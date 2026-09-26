@@ -1,28 +1,6 @@
 use super::*;
 
-/// A press on a scope chip, through the window loop's own routing — which is
-/// what ADR-0213 makes the *panel* badge mean.
-///
-/// `karakuri-console`'s `tests/library.rs` asserts everything up to the
-/// operation with no window anywhere: that the chips answer a press, that a
-/// press names the chip it landed on, and that nothing else in the bay takes
-/// one. This is the half that badge is actually about — *"the row is claimed
-/// the day a person who launched the instrument can perform that operation from
-/// the panel in front of them"* — and a control demonstrated in that crate and
-/// never wired here would pass there and be a lie this page tells on its own
-/// authority.
-///
-/// What is asserted is the whole press and not the routing alone: the mark
-/// moves to the chip that was pressed, the operation that leaves is
-/// `SelectScope` with the payload it is specified to carry, and the library
-/// cursor goes back to the top — because the listing under a new scope is a
-/// listing this cursor has never seen, and a cursor left where it was would sit
-/// on a Set nobody chose under a pill saying a press will load it.
-///
-/// And the chip that is already marked is pressed too, because that is the case
-/// a step cannot reach: a step would go somewhere else, and a pointer names —
-/// so the press is answered rather than refused, and the mark stays where it
-/// is.
+/// Clicking a library scope chip updates the active scope, emits `SelectScope`, and resets the cursor to the top (ADR-0213).
 #[test]
 fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
     let ctx = drawn_once();
@@ -103,27 +81,7 @@ fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
     );
 }
 
-/// A press on the star at the left of a library row, through the window loop's
-/// own routing — the half of the badge ADR-0213 makes a badge mean, beside
-/// [`a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing`].
-///
-/// `karakuri-console`'s `tests/library.rs` says where the mark is and that it
-/// answers a press; this says an operator reaches it — a control demonstrated
-/// in that crate and never wired here would pass there and be a lie the page
-/// tells on its own authority.
-///
-/// What is asserted is that the press names a state and not a step (ADR-0299):
-/// the same mark pressed twice asks for two different things, because the
-/// control reads the row's present mark and asks for the other one. That is the
-/// failure a toggle hides completely — a press that always emitted `true` would
-/// pass every assertion about the first press and never take a star off.
-///
-/// And that the star has not swallowed the row it sits in: a press on the row's
-/// own ground still takes the Set in hand and names no operation, which is rule
-/// 4's *a control claims what it acts on and no more* asked of the two boxes
-/// that overlap.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Clicking a library row's star icon toggles its starred state without triggering row selection (ADR-0213, ADR-0299).
 #[test]
 fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
     let ctx = drawn_once();
@@ -212,29 +170,7 @@ fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
     readout.pointer(&ctx, Pointer::Up);
 }
 
-/// A press on one of the Library bay's two filter fields, through the window
-/// loop's own routing — the half of the badge ADR-0213 makes a badge mean, one
-/// row under [`a_press_on_a_scope_chip_names_the_library_the_bay_reads`].
-///
-/// `karakuri-console`'s `tests/library.rs` asserts everything up to the
-/// operation with no window anywhere: where the two fields are, that each steps
-/// its own cycle, that the operation names where it arrived and carries the
-/// other field untouched, and that nothing between them takes a press. This is
-/// the half that says an operator reaches it — a control demonstrated in that
-/// crate and never wired here would pass there and be a lie the page tells on
-/// its own authority, which is exactly what `press_handler` was written after.
-///
-/// What is asserted is the whole press. The operation that leaves is `ListSets`
-/// carrying the step; `View::narrow` has been called, so the field the panel
-/// draws next frame reads the new value; and the library cursor is back at the
-/// top, because the listing under a narrower filter is one this cursor has
-/// never seen.
-///
-/// Both fields, because the operation carries both halves: the press on `layer`
-/// has to come back with the `holds` the press before it set, and a route that
-/// rebuilt the operation from one field would lose it.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Clicking library filter fields cycles their criteria and emits `ListSets` with combined filter parameters (ADR-0213).
 #[test]
 fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
     use karakuri_console::view::Field;

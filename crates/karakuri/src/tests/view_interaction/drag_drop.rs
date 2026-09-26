@@ -1,31 +1,6 @@
 use super::*;
 
-/// A press on a strip's ground addresses the keys to that deck — the whole
-/// route, through the same `Readout::pointer` a hand goes through.
-///
-/// # Why it is here and can be nowhere else
-///
-/// `karakuri-console` owns both halves and cannot put them together:
-/// `input::claim` there says a press on a strip is the panel's, and
-/// `Mixer::select` says which deck it names, and nothing in that crate joins
-/// the two. This file's press arm is the join, and the defect this was written
-/// against lived exactly in the gap: `on_strip` asked four questions where the
-/// bay has five, so every press on a strip's ground was routed to `egui`, the
-/// `(Pointer::Down, Claim::Panel)` arm never ran, and the `bay.select(at)` call
-/// at the end of it was unreachable — while `operations.html`'s *"click a
-/// strip"*, `console.html`'s strip tip, `Mixer::select` and that call all said
-/// it worked.
-///
-/// Deleting `|| bay.select(p).is_some()` from `input::on_strip` is the
-/// injection this was watched to fail against: the claim comes back `Egui` and
-/// the press asks for nothing.
-///
-/// The point is the strip's name box, which is the affordance's own words — *"a
-/// press anywhere on this strip that no knob under the pointer claimed"* — and
-/// the four that could have claimed it are asked here so that the press under
-/// test is the leftover rather than a chip.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Clicking a mixer strip's empty area selects that deck, routing keyboard focus accordingly.
 #[test]
 fn a_press_on_a_strips_ground_selects_that_deck() {
     let ctx = drawn_once();
@@ -96,47 +71,7 @@ fn a_press_on_a_strips_ground_selects_that_deck() {
     assert_eq!(readout.view.selection(), 2);
 }
 
-/// A Set dragged from a library row onto a mixer strip loads the strip it was
-/// let go over — the whole gesture, through the same `Readout::pointer` a hand
-/// goes through.
-///
-/// # Why it is here and can be nowhere else
-///
-/// `karakuri-console` has both halves of the gesture and cannot put them
-/// together: `carry.rs` there presses the model and the view directly, and
-/// hands the destination in itself, because that crate has no press handler to
-/// ask. The property that matters is which *moment* resolves the deck, and that
-/// is this file's: the press is over the Library bay, where there is no strip
-/// at all, and the release is over one. So a destination taken at the press
-/// names nothing and the drop is cancelled, and a destination taken at the
-/// release names the strip under the hand.
-///
-/// Deleting the `Mixer::dropped` ask from the release arm is the injection this
-/// was watched to fail against, and moving it into the press arm is the second
-/// — the first answers `Nowhere` for every drop and the second answers it for
-/// every drop that began in the library, which is all of them.
-///
-/// # What it asserts, in the order a hand does it
-///
-/// 1. A press on the third row is the panel's, and it emits nothing: half a
-///    gesture names one operand.
-/// 2. The cursor mark follows the hand, and `Acted::Pointed` is the press saying
-///    so. It is no longer the whole of what this console draws for a carry — the
-///    rectangle under the pointer is ringed and the pointer is a grab, which is
-///    `View::draw`'s and is held by `karakuri-console/tests/carry.rs`; the mock
-///    still draws no ghost. What is owed on that answer when a reading is open is
-///    [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`]; here it is
-///    the mark alone, and `Acted::Nothing` in its place would be a press that
-///    moved the cursor and told nobody.
-/// 3. Every move on the way is `Acted::Nothing`, over two strips that are not
-///    the one it lands on.
-/// 4. The release over strip C asks for `LoadSet` naming deck C and the Set from
-///    row 2 — not the selection, which is deck A throughout, and not the row the
-///    cursor started on.
-/// 5. A second carry let go over nothing asks for nothing, which is the outcome
-///    no other drag on this panel has.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Dragging a Set from the library and dropping it onto a mixer strip emits a `LoadSet` operation for the target deck.
 #[test]
 fn a_drop_on_a_strip_loads_the_strip_it_was_let_go_over() {
     let ctx = drawn_once();
@@ -252,31 +187,7 @@ fn a_drop_on_a_strip_loads_the_strip_it_was_let_go_over() {
     );
 }
 
-/// A Set let go on a deck preview cell loads that cell's deck, through the same
-/// `Readout::pointer` a hand goes through — and a cell whose letter names no
-/// slot loads nothing.
-///
-/// # Why it is here and not in `karakuri-console`
-///
-/// `carry.rs` there asks the two bays itself and hands the destination to
-/// `Panel::released`. What this file owns is that the release asks the second
-/// bay at all: the press handler resolved the drop against `Mixer::dropped`
-/// alone until ADR-0273, so a carry that crossed to the centre column and let
-/// go on a cell was answered `Nowhere` — the panel drawing a ring round a
-/// rectangle the release then declined to use. Deleting the
-/// `ProgramBay::dropped` ask from the release arm is the injection this was
-/// watched to fail against.
-///
-/// # And the slot count is asked with it
-///
-/// The deck here has three slots and the row is four cells, so cell D is drawn
-/// with nothing behind the letter on it. A release there names no deck, which
-/// is the refusal `3` already gets from the keyboard — `pointed`, off the same
-/// `View::mixer` length. Passing `DECKS` instead of that length is the second
-/// injection, and it asks for `LoadSet { deck: 3 }` on a deck that has no slot
-/// 3.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Dropping a dragged Set onto a program preview cell emits `LoadSet` for that cell's deck while declining drops on empty cells (ADR-0273).
 #[test]
 fn a_drop_on_a_preview_cell_loads_the_deck_its_letter_names() {
     let ctx = drawn_once();
@@ -366,52 +277,7 @@ fn a_drop_on_a_preview_cell_loads_the_deck_its_letter_names() {
     );
 }
 
-/// A carry that moves the library cursor re-reads the row it arrived at, which
-/// is the rule the cursor states rather than the keyboard: *"the reading
-/// follows the cursor: a move with one open is a read of the row it arrived
-/// at"* (`karakuri-console/src/view.rs`, `View::reading_open`).
-///
-/// # The defect it was written for
-///
-/// `Readout::took` discarded `View::point_at`'s `moved`. So taking a row in
-/// hand while a reading was open on a different row moved the cursor off that
-/// row, `View::opened` answered `None` because the row under the cursor was no
-/// longer the Set the reading was of, and the block disappeared — for the rest
-/// of the run, because nothing on this route ever walks the cursor back. The
-/// arrow keys never had it: they re-read on `moved && reading_open()`.
-///
-/// # Why it is here and can be nowhere else
-///
-/// It needs all three of a press handler, a store on a disk, and the glue
-/// between them, and this file is the only place that has any two. `carry.rs`
-/// in `karakuri-console` presses the bay and the view directly and that crate
-/// reaches no disk at all (ADR-0156), so the half it can hold is
-/// `the_row_a_hand_takes_is_the_row_the_cursor_marks` — that `point_at` answers
-/// the move — and not that anything acts on the answer.
-///
-/// # What it asserts, and what each one fails against
-///
-/// 1. The press answers `Acted::Pointed`, which is the whole of what
-///    `Readout::took` can do about it: the readout holds no store, so the press
-///    says *the cursor moved* and the caller reads the file. A `took` that drops
-///    the `bool` again answers `Acted::Nothing` here.
-/// 2. The block is gone until it is re-read, which is the defect itself,
-///    asserted so that step 3 cannot pass by the reading never having moved.
-/// 3. `read_reading` — the call the window loop makes on that answer — puts the
-///    reading under the row the hand took, naming that row's Set.
-/// 4. A press on the row the cursor is already on answers `Acted::Nothing`, so
-///    a carry that moved nothing costs no file read.
-///
-/// What it cannot see is that the window loop makes the call, because `winit`
-/// cannot be asked for an `ActiveEventLoop` outside its own loop and an event
-/// handler is not something a test can drive — `Readout::pointer`'s own doc.
-/// `App::window_event`'s carry arm calls [`reread_if_open`] with
-/// `matches!(acted, Acted::Pointed)`, the same function
-/// [`reread_if_open_re_reads_only_on_a_move_with_a_reading_open`] presses
-/// directly, below — this test is the two halves either side of that call, and
-/// neither reaches the call itself.
-///
-/// A CPU test: a store is a directory and a `Readout` takes no device.
+/// Moving the library selection during an open reading re-reads the landed row and preserves reading state.
 #[test]
 fn a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at() {
     let ctx = drawn_once();

@@ -4,23 +4,7 @@ use karakuri_console::view::tracker_group;
 use karakuri_environment::{audio, mix, Asked};
 use karakuri_operation::{BeatSource, GridScale, Operation};
 use karakuri_operation_record::{Current, Written};
-/// A press on each of the tracker group's three reaches the operation its key
-/// already reaches, and each of the three leaves this window by the door its
-/// record decides.
-///
-/// # Why the three are not one answer
-///
-/// The offset is `Silent(NoRecord)` and falls through [`App::performed`] to
-/// [`nudged`], which is where every route into the session's offset ends. The
-/// tap and the octave are `Owed(NotSettled)` — a tap's record is the *beat
-/// lock's* answer and no `Current` carries it — so `performed` takes them out
-/// before `unwritten` can print *"nothing moved, and nothing here decides it"*
-/// about a press that moved the grid. That difference is the whole of
-/// [`tracked`], and this is what says the three presses land on the right side
-/// of it.
-///
-/// It needs no device: `view::tracker_group` is a derivation over numbers,
-/// which is what makes the panel's arithmetic testable at all (ADR-0156).
+/// Verifies tracker group interaction routing: offset adjustment executes immediately while tap/octave handle unsettled records (ADR-0156).
 #[test]
 fn a_press_on_the_tracker_group_reaches_the_operation_its_key_reaches() {
     let ctx = drawn_once();
@@ -178,11 +162,7 @@ fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
         legend("up")
     );
 
-    // **Floored, and it holds there in silence.** A press at the bottom of
-    // the travel asks below zero and gets zero, which is the clamp
-    // `gain_key` makes rather than one `Deck::set_gain` would make later —
-    // it decides what the *record* says, so a session replays the value
-    // that took effect.
+    // Clamps fader at minimum travel without recording out-of-range negative values.
     assert_eq!(
         gain_key(Step::Down, 0.05),
         0.0,
@@ -219,29 +199,7 @@ fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
     assert_eq!(gain_key(Step::Default, 4.0), 1.0);
 }
 
-/// "A key steps it" one control along, and the difference between the two is
-/// the whole of this test.
-///
-/// `docs/manual/operations.html`'s Opacity row carries the same badge as the
-/// Gain row — `&uarr;&darr; space &middot; in the Mixer` — and is silent about
-/// the size for [`gain_key`]'s reason, so the step is [`OPACITY_STEP`] and it
-/// is `karakuri-cli`'s.
-///
-/// The clamp is this surface's and it is the reason for the test. Opacity is a
-/// proportion of a blend and there is no such thing as 1.4 of one, where gain
-/// is a level into an HDR mix — the legend says as much at the key: *"the fader
-/// is held inside 0 and 1"*. It is clamped here rather than left to
-/// `Deck::set_opacity`, because this decides what the record says: a session
-/// replays the value that took effect rather than one the engine quietly
-/// corrected.
-///
-/// So the two ends are asserted against the trim's, which is the shape a clamp
-/// copied from one control to the other would break: at 1.0 the fader holds and
-/// the trim does not.
-///
-/// The default is new and the two steps are not (ADR-0333). `\` had no partner
-/// on this control, so `space` on an addressed fader is the first way back to
-/// unity it has ever had.
+/// Verifies opacity step sizing ([`OPACITY_STEP`]), clamp enforcement within [0.0, 1.0], and spacebar reset to unity (ADR-0333).
 #[test]
 fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() {
     for from in [0.15_f32, 0.3, 0.5, 0.85] {
@@ -320,24 +278,7 @@ fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() 
     );
 }
 
-/// Every verdict the engine can report says what it does to the lane, and a row
-/// leaves it only when the file and the picture agree.
-///
-/// The six `swap::Event` variants are three answers: four that put a row on the
-/// lane under one of `view::Stage`'s words, one that takes it off, and one that
-/// is not about a version at all. The one worth the test is `Accepted`: it is
-/// the watchdog's verdict and not the operator's, and it is what clears a row
-/// because *keep a candidate* has no control on this panel — see
-/// `view::staging`, where that substitution is argued. A run in which
-/// `Accepted` did nothing would be a lane that fills up and never empties,
-/// which is not the lane the manual describes.
-///
-/// And the rows stay in slot order, which is the order they are drawn in: a
-/// candidate that lands on deck B and then one on deck A must not leave the
-/// lane reading B over A, because the letter is the only thing telling two rows
-/// of the same material apart.
-///
-/// A CPU test: an `Event` is a value, and nothing here takes a device.
+/// Verifies engine swap events map to staging lane states, clearing on `Accepted` and maintaining slot order.
 #[test]
 fn every_verdict_says_what_it_does_to_the_lane() {
     let landed = |label: &str| Event::Swapped {
@@ -349,11 +290,7 @@ fn every_verdict_says_what_it_does_to_the_lane() {
         label: label.into(),
         error: karakuri_engine::set::SetError::NoCapacity("drift_shell".to_owned()),
     };
-    // **The candidate's own cost and not a frame interval**, since
-    // ADR-0313: 24 ms is what one frame of that Set was measured at, held
-    // against one frame of the display. The lane does not read the number
-    // — it reads which verdict it was — but a value that named the wrong
-    // quantity here would be a test teaching the wrong sentence.
+    // Staging lane reflects candidate execution cost against display refresh intervals (ADR-0313).
     let stopped = |label: &str| Event::Overloaded {
         id: 3,
         label: label.into(),
@@ -440,11 +377,7 @@ fn every_verdict_says_what_it_does_to_the_lane() {
         "a rebuild of other material kept the old name"
     );
 
-    // **And a refusal's diagnostics reach the row, then leave it with the
-    // refusal.** The row is one slot's *newest* verdict, so a build that
-    // lands after a refusal must not be drawn under the sentence the
-    // refusal put there — which is a stale diagnostic beside material it
-    // is not about, and reads as a fault in the build that just worked.
+    // Diagnostics clear when a subsequent build replaces a refused candidate.
     let said = [
         "3:5: parse: expected `}`".to_owned(),
         "7:1: type: unknown builtin `curl2`".to_owned(),

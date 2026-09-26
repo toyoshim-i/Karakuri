@@ -40,13 +40,7 @@ impl App {
                     Change::Pointer(claim).repaint(),
                 )
                 .repaint;
-                // **And the hover layer is told where the pointer went**, with
-                // the claim `input::claim` has just answered: `Claim::Egui` is
-                // the panel saying the pointer is on none of its controls, so
-                // the common move costs one comparison there. What comes back
-                // is a frame owed **now** only where a tip is on screen that
-                // must not be — the dwell itself is a deadline and is asked
-                // for on the frame, beside `View::animating`.
+                // Notify hover layer of pointer movement; redraw is requested immediately only if an invalid tip must hide.
                 let tip = self.hover.moved(
                     claim,
                     &self.readout.panel,
@@ -79,21 +73,7 @@ impl App {
             } => {
                 self.handle_left_mouse_input(&mut gfx, event_loop, &event, state);
             }
-            // **The secondary button, and only its press.** A release is not
-            // routed at all, which is the whole of what this gesture is: a
-            // secondary press puts a row's menu down and takes nothing in
-            // hand, so there is nothing for a release to let go of and a
-            // `Pointer::Secondary` up would be an event with no arm to run
-            // (ADR-0311).
-            //
-            // **`egui` is not told either way**, which is what this arm
-            // changes least: before it, every button but the left one fell
-            // through this handler's `_ => {}` and reached nothing, and
-            // `egui` owns no widget anywhere on this console, so a secondary
-            // press routed to it would reach nothing there either. The claim
-            // is asked for the same reason it is asked on a left press —
-            // rule 1's drag and rule 2's cards are about the gesture and not
-            // about the button — and the answer is used the same way.
+            // Secondary button press opens context menus; releases and egui forwarding are skipped as they carry no state (ADR-0311).
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Right,
@@ -101,11 +81,7 @@ impl App {
             } => {
                 let ctx = gfx.egui.egui_ctx().clone();
                 let (claim, acted) = self.readout.pointer(&ctx, Pointer::Secondary);
-                // **The same send branch the left press takes**, because the
-                // item is picked by whichever press lands on the card: a menu
-                // opened with the secondary button and picked with it again is
-                // one gesture, and the second press is the one that names the
-                // item.
+                // Card clicks via secondary press trigger selection, matching left-click behavior.
                 if let Acted::Emitted(Some(Operation::TransferSet {
                     transfer: SetTransfer::Send { ref id },
                 })) = acted
@@ -131,19 +107,8 @@ impl App {
                 App::wants(&gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                // **The two shapes a wheel arrives in, and only the vertical
-                // half of either.** `LineDelta` is a count of detents and is
-                // what a mouse sends, so it is multiplied by the console's own
-                // `WHEEL_STEP` — three parameter rows, which is what
-                // `docs/manual/console.html` says a notch is worth.
-                // `PixelDelta` is a trackpad and is already a distance: it is
-                // in physical pixels like every other position this handler
-                // reads, so it is divided by the scale and passed through.
-                //
-                // **Negated, because the axes point opposite ways.** `winit`'s
-                // positive `y` is a wheel pushed away from the hand, which
-                // moves a list *up* — and a scroll position is how far down the
-                // content the pane has come.
+                // Convert vertical scroll delta to logical pixels (`LineDelta` scaled by `WHEEL_STEP`, `PixelDelta` scaled by DPI).
+                // Negate delta so positive wheel deflection scrolls down content.
                 let by = match delta {
                     MouseScrollDelta::LineDelta(_, y) => {
                         -y * karakuri_console::room::size::WHEEL_STEP
@@ -155,11 +120,7 @@ impl App {
                 if claim == Claim::Egui {
                     App::to_egui(&mut gfx, &mut self.costs, &event);
                 }
-                // **The frame is owed for what the wheel moved and not for the
-                // claim**, which is the `CursorMoved` arm's own rule one event
-                // along: a wheel spun against the top of a pane's list is the
-                // panel's and changes nothing, and a frame per notch of that
-                // would be a repaint for a gesture with no picture in it.
+                // Request redraw only if the wheel delta actually shifted scroll offset.
                 App::wants(
                     &gfx,
                     &mut self.egui_due,
@@ -168,15 +129,7 @@ impl App {
                 );
             }
 
-            // **The one modifier this loop keeps, and it keeps it for one
-            // key.** `shift-Tab` is the tab ring walked backwards (ADR-0259)
-            // and `winit`'s `KeyEvent` carries no modifier state, so the
-            // answer has to have been listened for — see [`App::shift`].
-            //
-            // **`egui` is still told**, which is what this arm has to add back:
-            // every event this `match` does not name reaches `to_egui` through
-            // the wildcard at the bottom, and a modifier taken here and not
-            // passed on would leave the toolkit's own copy stale.
+            // Track Shift modifier state for reverse tab cycling (ADR-0259) while forwarding to egui ([`App::shift`]).
             _ => {}
         }
         self.gfx = Some(gfx);

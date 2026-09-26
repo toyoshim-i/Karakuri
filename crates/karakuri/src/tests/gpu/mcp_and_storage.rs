@@ -3,23 +3,8 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// A save writes what the deck is playing as a Set file, and the file loads
-    /// back.
-    ///
-    /// This is the whole of what *Keep what a deck is playing* is, from the press
-    /// or the tool call through to a `.set` in the store — and it is a device test
-    /// because the one line of it that needs a `Deck` is the one that reads what
-    /// the slot is playing ([`playing_values`]).
-    ///
-    /// It is asserted against the deck rather than against the flags, which is the
-    /// whole reason that function exists: the capacity written down is the
-    /// geometry's own declaration and the salt is the one this slot is running at,
-    /// so a save that read the command line would record a picture nobody has seen.
-    ///
-    /// Nothing has been rebuilt when this saves, which is the case
-    /// [`Playing::at_launch`] exists for: a deck could not be written down at all
-    /// until the launch version had an address, and the failure it replaces is a
-    /// refusal saying the sources are not in the store on a run where they are.
+    /// Verifies saving active deck state creates a valid Set file containing current
+    /// geometry capacity and salt, which can be reloaded accurately (ADR-0221).
     #[test]
     fn a_save_writes_what_the_deck_is_playing_as_a_set_file_that_loads_back() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -84,49 +69,8 @@ mod gpu {
         std::fs::remove_dir_all(&root).expect("clean up");
     }
 
-    /// The swap report says what the lane says, because the lane and the
-    /// server are told by one drain.
-    ///
-    /// `Deck::events` empties the channel, so there is no second drain to be
-    /// had: a loop that read it again would read nothing, and a server told
-    /// from anywhere else would be told about a different build. That is why
-    /// [`staging`] reports rather than a function beside it, and this is the
-    /// check that fact owes — the sentence a model reads out of `swap_outcome`
-    /// is the event the row was written from.
-    ///
-    /// # The swap and its verdict arrive together, so the row may already be
-    /// gone
-    ///
-    /// This asserted `Stage::Landed` on a row that is no longer there, and
-    /// it was written when a candidate went on trial: the swap landed in one
-    /// drain and the verdict came thirty-eight frames later in another, so
-    /// between them the lane held a `landed` row. ADR-0313 put the verdict in
-    /// the call the swap lands in, so one `staging` pass sees `Swapped` and
-    /// its verdict, and a build that held the budget has its row settled in the
-    /// same pass that made it — *"empty is this lane's ordinary state"*.
-    ///
-    /// So what this pins is the pair, on whichever verdict this machine's
-    /// clock produces, which is `docs/contributing.md` §1's rule: a test that
-    /// turns on whether this adapter is fast is not a test. One frame of the
-    /// shipped example against a 20 ms budget is comfortable on the machines
-    /// this was written on and is not a fact about every machine, and the two
-    /// outcomes are two states of the instrument rather than a pass and a
-    /// failure:
-    ///
-    /// - it ran — no row, the capsule on `landed`, no cell marked, and the
-    ///   server's sentence saying it held the budget;
-    /// - it was stopped — a row on `overloaded`, the capsule with it, that
-    ///   deck's cell marked as a still, and the server's sentence saying so
-    ///   (ADR-0316).
-    ///
-    /// Which of the two happened is read off the deck (`Deck::overloaded`) and
-    /// never off the surfaces being checked, or this would be asserting that
-    /// three readings of one value agree with themselves.
-    ///
-    /// And what the slot is now playing moves with it. A build that landed
-    /// and was not taken up is a build a save would write the *previous*
-    /// version of, so the address is asserted here rather than left to the save
-    /// test, which never rebuilds anything.
+    /// Verifies swap outcome reports and staging lane states match across live execution,
+    /// handling both successful runs and budget overload stops consistently (ADR-0313, ADR-0316).
     #[test]
     fn the_swap_report_says_what_the_lane_says() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -245,21 +189,9 @@ mod gpu {
             "the swap reached the lane and did not reach the server: {said}"
         );
 
-        // **The transport's health capsule, which is the same drain's other
-        // reader.** A `swap::Event` cannot be made without a device, so this is
-        // where *the window writes down what the last write did* is checked at
-        // all: `karakuri-console` can be asked whether a capsule draws the
-        // verdict it was handed, and nothing in that crate can be asked whether
-        // this program hands it one. A version that drew the capsule perfectly
-        // and never filled `Readout::health` would leave every console test
-        // green — which is the seam `mod press_handler` exists for, on the
-        // readout's side, where the scan it uses cannot see anything at all.
+        // Asserts transport health capsule displays the swap verdict drained from the device.
         match stopped {
-            // **It ran.** The verdict was in the candidate's favour, so the
-            // file and the picture agree and the row left the lane in the same
-            // pass that made it — `view::staging`'s own rule, and the page's
-            // *empty is this lane's ordinary state*. The capsule keeps the
-            // swap's word, because a verdict in favour is not a write.
+            // Candidate met budget: row cleared from staging and capsule indicates landed swap.
             false => {
                 assert!(
                     row.is_none(),
@@ -309,11 +241,7 @@ mod gpu {
             }
         }
 
-        // **And the cells' half of the same reading**, which is the other thing
-        // a verdict writes into the view: only the slot the verdict was against
-        // is drawn as a still, and the entries past this deck's slot count are
-        // `false` rather than a panic, because the row is `view::DECKS` cells
-        // whatever the deck holds.
+        // Verifies still rendering is applied only to the failing slot following budget overruns.
         let mut cells = [false; view::DECKS];
         cells[ON_AIR] = stopped;
         assert_eq!(
@@ -330,11 +258,7 @@ mod gpu {
             was, now,
             "the build landed and the slot is still addressed as what it launched with"
         );
-        // **And the row names the node the edit was of.** The edit was to the
-        // slot's L1 and to nothing else, so a build that reported the whole
-        // stack and a diff that compared it against what was playing come to
-        // one changed node — which is the whole of ADR-0326 asserted against a
-        // real watcher rather than against a `Changed` this file built.
+        // Asserts staging row reports only the specific node modified in the edit (ADR-0326).
         if let Some(row) = rows.iter().find(|row| row.deck == ON_AIR) {
             assert_eq!(
                 row.addr, "L1:0",
@@ -351,30 +275,8 @@ mod gpu {
         std::fs::remove_dir_all(&root).expect("clean up");
     }
 
-    /// A real Set reads out into a pane, which is the seven reads [`inspector`]
-    /// makes held against a Set this program actually builds rather than against a
-    /// fixture it wrote itself (`docs/contributing.md` §3 — the criterion is not
-    /// that it probably will not change but that it *can*, and this window's input
-    /// is the product).
-    ///
-    /// It is the one place the resolution in [`node_of`] is checked end to end:
-    /// this deck's Sets have the default interface, so every control an author
-    /// could have addressed is a wildcard, and if the resolution were wrong the bay
-    /// would draw node heads with nothing under them and every other test would
-    /// still pass.
-    ///
-    /// Three of them are addressed all the same, and they are the built-in camera's
-    /// — `radius`, `speed` and `height`, which the engine declares for a node with
-    /// no procedure behind it and publishes with their address because a bare name
-    /// does not reach them
-    /// (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`).
-    /// That is what makes the last assertion here worth more than it was: the pair
-    /// this deck opens on declares a `radius` of its own, so the two halves of
-    /// `node_of` are both exercised on one key — the wildcard one landing on the L1
-    /// alone, and the addressed one landing on the camera — and a resolution that
-    /// counted the camera as a second declaration would drop the geometry's row and
-    /// leave the count short. It did, until the landing stopped being worked out
-    /// here.
+    /// Verifies inspector pane layout against a real Set, ensuring node resolution
+    /// correctly disambiguates author parameters from built-in camera parameters (ADR-0318).
     #[test]
     fn a_pane_reads_a_running_set() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -422,14 +324,7 @@ mod gpu {
             "the pair builds with no L5, so there is nothing to fold"
         );
 
-        // **The deck head's two build chips, read off the Set rather than off
-        // any number this file chose.** Every assertion below is against what
-        // the engine answers, because the numbers belong to
-        // `examples/drift_shell.kir` — a file the MCP surface exists to rewrite
-        // — and a fixture the product can rewrite is not a fixture
-        // (`docs/contributing.md` §3). What is being checked is that the offer
-        // is the *material's* declaration: a ladder built from the wrong range
-        // is a chip that asks for builds the engine refuses (ADR-0328).
+        // Asserts deck build chips derive capacity ranges directly from material declarations (ADR-0328).
         let set = engine.deck.slot(karakuri_engine::DeckSlot(0)).set();
         let aimed = pane
             .aimed
@@ -470,14 +365,7 @@ mod gpu {
                 );
             }
         }
-        // **The running value is inside the declared range and is not
-        // necessarily on the ladder**, and the pair this panel opens on is the
-        // demonstration rather than a corner: it runs at 10240, which
-        // `examples/coil_vortex.kir` declares as its default and which is not a
-        // power of two. So the *shipped* state of this program is the one
-        // `view::stepped_capacity` steps **up** from — the case a `position`
-        // lookup would have answered by dropping the slot to the bottom of its
-        // own range.
+        // Verifies capacity stepping operates smoothly even when active values are non-power-of-two defaults.
         assert!(
             (declared[0][0]..=declared[0][1]).contains(&aimed.capacity),
             "the pair runs at {} and its geometry declares [{}, {}]",

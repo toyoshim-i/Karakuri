@@ -16,30 +16,14 @@ use super::HEAD_SLOT;
 // Keeping what a deck is playing, and rewiring it
 // ---------------------------------------------------------------------------
 
-/// What this run holds so that a deck can be kept, and rewired.
+/// Runtime state for persisting deck sets, keeping procedures, and rewiring.
 ///
-/// One value rather than seven fields on [`App`], because the seven move
-/// together and every one of them is read by the same three moments: a request
-/// arriving, a build landing, and a save coming back off the disk. It is also
-/// what makes those three reachable at all — the window loop binds `gfx` out of
-/// `self.gfx` and holds it for the length of the handler, so a method on `App`
-/// could not be called there. This is the piece that is passed instead.
-///
-/// Every field is `pub(crate)` rather than reached only through methods:
-/// `App::new` builds one whole (its fields come from the same opening that
-/// builds the rest of `App`) and `mod gpu`'s tests build one from nothing, and
-/// both are outside this module — see `crate::App::new` and
-/// `crate::gpu::keeping`.
+/// Groups channels and playing state passed into event handlers while graphics
+/// context is borrowed. Constructed directly by `App::new` and test fixtures.
 pub(crate) struct Keeping {
-    /// The server's half of the channel, when `--mcp` asked for one, and the whole
-    /// of what a model reaches this program through.
+    /// MCP server reporter channel when `--mcp` is active.
     ///
-    /// Told what the swap machinery said, handed what a client asked the render
-    /// loop for, and nothing else — see [`karakuri_mcp`]. It is bound in [`main`],
-    /// before the window, for the reason the working copies are made there: `serve`
-    /// binds a socket and can fail, and a failure has to be a sentence on a
-    /// terminal rather than a panic inside a `winit` callback, where it aborts with
-    /// no message at all.
+    /// Communicates swap events and client requests to the MCP server.
     pub(crate) mcp: Option<mcp::Reporter>,
     /// Thread-safe slot MCP modification policies.
     pub(crate) slot_policies: karakuri_environment::SlotPolicies,
@@ -49,48 +33,22 @@ pub(crate) struct Keeping {
     /// Where the watchers report what they built and stored — the other end of
     /// [`watch::Watch::storing_to`], drained where a build lands.
     pub(crate) built: std::sync::mpsc::Receiver<watch::Built>,
-    /// Builds reported but not yet landed, kept by their build id.
+    /// Builds reported by watchers awaiting swap completion at a frame boundary.
     ///
-    /// The two arrive on two channels and in either order: a watcher stores a build
-    /// on its worker thread and the swap lands at a frame boundary some frames
-    /// later, so a report that came in before its `Swapped` has to wait somewhere.
-    /// Removed when it lands, so a build that was refused or that the deck never
-    /// took leaves nothing behind — there is at most one outstanding build per
-    /// slot, which is what `HotSwap` allows.
+    /// At most one pending build per slot is retained until swapped or dropped.
     pub(crate) pending: Vec<watch::Built>,
     /// Where a save that has reached the disk comes back, and the sending half each
     /// save thread is given a clone of.
     pub(crate) saves: std::sync::mpsc::Receiver<Saved>,
     pub(crate) save_tx: std::sync::mpsc::Sender<Saved>,
-    /// Where a send that has answered the dialog comes back, and the sending half
-    /// each send thread is given a clone of. [`saves`]' shape one act along, and it
-    /// is a second channel rather than a second arm of the first because a send is
-    /// not a save: it writes outside the store, under a name the operator typed
-    /// into a window this program does not own, and nothing is waiting on it over
-    /// MCP.
+    /// Channel for file-dialog export completions (`Sent`).
     ///
-    /// The run does not wait for these, where it waits for the saves once at the
-    /// end ([`Keeping::awaited_saves`]). A save is bounded by a disk; a send is
-    /// bounded by a hand that has not answered a dialog yet, and a quit that
-    /// blocked on one would be a program refusing to close because it had opened a
-    /// window over itself. So there is no count kept here: a send still waiting on
-    /// its dialog when the run ends wrote nothing, which is the same answer a
-    /// dismissal gives.
-    ///
-    /// [`saves`]: Self::saves
+    /// Unlike store saves, dialog exports are not awaited at application exit.
     pub(crate) sends: std::sync::mpsc::Receiver<Sent>,
     pub(crate) send_tx: std::sync::mpsc::Sender<Sent>,
-    /// Where a kept procedure's outcome comes back, and it is a third channel
-    /// beside [`saves`](Self::saves) and [`sends`](Self::sends) for their reason:
-    /// three acts that end on a disk, each answered at the frame its answer arrives
-    /// on, and a queue apiece so that a slow write of one cannot delay another's
-    /// answer.
+    /// Channel for procedure `.kir` keep completions (`Kept`).
     ///
-    /// It is not the save channel with a flag on it. A keep writes one `.kir` under
-    /// a name and a save writes a Set file naming every node; the two outcomes say
-    /// different things, land in different directories and are refused for
-    /// different reasons — one of them refuses a name that is taken, which a Set
-    /// save does not — so folding them would be one sentence meaning two things.
+    /// Separated from set saves to maintain dedicated queues and distinct error semantics.
     pub(crate) keeps: std::sync::mpsc::Receiver<Kept>,
     pub(crate) keep_tx: std::sync::mpsc::Sender<Kept>,
     /// How many saves are being written right now. The run waits for these once, at
@@ -119,24 +77,10 @@ impl Keeping {
         self.rewire(engine, wires);
     }
 
-    /// Every edge asked for since the last frame, written and answered here, on
-    /// this frame.
+    /// Applies requested wire edges to engine state on the current frame.
     ///
-    /// The decisions are [`rewired`]'s and are written there, because none of them
-    /// needs a device. What is here is the two things that do: the deck's own slot
-    /// count, which is the only thing that knows how many slots there are, and the
-    /// answer going back to whoever asked.
-    ///
-    /// Answered once, at the frame it was applied on, which is `mcp::WireRequest`'s
-    /// third point. Not at the swap: what the *build* made of the edge is
-    /// `swap_outcome`'s answer, as it is for every other rebuild, and a tool that
-    /// waited for thirty judged frames would hold a connection open across a
-    /// transition.
-    ///
-    /// One sentence for both audiences, which is [`refused`]'s rule: what the
-    /// terminal is told and what the client is handed are the same words, so the
-    /// second cannot be right on the day it is written and wrong at the next
-    /// correction.
+    /// Validates edges against deck slot count, updates connections via [`rewired`],
+    /// logs the result, and immediately settles MCP reply futures.
     fn rewire(&mut self, engine: &mut Engine, asked: Vec<mcp::WireRequest>) {
         if asked.is_empty() {
             return;
@@ -171,12 +115,7 @@ impl Keeping {
         id: Option<String>,
         reply: Option<mcp::Reply>,
     ) {
-        // **Checked here rather than only where the request came from.** A key
-        // press cannot name a slot this deck does not hold and a tool call can,
-        // and below this line `playing_values` reads `deck.slot(slot)`, which
-        // indexes. The server refuses it too, in its own words, so a model never
-        // reaches this — and this is the guard that does not depend on it
-        // having.
+        // Guard against out-of-range slots before indexing deck state.
         let count = engine.deck.slot_count();
         if !slot_in_range(slot, count) {
             return refused(reply, karakuri_environment::no_such_slot(slot, count));
@@ -198,18 +137,7 @@ impl Keeping {
                 karakuri_environment::nothing_to_save(slot, None, true),
             );
         }
-        // **Named and answered above the line that needs a deck**, which is
-        // where the whole of `accepted_save`'s doc lives: `playing_values` below
-        // is the one read here that needs one, and the accept has to be on the
-        // side of it a test can reach.
-        // **An id an operator typed is checked here**, which is
-        // `checked_name`'s wall for an arrangement's name one bay along: the
-        // panel owns the affordance and never the authority (P-0090).
-        // `filed_as` takes an `Asked::Operator` id verbatim, and until the
-        // pane head's name (ADR-0292) nothing on an operator's side of this
-        // call could carry one — `k` and the `keep` capsule both pass `None`.
-        // The first thing that can is the first thing that could put a `/` in
-        // a file name.
+        // Validate user-supplied save ID before allocating paths (P-0090, ADR-0292).
         if let Some(said) = id
             .as_deref()
             .and_then(|id| karakuri_mcp::checked_id(id).err())
@@ -240,15 +168,10 @@ impl Keeping {
             values,
         };
         let tx = self.save_tx.clone();
-        // **A thread per save**, and detached: no frame waits for it. The *run*
-        // waits, once, at the end and under a bound — see
-        // [`Keeping::awaited_saves`], which is what this count is for.
+        // Spawn background thread to write save without blocking current frame.
         self.in_flight += 1;
         std::thread::spawn(move || {
             let (slot, asked, id) = (save.slot, save.asked, save.id.clone());
-            // **Carried back rather than answered from here.** This thread knows
-            // the outcome and could say it, and that would be a second place a
-            // save is reported from.
             let outcome = save.run();
             let _ = tx.send(Saved {
                 slot,
@@ -289,11 +212,7 @@ impl Keeping {
                 karakuri_environment::nothing_to_save(slot, None, false),
             );
         };
-        // **The one node of that slot, by layer and index.** A node the list
-        // has no entry for is the built-in camera or an address nobody drew,
-        // and either way there is no source: the panel draws no capsule on the
-        // camera's head, so a hand cannot reach this, and a model naming it is
-        // told what it named rather than handed an empty file (P-0083).
+        // Locate matching kept node; built-in nodes or missing addresses lack source procedures (P-0083).
         let Some(found) = nodes.iter().find(|kept| {
             kept.layer == setfile::kind_name(ir_layer(node.layer)) && kept.index == node.index
         }) else {

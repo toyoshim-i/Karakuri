@@ -33,24 +33,10 @@ pub(super) use karakuri_store::record::{DeckSlot, Record};
 pub(super) use karakuri_store::store::Store;
 pub(super) use winit::event::WindowEvent;
 
-/// What a frame these tests compose advances by.
-///
-/// A stated count rather than a measured one, and it is honest here for the
-/// reason it was not in the live path: these frames are composed to assert what
-/// was *drawn* — a cell that took a pass, the rectangle it was aimed at — and
-/// they time nothing at all, so this is a fixture rather than a measurement
-/// withheld. The live count is `App::clock`, which measures the interval and
-/// writes it into the `tick` (ADR-0297).
+/// Standard frame tick advancement for headless test composition (ADR-0297).
 pub(super) const STEPS_A_FRAME: u8 = 1;
 
-/// The picture format a headless harness hands [`Engine::new`].
-///
-/// A stand-in, and it is named here once rather than at nineteen call sites: a
-/// run reads its picture format off the console's own surface (`Gfx::
-/// picture_format`) and there is no surface here, so these tests name an sRGB
-/// 8-bit format every backend can make a texture in. What is asserted is never
-/// the value — `a_picture_format_is_a_value_read_off_a_surface` in `mod tests`
-/// is what holds the source to one derivation.
+/// Default sRGB 8-bit texture format for headless test engine initialization.
 pub(super) const HEADLESS_PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// A [`Keeping`] with nothing served and nothing yet built, which is what a run
@@ -78,14 +64,7 @@ pub(super) fn keeping() -> Keeping {
     }
 }
 
-/// One request, one reply, over TCP exactly as a client would — the shape
-/// `karakuri-environment/src/mcp.rs`'s own `wire_tests` use, restated here
-/// because that module is `#[cfg(test)]` and nothing outside it can call in.
-///
-/// Over a socket, because that is the only way to read a [`mcp::Reporter`]
-/// back. A report handed to the server goes into a queue only the protocol can
-/// drain, which is exactly the property under test: a swap the lane drew is a
-/// swap a model can ask about.
+/// Sends a request and awaits a reply over TCP to test MCP reporter communication over the wire.
 pub(super) fn call(port: u16, name: &str, args: serde_json::Value) -> (bool, String) {
     use std::io::{BufRead, Write};
     let body = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",

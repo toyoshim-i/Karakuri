@@ -20,12 +20,7 @@ fn bare_strip() -> view::Strip {
     }
 }
 
-/// The press handler dispatches baseline pointer events directly as executable
-/// code.
-///
-/// Exercises `Readout::pointer` directly across pointer events (move, down, up,
-/// secondary, wheel) on empty space and asserts proper event dispatch and claim
-/// handling.
+/// Exercises `Readout::pointer` across baseline pointer events on empty space to verify event dispatch and claiming.
 #[test]
 fn the_press_handler_dispatches_pointer_events() {
     let ctx = crate::tests::drawn_once();

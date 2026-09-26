@@ -1,59 +1,8 @@
 use super::*;
 
-/// What one Set declares, read off the cards the store keeps beside its
-/// artifacts — the answer to
-/// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet), in the shape
-/// the Library bay draws it in.
+/// Reads metadata declared by a Set's artifacts from store cards (ADR-0156).
 ///
-/// # It is the same reading the MCP tool gives a model, through the same path
-///
-/// `karakuri_mcp::read_set` renders this for a model, and what it reads is the
-/// Set file's `slot` records and each artifact's metadata card —
-/// `Store::read_set`, then `Store::read_meta` per node, then the `param_decl`,
-/// `capacity_decl` and `emit` records on it. This walks the same records rather
-/// than a second source: a panel and a model that disagreed about what a Set
-/// declares would be two answers to one question. What differs is the
-/// rendering, and it differs because the destinations do: a model is handed
-/// prose it reads in a context window and a bay is handed one line per control
-/// in a column eight characters wide.
-///
-/// The prose renderer is not called, and could not be: it returns one `String`
-/// per Set with its blocks already laid out in sentences, and a listing row
-/// wants the key and the range apart. Lifting a structured reading into
-/// `karakuri-environment` so that both surfaces render one value is the right
-/// shape and is a change to a crate this pass may not touch; what is here is
-/// written against the same records in the same order so that the day somebody
-/// does, this is what moves.
-///
-/// # The three blocks the row promises, and the fourth that is not here
-///
-/// *"Every knob with its range and default, the element count, the attributes
-/// emitted — each read off the artifact's own card, so those three fetch no
-/// source and compile nothing."* The three are each a record on a card. The
-/// element storage is deliberately absent: the MCP tool's
-/// `element_storage_block` calls `setfile::load`, which fetches every source in
-/// the Set and runs `compile::check` over it, so a panel that drew it would be
-/// paying exactly the cost that sentence says these three do not.
-/// `docs/manual/console.html`'s note says the same and says where the figure
-/// goes instead — *"A model asking over MCP gets it and pays for it; a press in
-/// a library list is not the place to spend that"* — which the row settles the
-/// same way.
-///
-/// # One control per key, and the range is the one every node agrees to
-///
-/// A Set publishes one control per *key* and not one per declaration
-/// (`docs/ir-spec.md`, and `karakuri_engine::set::Set::published`), so a name
-/// two nodes declare is one row over the part of the range both of them accept.
-/// That intersection is `Set::declared_range`'s own arithmetic — `lo.max(min)`,
-/// `hi.min(max)` — done here because a built Set is what this chip exists to be
-/// pressed before: `published()` needs an engine and a device, and a reading
-/// that took one would be the load it is meant to save.
-///
-/// The default is the first declarer's, and the order is the file's own — the
-/// same order `read_set` prints its nodes in and the order `Set::published`
-/// walks. A default is one number and two nodes may declare two; the
-/// alternative is drawing neither, which is a blank row and is the one thing
-/// the mock's own tip refuses.
+/// Collects parameter ranges and defaults, element capacity, and emitted attributes.
 pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, String> {
     let store = Store::open(root).map_err(|e| format!("the store at {}: {e}", root.display()))?;
     let lines = store
@@ -75,11 +24,7 @@ pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, Stri
             continue;
         };
         reading.nodes += 1;
-        // **A node with no card is counted rather than skipped in silence.**
-        // A card is derived rather than kept, so an artifact stored as bytes
-        // has none — an ordinary state of a working store, which
-        // `mcp::node_block` says at length — and what it costs this reading is
-        // whatever that node declared. The foot is where that is said.
+        // Nodes without metadata cards are still counted in total node count.
         let Ok(card) = store.read_meta(proc_hash) else {
             continue;
         };
@@ -146,22 +91,7 @@ pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, Stri
     Ok(reading)
 }
 
-/// A declared range and the default that applies until something turns it, in
-/// the shape the mock draws every line of a reading in: `0 – 8 · 2`.
-///
-/// The three marks are the mock's own — an en dash between the ends of the
-/// range and a middle dot before the default — and both are in the face the
-/// panel draws with, which is asserted rather than assumed
-/// ([`the_marks_a_reading_is_spelled_with_are_in_the_face`]): the Library bay's
-/// foot read `load → A` with the arrow typed as a U+2192 the default face does
-/// not carry, and drew `load □ A` for a release. The arrow is drawn rather than
-/// typed now, and is a label between two capsules (ADR-0305).
-///
-/// A default that is not a literal is a word and not a blank. The card's
-/// `default` is absent where the declaration's expression is not a number this
-/// build can state — never where there is none, since the `.kir` grammar makes
-/// the expression mandatory — so what a blank would say here is false. `expr`
-/// is what is drawn instead, in a column that has room for four characters.
+/// Formats a knob parameter range and default value for display in the reading pane (ADR-0305).
 pub(crate) fn spelled(min: &str, max: &str, default: Option<String>) -> String {
     format!(
         "{min} – {max} · {}",
@@ -169,27 +99,13 @@ pub(crate) fn spelled(min: &str, max: &str, default: Option<String>) -> String {
     )
 }
 
-/// The reading under the cursor, read and written into the view, and the
-/// sentence to print about it.
-///
-/// [`listing`]'s shape one control along, and it is here for that function's
-/// reason: reading a Set file and the cards behind it is a disk read, this is
-/// the side of the seam that owns the store, and `karakuri-console` takes none
-/// of the three (ADR-0156). On the press and never on a frame (P-0091) — which
-/// is the press on the `params` chip, and the key that moves the cursor while a
-/// reading is open, because the reading follows the cursor.
+/// Reads the Set metadata for the currently selected library row into the view (ADR-0156, P-0091).
 pub(crate) fn read_reading(view: &mut View, store: &std::path::Path) -> String {
     // **The Sets, which is empty under `history`**: a reading is what a Set
     // declares and a row of that scope is a version, so the cursor has no
     // operand there — `view::View::sets`.
     let Some(id) = view.sets().get(view.cursor_row()).cloned() else {
-        // A press with no row under the cursor asks nothing —
-        // `LibraryBay::read` answers `None` for it — so this is reachable only
-        // from a cursor that moved in a listing that went empty in between, or
-        // from a reading left open while the bay was marked `history`: the
-        // block is not drawn there (`View::opened` matches the row's name), and
-        // it is put away here rather than left holding an answer about a Set
-        // nobody can see.
+        // Dismiss the reading pane if the selected row is no longer valid.
         view.shut_reading();
         return String::from(match view.scope() {
             Some(scope) if !scope.lists_sets() => {
@@ -223,38 +139,7 @@ pub(crate) fn read_reading(view: &mut View, store: &std::path::Path) -> String {
     }
 }
 
-/// The reading follows the cursor, on whichever surface moved it.
-///
-/// `karakuri-console/src/view.rs` states the rule on `View::reading_open`: *"a
-/// move with one open is a read of the row it arrived at, and a move with
-/// nothing open is a pointer moving"*. Two surfaces move that cursor, the arrow
-/// keys through `View::walk` and a carry's press through `View::point_at`, and
-/// both owe it the same read — this is the one place that read is written, so
-/// there is one implementation of the rule for both to call rather than two
-/// copies that could answer it differently.
-///
-/// `moved` is each caller's own answer to *did this press move the cursor*: the
-/// arrow-key arm compares `View::cursor_row()` before and after the press, and
-/// the carry's arm is `matches!(acted, Acted::Pointed)`. Neither shape is
-/// repeated here, because *what counts as a move* is each surface's own
-/// question and this function's only question is what to do once one has
-/// happened.
-///
-/// # The defect this rule exists to prevent
-///
-/// Until ADR-0265, `Readout::took` discarded `View::point_at`'s `moved`. A
-/// carry taken in hand while a reading was open on a different row moved the
-/// cursor off it, `View::opened` answered `None` because the row under the
-/// cursor was no longer the Set the reading was of, and the block vanished with
-/// nothing on that route ever walking the cursor back — no panic, no
-/// diagnostic, a reading that stopped being drawn. The arrow keys never had the
-/// bug — they always re-read on `moved && reading_open()` — so the two call
-/// sites already agreed before this function existed; what it buys is that they
-/// cannot silently stop agreeing.
-///
-/// Returns the line to print rather than printing it, so a caller with nothing
-/// to print — the ordinary case, a press with no reading open — pays for no
-/// `println!` and a test can call this with no stdout to capture.
+/// Updates the active Set reading when the cursor row moves in the Library bay (ADR-0265).
 pub(crate) fn reread_if_open(
     moved: bool,
     view: &mut View,
@@ -263,17 +148,7 @@ pub(crate) fn reread_if_open(
     (moved && view.reading_open()).then(|| read_reading(view, store))
 }
 
-/// The record's layer a vocabulary layer names.
-///
-/// A third spelling of a list that already has two conversions in
-/// `karakuri-environment` — `setfile::kind_of` and `mcp.rs`'s pair — and it is
-/// here because both of those are private to that crate and neither is on its
-/// way out. What crosses the seam is the summary, whose nodes carry a
-/// `karakuri_store::record::Layer`, and what a filter carries is a
-/// `karakuri_operation::Layer`; the comparison has to happen on one side.
-///
-/// Exhaustive with no wildcard, which is what makes it a table rather than a
-/// guess: a sixth layer does not compile until somebody says which it is.
+/// Maps an operation layer to its corresponding store record layer representation.
 pub(crate) fn asked(layer: karakuri_store::record::Layer) -> karakuri_operation::Layer {
     use karakuri_operation::Layer as Asked;
     use karakuri_store::record::Layer as Written;
@@ -287,18 +162,7 @@ pub(crate) fn asked(layer: karakuri_store::record::Layer) -> karakuri_operation:
     }
 }
 
-/// The word a `kind` line spells a layer with, as the vocabulary's own value —
-/// `karakuri_environment::history::LAYERS`' six words read back.
-///
-/// `None` for a word that is not one of the six, which is a `.kir` declaring no
-/// kind at all: `declared_kind` already answers `None` there, and this is the
-/// same absence carried one step further rather than a second reading of it.
-///
-/// The wildcard is the risk here and it is why `LAYERS` is the list. This match
-/// answers a word rather than a value, so a sixth kind does *not* stop the
-/// build — it falls to `None` and a `kind L5` file reads as one declaring
-/// nothing. That is the failure `setfile::layer_from_ordinal`'s comment names
-/// one layer earlier, arriving through the other door.
+/// Parses a declared kind string into a vocabulary `Layer`.
 pub(crate) fn kind_of(word: &str) -> Option<karakuri_operation::Layer> {
     use karakuri_operation::Layer;
     match word {
@@ -312,12 +176,7 @@ pub(crate) fn kind_of(word: &str) -> Option<karakuri_operation::Layer> {
     }
 }
 
-/// Which kinds the filter row is showing, as a sentence — the words of the
-/// chips that are on, or *every kind* where none of them is.
-///
-/// `karakuri_operation::LibraryKinds::narrowing` settles the reading of *none
-/// on* once and this says it in the panel's own words: a row that hid the whole
-/// listing would be a state an operator cannot see their way out of.
+/// Formats active kind filter chips as a human-readable description for UI display.
 pub(crate) fn showing(kinds: karakuri_operation::LibraryKinds) -> String {
     if !kinds.narrowing() {
         return String::from("every kind");

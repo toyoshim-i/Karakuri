@@ -150,24 +150,7 @@ fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
     );
 }
 
-/// A send that reached the disk says where it went, and a dismissed dialog
-/// writes nothing and says so.
-///
-/// Three outcomes, one sentence each, and the third is the one worth the test:
-/// a press that opened a window over the panel and then wrote nothing is
-/// exactly the case a reader would otherwise read as a fault, and rule 04 of
-/// the manual is that nothing is hidden quietly.
-///
-/// The dialog is not driven here and does not need to be. What a save dialog
-/// answers is a path or nothing, so [`sent`] takes that answer and the platform
-/// stays outside the test — the same split [`Save::run`] is on one act along,
-/// where the thread is the caller's and the write is a function.
-///
-/// `None` is asserted to have written nothing at all, by counting the directory
-/// rather than by trusting the sentence: a `sent` that bundled first and threw
-/// the bytes away would print the same words.
-///
-/// A CPU test: a store read and a file written.
+/// Verifies package export results: reports target path on success or reports cancellation without writing files.
 #[test]
 fn a_send_says_where_it_went_and_a_dismissed_dialog_writes_nothing_and_says_so() {
     let root = scratch_dir("send-set");

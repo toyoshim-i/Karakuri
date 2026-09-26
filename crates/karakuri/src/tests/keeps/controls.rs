@@ -4,26 +4,7 @@ use karakuri_console::view::tracker_group;
 use karakuri_environment::{audio, mix, Asked};
 use karakuri_operation::{BeatSource, GridScale, Operation};
 use karakuri_operation_record::{Current, Written};
-/// What the legend says about a control surface, and none of it needs one
-/// plugged in.
-///
-/// The same house rule as the room's test below: the half that has no device in
-/// it is [`surface_line`] and [`unsurfaced`], and both are pure functions of
-/// what was found. What is deliberately not here is that a real port opens —
-/// nothing in this file can stand in for a controller on a desk, and
-/// `karakuri_environment::midi`'s tests are what hold the route from a message
-/// to a record.
-///
-/// 1. The port is named, because *which surface answered* is the one thing an
-///    operator cannot see from the panel: this program takes the first input there
-///    is (ADR-0220's reason one column along — the instrument has no `--midi-in`),
-///    and a run that took the wrong one of two would look exactly like a run whose
-///    controller is asleep.
-/// 2. The map is named, and by its path as well as its name. `default` under the
-///    store and `surface` in the preset library are two files, and an operator
-///    who has just learned one wants to know which is loaded.
-/// 3. No map is a state, with the sentence that tells them what to do next,
-///    and nothing plugged in is not a fault.
+/// Verifies surface status line formatting: reports active port, map name/path, or unconfigured status without requiring physical hardware (ADR-0220).
 #[test]
 fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
     let line = surface_line(
@@ -83,26 +64,7 @@ fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
     );
 }
 
-/// The three things this program has decided about a room, and none of them
-/// needs a device.
-///
-/// The house rule for this pass was to say how what could not be opened was
-/// tested. This is it: `listening`'s judgement is [`unopened`], which is a pure
-/// function of an error, and the case that can only happen during a set — an
-/// input picked off a list and gone by the time it is opened — is reachable on
-/// any machine at all by picking a name no device can have. What is
-/// deliberately not here is that a real input opens; that is `karakuri-audio`'s
-/// ignored `the_default_input_opens_and_delivers` and no assertion in this file
-/// could stand in for it.
-///
-/// 1. No device at all is not a fault (P-0084): the sentence says `none` is a
-///    state, and says what goes on answering.
-/// 2. A device that was named and is not there is loud (P-0094): the sentence
-///    carries the list, so an operator who picked a cable that has gone is holding
-///    the right names rather than an invitation to go and look.
-/// 3. And a refused pick does not take the room away. Nothing is open in this
-///    test, so what is asserted is the half that can be: the answer says so rather
-///    than going quiet.
+/// Verifies audio input status reporting: missing devices report cleanly without fault, and unconfigured inputs list available choices (P-0084, P-0094).
 #[test]
 fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusal() {
     let quiet = unopened(
@@ -183,20 +145,7 @@ fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusa
     );
 }
 
-/// "Five milliseconds a press, down and up" — `docs/manual/operations.html`'s
-/// row, and the sign `docs/manual/console.html` says is the half that gets read
-/// wrong at two in the morning: *"Negative and the picture waits for the music,
-/// positive and it leads."*
-///
-/// A pair wired the wrong way round reads correct and points backwards. The
-/// letters went on 2026-09-10 and the arithmetic did not: `↑↓` on the
-/// Transport's offset is what `o` and `p` were, and this asks [`offset_key`]
-/// which way each direction goes and that both go by the one constant the
-/// command line's own `o` and `p` use.
-///
-/// And that `space` on it is the value it was declared at, which is ADR-0259's
-/// rule for every level and the first way back to no offset at all this control
-/// has had.
+/// Verifies Transport latency offset steps by 5ms in expected directions and resets to zero with space (ADR-0259).
 #[test]
 fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
     assert_eq!(
@@ -228,14 +177,7 @@ fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
     assert_eq!(offset_key(Step::Down, 20.0), 15.0);
 }
 
-/// The tempo steps by one beat a minute, counted from the grid it is standing
-/// on, and is floored where the oscillator's own clamp is (ADR-0350).
-///
-/// `space` is not a destination on this control: the figure has no value it was
-/// declared at, so `karakuri_console::focus` declines there.
-///
-/// One step is inside the ±15% a press on the figure is trusted with at every
-/// tempo the trackable range holds.
+/// Verifies tempo adjustment steps by 1 BPM and clamps at lower oscillator bounds (ADR-0350).
 #[test]
 fn the_tempo_steps_by_one_beat_a_minute_from_the_grid_it_is_standing_on() {
     assert_eq!(tempo_key(Step::Up, 128.0), 129.0);
@@ -278,13 +220,7 @@ fn the_master_out_steps_by_a_tenth_and_is_held_inside_the_track() {
     );
 }
 
-/// The exposure steps a quarter stop, taken on the console's own track so that
-/// a key and a pointer land on the same forty-eight values —
-/// `view::EXPOSURE_TRACK_W`'s whole argument, met from the keyboard's end.
-///
-/// Four presses are one stop, which is what a quarter stop means and the one
-/// claim here worth stating as arithmetic rather than as a constant: a
-/// doubling.
+/// Verifies exposure adjustments step in quarter-stop increments, four steps equaling one stop.
 #[test]
 fn the_exposure_steps_a_quarter_stop_and_four_presses_double_it() {
     let mut at = 1.0;
@@ -310,16 +246,7 @@ fn the_exposure_steps_a_quarter_stop_and_four_presses_double_it() {
     );
 }
 
-/// "Negative and the picture waits for the music, positive and it leads", and
-/// "held inside 200 milliseconds either way" — the two halves of
-/// `docs/manual/console.html`'s offset contract that a panel can be held to
-/// without a device.
-///
-/// The second is the one a control is silent about by default: the value is
-/// clamped in `karakuri_environment::audio` and a press at the end of the
-/// travel would otherwise print the same number as the press before it with
-/// nothing said, which is P-0094's *an instrument says what it did* read from
-/// the far end.
+/// Verifies latency offset bounds are clamped within ±200ms with explicit limit reporting (P-0094).
 #[test]
 fn the_offset_says_which_way_it_points_and_says_when_it_was_held_at_the_bound() {
     let waiting = offset_said(-15.0, -15.0);
@@ -373,24 +300,7 @@ fn the_offset_keys_say_so_and_change_nothing_with_no_input_attached() {
     assert_eq!(nudged(&mut open, &Operation::TapBeat), None);
 }
 
-/// The console's copy of the offset's two ends and its step are this crate's
-/// own, held against the originals here because this is the one package that
-/// can see both.
-///
-/// `karakuri-console` restates `LATENCY_OFFSET_RANGE` and
-/// `LATENCY_OFFSET_STEP_MS` because it depends on nothing that could reach them
-/// (ADR-0156) and a track has to know its own ends to be laid out. That is
-/// `EXPOSURE_STOPS`' arrangement one control along — and it is not its
-/// position, which is the reason this test exists: the exposure's bounds are
-/// private to `karakuri-cli` and nothing in the workspace can compare them,
-/// where these two are public and this binary names both crates. A restatement
-/// nobody can check is a copy; one that is checked is a transcription with a
-/// guard, which is `docs/contributing.md` §4's second way of making a statement
-/// hold.
-///
-/// And the track's width falls out of the two, which is what makes one pixel
-/// one press: eighty five-millisecond steps across four hundred milliseconds,
-/// and eighty pixels of track.
+/// Verifies console latency offset constants match environment ranges and step intervals (ADR-0156).
 #[test]
 fn the_consoles_offset_track_spans_the_sessions_own_range() {
     assert_eq!(
@@ -418,20 +328,7 @@ fn the_consoles_offset_track_spans_the_sessions_own_range() {
     );
 }
 
-/// Which half of the octave the panel draws live is the half the beat lock
-/// would accept, and neither number is written down twice.
-///
-/// `BeatLock::octave` refuses when `BPM_RANGE` does not contain `bpm * factor`
-/// and nothing else, so [`tracking`] asks the range the same question before
-/// the press. The tempos here are the mock's own and the two edges of the
-/// range: at 128 only `½` is live, which is exactly what
-/// `docs/manual/console.html` draws and says — *"128.0 doubled is 256 and the
-/// tracker searches 60 to 200 BPM"*.
-///
-/// The range is under two octaves wide, which is the mock's other claim about
-/// this control — *"the two halves are never both available"* — and it is
-/// asserted here rather than assumed, because it is the whole reason the chip
-/// has two faces instead of one.
+/// Verifies octave tracker switches activate only within supported BPM bounds (60-200 BPM).
 #[test]
 fn the_octave_halves_the_panel_draws_live_are_the_ones_the_lock_would_take() {
     let range = audio::BPM_RANGE;

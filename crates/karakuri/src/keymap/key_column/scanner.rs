@@ -24,42 +24,13 @@ pub fn page() -> String {
     })
 }
 
-/// The grammar guard's own keys, beside the digit.
-///
-/// `crate::grammar` matches all six as literals — `Key::Named(NamedKey::…)`
-/// arms `bound` used to scan for — but they stay declared here rather than
-/// scanned for the same reason [`DIGIT`] always was one line down:
-/// [`crate::keymap::KEY_BINDINGS`] is checked against `docs/manual/operations.html`
-/// directly by
-/// [`every_binding_the_table_names_a_title_for_reaches_a_route_marked_built`]
-/// below, and a scan of this file's text is not what answers *what does the
-/// window loop bind* for any key any more, table-driven or guard.
+/// Literal navigation and activation keys handled in grammar guards.
 const GRAMMAR_KEYS: &[&str] = &["up", "down", "left", "right", "space", "enter"];
 
-/// `backspace`, which is neither in [`crate::keymap::KEY_BINDINGS`] nor in
-/// `crate::grammar`. It is a literal in the two letter-taking flows — the
-/// arrangement pill's name and the inspector's — that return before
-/// `window_event`'s own `match` on `key.logical_key` is ever reached, so it
-/// belongs to neither table. Both flows bind it unconditionally, so unlike
-/// [`DIGIT`] it is declared outright in [`bound`] rather than asked of anything
-/// at runtime.
+/// Backspace key handled in text-entry input flows.
 const NAME_ENTRY_KEY: &str = "backspace";
 
-/// Every key the window loop binds, both the table and the grammar guard beside
-/// it — declared rather than scanned.
-///
-/// [`crate::keymap::KEY_BINDINGS`] answers the ten literal keys directly: this is now a
-/// lookup over data `window_event` itself dispatches through, not a second copy
-/// of it. The other eight — `crate::grammar`'s four named keys, the four
-/// arrows, and the digit — are not in that table (`crate::grammar`'s own doc
-/// comment says why: it is a guard rather than arms, for the same reason the
-/// digits were always a special case here), so they are declared in
-/// [`GRAMMAR_KEYS`] and [`DIGIT`] rather than read out of this file's source.
-/// And `backspace` — see [`NAME_ENTRY_KEY`] — is neither the table's nor the
-/// grammar's, and is declared for its own reason beside them. None of the four
-/// is data this function could observe wrongly — every one names permanent
-/// code, not a configuration — so declaring them is not a weaker check than
-/// scanning for them was; it is the same facts, asserted instead of parsed.
+/// Returns the complete set of keys bound by the window loop across table and guards.
 pub fn bound() -> BTreeSet<String> {
     let mut found: BTreeSet<String> = crate::keymap::KEY_BINDINGS
         .iter()
@@ -67,27 +38,14 @@ pub fn bound() -> BTreeSet<String> {
         .collect();
     found.extend(GRAMMAR_KEYS.iter().map(|key| (*key).to_owned()));
     found.insert(NAME_ENTRY_KEY.to_owned());
-    // **The one key of the grammar that names a different row in every
-    // bay**, contributed by the console's dispatch table rather than
-    // declared unconditionally like the rest of [`GRAMMAR_KEYS`] — see
-    // [`DIGIT`]. `crate::grammar` binds it with a guard rather than a
-    // literal, and *which* rows it reaches depends on
-    // `karakuri_console::focus::BUILT` rather than on anything this
-    // file says, so this is the one entry that still asks the console
-    // rather than stating a fact `main.rs` alone could get wrong.
+    // Include digit key if any bay in console focus defines active bindings.
     if !karakuri_console::focus::BUILT.is_empty() {
         found.insert(DIGIT.to_owned());
     }
     found
 }
 
-/// Every row's title and its key badge, in page order: the badge's class —
-/// `has`, `plan` or `gap` — and the keys it names.
-///
-/// Read verbatim and never decoded, which is `mcp.rs`'s rule and
-/// `panel_column.rs`'s after it: a badge that names nothing says `&mdash;`, and
-/// a key that needed decoding to match would be a key nobody could find on
-/// their keyboard.
+/// Extracts row title, badge class (`has`, `plan`, `gap`), and keys from the manual HTML.
 pub fn key_badges() -> Vec<(String, String, String)> {
     let html = page();
     let mut found = Vec::new();
@@ -127,33 +85,14 @@ pub fn key_badges() -> Vec<(String, String, String)> {
     found
 }
 
-/// The rows [`ROWS`] says a route reaches, or `None` if this program does not
-/// bind it at all.
-///
-/// A route is a key and the bay it is addressed in, `None` for a global — which
-/// is the whole of what changed here: `space` alone names no route, and
-/// `("mixer", "space")` names five rows.
+/// Returns matching manual rows reached by a given bay and key combination.
 pub fn rows_of(bay: Option<&str>, key: &str) -> Option<&'static [&'static str]> {
     ROWS.iter()
         .find(|(b, k, _)| *b == bay && *k == key)
         .map(|(_, _, rows)| *rows)
 }
 
-/// What a key badge says, parsed — the keys it names and the bay it names them
-/// in, or `None` for a badge that is not one of the two spellings this column
-/// carries.
-///
-/// The two spellings are ADR-0331's: a built badge names bare letters, and a
-/// designed one names a key of the grammar and the bay it is addressed in.
-/// Since 2026-09-10 a built badge may be either, because the grammar is bound
-/// in two bays — which is the clause that record left for *"the code that binds
-/// `Tab`"* and this is it.
-///
-/// A badge naming a bay resolves every key in it to that bay; a badge naming
-/// none resolves every key to a global. A badge cannot mix them, and that is
-/// not a limitation to work around: a press goes to the bay that has focus or
-/// it does not, and a row reached both ways would need two badges rather than
-/// one with two halves.
+/// Parses key badge content into list of keys and optional target bay (ADR-0331).
 pub fn parsed(badge: &str) -> Option<(Vec<String>, Option<&'static str>)> {
     let (keys, bay) = match badge.split_once(IN_THE) {
         Some((keys, bay)) => {

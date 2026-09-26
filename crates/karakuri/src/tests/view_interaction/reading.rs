@@ -1,16 +1,6 @@
 use super::*;
 
-/// The answer is written into the view, under the row the cursor is on, and a
-/// Set that cannot be read says so and draws nothing.
-///
-/// [`read_reading`] is the glue the window loop runs on a press that asked for
-/// a reading — [`listing`]'s shape one control along — and the two halves worth
-/// a test are the ones a caller cannot see: that what is opened is the row
-/// under the cursor rather than the first row, and that a failure closes the
-/// block. A reading that failed to read and a Set that declares nothing must
-/// not draw the same, which is `library`'s own rule one bay up.
-///
-/// A CPU test: a store is a directory and a `View` takes no device.
+/// Displays parameter reading details for the selected cursor row and closes reading blocks on read errors.
 #[test]
 fn a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on() {
     let root = scratch_dir("read-set-view");
@@ -56,20 +46,7 @@ fn a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// [`reread_if_open`] re-reads on a move with a reading open, and does nothing
-/// on any other press — ADR-0265's rule, as a check on the one function both
-/// `App::window_event` call sites share, rather than on the two copies of it
-/// the window loop used to carry.
-///
-/// Until 2026-09-11 the two call sites were two verbatim statements, held equal
-/// to each other only by a text scan
-/// (`reading_follows_the_cursor::both_surfaces_re_read_the_row_the_cursor_arrived_at`)
-/// that read this file and matched each one whole. Now there is one statement
-/// and not two to keep in step, and this presses it directly: three presses,
-/// only the middle one of which is a move, and only the third of which should
-/// read anything.
-///
-/// A CPU test: a store is a directory and a `View` takes no device.
+/// Cursor navigation moves refresh open parameter readings while non-navigational clicks leave readings unchanged (ADR-0265).
 #[test]
 fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
     let root = scratch_dir("reread-if-open");
@@ -187,21 +164,7 @@ fn a_press_on_the_params_chip_asks_for_the_set_under_the_cursor() {
     );
 }
 
-/// The marks a reading is spelled with are in the face the panel draws with.
-///
-/// [`spelled`] writes `0 – 8 · 2` with an en dash and a middle dot, and the
-/// Library bay's old `load → A` pill is what this test exists because of: its
-/// arrow was typed with a U+2192 `egui`'s default face does not carry, and the
-/// panel drew `load □ A` for a release — *a readout of where a press lands,
-/// with a tofu where the lands was*. A range with a tofu in it would be the
-/// same failure on every row of every reading.
-///
-/// The minus is here too, because a declared range can start below zero — the
-/// mock's own `twist` is `−2 – 2 · 0` — and it is the sign `format!` writes
-/// rather than the typographic one, which is asserted so that the two are not
-/// quietly swapped.
-///
-/// A CPU test: fonts are `egui`'s and take no device.
+/// Verifies reading display typography uses en-dashes and middle dots supported by console fonts without glyph fallback tofu.
 #[test]
 fn the_marks_a_reading_is_spelled_with_are_in_the_face() {
     let ctx = drawn_once();

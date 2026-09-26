@@ -43,32 +43,14 @@ fn a_library_is_the_store_and_a_missing_store_is_not_made() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A version, written where `history::list` reads them.
-///
-/// The name is `Snapshots::record`'s own — a `HHMMSS-mmm` stamp, the slot, the
-/// layer with its index where it is not the first, the procedure name, and
-/// `@<set>` where there was a Set — and it is spelled here rather than recorded
-/// through that type because what these tests are about is the *reading*: a
-/// version filed under a Set, one filed under none, and the difference between
-/// them.
+/// Writes a snapshot file formatted to match `history::list` parsing expectations.
 fn version_file(root: &std::path::Path, day: &str, name: &str, body: &str) {
     let dir = root.join("history").join(day);
     std::fs::create_dir_all(&dir).expect("a day directory");
     std::fs::write(dir.join(name), body).expect("a version");
 }
 
-/// The `history` scope lists the versions of the Set the load pulldown's deck
-/// is running, and a version filed under no Set is not one of them.
-///
-/// That last clause is the one ADR-0276 wrote down and ADR-0308 had to obey:
-/// *"a narrowing must treat a `None` row as matching no Set rather than as a
-/// wildcard."* A run launched on a pair somebody typed files every version it
-/// writes under none, so a wildcard would put the whole of that run's editing
-/// under whatever Set the operator loaded afterwards — silently, in a bay whose
-/// rows are names.
-///
-/// And a deck running nothing lists nothing, with the sentence saying which
-/// nothing it is. A CPU test: `listing` reaches a disk and no device.
+/// Verifies history listings filter by the active Set and exclude versions filed under no Set (ADR-0276, ADR-0308).
 #[test]
 fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
     let root = scratch_dir("history-listing");
@@ -139,22 +121,7 @@ fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A landing writes the version's bytes over the node's working copy, and a
-/// file that is gone is refused by name.
-///
-/// The write is the whole of what a landing does on this side: nothing touches
-/// a deck, nothing sends an aim, and the watcher already looking at that file
-/// is what builds it — ADR-0228's argument met from the other end. So what this
-/// asserts is the bytes and the path: the file the version was of, resolved
-/// through the slot's own nodes rather than through the copies the run launched
-/// with.
-///
-/// The refusal names the file, because `rm -rf history/2026/07` is this store's
-/// whole retention policy: a row whose file an operator deleted by hand is an
-/// ordinary state, and P-0083 says a refusal carries what the next attempt
-/// needs.
-///
-/// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no device.
+/// Verifies version restoration writes snapshot bytes over the node working copy and reports missing files cleanly (ADR-0228, P-0083).
 #[test]
 fn a_landing_writes_the_versions_bytes_over_the_nodes_working_copy() {
     let root = scratch_dir("history-landing");
@@ -334,23 +301,7 @@ fn a_step_back_lands_the_version_before_the_one_running() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A keep takes its own row off the lane and leaves every other row standing.
-///
-/// The half of the press that is not the operation: [`kept`] is where a
-/// `KeepCandidate` is performed, because `written` answers
-/// `Silent(Silent::Surface)` for it and there is no record for `apply` to move
-/// a deck with. What it changes is one line in one list.
-///
-/// Two rows of one slot is the case worth the test, and it is what ADR-0326
-/// made possible: a build that changed two nodes draws two rows on one deck, so
-/// a keep that retired by *slot* would take a node nobody ruled on off the lane
-/// with the one they did.
-///
-/// And a keep on a node with no row says so rather than reporting a press that
-/// did nothing — no control on this panel can ask it, so the line is for the
-/// day a map or a model reaches this row.
-///
-/// A CPU test: a `View` takes no device.
+/// Verifies keeping a candidate removes its staging lane entry while leaving other node rows intact (ADR-0326).
 #[test]
 fn a_keep_takes_its_own_row_off_the_lane() {
     let node = |layer: karakuri_operation::Layer, index: u32, name: &str| Changed {

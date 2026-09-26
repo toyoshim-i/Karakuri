@@ -14,48 +14,7 @@ use winit::window::Window;
 
 use crate::CANVAS;
 
-/// Open or close the projector window, and say what happened.
-///
-/// The one operation in this file that makes a *window*, which is why it takes
-/// an `&ActiveEventLoop` and why it is reached from `window_event` rather than
-/// from [`App::performed`]: `winit` will not create a window without one, and
-/// `performed` is handed a [`Gfx`] and no event loop.
-///
-/// # What each answer is
-///
-/// - `Projector(0)` on opens a window, makes a surface on the device the
-///   panel is already using, configures it and puts a [`WindowSink`] over it.
-///   The next frame's [`render_size`] sees a second output and the frame
-///   follows the larger of the two.
-/// - `Projector(0)` off drops the [`Projector`], which drops the surface
-///   and the last reference to the window — so the window closes and the sink
-///   leaves the slice on the same statement. Nothing is torn down in an order
-///   this file has to remember.
-/// - `Program` never arrives: the picture's on and off is the fold, and
-///   the console performs it where the arrangement is (`Readout::sink`). It is
-///   an arm here so that the match is exhaustive and says so.
-/// - `Plugin(n)` is refused with the sentence that names what is missing,
-///   which is [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
-///   there is no manifest to read a plugin sink out of, and the console draws
-///   both plugin chips `no plugin` for that reason, so this is only reachable
-///   from a route that is not the panel.
-///
-/// # The surface has to be the format the present pass was built for
-///
-/// [`Present`]'s pipeline names one target format at construction, and that is
-/// [`Gfx::picture_format`] — the first sRGB format the console's own surface
-/// offers, read off it once in [`App::resumed`], so the encode is the
-/// hardware's and happens exactly once (P-0064). A surface in another format
-/// would need a second pipeline, which is a *second present pipeline* and is
-/// exactly what ADR-0247 says nothing needs. So this asks the projector's
-/// surface for that same format and refuses to open the window when it is not
-/// offered, naming both — a window that opened and drew nothing would be the
-/// silent wrong picture P-0094 refuses, and this is a refusal before the show
-/// rather than a fault during one.
-///
-/// Two surfaces of one adapter offer the same formats, so the refusal is
-/// reached only where the projector's window is on a display the console's
-/// adapter does not drive.
+/// Opens or closes the projector window, configuring a [`WindowSink`] using the shared adapter format (ADR-0247, P-0064, P-0083, P-0094).
 pub(crate) fn routed(
     gfx: &mut Gfx,
     event_loop: &ActiveEventLoop,
@@ -213,11 +172,7 @@ pub(crate) fn answered(
         // so nothing in the arrangement moved and no `Outcome` says so.
         focus::Asked::Moved => return Change::Pointed(true).repaint(),
         focus::Asked::Emitted(operation) => Acted::Emitted(Some(operation.clone())),
-        // **A move of the arrangement**, which is not the vocabulary's: the
-        // fold `space` performs on a bay, and the Program head's solo. It
-        // leaves by `Readout::op` like every other arrangement press, so the
-        // sentence a fold prints and the frame it asks for are the ones `f`
-        // printed and asked for until 2026-09-10.
+        // Perform arrangement actions (such as bay folding or Program solo) and route through `Readout::op`.
         focus::Asked::Panel(op) => {
             let outcome = readout.op(*op);
             return Change::Operated(&outcome).repaint();
@@ -229,15 +184,7 @@ pub(crate) fn answered(
             let outcome = readout.sink(asked.clone(), *op);
             return Change::Operated(&outcome).repaint();
         }
-        // **The level, named here because the step is this file's arithmetic**
-        // — [`gain_key`] and [`opacity_key`], whose tenth is `karakuri-cli`'s
-        // and whose clamp decides what the record says.
-        //
-        // **Five levels and one shape.** The two on a strip are read off the
-        // deck through [`held`]; the master out is read off the same deck one
-        // pass along, the exposure off the look and the offset off the audio
-        // session — each of them a value this file has in front of it and the
-        // console does not (ADR-0156, ADR-0333).
+        // Clamp and record stepped level adjustments for gain, opacity, master out, exposure, and offset (ADR-0156, ADR-0333).
         focus::Asked::Stepped { level, step } => match level {
             focus::Level::Trim(deck) | focus::Level::Fader(deck) => {
                 match held(&gfx.engine.deck, *deck) {
@@ -276,11 +223,7 @@ pub(crate) fn answered(
                 }
             },
         },
-        // A press on the audio-in pill or on one of its rows, performed
-        // through the method a pointer press on the same rectangle already
-        // reaches: opening the card enumerates the machine's inputs, which is a
-        // device read and not a thing `karakuri-console` can do at all
-        // (ADR-0156, ADR-0350).
+        // Enumerate audio input devices upon opening the audio-in card (ADR-0156, ADR-0350).
         focus::Asked::Listened(ask) => {
             let acted = readout.listened(ask.clone());
             return App::performed(
@@ -315,17 +258,7 @@ pub(crate) fn answered(
     App::performed(gfx, started, readout, recorder, &acted, Repaint::Never).repaint
 }
 
-/// A load, performed — [`loading`] reached from an operation, and `None` for
-/// every operation that is not one.
-///
-/// `Operation::LoadSet` writes no record either, so this is [`pointed`]'s shape
-/// one bay along: the surface that names it performs it. What it does not do is
-/// touch the deck, which is the whole design — see [`loading`] and
-/// [`Engine::aimed`].
-///
-/// Every failure is a sentence and none of them moves anything: a slot the deck
-/// has not got, a store that will not open, a Set that is not there, a
-/// procedure that no longer checks, or a worker that has gone.
+/// Loads a selected Set into a deck slot via [`loading`], reporting status sentences on failure ([`Engine::aimed`]).
 pub(crate) fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     let Operation::LoadSet { deck, set } = operation else {
         return None;
@@ -345,20 +278,7 @@ pub(crate) fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     };
     match loading(&gfx.store, slot, slot_salt(slot), aim, set) {
         Ok(line) => {
-            // **What that slot is now playing**, written on the press that
-            // changed it. A `Set` has no name of its own, so the strip and the
-            // pane head read whatever whoever built it says — and after a load
-            // that is the id the operator picked out of the library, which is
-            // the same word the row they pressed on carries.
-            //
-            // **Written on the aim rather than on the swap**, which is a
-            // choice and not an oversight: the build may still be refused, or
-            // land and stop its slot for cost, and a name that waited for the verdict
-            // would leave the strip naming material that is no longer in the
-            // file. The staging lane is what says which of the three happened,
-            // on the deck it happened to, and it is the surface built for
-            // exactly that disagreement — a strip name that hedged would be a
-            // second, quieter answer to the question that lane is about.
+            // Update slot material ID on aim before build verification; staging reports discrepancies.
             if let Some(name) = gfx.material.get_mut(slot) {
                 name.clear();
                 name.push_str(set);
@@ -418,54 +338,7 @@ pub(crate) fn overlaid(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     }
 }
 
-/// A version put back — a row of the Library bay's `history` scope landed on
-/// the node it was a version of, and `None` for every operation that is not
-/// one.
-///
-/// # It is a load, and it goes the way every other load goes
-///
-/// The snapshot's bytes are written over that node's working copy under
-/// `<store>/scratch/`, where the slot's watcher is already looking, and nothing
-/// else is touched: no deck, no aim, no channel. So the worker reads it,
-/// compiles it off the render thread, swaps it at a frame boundary and rolls it
-/// back on its own if it cannot hold the budget — which is [`loading`]'s
-/// argument met from the other end, and
-/// `docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md`
-/// is where it is written down. Nothing is installed.
-///
-/// The version it replaces is kept by the same act. The watcher snapshots at
-/// its compile-success point
-/// (`docs/adr/0089-history-is-gated-on-compiling-not-on-landing.md`), so what
-/// was on the node before this write is the next row of the very listing the
-/// press came off — a landing you did not mean is itself undoable.
-///
-/// # Finding the file again, and why no path crosses the seam
-///
-/// The console says a name — [`version_row`]'s spelling, the one it was handed
-/// — and this re-asks `history::list` and rebuilds that spelling per candidate
-/// to find the row. That is `SetTransfer::Take`'s arrangement exactly: *"the
-/// panel's route re-asks the listing and finds the row by the word that was
-/// pressed, so no surface spells a path"*.
-///
-/// Which node the file is is asked of the aim rather than of the launch copies.
-/// [`Engine::pointing`] is the run's one `mcp::Slots`, written out of what each
-/// watcher is *pointed at* — `Aiming::at` — so the answer follows a library
-/// load. `Slots::file` is the one walk that turns `(slot, layer, index)` into a
-/// file, and it is asked rather than repeated.
-///
-/// This used to build a `Slots` of its own here, because the one the MCP server
-/// held was the launch working copies and went stale on the first load
-/// (ADR-0308's *Doubted*). The server reads this same handle now, so the second
-/// one is gone rather than kept beside it.
-///
-/// # Five refusals, and each says where the deck is still pointed
-///
-/// A slot the deck has not got, a deck playing no Set at all, a version that is
-/// not one of that Set's, a node the deck does not hold, and a file that is
-/// gone or will not be written. `rm -rf history/2026/07` is this store's whole
-/// retention policy, so the fourth is an ordinary state of a working store and
-/// the sentence names the file rather than calling it damaged
-/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+/// Restores a snapshot from the Library history scope onto a slot node's working copy without reinstalling (ADR-0089, ADR-0228, ADR-0308, P-0083).
 pub(crate) fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
     let Operation::RestoreProcedure { deck, revision } = operation else {
         return None;
@@ -508,22 +381,7 @@ pub(crate) fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
     ))
 }
 
-/// The Set the load pulldown's deck is running, or `None` for a deck playing
-/// the pair the run was launched with.
-///
-/// It is read off the aim and off nothing else, which is ADR-0304: the id rides
-/// the `watch::Aim` a load sends, restated by every rewiring, and
-/// `Gfx::material` beside it is the mixer strip's *readout* — the pair at
-/// launch, and never an id a listing can match.
-///
-/// The pulldown and not the selection, which is ADR-0305 read on a second
-/// control: the letter in that foot is what says where a load lands, so it is
-/// what says whose history the `history` scope is showing. A target past the
-/// slots the deck has answers `None`, which `View::aim_at` already refuses and
-/// this does not depend on.
-///
-/// Owned, because the caller is about to take `&mut View`. One `String` per
-/// press on a path that is about to read a directory.
+/// Returns the Set ID currently running on the load pulldown's target deck (ADR-0304, ADR-0305).
 pub(crate) fn aimed_set(gfx: &Gfx, view: &View) -> Option<String> {
     gfx.engine
         .aimed

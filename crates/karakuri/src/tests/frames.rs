@@ -22,28 +22,10 @@ fn every_frame_that_could_not_be_acquired_is_acted_on() {
     assert_eq!(missed(&Acquired::Validation), Some(Missed::Fault));
 }
 
-/// A figure quoted in prose is held against the run that was just taken, so a
-/// panel that grows says so instead of leaving a sentence that was true of a
-/// smaller one.
-///
-/// This is the failure the guard exists for, and it is not hypothetical: the
-/// line above the reading cited ADR-0164's 184 allocations and said the `egui`
-/// pass "is still that" through the mixer bay landing at 456 and the parked
-/// deck at 525 — two commits of a present-tense claim nobody re-checked,
-/// because nothing re-checked it.
-///
-/// What can be asserted here is the verdict, not the reading. A reading needs a
-/// device, a window and three seconds of nobody touching it, so it cannot be
-/// taken from `cargo test`; what this file can do is make the figure in the
-/// sentence and the figure under the verdict one constant, and hold [`drifted`]
-/// to catching what actually went wrong.
+/// Compares documented allocation figures against runtime measurements to detect regressions (ADR-0164).
 #[test]
 fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
-    // The band a run has to stay inside to say nothing. The nine runs
-    // behind the figure of 2026-08-31 agreed to the allocation; the nine
-    // behind 2026-08-26's read between 524 and 538, which is the widest
-    // run-to-run spread this file has ever taken, and a guard that fired
-    // on 14 allocations is one nobody could keep passing.
+    // Allowed tolerance band for allocation drift between runs.
     assert_eq!(drifted(WRITTEN_ALLOCS, WRITTEN_ALLOCS), None);
     assert_eq!(
         drifted(WRITTEN_ALLOCS + 14, WRITTEN_ALLOCS),
@@ -51,11 +33,7 @@ fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
         "the run-to-run spread of the reading this quotes must not read as staleness"
     );
 
-    // And what it is for: ADR-0164's 184 against the mixer bay's 456 is
-    // 2.5x, so the first run after that bay landed would have said the
-    // sentence had stopped being true. It is the same answer whichever of
-    // the two is the one written down, because a pass that got cheaper
-    // makes the sentence just as untrue.
+    // Verifies significant allocation shifts trigger drift warnings (ADR-0164).
     assert!(
         drifted(456, 184).is_some(),
         "the mixer bay's landing is the drift this exists to have caught"
@@ -71,16 +49,7 @@ fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
     assert!(drifted(WRITTEN_ALLOCS / 10, WRITTEN_ALLOCS).is_some());
 }
 
-/// A frame nobody asked for is the one the reading is about.
-///
-/// The measurement carries the claim now, so what it counts has to be asserted
-/// rather than eyeballed on stdout. The failure it exists for is the one that
-/// made the first run of this read `3 frames` on a window that had behaved
-/// perfectly: an event resets the stretch, and the frame that event asked for
-/// lands a millisecond into the new one and gets blamed on the panel. The other
-/// direction is worse and is asserted too — a `push` that never counts anything
-/// reads `0 frames` whatever the window is doing, which is a measurement that
-/// cannot fail.
+/// Verifies frame counting accuracy: unrequested frames trigger counts, while event-driven frames do not corrupt intervals.
 #[test]
 fn a_frame_nobody_asked_for_is_the_one_counted_against_a_still_panel() {
     let frame = Cost {
@@ -162,15 +131,7 @@ fn a_moving_pointer_does_not_take_the_rate_off_the_transport_row() {
     assert_eq!(costs.rate(), Some(rate));
 }
 
-/// The defect this instrument was built for, stated as an assertion.
-///
-/// A frame that spent 200 ms blocked and 3 ms on the CPU is a 203 ms frame.
-/// [`Cost::whole`] answers 3 ms, and that is not an error in it — it is CPU
-/// time and says so — but it is what a reader who wants *what did this frame
-/// cost* used to be handed, and what a loop at four frames a second was read
-/// off as *idle 97.6% of the time*. The number with the wait in it is
-/// [`Cost::period`], and the frame's own arithmetic is here so that a later
-/// widening of `whole` fails rather than passes.
+/// Asserts distinction between CPU time ([`Cost::whole`]) and total frame interval including waits ([`Cost::period`]).
 #[test]
 fn a_frames_cost_has_the_wait_in_it_and_the_three_cpu_stretches_do_not() {
     let frame = Cost {
@@ -200,12 +161,7 @@ fn a_frames_cost_has_the_wait_in_it_and_the_three_cpu_stretches_do_not() {
     assert_eq!(Cost::default().elsewhere(), None);
 }
 
-/// A period is an interval and needs two frames, and an audit happens at most
-/// once per [`Costs::AUDIT`] however many frames go by.
-///
-/// Both are the same rule from two sides: the instrument reads the clock rather
-/// than counting frames, so nothing about how fast this window draws changes
-/// what either answers.
+/// Asserts period intervals require two frames and audit intervals are clock-driven rather than frame-count-driven ([`Costs::AUDIT`]).
 #[test]
 fn the_first_frame_has_no_period_and_an_audit_does_not_repeat() {
     let mut costs = Costs::new();
@@ -232,20 +188,7 @@ fn the_first_frame_has_no_period_and_an_audit_does_not_repeat() {
     assert!(!costs.audit(), "two frames in a row were audited");
 }
 
-/// A whole drag, through the window loop's own routing.
-///
-/// `karakuri_console::input`'s tests are about the rule; this is about this
-/// file obeying it, which is a different claim and the one that actually
-/// reaches an operator. It drives the gesture a hand makes — press on the
-/// boundary between the left pane and the centre, run the pointer well past it
-/// and across two bays, let go — through `Readout::pointer`, which is the
-/// method `window_event` calls, and asserts two things: the boundary moved, so
-/// the drag works with a toolkit in the loop, and `egui` was never told about
-/// any of it, so the two never both think they are dragging.
-///
-/// It cannot be a real pointer: synthesising one takes an Accessibility grant
-/// this process does not have, and a test that needs a human to click is not a
-/// test.
+/// Verifies splitter dragging via `Readout::pointer` updates pane boundaries while isolating drag state from `egui`.
 #[test]
 fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
     let ctx = drawn_once();
@@ -330,12 +273,7 @@ fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
         pane_width(&readout)
     );
 
-    // **And the way back, through the same routing.** A closed pane keeps
-    // its boundary at the window's own edge, so the gesture that brings it
-    // back is a second drag on that boundary — pressed, pulled inward, let
-    // go. This is the sufficient half of *Fold a pane away* for the row
-    // that needs it: `karakuri-console` cannot depend on this file, so
-    // whether a hand on a real window reaches the fold is a test here.
+    // Verifies dragging a folded pane's boundary unfolds the pane back into view.
     let edge = readout
         .panel
         .layout()
@@ -366,22 +304,7 @@ fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Egui);
 }
 
-/// A wheel over an Inspector pane scrolls that pane, and no other.
-///
-/// # Why it is here and can be nowhere else
-///
-/// `karakuri-console` holds the position and the derivation, and
-/// `input::wheeled` answers *which pane* — but nothing in that crate joins the
-/// two, because joining them is routing a window event and there is no window
-/// there. `Readout::pointer` is the join, and it is a method rather than four
-/// arms of `window_event` for exactly this reason: `winit` hands out no
-/// `ActiveEventLoop` outside its own loop, so the handler is not something a
-/// test can call and the part worth testing is this
-/// ([ADR-0307](../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
-///
-/// Four things, and the third is the one a single-pane inspector would have
-/// hidden: the wheel is aimed with the pointer, so two panes are two positions
-/// and turning one must leave the other where it was.
+/// Verifies mouse wheel events over an Inspector pane scroll only that targeted pane (ADR-0307).
 #[test]
 fn a_wheel_over_an_inspector_pane_scrolls_that_pane() {
     let ctx = drawn_once();
@@ -520,17 +443,7 @@ fn pane_width(readout: &Readout) -> f32 {
     layout.rect(layout.find("left-pane").expect("left-pane")).w
 }
 
-/// A context that has drawn once, which is what routing a pointer takes: the
-/// claim rule asks where the Outputs row's control is, that is the width of the
-/// type in it, and `egui`'s fonts are not valid until a pass has run. The
-/// window loop has drawn long before a hand arrives; a test has to say so.
-///
-/// The texture delta is cleared because `epaint` panics if one is dropped
-/// unapplied — there is no renderer here to apply it to, which is the whole of
-/// what makes this a test and not a window.
-///
-/// `mod gpu` uses it too: a strip is laid out with the type in it, and a device
-/// does not make fonts valid.
+/// Ensures an initial draw pass runs to initialize `egui` font metrics and layouts before routing pointer queries.
 pub(crate) fn drawn_once() -> egui::Context {
     let ctx = egui::Context::default();
     let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
@@ -538,43 +451,7 @@ pub(crate) fn drawn_once() -> egui::Context {
     ctx
 }
 
-/// The whole of what the four class pills are for: an operation the gate
-/// refuses becomes one it allows, because a hand pressed a capsule.
-///
-/// # Why it is here and can be nowhere else
-///
-/// It crosses three crates and no two of them can see the third.
-/// `karakuri-console` draws the pill and hands back a value; it must not name
-/// `karakuri-environment` at all (ADR-0156), so it cannot reach the handle.
-/// `karakuri-environment` holds the `Opening` and cannot see a console.
-/// `karakuri-operation`'s gate holds the audit and the refusal and depends on
-/// neither. This file is the only place all three are in scope, which is the
-/// same reason `key_column` is a unit test in this binary: a surface is where
-/// the buck stops, nothing may depend on this package, and the checks that need
-/// everything at once live in it.
-///
-/// # What it asserts, in the order an operator's afternoon goes
-///
-/// 1. `SetGain` is in the mix-fader class, which is the classification ADR-0235
-///    drew — asserted against `standing` rather than assumed, so that a row moved
-///    out of the class fails here rather than making this test quietly vacuous.
-/// 2. On a run nobody has touched it is refused, and the sentence is
-///    `gate::refusal`'s own by equality — P-0090, *a refusal a person can reach
-///    from two surfaces is one sentence*, asserted against the function rather
-///    than with a `contains`. It names the Mixer bay, because a model that is told
-///    only *no* reports the instrument as incapable instead of as closed.
-/// 3. A press on the Mixer bay's pill — through `Readout::pointer`, which is the
-///    same routing a hand goes through, and not by calling `set` here — opens the
-///    class.
-/// 4. The same call, the same audit, now allowed. Nothing about the
-///    operation changed and nothing about the vocabulary changed; the list a model
-///    reads never shortened at any point.
-/// 5. And exactly that class. The other three are still shut and an operation in
-///    one of them is still refused, which is the property the console's own
-///    `a_press_opens_exactly_one_class_and_leaves_the_other_three_shut` makes
-///    about the value and this one makes about the run.
-/// 6. A second press shuts it, and the call is refused again — the other half of
-///    the page's *"click again to shut it"*, seen from the gate.
+/// Verifies permission class toggles: clicking a bay capsule pill opens its gate class and unblocks operations, while a second press shuts it (ADR-0156, ADR-0235, P-0090).
 #[test]
 fn the_gate_lets_a_refused_operation_through_once_the_class_is_open() {
     use karakuri_operation::gate::{audit, refusal, standing, Running, Standing};
@@ -705,26 +582,7 @@ fn each_of_the_four_pills_opens_its_own_class_through_a_press() {
     }
 }
 
-/// A reading is read off the cards, one row per key, and never off a compile.
-///
-/// The claim `docs/manual/operations.html` makes for this row — *"each read off
-/// the artifact's own card, so those three fetch no source and compile
-/// nothing"* — and the four things [`declared`] has to get right, each of which
-/// a plainer reading would get wrong:
-///
-/// 1. One control per key. `exposure` is declared by two nodes here, exactly as
-///    it is in the mock's own reading, and it is one row.
-/// 2. Over the part of the range both of them accept, which is
-///    `Set::published`'s intersection done off the cards: `[0, 1]` and `[0.2, 0.8]`
-///    is one control over `[0.2, 0.8]`.
-/// 3. A node with no card is counted and not skipped in silence, which is the
-///    foot's `n without a card` and the one thing that keeps a knob missing for
-///    want of a card from being a knob missing.
-/// 4. Nothing was compiled. The artifacts here are not `.kir` at all — they are
-///    three bytes each — so a reading that fetched and checked a source could
-///    not have answered at all, which is the strongest form this claim can be put in.
-///
-/// A CPU test: a store is a directory and no adapter is opened.
+/// Verifies control declarations are extracted directly from node cards rather than compiling shaders, combining shared keys and reporting uncarded nodes.
 #[test]
 fn a_reading_is_read_off_the_cards_and_never_off_a_compile() {
     use karakuri_store::ndjson::Line;

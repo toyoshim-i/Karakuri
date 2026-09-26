@@ -1,20 +1,6 @@
 use super::*;
 
-/// The one record an operation writes, for the tests that know there is exactly
-/// one.
-///
-/// For the four whose record needs no reading at all, which is where
-/// `Current::default()` — *I read nothing* — is the honest answer. A conversion
-/// that answered anything but a single record for one of those four is this
-/// file's assumption breaking rather than a test needing a helper, which is why
-/// the panic says so.
-///
-/// The mask's operation is not one of them and must not be passed here: its
-/// record is written out of the operation *and* a reading of the running mask
-/// (ADR-0201), so it would come back `Owed(NotRead)` and this would panic —
-/// correctly, and saying which operation. What the mask's tests hand in is a
-/// reading, through [`reading`] where there is a deck and by hand where there
-/// is not.
+/// Helper to extract single records from operations that require no contextual reading (`Current::default()`).
 pub(crate) fn only_record(operation: &Operation) -> Record {
     match written(operation, &Current::default()) {
         Written::Records(records) if records.len() == 1 => records.into_iter().next().unwrap(),
@@ -56,20 +42,7 @@ pub(crate) fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
     }
 }
 
-/// The pair a bare run plays, for the tests that need one on the disk.
-///
-/// [`Sources::under`] takes a preset library and does not go looking for one;
-/// this is the going-looking, and in a test binary the answer is always the
-/// last candidate — the workspace this file was compiled in, which is also the
-/// tree the test is run from. That is the development entry doing exactly what
-/// it is for, and it is why these tests can assert the pair is on the disk
-/// without an install anywhere.
-///
-/// A function rather than an `impl Default` on [`Sources`], because a `Default`
-/// is what baked the build machine's own tree into a shipped binary: a type
-/// whose default value is a search of the filesystem invites exactly that call
-/// from production, and a production caller now has to say which library it
-/// means.
+/// Resolves the fallback preset library path from the current workspace root for disk-backed tests.
 #[cfg(test)]
 pub(crate) fn shipped() -> Sources {
     let presets = karakuri_environment::places::presets(None)
@@ -81,39 +54,13 @@ pub(crate) fn shipped() -> Sources {
     Sources::under(&presets.dir)
 }
 
-/// The shipped pair in every slot, for the tests that build an [`Engine`].
-///
-/// A *run* may not do this — [`working_copies`] is what a run calls, and its
-/// whole point is that no two slots watch one file — and this helper is not a
-/// way back to that. It is legal here for the reason the copies exist: nothing
-/// in these tests edits a `.kir`, no watcher of theirs ever sees a change, and
-/// a test that materialised into a temporary store would be asserting the
-/// copies rather than the thing it is about. The one test that *is* about the
-/// copies calls `working_copies` and is named after the claim.
+/// Supplies default test slot configurations without creating isolated disk working copies.
 #[cfg(test)]
 pub(crate) fn shipped_slots() -> Vec<Sources> {
     std::iter::repeat_n(shipped(), SLOTS).collect()
 }
 
-/// The reference workload's pair, for the tests whose claim is about a cost
-/// rather than about what this program opens on.
-///
-/// `docs/contributing.md` §1 names `examples/drift_cloud.kset` —
-/// `drift_shell.kir` at the 262144 elements it declares, with `soft_points.kir`
-/// — and this resolves those two out of the same preset library [`shipped`]
-/// answers from. It is deliberately not [`shipped_slots`], and the two were one
-/// value until 2026-09-07.
-///
-/// What separated them is a test going quiet rather than red.
-/// [`ADR-0271`](../../../docs/adr/0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md)
-/// moved the default pair to `examples/star_vortex.kset`'s two parts, which are
-/// closed-form and 10240 elements.
-/// `gpu::the_budget_parks_a_deck_and_the_strip_carries_both_residencies` then
-/// measured 1.8 ms a slot against a 2.7 ms headroom and the governor answered
-/// `NoPrimingNeeded` — a closed-form Set with nothing to warm — so the park the
-/// test is named for was still a park and no longer the budget's. Which pair a
-/// bare run opens on is a demo decision (ADR-0270); whether the budget refuses
-/// a second Live slot is not, and it needs material chosen for its cost.
+/// Resolves reference workload pair paths (`examples/drift_cloud.kset`) for compute budget evaluation (ADR-0270, ADR-0271).
 #[cfg(test)]
 pub(crate) fn reference() -> Sources {
     let shipped = shipped();

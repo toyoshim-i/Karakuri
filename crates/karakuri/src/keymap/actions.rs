@@ -46,12 +46,7 @@ pub(super) fn key_save(ctx: &mut KeyCtx, gfx: &mut Gfx) {
     // inventing a stamp.** A caller that can type a name is not made to
     // take a timestamp, and a key press is not one of them.
     let acted = Acted::Emitted(Some(Operation::SaveSet { deck, id: None }));
-    // **Named through `performed` and performed beside it**, which is
-    // `e`'s shape: the emission is what records the press as
-    // `Silent(OnLanding)` rather than as nothing at all, and the save
-    // itself is this function's because `Operation::SaveSet` writes no
-    // record here — the `save` record is written where the work lands,
-    // and this program records no session to write it into.
+    // Records the action emission before executing the set save operation.
     let repaint = App::performed(
         gfx,
         ctx.started,

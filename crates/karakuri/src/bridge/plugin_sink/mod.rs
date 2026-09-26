@@ -1,8 +1,5 @@
 //! Video output sink streaming zero-copy GPU frames to an out-of-process plugin.
-//!
-//! On macOS, frames are rendered into an `IOSurface`-backed Metal texture, and the
-//! resulting `IOSurfaceID` is forwarded to the plugin process (e.g. Syphon) over a
-//! non-blocking pipe (ADR-0358, docs/plugins.md).
+//! On macOS, frames render to an `IOSurface`-backed Metal texture forwarded via pipe (ADR-0358, docs/plugins.md).
 
 use karakuri_engine::{Gpu, Sink, Skip};
 use karakuri_environment::output_plugin::OutputPlugin;
