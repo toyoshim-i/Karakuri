@@ -2,32 +2,7 @@
 
 use super::wire_common::*;
 
-/// **The five ADR-0334 left `plan` reach the loop now, and the one it
-/// listed beside them never will.**
-///
-/// ADR-0334 named six rows that `operate` refused for want of a performer
-/// on the frame the drain lands on, and ADR-0341 is the day each of them
-/// got one — four by the drain calling the window's own press arm, one by
-/// a reading `crates/karakuri` was not taking. **What is asserted here is
-/// the half this crate owns**: the name is taken, the payload crosses the
-/// channel as it was spelled, and the audit is what stands between them
-/// rather than a refusal written in this file. What each of them then *does*
-/// needs a window and is asserted where the window is.
-///
-/// **With every class open**, because four of the five are closed rows and
-/// a fixture that left them shut would assert the gate a second time
-/// instead of the route. The one that is open either way is the star: its
-/// class is nobody's, the refusal it meets is the performer's, and
-/// `gate.rs` is untouched (ADR-0301).
-///
-/// **No count in the name.** It was five when it was written and six by
-/// the end of the day, because ADR-0338's two moved in another session
-/// while this one was running — so the list below is what it is and the
-/// name does not have to be edited when it grows again.
-///
-/// **Watched to fail** with any of them taken out of `sayable`'s operable
-/// list: the call is refused on the connection thread, `failed` is true,
-/// and the loop sees nothing.
+/// Verifies that operate requests for supported performer operations cross the channel as spelled.
 #[test]
 fn the_rows_that_grew_a_performer_reach_the_loop() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -124,13 +99,7 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
         );
     }
 
-    // **And ADR-0338's load, which is taken here and answered by the
-    // audit rather than by this file.** Its class is a predicate over the
-    // deck it names and this server has read no residency, so it is
-    // refused with the reading nobody took — `LoadSet`'s own answer beside
-    // it (ADR-0334), and a built route rather than a missing one. What is
-    // asserted is *which* refusal: a spelling that did not take the name
-    // would refuse it before the gate ever saw it.
+    // Verify that loading an unresident procedure is audited and rejected by the audit layer.
     let (failed, said) = call(
         port,
         "operate",
@@ -148,10 +117,7 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
         "the load was refused by this file's spelling rather than by the audit: {said}"
     );
 
-    // **And the send is refused, in a sentence naming the flag that
-    // sends.** It is the row that is `gap` rather than `plan`: a send names
-    // no destination and a model cannot answer the dialog the panel puts
-    // one in, and a take names a file, which never crosses this protocol.
+    // Verify unroutable operations like Send/Take are rejected with CLI instructions.
     let (failed, said) = call(
         port,
         "operate",
@@ -169,12 +135,7 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
     );
 }
 
-/// **Two assertions, and the weaker one covers more.** The four this
-/// fixture can carry to a real answer must succeed outright. All seven must
-/// come back saying something other than the refusal — a tool that fails
-/// because this fixture has no store, no saved set and no render loop is
-/// this fixture failing it, and a tool the audit stopped says so in the one
-/// sentence, which is what makes the two distinguishable at all.
+/// Verifies that core workflow tools remain functional even when all operation gate classes are closed.
 #[test]
 fn the_seven_tools_still_work_with_every_class_closed() {
     let server = start(true);

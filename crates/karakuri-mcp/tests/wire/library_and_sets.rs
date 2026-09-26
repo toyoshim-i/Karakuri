@@ -2,19 +2,7 @@
 
 use super::wire_common::*;
 
-/// **The tool is offered, and the library comes back most recent first.**
-///
-/// The two halves are one test for the reason the `read_set` pair are: a
-/// tool a client is never told about and a tool that answers nothing are
-/// both invisible, and this is the pass that says a model can find it and
-/// use it in one go.
-///
-/// **`beta` and `gamma` are written in the same second on purpose.** The
-/// store's own order is by id and is total; this surface sorts by recency,
-/// and a sort on a coarse clock's seconds has ties — so the tie-break by id
-/// is the whole reason two calls on an unchanged store say the same thing.
-/// Without it these two would come back in whatever order `read_dir` felt
-/// like, which is not an order at all.
+/// Verifies that list_sets is advertised and returns Sets ordered by recency (with ID tie-breaking).
 #[test]
 fn the_listing_is_offered_and_comes_back_most_recent_first() {
     let server = start(true);
@@ -56,23 +44,7 @@ fn the_listing_is_offered_and_comes_back_most_recent_first() {
     );
 }
 
-/// **A walk answers one Set's versions, and a row filed under another Set
-/// or under none is never in it.**
-///
-/// The narrowing is this surface's — `history::list` hands over one ordered
-/// listing with the whole address on every row — so the filter is written
-/// here and has to be checked here. **The `None` row is the half that
-/// matters**: a version written while a slot was running material nobody
-/// had saved is a version of *nothing*, and a filter that let it through
-/// would be inventing a history for whichever Set was asked about
-/// (ADR-0276, ADR-0308).
-///
-/// **Watched to fail** against three defects: a narrowing on
-/// `version.set.is_none() || version.set.as_deref() == Some(id)`, which is
-/// the wildcard reading and puts `bend` in the answer; a walk that returned
-/// the whole listing, which puts `drift_shell` in it; and a `set` argument
-/// read as optional, which answers a call that named no Set with somebody
-/// else's edits.
+/// Verifies that walk_history filters history specifically to the requested Set.
 #[test]
 fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
     let server = start(true);
@@ -152,28 +124,13 @@ fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
     assert!(said.contains("`set` is required"), "{said}");
 }
 
-/// **Both filters, apart and together.**
-///
-/// `holds` is the "which of these use `drift_shell`" question and `layer` is
-/// the "which of these deform something" one, and the pair is the reason
-/// each is a filter rather than something a reader does by eye over twenty
-/// lines. Case is folded because a model that read a name in one answer and
-/// typed it back with a capital is asking the same question.
-///
-/// **Together they are asked of the set and not of one node.** `holds` and
-/// `layer` matching the same node would answer a question nobody has — the
-/// useful one is *which of the sets built on this also deform something*,
-/// and there the deformation is a different node with a different name.
+/// Verifies that list_sets filters by `holds` and `layer` independently and together.
 #[test]
 fn the_filters_narrow_the_listing_and_can_be_combined() {
     let server = start(true);
     let l1 = stored(&server, PROBE_L1, true);
     let l2 = stored(&server, PROBE_L2, true);
-    // **Capitals in the fixture's own name and not only in the query.**
-    // Folding one side and not the other passes any fixture where the
-    // stored name is already lowercase, which is most of them — so the name
-    // the set carries is spelled the way an operator types a name and the
-    // query is spelled the way a model shouts one.
+    // Use mixed case in fixture and query to verify case-folding filter behavior.
     set_of(&server, "plain", &[(Layer::L1, 0, Some("Drift_Shell"), l1)]);
     set_of(
         &server,
@@ -231,15 +188,7 @@ fn the_filters_narrow_the_listing_and_can_be_combined() {
     );
 }
 
-/// **A capped listing says what it dropped.**
-///
-/// A library is not bounded by anything — a run that presses `k` between
-/// takes keeps one a minute — so an answer that rendered whatever it found
-/// would eventually be an answer nobody can read. The cap is not the
-/// interesting half: a model told "here are your sets" over twenty of
-/// twenty-five will tell its user they have twenty and then act on a
-/// library it has not seen. So the count that matched, the count shown and
-/// the fact that the filters narrow it are all in the text.
+/// Verifies that list_sets caps output and clearly indicates remaining unlisted items.
 #[test]
 fn a_capped_listing_can_never_be_read_as_the_whole_library() {
     let server = start(true);
@@ -281,15 +230,7 @@ fn a_capped_listing_can_never_be_read_as_the_whole_library() {
     );
 }
 
-/// **An empty store and a filter that matches nothing are both answers, and
-/// they are different answers.**
-///
-/// Neither is an error: a store nobody has saved into is what every store
-/// starts as, and a filter that selects none of twenty sets is the filter
-/// doing its job. They read differently because they send a reader to
-/// different places — one to `save_set`, the other to a different filter —
-/// and being told "nothing matches" by an empty library is being told to go
-/// looking for material that was never there.
+/// Verifies that an empty store and a non-matching filter return distinct, informative messages.
 #[test]
 fn an_empty_store_and_a_filter_that_matches_nothing_read_differently() {
     let server = start(true);
@@ -325,19 +266,7 @@ fn an_empty_store_and_a_filter_that_matches_nothing_read_differently() {
     );
 }
 
-/// **What a node is called is one answer, and every node has one.**
-///
-/// The three cases are the three candidates, in order: the name this set
-/// gave the node, the name its procedure gives itself, and the short hash
-/// where there is neither. The last two are the ones worth building a
-/// fixture for, because both are *ordinary* states of a working store —
-/// `Store::put_artifact` writes no card, and a set saved on another machine
-/// names artifacts this store has never had — and a listing that dropped
-/// either would be a library with holes in it.
-///
-/// **And it is checked against `read_set`'s own answer**, which is the
-/// point of the derivation being one function: a model that picks a set out
-/// of a listing and then reads it must find the node it was told about.
+/// Verifies that node naming in list_sets matches read_set (custom name, proc name, or short hash).
 #[test]
 fn a_node_is_called_here_what_read_set_calls_it() {
     let server = start(true);
@@ -457,11 +386,7 @@ fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
             "the card does not say `{expected}`: {said}"
         );
     }
-    // **What the Set turned it to is not what the artifact declares.** The
-    // fixture's `param` record holds 2.5 and the tool answers about
-    // declarations; a reader folding the two would print it as a range or as
-    // a default, and either is the `param_decl` / `param` confusion the
-    // record vocabulary keeps two names to prevent.
+    // Verify artifact declarations are shown rather than runtime instance values.
     assert!(
         !said.contains("2.5"),
         "a value this set holds was rendered as something the artifact \
@@ -469,38 +394,7 @@ fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
     );
 }
 
-/// **What a saved set will allocate to hold elements, without building
-/// it.**
-///
-/// `Set::element_storage` has reported this per node since the buffers
-/// existed and nothing in this tree printed it; the figure that *was*
-/// printed, at stage 4, was a second arithmetic over one procedure's `emit`
-/// list and was 85% low. So the test is not that a number appears — it is
-/// that the number is the one the allocation is sized by, over material
-/// where a per-procedure reading would say something else:
-///
-/// - **`warp` is charged for `position` and it never mentions it.** An L2
-///   writes everything that reached it, so it is sized at the chain's
-///   stride; a figure read off its own `deform` block would be another
-///   number entirely.
-/// - **`dots` has no row at all.** A renderer draws from the buffer the
-///   node above it allocated, so a row for it would be the same memory
-///   counted twice — and a zero would be a number the reader has to work
-///   out the meaning of.
-/// - **Sixteen elements and not the eight the procedure defaults to.** The
-///   `capacity` record is what this set was saved at, and a figure computed
-///   from the declaration instead would be exactly half of every number
-///   below while looking just as plausible.
-///
-/// The bytes are hand-walked from WGSL's placement rules, the same way
-/// `karakuri-engine`'s own storage tests are, so nothing here is the engine
-/// compared against itself: `emit position` lays out `seed` at 0, then
-/// `birth_frac` at 4, then `position` at 16 — 28 bytes rounded up to the
-/// struct's 16-byte alignment, so a stride of 32. A geometry keeps two
-/// directions of the element buffer and two of the four-byte liveness flag
-/// and, having neither `spawn` nor `kill()`, nothing else: `2 * 16 * (32 +
-/// 4)` is 1152. The deform keeps one buffer at that stride and no flags of
-/// its own: `16 * 32` is 512.
+/// Verifies that read_set correctly reports element storage memory allocation per node.
 #[test]
 fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
     let server = start(true);
@@ -550,11 +444,7 @@ fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
     assert!(!failed, "{said}");
     for expected in [
         "element storage: 1664 bytes in total, across the 2 nodes",
-        // **With the indentation, because the assertion below discriminates
-        // on it.** A storage row is indented and a node block's head is
-        // not; a bare substring here would keep passing on the day the
-        // indent went away, and the negative assertion would then be
-        // asserting nothing.
+        // The output uses indentation to separate storage rows from node block headers.
         "  `shell` — 1152 bytes for 16 elements, 72 bytes each",
         "  `warp` — 512 bytes for 16 elements, 32 bytes each",
     ] {
@@ -563,20 +453,13 @@ fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
             "the set was not costed as `{expected}`: {said}"
         );
     }
-    // **The storage rows are indented and the node blocks are not**, which
-    // is what tells the two apart now that a node block names the node in
-    // its own head — `L4:0 \`dots\` — stored as …` is the renderer being
-    // described, and `  \`dots\` — 512 bytes` would be the renderer being
-    // charged for a buffer it does not own.
+    // Verify renderer draws from node above and isn't charged as separate element storage.
     assert!(
         !said.contains("  `dots` — "),
         "the renderer was charged for the buffer it draws from, which is the \
          node above it: {said}"
     );
-    // **The sentence that keeps this from being read as device memory.**
-    // The withdrawn figure's mistake was as much in what it was taken to
-    // mean as in its arithmetic, and a number a model relays as "what this
-    // costs a GPU" is that mistake in a new costume.
+    // Clarify that element storage is not total device memory.
     assert!(
         said.contains("NOT what this set costs a GPU"),
         "an element-storage figure is offered as though it were device \
@@ -584,14 +467,7 @@ fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
     );
 }
 
-/// **An artifact with no card is described, not reported as a broken
-/// store.**
-///
-/// `Store::put_artifact` writes no card of its own — it takes bytes and does
-/// not compile — so this is the ordinary state of anything stored before
-/// cards existed or stored without one, and `Store::read_meta` answers it
-/// with the same `NotFound` it answers a damaged library with. What a model
-/// must not be handed is a failed call about a store that is fine.
+/// Verifies that an uncarded artifact returns a helpful description rather than reporting store damage.
 #[test]
 fn an_artifact_with_no_card_is_answered_and_not_called_a_broken_store() {
     let server = start(true);
@@ -611,10 +487,7 @@ fn an_artifact_with_no_card_is_answered_and_not_called_a_broken_store() {
         "a card nobody has written yet reads as damage: {said}"
     );
 
-    // **A hash this store has never seen is the other absence**, and it is a
-    // different fact: the Set cannot be loaded here at all. Both arrive as
-    // one `NotFound`, so a reader that did not ask the second question tells
-    // a model to go read a source that is not there.
+    // If an artifact hash is missing entirely from store, report that artifact is missing.
     set_naming(&server, "elsewhere", Hash::of(b"stored on another machine"));
     let (failed, said) = call(server.port, "read_set", json!({"id":"elsewhere"}));
     assert!(!failed, "{said}");
@@ -625,12 +498,7 @@ fn an_artifact_with_no_card_is_answered_and_not_called_a_broken_store() {
     );
 }
 
-/// **A set id from a client is one path component on the way to a card as
-/// much as on the way to a save.**
-///
-/// `save_set` puts a client's id through [`checked_id`] and this reads a
-/// file under `<store>/sets/` by the same spelling — paths never cross this
-/// protocol, and a *read* is the direction that hands the file back.
+/// Verifies that Set IDs containing path traversal or invalid characters are rejected.
 #[test]
 fn a_set_id_on_the_way_to_a_card_cannot_name_a_path() {
     let server = start(true);

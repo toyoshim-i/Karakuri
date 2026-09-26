@@ -18,12 +18,7 @@ fn a_procedure_can_be_read_and_rewritten_over_the_wire() {
         &source[..80.min(source.len())]
     );
 
-    // **Prepended rather than substituted.** This asserted a phrase out of
-    // the example's own comment header once, and broke the day somebody
-    // rewrote the example — the substitution found nothing, the "edit" was
-    // identical to the source, and the failure read as "the write did not
-    // reach the file". A test of *writing* must not depend on what the
-    // fixture happens to say.
+    // Prepend comment to ensure modified content is distinct without relying on specific fixture text.
     let edited = format!("// Edited over the wire.\n{source}");
     let (failed, said) = call(
         server.port,
@@ -38,26 +33,7 @@ fn a_procedure_can_be_read_and_rewritten_over_the_wire() {
     );
 }
 
-/// **A re-point moves what the server resolves, on the very next call.**
-///
-/// This is the whole of why [`Slots`] is a handle. The server was handed
-/// the launch working copies and kept them for the run, so after the panel
-/// loaded a Set onto a deck — which writes new scratch files and points
-/// that slot's watcher at them — every address this surface resolved was
-/// the layout the deck had stopped running. A `read_procedure` handed back
-/// the material the operator had just replaced and a `write_procedure`
-/// wrote a file no watcher was polling, **both of them answering
-/// successfully**: the wrong answer arrives as a sentence saying it worked
-/// (`docs/principles/0094-…`).
-///
-/// So the assertion is over the wire, on both tools, before and after one
-/// re-point — and the write is read back off the **new** file, because a
-/// write that went to the old one would still have said *compiled and
-/// written*.
-///
-/// Watched to fail against the launch copy: a `Slots` that answers out of
-/// what it was constructed with reads back `probe_l4` after the re-point
-/// and leaves `after.kir` untouched on disk.
+/// Verifies that re-pointing a slot updates file resolution and targets new paths on subsequent calls.
 #[test]
 fn a_re_point_moves_what_an_address_resolves_to() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -136,19 +112,7 @@ fn a_re_point_moves_what_an_address_resolves_to() {
     );
 }
 
-/// **A node the slot stopped holding is refused naming what it holds
-/// now.**
-///
-/// The other half of the same defect, and the one that is refused rather
-/// than answered — which makes it the *milder* half and still a wrong
-/// sentence: a model told `slot 0 holds 2 L4 nodes, so index is 0-1` after
-/// a load that left the slot one renderer will keep addressing a node that
-/// is not there. The refusal is derived from the current nodes because
-/// [`Slots::path`] walks them on every call
-/// (`docs/principles/0083-…`).
-///
-/// Watched to fail against the launch copy: `L4:1` resolves and the write
-/// lands on a file the deck is not running.
+/// Verifies that accessing a node removed by a loaded Set produces an accurate descriptive error.
 #[test]
 fn a_node_a_load_took_away_is_refused_naming_what_the_slot_holds_now() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -206,16 +170,7 @@ fn a_node_a_load_took_away_is_refused_naming_what_the_slot_holds_now() {
     );
 }
 
-/// **Every node a slot holds is reachable, at the address the rest of this
-/// program already spells it by.**
-///
-/// This surface reached the L1 and the renderers and nothing else, so the
-/// material a model could neither see nor edit was exactly the material
-/// this language is most interesting about: the deformation between the
-/// two, the camera, the field the renderers evaluate, and a second
-/// simulation source. Each address is checked against the *name* the file
-/// declares rather than against its position, because a resolver that had
-/// them one place out would still hand back a procedure.
+/// Verifies that every node across all layers in a slot can be read at its layer address and index.
 #[test]
 fn every_node_of_a_slot_can_be_read_at_its_own_address() {
     let server = start_chain();
@@ -243,12 +198,7 @@ fn every_node_of_a_slot_can_be_read_at_its_own_address() {
     }
 }
 
-/// **A deformation, a camera and a field are written as themselves.**
-///
-/// The layer a write was checked against was `L1` or, for everything else,
-/// `L4` — so a `kind L2` sent to a slot's L2 was refused for not being a
-/// renderer, which is a refusal about a mistake nobody made. Both halves
-/// are asserted here: the writes that must land, and the one that must not.
+/// Verifies that L2, L3, and Field procedures can be edited and rewritten over the wire.
 #[test]
 fn a_deformation_a_camera_and_a_field_are_written_as_themselves() {
     let server = start_chain();
@@ -408,22 +358,7 @@ fn a_cross_origin_request_is_refused() {
     assert_eq!(status, 200);
 }
 
-/// The body of a non-POST used to be left in the reader and become the next
-/// request line, so a `GET` with a body ran a smuggled call.
-/// **A path this server does not have is a 404, and that is what lets a
-/// client connect at all.**
-///
-/// A client's first move is authorization discovery:
-/// `GET /.well-known/oauth-protected-resource`. This server answered 405 to
-/// every path, which says "that resource exists, just not by this verb" —
-/// so the client went off to fetch protected-resource metadata, tried to
-/// parse `this server only answers POST` as JSON, and reported the server
-/// as unreachable. Nothing was unreachable; the handshake died on a path
-/// that has never existed here.
-///
-/// Asserted over a socket rather than against a handler, because a status
-/// code is a property of the wire — see this module's other wire tests for
-/// why that distinction has already mattered here.
+/// Verifies that unserved paths return 404 with JSON bodies (satisfying OAuth discovery gracefully).
 #[test]
 fn a_path_this_server_does_not_serve_is_not_found_rather_than_not_allowed() {
     let server = start(true);
@@ -444,11 +379,7 @@ fn a_path_this_server_does_not_serve_is_not_found_rather_than_not_allowed() {
     }
 }
 
-/// The endpoint itself still answers 405 to a GET, which is the Streamable
-/// HTTP transport's own rule for a server offering no SSE stream there.
-///
-/// The control for the test above: answering 404 everywhere would satisfy
-/// it and break the transport.
+/// Verifies that GET requests to the root endpoint return 405 Method Not Allowed per transport spec.
 #[test]
 fn the_endpoint_itself_answers_405_to_a_get() {
     let server = start(true);

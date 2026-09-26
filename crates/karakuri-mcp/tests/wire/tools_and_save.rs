@@ -27,24 +27,14 @@ fn a_write_names_the_other_slots_it_reached() {
         said.contains("also slot 1"),
         "the other slot was not named: {said}"
     );
-    // **Where the version it replaced went.** This said "there is no
-    // backup" while `--watch` was snapshotting every version that compiled
-    // into the edit history — and it is the text a model reads, so the one
-    // surface that could have told it the file was recoverable said the
-    // opposite.
+    // Verify that replacement destination indicates edit history.
     assert!(
         said.contains("history"),
         "where the old version went: {said}"
     );
 }
 
-/// **A file shared as anything but a renderer is shared exactly as much.**
-///
-/// The scan behind that sentence walked an L1 and a list of renderers,
-/// which is the shape a slot had before it could hold a deformation chain
-/// — so one `swirl_warp.kir` given to two slots was a write that changed
-/// both and named one, and the count a model is handed is only worth
-/// having if it is the whole count.
+/// Verifies that writing to a shared file reports all slots using it across any layer.
 #[test]
 fn a_write_names_the_other_slots_it_reached_on_any_layer() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -129,12 +119,7 @@ fn everything_advertised_can_be_called() {
     }
 }
 
-/// **The save tool is offered, and a call reaches the loop with what it was
-/// given and comes back with what the loop said.**
-///
-/// The whole of the new channel in one pass: advertised, sent, answered.
-/// The stand-in asserts the arguments it was handed, because a request that
-/// arrived with the wrong slot or no id would still have produced an answer.
+/// Verifies that save_set is offered in tool list and delegates slot save requests to the render loop.
 #[test]
 fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
     // **Two slots**, so that the slot the loop is handed is a fact about
@@ -195,13 +180,7 @@ fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
     );
 }
 
-/// **A slot that cannot be saved comes back with the loop's own refusal**,
-/// unchanged.
-///
-/// The sentence comes from [`crate::nothing_to_save`] rather than being
-/// written out here: a copy would go on passing after the real refusal was
-/// corrected, which is exactly what happened to this wording once already —
-/// it named `--watch` alone for as long as `--mcp` also made a slot savable.
+/// Verifies that unsavable slots return the loop's original refusal message unmodified.
 #[test]
 fn a_slot_that_cannot_be_saved_comes_back_with_the_loops_own_words() {
     let (server, reporter) = started(true);
@@ -222,17 +201,7 @@ fn a_slot_that_cannot_be_saved_comes_back_with_the_loops_own_words() {
     );
 }
 
-/// **A slot this deck does not hold meets the refusal `read_procedure`
-/// gives it — which is the refusal a key press meets**, without troubling
-/// the render loop at all.
-///
-/// `contains("no slot 7")` was all this asked, and it passed under all four
-/// spellings this program had of one sentence: the keys' `no slot 7: this
-/// deck holds slots 0-6`, this module's `holds 0-6`, MIDI's `no slot 7 —
-/// …`, and a record's `slot 7: …`. It is `assert_eq!` against
-/// [`crate::no_such_slot`] now, on both surfaces of this module, because
-/// `save_set` is the control a model and a hand both reach and the wording
-/// they get for one mistake has to be one wording. See that function.
+/// Verifies that saving a nonexistent slot produces a standard no_such_slot refusal without queuing to the loop.
 #[test]
 fn a_save_for_a_slot_that_does_not_exist_is_refused_here() {
     let (server, reporter) = started(true);
@@ -265,15 +234,7 @@ fn a_save_for_a_slot_that_does_not_exist_is_refused_here() {
     assert_eq!(said, karakuri_environment::no_such_slot(7, 1));
 }
 
-/// **`"id": null` is a caller saying nothing about the id**, not a caller
-/// getting its type wrong.
-///
-/// A client that builds its arguments from a record with an empty field
-/// sends `null` for an argument it is not using, and this refused it with
-/// "`id` is a string" — a refusal about a mistake the caller had not made,
-/// and one it cannot act on, since what it wanted was the default. Every
-/// other optional argument on this surface reads an absent one as its
-/// default; `null` is absent's second spelling.
+/// Verifies that null ID is treated as omitted/default rather than a type mismatch.
 #[test]
 fn a_null_id_is_an_absent_id_and_not_a_bad_one() {
     let (server, reporter) = started(true);
@@ -301,18 +262,7 @@ fn a_null_id_is_an_absent_id_and_not_a_bad_one() {
     assert!(said.contains("`id` is a string"), "{said}");
 }
 
-/// **A save in flight does not hold up another connection**, which is the
-/// evidence rather than a comment saying the lock was dropped.
-///
-/// `handle` locks one mutex around `dispatch` and runs a thread per
-/// connection, so a tool that waited for the render loop under that lock
-/// would stop every other client for as long as the loop took. Here the
-/// stand-in has taken a save and is holding it; a second connection asks for
-/// a procedure and must be answered before the first is released.
-///
-/// The second call is not merely *started* while the first is in flight —
-/// it is started only once the stand-in has the request in its hands, so
-/// there is no ordering in which this passes by racing ahead of the wait.
+/// Verifies that in-flight save requests do not block concurrent requests on separate connections.
 #[test]
 fn a_save_in_flight_does_not_block_another_connection() {
     let (server, reporter) = started(true);
