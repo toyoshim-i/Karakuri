@@ -191,33 +191,20 @@ fn every_set_names_parts_that_are_there() {
     }
 }
 
-/// Ensures every .kir source file in examples belongs to at least one .kset, or is explicitly exempted.
+/// Ensures every .kir source file in examples belongs to at least one .kset.
+///
+/// A `kind L5` is exempt: it is a master chain slot, and the chain is one level
+/// out from every Set.
 #[test]
 fn every_part_is_in_some_set() {
     let named: Vec<String> = ksets()
         .iter()
         .flat_map(|s| s.parts.iter().map(|p| p.path.clone()))
         .collect();
-    // Frame effects operating in the master chain rather than inside Sets.
-    let in_no_set: [(&str, &str); 3] = [
-        (
-            "feedback.kir",
-            "a master chain slot, and the chain is one level out from every Set",
-        ),
-        (
-            "bloom.kir",
-            "a master chain slot, and the chain is one level out from every Set",
-        ),
-        (
-            "rgb_shift.kir",
-            "a master chain slot, and the chain is one level out from every Set",
-        ),
-    ];
 
     for path in kir_files() {
         let file = path.file_name().expect("a file name").to_string_lossy();
-        if let Some((_, why)) = in_no_set.iter().find(|(f, _)| *f == file) {
-            assert!(!why.is_empty(), "{file} is excused without a reason");
+        if compile(&file).kind == karakuri_ir::Kind::L5 {
             continue;
         }
         assert!(
