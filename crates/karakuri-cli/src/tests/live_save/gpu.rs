@@ -1,24 +1,6 @@
 use super::*;
 
-/// One fold, so the card and the uniform cannot disagree.
-///
-/// The number in a `param_decl` and the number the engine loads into a node's
-/// uniform are the same declaration read twice, and until this commit there was
-/// exactly one reader of it — private to `karakuri-engine`, with a note saying
-/// a second evaluator elsewhere would agree with the shader by coincidence. The
-/// metadata writer is that elsewhere. So the fold moved to
-/// `karakuri_ir::Param::default_scalar` and both call it, and this is what
-/// fails if either grows a reader of its own: a card claiming `0.0` where the
-/// run loaded `-0.35` describes a procedure nobody ran, and nothing downstream
-/// could say which of the two was wrong.
-///
-/// Both directions. Every default the card states must be the value the built
-/// Set is running, *and* every value the Set is running must be stated — one of
-/// those alone passes when a writer silently drops the declaration it cannot
-/// fold.
-///
-/// The Set is built with no overrides and no Set file, so what a node holds is
-/// exactly what its `.kir` declared.
+/// Verifies that metadata cards and engine shader uniforms agree on parameter defaults.
 #[test]
 fn the_engine_and_the_metadata_writer_cannot_disagree_about_a_default() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -67,16 +49,7 @@ fn the_engine_and_the_metadata_writer_cannot_disagree_about_a_default() {
      {on_the_card:?}"
     );
 }
-/// A live save writes a file that loads back into the same material — and does
-/// it for a Set of *two* geometries, which is where the numbers stop being
-/// interchangeable.
-///
-/// Two geometries at two different capacities and two different salts, because
-/// that is the shape a single number cannot describe: a saver reaching for
-/// `Set::capacity` gets the sum, which is neither geometry's, and the file it
-/// writes is refused for having one capacity where the Set has two.
-/// `Set::source_capacities` is the reading that is per geometry, which is what
-/// the record is.
+/// Verifies that live saves for multi-geometry Sets preserve per-geometry capacities and salts on reload.
 #[test]
 fn a_live_save_reads_back_into_the_material_it_was_taken_from() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -136,25 +109,7 @@ fn a_live_save_reads_back_into_the_material_it_was_taken_from() {
         "each geometry's own salt is what the file has to carry"
     );
 }
-/// A save after a rebuild records the camera the slot was loaded with, and not
-/// the built-in orbit's defaults.
-///
-/// This is the whole path and deliberately not a piece of it: a slot aimed by a
-/// `camera` record, the watcher a `--watch` run gives it, an edit to a file,
-/// the build worker, the swap — and then the same `playing_values` the `k` key
-/// reads through. Every link in it was correct on its own while the chain
-/// silently re-aimed the slot, because the one that was missing was the request
-/// in the middle: `Set::build_many` starts every Set from `Orbit::default()`,
-/// so the rebuilt Set was aimed at the defaults and the saver recorded exactly
-/// what it found. That is why the loss stopped being a wrong picture and became
-/// a file — the operator's next preset was written with a camera nobody had
-/// chosen.
-///
-/// Driven through `HotSwap` rather than by calling the worker's code, for the
-/// reason [`save_and_load`] goes through [`Save::run`]: a rebuild assembled by
-/// hand here would be a second copy of the rebuild, and a test of a copy is a
-/// test of nothing. `begin_frame` is the only place a build is installed, and
-/// it is enough on its own — nothing here has to render.
+/// Verifies that saving after a rebuild records the initial camera orbit rather than engine defaults.
 #[test]
 fn a_save_after_a_rebuild_records_the_camera_the_slot_was_loaded_with() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -165,11 +120,7 @@ fn a_save_after_a_rebuild_records_the_camera_the_slot_was_loaded_with() {
         kir(&dir, "r.kir", &example("soft_points.kir")),
     ];
     let (material, _placed) = slot(&paths);
-    // Six numbers no default produces. A `camera` record spells two of them
-    // and the loader fills the rest from `Orbit::default()`, so a Set file
-    // cannot actually deliver these four — they are here because what is
-    // under test is the *carrying*, and a value that differs in every field
-    // says which fields were carried.
+    // Non-default orbit parameters for testing camera orbit propagation.
     let aimed = karakuri_engine::camera::Orbit {
         radius: 3.25,
         speed: 0.75,
@@ -347,26 +298,7 @@ fn a_run_with_no_watcher_saves_the_version_it_is_still_drawing() {
      compiled, let alone drew"
     );
 }
-/// A `.kir` rewritten between the compile and the first frame cannot reach a
-/// save.
-///
-/// The window is real and it is not short: between `sort_slot` and the first
-/// frame sit the adapter request, the deck build, `measure_slots`, and the
-/// audio, MIDI, tempo and MCP server starts. The launch seeding used to
-/// `std::fs::read` each path again at the end of that, so anything rewriting a
-/// file in between moved the slot's address onto bytes the deck had never
-/// compiled. If the rewrite did not compile, no watcher ever corrected it — `k`
-/// then wrote a Set naming a procedure that had never been on screen, and the
-/// file did not load back at all.
-///
-/// Distinct from
-/// [`a_run_with_no_watcher_saves_the_version_it_is_still_drawing`], which
-/// rewrites the file after the run is under way. This one rewrites it inside
-/// the startup sequence, which is the window a second read opens and carrying
-/// the bytes closes.
-///
-/// Two assertions, the first crisp and the second end to end: the address the
-/// slot reports, and the file that comes back off the disk.
+/// Verifies that disk writes occurring between compilation and the first frame do not affect the saved state.
 #[test]
 fn a_rewrite_between_the_compile_and_the_first_frame_cannot_reach_a_save() {
     let gpu = Gpu::headless().expect("no GPU");
