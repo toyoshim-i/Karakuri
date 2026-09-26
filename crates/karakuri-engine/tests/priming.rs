@@ -1,41 +1,7 @@
-//! Priming: a deck slot warming its element buffers out of the mix.
+//! Integration tests for off-air deck slot simulation priming and preview rendering.
 //!
-//! What is asserted here is the claim `deck.rs` makes in "Every off-air slot
-//! runs, and a preview is what it is for", in the order that module argues it:
-//!
-//! - an off-air slot **steps every frame, at the room's tempo** — its `t` keeps
-//!   up with the Live slots' — and reaches the mix in no way at all;
-//! - **Priming and Allocated do the same thing**, so a slot nobody asked about
-//!   warms exactly as one somebody asked for does;
-//! - **a slot off air for thirty frames and then put on air is bit-for-bit the
-//!   slot that was on air for thirty-one**, which is what makes its cell a
-//!   preview of what putting it on air would look like;
-//! - and it is visibly different from a slot that has never stepped, or none of
-//!   the above would be worth anything;
-//! - determinism survives all of it, including a slot that primes for a while
-//!   and then goes Live;
-//! - and **the signal an off-air slot reads is its own clock's, not the
-//!   frame's** — so a Set that arrived late warms into the same material as one
-//!   that was there from the start, and a slot that is not behind reads exactly
-//!   what it would have read on air.
-//!
-//! The last pair needs both halves and the second is the sharper one: two
-//! warming runs agree with each other under any clock that is a function of the
-//! step index, including one a whole frame early. Only a comparison against a
-//! *Live* run says which instant is the right one.
-//!
-//! **A reduced rate used to be half of this file and is gone.** Priming could
-//! be slowed to one step in `n` by the governor, and four tests here asserted
-//! what that did and did not change. ADR-0269 retired the rate: a drawn slot
-//! steps every frame, every slot is drawn, and a preview off the room's tempo
-//! is not a preview of anything.
-//!
-//! The material is deliberately an *accumulating* procedure — elements drift
-//! outward from the origin at a fixed rate — because a closed-form one would
-//! look identical warm and cold and every test below would pass on a deck that
-//! never primed anything. Cold, every element is at the origin and the frame is
-//! one small blob; warm, they are on a sphere. That gap is what "shows warmed
-//! state" is measured by.
+//! Asserts that off-air slots step simulation at full tempo without mix contamination,
+//! maintain bit-identical determinism with live slots, and correctly track local time and signal curves.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -59,16 +25,7 @@ mod gpu {
     const SEED_A: u32 = 19274;
     const SEED_B: u32 = 88888;
 
-    /// **Accumulating on purpose.** `position = position + ...` reads what it
-    /// emits, so the state at `t` is the sum of every step taken to get there and
-    /// nothing but running it forward produces it. `karakuri-ir` classifies this
-    /// as not closed form, which is what makes it a legitimate thing to prime;
-    /// `tests/governor.rs` asserts the other side.
-    ///
-    /// Cold, every element sits at the origin — a Set comes up with every
-    /// attribute zeroed for a procedure with no `spawn` block, bar the `seed` and
-    /// `birth_frac` the engine seeds — so the frame is one blob. After thirty steps they are on a
-    /// sphere of radius `30 * dt * 4`, about two units.
+    /// Accumulating simulation fixture with positions integrating outward along velocity vectors.
     const CREEP: &str = r#"
 proc creep {
   kind     L1
@@ -205,21 +162,7 @@ proc soft_points {
 
     // ---------------------------------------------------------------------------
 
-    /// **A Priming slot steps, and contributes nothing to the mix.**
-    ///
-    /// Both halves matter and each would pass alone on a broken implementation.
-    /// "Steps" alone passes on a slot that is also being composited — which is just
-    /// Live under another name. "Contributes nothing" alone passes on a slot that
-    /// is doing nothing at all — which is Allocated under another name. The mix is
-    /// compared bit for bit against a deck holding only the other slot, on the same
-    /// ticks, so the priming slot's absence from it is exact rather than small.
-    ///
-    /// **Drawn into its own target and absent from the mix are the two halves of
-    /// one separation**, and this test now holds both. It used to assert that a
-    /// Priming slot rendered nowhere at all, which was true of the engine and
-    /// wrong of the instrument: the slot an operator is warming is the one they
-    /// need to see. Every slot is drawn into its own target now
-    /// (ADR-0258), and *drawn* and *mixed* are two questions.
+    /// Verifies that Priming slots advance simulation time without leaking into the final output mix.
     #[test]
     fn a_priming_slot_advances_its_t_and_contributes_nothing_to_the_mix() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -264,17 +207,8 @@ proc soft_points {
             "a Priming slot reached the mix — it is stepped and drawn into its own \
          target, and neither of those may put it in the room"
         );
-        // **And it *did* draw into its own target**, which is the other half of
-        // the separation and used to be asserted the other way round. Priming
-        // itself needs no draw — the warming is in the element buffers and not
-        // in the pixels, which is what "Every off-air slot runs, and a preview
-        // is what it is for" in
-        // `deck.rs` argues — but a warming slot is exactly the one an operator
-        // wants to look at before bringing it up, so every slot is drawn into
-        // its own target whatever its residency
-        // (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`).
-        // The mix comparison above is what says that draw does not leak into
-        // the room.
+        // Verifies that off-air slots render to their individual preview targets
+        // without compositing into the main output mix.
         assert!(
             lit(&readback(
                 &gpu,
@@ -289,21 +223,7 @@ proc soft_points {
         assert!(deck.level(karakuri_engine::DeckSlot(1)).is_none());
     }
 
-    /// **An off-air slot steps every frame, at the room's tempo, whatever its
-    /// residency.**
-    ///
-    /// This is ADR-0269 stated as a `t`. Both off-air slots take the same steps
-    /// the Live one takes, off the same ticks — a slot nobody asked about as
-    /// much as one that was asked for and granted — because both of them are
-    /// drawn into a cell an operator judges material by, and a cell drawn from
-    /// a slot nothing is stepping is a still.
-    ///
-    /// **Uneven ticks rather than one step a frame**, so that "every frame" is
-    /// asserted as *the same steps the room took* rather than as a frame count
-    /// that a slot stepping once a frame would satisfy by accident.
-    ///
-    /// Before ADR-0269 the Allocated slot read zero here and the Priming one
-    /// read whatever rate the last `set_prime_one_in` had left.
+    /// Verifies that off-air slots (Priming and Allocated) step simulation at the exact tempo of live slots.
     #[test]
     fn an_off_air_slot_steps_every_frame_at_the_rooms_tempo() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -344,20 +264,7 @@ proc soft_points {
         );
     }
 
-    /// **An off-air slot's cell shows the material running, not the still it
-    /// went off air on**, which is the whole of what ADR-0269 is for.
-    ///
-    /// **Warmed on air first, and that is what makes the assertion sharp.** A
-    /// slot taken off air after a few frames has a picture in its target
-    /// already, so the failure this catches is not a black cell — it is a cell
-    /// that goes on showing the same picture, which is what an operator was
-    /// being asked to judge a candidate on and which looks like a working
-    /// preview until you watch it.
-    ///
-    /// Compared as pixels bit for bit rather than as a count: the claim is that
-    /// the picture *changed*, and a count could hold across two different
-    /// pictures. The lit-pixel ratio is asserted beside it so that "changed" is
-    /// the material spreading rather than a bit somewhere.
+    /// Verifies that off-air slot preview targets continue updating rather than freezing on the last live frame.
     #[test]
     fn an_off_air_slots_cell_shows_material_running_rather_than_a_still() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -398,42 +305,7 @@ proc soft_points {
         );
     }
 
-    /// **An off-air slot that goes Live shows warmed state**, and the warming is
-    /// exactly the warming being on air would have done — at either off-air
-    /// residency.
-    ///
-    /// Four runs of the same material, same seed, same ticks, differing only in
-    /// what the slot was doing for the first thirty frames:
-    ///
-    /// ```text
-    ///   primed   30 frames Priming,   then 1 Live   →  t = 31/60
-    ///   resting  30 frames Allocated, then 1 Live   →  t = 31/60
-    ///   always   31 frames Live                     →  t = 31/60
-    ///   cold                          1 frame Live  →  t =  1/60
-    /// ```
-    ///
-    /// `primed == always` and `resting == always`, **bit for bit**. The first is
-    /// what justifies warming out of the mix at all: every one of a Set's states
-    /// is L1's, so running L1 without compositing reaches the identical state,
-    /// and nothing about the frames a slot spent off air is recoverable from the
-    /// picture afterwards. The second is ADR-0269 — the two off-air residencies
-    /// are one behaviour, and a slot nobody asked about warms exactly as a slot
-    /// somebody asked for does. It can be exact because it is the same
-    /// arithmetic in the same order; a tolerance here would hide a real
-    /// difference rather than absorb a rounding one.
-    ///
-    /// **`cold` is a fresh deck rather than a parked slot**, and it used to be
-    /// the second. Thirty frames Allocated *was* a cold slot, because Allocated
-    /// did not step; it is a warm one now, so keeping it as the control would
-    /// have made this test compare warm against warm and pass on an engine that
-    /// warmed nothing at all.
-    ///
-    /// `primed != cold`, by a lot and in the direction warmth predicts: cold,
-    /// every element is still at the origin and the frame is one blob; warm,
-    /// they are spread over a sphere. Asserted as a ratio of lit pixels rather
-    /// than as inequality, because two frames of an accumulating procedure
-    /// differ at *some* bit almost whatever happens, and the point is that the
-    /// difference is the warming.
+    /// Verifies that off-air slots transitioned to Live match continuously live slots bit-for-bit.
     #[test]
     fn an_off_air_slot_that_goes_live_shows_warmed_state() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -517,19 +389,7 @@ proc soft_points {
         );
     }
 
-    /// **Determinism survives priming**, including the transition out of it.
-    ///
-    /// Uneven ticks, a slot that primes for a while and then goes on air, and a
-    /// second slot live throughout. Two runs, bit for bit. A priming decision
-    /// that read a clock shows up here — verified by making the step decision
-    /// genuinely random, which this fails on.
-    ///
-    /// What it does **not** cover, despite being the file's determinism test: the
-    /// governor's index order. `govern` is not called here and is not on the frame
-    /// path, and randomising the order slots are *stepped* in is invisible to a
-    /// pixel comparison anyway — slots do not interact, each renders into its own
-    /// target, and the composite reads them by index afterwards. The governor's
-    /// order is asserted directly in `tests/governor.rs`, where it is observable.
+    /// Verifies deterministic bit-identical rendering across priming and live residency transitions.
     #[test]
     fn priming_then_going_live_reproduces_bit_identically() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -561,34 +421,7 @@ proc soft_points {
         );
     }
 
-    /// **A Set that arrived late warms into what it would have warmed into had
-    /// it been there from the start.**
-    ///
-    /// A binding is resolved on every step and its value comes off the
-    /// oscillator, so a Set whose `t` is behind the session's — which is any Set
-    /// a build installs part-way through a set — would sample its bound param at
-    /// instants its own clock never reached if it were handed the room's phase.
-    /// `Set::prepare_warming` hands it the session's grid *held back by its lag
-    /// in steps* instead, so what it warms into does not depend on when it
-    /// arrived.
-    ///
-    /// The lag is manufactured through the session's clock rather than through
-    /// the slot's, because a slot's clock is only advanced by the frame loop:
-    /// the deck is given an oscillator that has already run, which is the same
-    /// arithmetic a mid-session install produces from the other side.
-    ///
-    /// **This used to be the rate test.** The lag it covered was the governor's
-    /// — a slot stepping one frame in four falls three steps behind every four —
-    /// and there is no such rate any more (ADR-0269). The lag that is left is
-    /// this one, and it is the only one `Clock::Local` still exists for.
-    ///
-    /// The two sequences are compared step for step rather than at the end,
-    /// because the state a Set accumulates is a function of the whole sequence
-    /// and two sequences can meet at the last value without having agreed
-    /// anywhere else. The distinct-value assertion is not decoration: `beat`
-    /// bound onto a range this test could have written as `[x, x]`, or a run
-    /// shorter than a beat, would make both sequences constant and the
-    /// comparison would hold against any implementation at all.
+    /// Verifies that late-arriving Sets track local step time independently of global session elapsed time.
     #[test]
     fn a_set_that_is_behind_the_session_warms_into_the_same_material() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -659,20 +492,7 @@ proc soft_points {
         );
     }
 
-    /// **A slot that is not behind reads exactly what being on air reads.**
-    ///
-    /// The sharper half of the claim above, and the one that catches the error
-    /// rate-invariance alone cannot see: two warming runs agree with each other
-    /// under any clock that is a function of the step index, including one a frame
-    /// early and one at the wrong scale entirely. Only a Live run says *which*
-    /// instant is the right one.
-    ///
-    /// A slot that came up with the deck steps whenever the session steps, so
-    /// its lag is zero and it must read the session's oscillator itself — not a
-    /// position recomputed from its own `t`, which costs an f32 rounding the
-    /// session's `t` never took and diverges inside a second. Bit for bit, on
-    /// every step, because the identity `priming_then_going_live_reproduces_bit_
-    /// identically` rests on is bit-exact and a bound Set has to keep it too.
+    /// Verifies that non-lagging off-air slots read identical signal values as live slots on every step.
     #[test]
     fn a_slot_that_is_not_behind_reads_the_same_signal_as_being_on_air() {
         let gpu = Gpu::headless().expect("no GPU available");

@@ -1,22 +1,7 @@
-//! Several L4 renderers over one geometry, asserted in pixels.
+//! Pixel-level integration tests for overdraw rendering (multiple L4 passes over shared geometry).
 //!
-//! **This is the payoff the primitive-centric bet was made for.** One cloud
-//! drawn as sprites *and* as streaks *and* as a solid used to cost three
-//! simulations, because a Set was a pair and the only way to have two renderers
-//! was to have two of everything. It is now one simulation and three draw
-//! passes.
-//!
-//! Two claims carry the file and they pull in opposite directions:
-//!
-//! - **Both renderers reach the frame**, which is what fails if the second pass
-//!   clears the target instead of loading it — a defect that produces a
-//!   perfectly plausible picture of the last renderer alone.
-//! - **The geometry is drawn twice and simulated once**, which is what fails if
-//!   a stack quietly becomes two Sets.
-//!
-//! The material is deliberately flat and the two renderers deliberately differ
-//! only in colour and size. What is under test is a compositing rule, and
-//! anything that looked good would only make a failure harder to read.
+//! Asserts that multiple L4 renderers composited onto a single target preserve previous pass contents,
+//! maintain separate parameter scopes, and execute geometry simulation exactly once.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -76,18 +61,7 @@ proc creep {
 }
 "#;
 
-    /// A flat sprite of one colour at one size. `name` keeps two of them distinct
-    /// as procedures; `exposure` is declared by both on purpose — every L4 in
-    /// `examples/` declares one, and a Set holding two of them is exactly what the
-    /// old `ParamCollision` refusal forbade.
-    ///
-    /// **The default is an argument because two renderers must be able to declare
-    /// one name at two values.** With both at 1.0 a Set that handed every renderer
-    /// the *first* one's parameter map would draw an identical frame, and every test
-    /// here would pass through it — which is what happened to the first draft.
-    /// `scale` is given in pixels and divided by [`H`] here, because
-    /// `point_rate` is a fraction of the target's height and every claim in this
-    /// file is about how many texels a sprite lands on.
+    /// Generates an L4 sprite procedure with distinct color, scale, and exposure parameters.
     fn sprite(name: &str, rgb: (f32, f32, f32), scale: f32, exposure: f32) -> String {
         let (r, g, b) = rgb;
         let scale = scale / H as f32;
@@ -218,29 +192,7 @@ proc {name} {{
 
     // ---------------------------------------------------------------------------
 
-    /// **Both renderers reach the frame, and the arithmetic says by how much.**
-    ///
-    /// The whole point, and the one defect that produces a plausible picture rather
-    /// than an error: if the second pass cleared the target instead of loading it,
-    /// the frame would be the second renderer alone — a perfectly reasonable image
-    /// of exactly half the work.
-    ///
-    /// **Colour and alpha compose differently, and the test has to say so.** Under
-    /// `additive` the colour blend is `dst + src * a` — a sum, so a stack of two
-    /// must come out as the two drawn alone added channel for channel. Alpha is
-    /// `a_s + a_d * (1 - a_s)`, which is coverage rather than a fourth colour: it is
-    /// the union of what drew, it saturates toward 1, and it is *not* a sum. An
-    /// earlier draft of this test asserted a sum for all four and failed on alpha,
-    /// which was the blend state being right and the assertion being written from a
-    /// guess.
-    ///
-    /// Both halves pin the *load*, since a clear on the second pass would give
-    /// exactly the green-only frame; and both pin that the first pass clears, since
-    /// a load there would accumulate whatever the target happened to hold.
-    ///
-    /// The two renderers are different sizes as well as different colours, so the
-    /// green sprite covers texels the red one does not — a stack that drew one
-    /// renderer twice would still reach the right total for a single colour.
+    /// Verifies that multiple L4 renderers correctly composite both color (additive sum) and alpha (coverage union).
     #[test]
     fn a_stack_of_two_renderers_composes_what_each_of_them_draws_alone() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -348,17 +300,7 @@ proc {name} {{
         );
     }
 
-    /// **Order is draw order — and under `additive` alone that is invisible, which
-    /// is worth asserting rather than assuming.**
-    ///
-    /// Additive blending is a sum, and a sum is commutative; the coverage in alpha
-    /// composes as `a_s + a_d(1 - a_s)`, which is symmetric in the two. So two
-    /// additive renderers swapped must give the *same* frame, and a test that
-    /// claimed otherwise would be asserting a defect.
-    ///
-    /// Naming it matters because the list is ordered and the order is real — it is
-    /// what decides which pass clears, and it will be what decides the composite
-    /// the moment a `weighted` node is in the stack, whose resolve is an `over`.
+    /// Verifies that draw order commutativity holds for purely additive blend modes without visual change.
     #[test]
     fn swapping_two_additive_renderers_does_not_change_the_frame() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -384,21 +326,7 @@ proc {name} {{
         }
     }
 
-    /// **Two renderers declaring one name hold two values, each reaches its own
-    /// renderer's uniform, and a bare name moves both.**
-    ///
-    /// Every L4 in `examples/` declares `exposure`, which is why a Set keyed by name
-    /// alone had to refuse two renderers outright. Both fixtures here declare one,
-    /// at **different defaults**, which is what makes this a claim about two values
-    /// rather than about one written twice.
-    ///
-    /// The pixels are what make it a claim about the *uniforms* rather than about a
-    /// map. `exposure` scales the colour each renderer writes, and the two
-    /// renderers own separate colour channels, so the two contributions can be read
-    /// off one frame independently: setting a bare `exposure` to 2.0 has to take red
-    /// from 1.0 to 2.0 — twice — and green from 0.25 to 2.0 — eight times. A Set
-    /// that handed both renderers the first one's map would have drawn green at 1.0
-    /// to begin with and would move it by two.
+    /// Verifies that identically-named parameters across renderers maintain separate scopes and defaults.
     #[test]
     fn one_name_declared_by_two_renderers_is_two_values_each_reaching_its_own() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -442,18 +370,7 @@ proc {name} {{
         }
     }
 
-    /// **A binding's blend base comes from a node that declares the name.**
-    ///
-    /// `Set::bind` accepts an L4 binding if *any* renderer declares the name — one
-    /// binding, one value, written to every renderer that has it, which is the rule
-    /// a bare `--param` follows. Resolving it read the *first* renderer's map
-    /// unconditionally, so a name only the second declares missed, and the
-    /// `unwrap_or(0.0)` behind that lookup turned the declared default into zero.
-    ///
-    /// Silent, and on the render path: a signal nothing provides comes back with
-    /// confidence 0.0 and step 4 of the binding path writes the param's own value
-    /// unchanged — so the failure is a renderer drawing at zero rather than an
-    /// error. `spread` is declared by the second renderer only, at 3.0.
+    /// Verifies that bindings resolve their base value from the renderer declaring that parameter.
     #[test]
     fn a_binding_blends_from_a_node_that_declares_the_name_not_the_first_one() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -519,20 +436,7 @@ proc {name} {{
         )
     }
 
-    /// **A weighted node in a stack composites over what is under it, and order is
-    /// what decides which.**
-    ///
-    /// Under `additive` order is invisible, which the test above asserts. It stops
-    /// being invisible the moment a weighted node is in the stack: its resolve is an
-    /// `over`, so a nearly opaque weighted sprite hides what is beneath it and does
-    /// not hide what is drawn after.
-    ///
-    /// This is the half of `blend weighted` that a lone renderer cannot exercise at
-    /// all. With one node the resolve writes onto the transparent black the first
-    /// pass clears to, where `over` gives back exactly the source — so the `over`
-    /// blend state and no blend state at all are indistinguishable, and both the
-    /// state and the `first`/load flag went untested until a stack existed to put a
-    /// weighted node second in.
+    /// Verifies that weighted renderers composite over previous passes according to draw order.
     #[test]
     fn a_weighted_node_in_a_stack_composites_over_what_is_under_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -549,12 +453,8 @@ proc {name} {{
             "the material under the veil drew nothing"
         );
 
-        // Drawn second, the veil covers most of the red — and **leaves the rest**.
-        // `over` at alpha 0.94 keeps 6% of what is under it, and the lower bound is
-        // the half that matters: a resolve that cleared instead of loading would
-        // erase the red entirely and satisfy an upper bound alone. That is exactly
-        // the mutant this test was written for and did not catch until the floor
-        // was added.
+        // The veil at alpha 0.94 preserves non-zero underlying content;
+        // verifies that resolve loads rather than clears the target.
         assert!(
             a[0] < red_alone[0] * 0.25,
             "a weighted node drawn second did not cover what was under it: {} of {}",
@@ -586,13 +486,7 @@ proc {name} {{
         );
     }
 
-    /// **A weighted node that is first still clears**, so a stack beginning with one
-    /// draws what that node alone would.
-    ///
-    /// The other end of the same flag: `first` picks `Clear` over `Load`, and a
-    /// weighted resolve that always cleared would wipe whatever ran before it —
-    /// caught above — while one that never cleared would composite onto a stale
-    /// frame, which nothing else here would see.
+    /// Verifies that a weighted node drawn as the first pass clears the target buffer.
     #[test]
     fn a_weighted_node_drawn_first_clears_what_was_in_the_target() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -613,13 +507,7 @@ proc {name} {{
         );
     }
 
-    /// **A stack skips the simulation only if *every* renderer is fullscreen.**
-    ///
-    /// A fullscreen L4 consumes no attribute, so a Set holding only those has
-    /// nothing reading its element buffers and the whole simulation is work for a
-    /// reader that does not exist. One fullscreen node beside a per-element one does
-    /// not excuse it — and `any` in place of `all` there is a defect that shows up as
-    /// a frozen cloud rather than as an error.
+    /// Verifies that simulation runs if any renderer consumes element buffers in a mixed stack.
     #[test]
     fn a_mixed_stack_still_simulates_because_one_renderer_reads_the_elements() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -653,18 +541,7 @@ proc wash {
         );
     }
 
-    /// **The addressed write is what a bare name cannot do: set two renderers'
-    /// `exposure` apart.**
-    ///
-    /// A name with no address reaches every node declaring it — one knob moving both
-    /// renderers, which is the useful default and is why it is the default. It is
-    /// also, by construction, unable to give them different values. That is the gap
-    /// `Set::set_param_at` closes, and it is the same gap the record vocabulary has:
-    /// `layer` plus an `index`.
-    ///
-    /// Asserted in pixels rather than in the map, because the claim is about which
-    /// renderer's *uniform* was written. The two own separate colour channels, so
-    /// one frame carries both answers.
+    /// Verifies that index-addressed parameter writes target specific renderers in the stack.
     #[test]
     fn an_addressed_write_reaches_one_renderer_and_leaves_the_other() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -775,11 +652,7 @@ proc wash {
     }
 }
 
-/// **The refusal, which reaches no device.**
-///
-/// A Set with no renderer is turned away before anything is compiled — the
-/// check is `Set::validate`'s, and `Set::build_many` reaches it by calling
-/// that rather than by keeping a copy.
+/// Validation tests for empty renderer stack refusals without device allocation.
 mod refused {
     use super::gpu::{compile, PAIR_L1};
     use karakuri_engine::set::{Layering, SetError, Wiring};

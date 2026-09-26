@@ -1,27 +1,7 @@
-//! What a Set is resident for, per node and in total.
+//! Integration tests for GPU element storage allocation and memory sizing accounting.
 //!
-//! **Asserted against the buffers, not against a layout recomputed here.**
-//! `Set::element_storage` sums `wgpu::Buffer::size()` over the buffers each
-//! node created, so a test that rebuilt the element layout to compare against
-//! would pass whatever the layout did — it would assert that the engine calls a
-//! function. Every number below is instead hand-walked in the comment beside it
-//! from the WGSL placement rules, the same way `karakuri-ir`'s op counts are.
-//!
-//! That is the difference between this and the stage-4 figure it replaces. That
-//! one was a second arithmetic over one procedure's `emit` list, and it was
-//! wrong in three ways at once that no per-procedure test could see: an L2 is
-//! sized from everything that reached it, an amplifier above a node widens
-//! every element below it, and a compacted L1 pays for a destination index the
-//! text of the procedure never mentions. Each of the first four claims here is
-//! one of those, plus the total that only a Set can hold.
-//!
-//! **The last two are about the shapes a `Set` can take rather than about a
-//! node**, and they are here because `Set::element_storage` walks sources and
-//! their pairings itself: a Set over two geometries instantiates a chain per
-//! source, and a Set whose deform declares a geometry slot holds *two*
-//! simulations under one source. Neither walk is exercised by a single-source
-//! fixture, and each is a place a dropped iterator would still return a
-//! plausible list.
+//! Asserts exact buffer allocations per node, compaction overhead, amplifier capacity expansion,
+//! and multi-source chain topologies directly against wgpu buffer sizes.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -35,15 +15,7 @@ mod gpu {
     use karakuri_engine::{Gpu, Set};
     use karakuri_ir::typed::Checked;
 
-    /// **Eight elements, `position` and `tint`.** Two `vec3`s rather than a `vec3`
-    /// and a scalar, because a scalar after a `vec3` lands in the padding and costs
-    /// nothing — which would make the fixture unable to tell an L2 sized from the
-    /// chain apart from one sized from its own `emit` list. Two vectors is the
-    /// smallest emit list where dropping one changes the stride.
-    ///
-    /// **No `spawn` and no `kill()`**, so its live set cannot change and the engine
-    /// builds no compaction scan for it. That is the baseline the fixture below
-    /// varies by exactly one thing.
+    /// Eight-element fixture without spawning or compaction, establishing baseline storage sizing.
     const STILL: &str = r#"
 proc still {
   kind     L1
@@ -59,12 +31,7 @@ proc still {
 }
 "#;
 
-    /// The same procedure with one `kill()` in it.
-    ///
-    /// **The emit list is identical on purpose.** Compaction is the only difference
-    /// between this and [`STILL`], so the difference between the two figures is the
-    /// scan's destination index buffer and nothing else — a subtraction rather than
-    /// a second hand-walked stride.
+    /// Eight-element fixture with compaction, isolating destination index buffer overhead.
     const CULLING: &str = r#"
 proc culling {
   kind     L1
@@ -83,12 +50,7 @@ proc culling {
 }
 "#;
 
-    /// An endomorphic L2 that names `position` and nothing else.
-    ///
-    /// **It never mentions `tint`, and it is sized for it anyway.** What an L2
-    /// writes carries everything that reached it, so its element struct is
-    /// `upstream ∪ emit` — the exact input a figure computed from this file alone
-    /// cannot have, and the one the assertions below are built to catch.
+    /// Endomorphic L2 deformer verifying upstream attribute preservation in element layouts.
     const WIDEN: &str = r#"
 proc widen {
   kind L2
@@ -115,13 +77,7 @@ proc fan {
 }
 "#;
 
-    /// The same procedure again under a chosen name, at sixty-four elements.
-    ///
-    /// **A name per source rather than one fixture used twice**, because a Set
-    /// refuses two nodes called the same thing and an edge is written against the
-    /// name — so a pairing fixture cannot be built out of one string at all. The
-    /// emit list is [`STILL`]'s, so the stride below is the same 48 and the two
-    /// sources differ in nothing that this file measures.
+    /// Returns an L1 source procedure with specified name and default capacity.
     fn source(name: &str) -> String {
         format!(
             r#"
@@ -180,26 +136,12 @@ proc dots {
         build_sources(gpu, &[l1], l2s, &[])
     }
 
-    /// The same over several geometries, and with the edges that fill whatever
-    /// geometry slot a deform declares.
-    ///
-    /// Each source is built at the capacity its own procedure defaults to, which is
-    /// the rule the single-source [`build`] already followed — a per-source
-    /// capacity is exactly what makes the entries below a list rather than one
-    /// figure times a count.
+    /// Builds a multi-source Set with specified deformation chain and graph edges.
     fn build_sources(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> Set {
         both(gpu, l1s, l2s, edges).1
     }
 
-    /// **The same material through both answers**: what the plan says the Set
-    /// will allocate, and the Set built from it.
-    ///
-    /// **One assembly of the arguments and not two**, because the claim
-    /// [`the_plan_reports_what_the_built_set_allocates`] makes is that two
-    /// answers about *one* Set agree. A helper that assembled the arguments
-    /// twice could be handed the plan of one Set and the build of another, and
-    /// the equality would then be measuring the helper rather than the engine —
-    /// which is the shape of mistake this whole file exists to refuse.
+    /// Compiles and constructs both planned storage accounting and active GPU Set.
     fn both(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> (Vec<PlannedStorage>, Set) {
         let l1: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
         let sources: Vec<(&Checked, u32)> = l1
@@ -248,17 +190,7 @@ proc dots {
         (planned, set)
     }
 
-    /// The stride of `emit position, tint`, walked by hand from WGSL's placement
-    /// rules so that nothing below is comparing the engine against itself:
-    ///
-    /// ```text
-    /// seed        u32  @  0..4
-    /// birth_frac  f32  @  4..8
-    /// position    vec3 @ 16..28   (16-byte aligned, 12 bytes long)
-    /// tint        vec3 @ 32..44
-    /// ```
-    ///
-    /// 44 bytes rounded up to the struct's own 16-byte alignment: 48.
+    /// Expected stride of emit position, tint struct (44 bytes padded to 48 alignment).
     const STRIDE: u64 = 48;
 
     /// One `u32` per element in the alive array, and one per element in the
@@ -291,12 +223,7 @@ proc dots {
         assert_eq!(nodes[0].per_element(), 2 * (STRIDE + FLAG), "2 * (48 + 4)");
     }
 
-    /// **A compacted L1 pays for a third buffer, and its procedure does not say
-    /// so.** The scan writes one destination index per element, and it exists
-    /// because the procedure can `kill()` — nothing about the emit list, the
-    /// layout, or the stride changes at all. This is the term the figure that used
-    /// to be published from stage 4 was missing, and no reading of one `.kir`'s
-    /// storage declarations could have found it.
+    /// Verifies that compacted L1 procedures allocate an additional scan destination index buffer.
     #[test]
     fn a_compacted_l1_also_pays_for_the_scans_destination_index() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -317,17 +244,7 @@ proc dots {
         );
     }
 
-    /// **A non-amplifying L2 pays once, and for the whole chain's element.**
-    ///
-    /// Once, because its output is rebuilt from its input every frame and nothing
-    /// reads back what it wrote — there is no second direction. And for the whole
-    /// element, because what it writes carries everything that reached it: `widen`
-    /// names `position` alone and is sized for `tint` as well. A figure built from
-    /// this procedure's own `emit` list would report a stride of 8 — `seed` and
-    /// `birth_frac` and nothing else — against the 48 the engine allocates.
-    ///
-    /// It pays nothing for flags: the elements it emits are the elements that
-    /// reached it, under the flags they arrived with, so it shares the L1's array.
+    /// Verifies that non-amplifying L2 deformers allocate a single buffer matching upstream element stride.
     #[test]
     fn a_non_amplifying_l2_pays_once_and_for_what_reached_it() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -345,18 +262,7 @@ proc dots {
         );
     }
 
-    /// **An amplifier is sized against the elements it makes, at the chain's
-    /// stride, and it owns flags for them.**
-    ///
-    /// Its output count is the Set's capacity times its factor; its element carries
-    /// everything upstream emitted plus the `copy` index that starts existing here;
-    /// and its outputs are new elements nothing upstream holds a flag for, so it
-    /// allocates an alive array of its own rather than sharing one.
-    ///
-    /// `copy` is free: `seed` and `birth_frac` leave eight bytes of the first
-    /// 16-byte block unused and a `u32` lands in four of them, so the stride is the
-    /// same 48 the L1 has. That is deliberate in the fixture — it means the number
-    /// below cannot be reached by accidentally counting `copy` twice.
+    /// Verifies that amplifiers allocate buffers for their expanded capacity and own distinct alive arrays.
     #[test]
     fn an_amplifying_l2_is_sized_for_the_attributes_that_reached_it() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -374,14 +280,7 @@ proc dots {
         );
     }
 
-    /// **The Set is the first thing that can be asked what a chain holds.**
-    ///
-    /// `capacity` differs per node and an amplifier multiplies it for everything
-    /// below, so the total is not any node's figure times any one number: the L1
-    /// runs at eight elements, the amplifier and everything after it at
-    /// thirty-two. A chain of `[amplify 4, endomorphism]` is the shortest fixture
-    /// where a total computed from the Set's capacity alone would be wrong by a
-    /// factor of four on two of its three terms.
+    /// Verifies that total Set storage sums every node at its specific amplified capacity.
     #[test]
     fn a_sets_total_is_every_node_at_its_own_capacity() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -409,18 +308,7 @@ proc dots {
         assert_eq!(nodes.iter().map(|n| n.bytes).sum::<u64>(), 4032);
     }
 
-    /// **A Set over two sources instantiates the whole chain per source**, and the
-    /// entries are per instance.
-    ///
-    /// Two geometries emitting the same two attributes at the same capacity: the
-    /// figures are equal on purpose, because the claim is about the *walk* and not
-    /// about arithmetic that already has four tests above it. What a per-source
-    /// walk gets wrong is the count of entries and the total, and both are stated
-    /// here.
-    ///
-    /// Each source is a static L1 with no `spawn` and no `kill()`, so each pays for
-    /// two directions of the element buffer and the alive array and for nothing
-    /// else: `2 * 64 * (48 + 4)` is 6656, twice.
+    /// Verifies that multi-source Sets account for separate storage allocations per source chain.
     #[test]
     fn every_source_in_a_set_is_charged_for_its_own_chain() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -446,21 +334,7 @@ proc dots {
         assert_eq!(set.element_storage_bytes(), 13312, "6656 + 6656");
     }
 
-    /// **A paired Set holds two simulations under one source, and the far one is
-    /// charged once.**
-    ///
-    /// `uses far : Geometry` collapses the source list: the two geometries become
-    /// one `Source` with a near simulation, a far simulation and one chain over
-    /// them — so the entries are three rather than the two a reader counting
-    /// *sources* would expect, and the far side appears exactly once despite being
-    /// read every frame by the node below it.
-    ///
-    /// The far simulation is charged as a simulation, not as an input: `2 * 64 *
-    /// (48 + 4)` is 6656, the same as the near one, because it is a full L1 with
-    /// its own two directions. The deform pays `64 * 48` = 3072 — one buffer at the
-    /// chain's stride, with no flags of its own, since it emits the elements that
-    /// reached it under the flags they arrived with — and it pays nothing at all
-    /// for reading `far.position`, which is somebody else's buffer.
+    /// Verifies that paired L2 deformers charge the paired geometry once without duplicating input buffers.
     #[test]
     fn a_pairing_l2_charges_the_far_geometry_once_and_reads_it_free() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -507,27 +381,7 @@ proc dots {
         assert_eq!(set.element_storage_bytes(), 16384, "6656 + 6656 + 3072");
     }
 
-    /// **The figure a Set that has not been built can be asked for is the
-    /// figure it allocates.**
-    ///
-    /// This is the test that keeps the one-place property honest, and it is
-    /// worth being exact about which half of it. `crate::storage` decides both
-    /// how large each buffer a node allocates is *and* what they come to
-    /// together. The first half is asserted by every hand-walked number above,
-    /// which reads the buffers a build actually created; the second — the
-    /// doubling that is an L1's two directions, the flag array only an
-    /// amplifier owns — is reachable only through a plan and is asserted here
-    /// and nowhere else.
-    ///
-    /// **And the walk, which cannot be shared at all**: a device-free reporter
-    /// has to work out for itself which chains exist, what stride each node
-    /// writes at, what an amplifier did to the count below it and whether an L1
-    /// pays for a compaction scan. Each of those is a term the withdrawn
-    /// stage-4 figure got wrong, and each case below is one of them.
-    ///
-    /// A Set is compared against itself rather than against a constant, so
-    /// nothing here needs re-stating when a stride changes — the numbers are
-    /// the business of the tests above.
+    /// Verifies that offline PlannedStorage accounting matches active GPU Set buffer allocations exactly.
     #[test]
     fn the_plan_reports_what_the_built_set_allocates() {
         let gpu = Gpu::headless().expect("a GPU");
