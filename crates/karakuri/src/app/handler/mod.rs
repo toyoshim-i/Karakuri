@@ -122,9 +122,7 @@ impl ApplicationHandler for App {
         );
         // Seed deck state from initial compile output on window setup or remake ([`Playing::at_launch`]).
         self.keeping.playing = Playing::at_launch(&engine.placed, engine.deck.slot_count());
-        // **Before the first frame and before the first strip is written**, so
-        // that the panel's first frame draws the deck as it actually is rather
-        // than a settled version of it that the second frame corrects.
+        // Run startup pass before the first frame so the initial panel state reflects actual deck state.
         let governed = engine.startup(&gpu);
         // Initialize the four risk badges from governor pass results (ADR-0356).
         self.readout.view.costs = costs(&governed);
@@ -167,10 +165,7 @@ impl ApplicationHandler for App {
                 None,
             )
         );
-        // **And the arrangement pill's menu, once for the run**, for
-        // `library`'s reason and for one more: this is a directory read, and
-        // the only thing that can add a name to it is a save this program
-        // performs — which re-reads it there. See `arrangements`.
+        // Query available arrangements from the store directory on startup (see `arrangements`).
         self.readout.view.arrangement.filed = arrangements(&self.store);
         // Seed inspector panes from initial published set definitions before the first frame.
         let targets = self.readout.view.pane_decks();
@@ -213,10 +208,7 @@ impl ApplicationHandler for App {
         self.readout.view.map = controller.as_ref().map(|open| view::MapPill {
             name: open.map_name().map(str::to_owned),
         });
-        // **The port the server bound, asked of the server.** `--mcp 0` takes
-        // an ephemeral port, so the flag's argument and the address a client
-        // dials are two different numbers on that run; `Reporter::port` is the
-        // one `main` already printed and is the only one worth a legend.
+        // Query bound server port for legend readout ([`mcp::Reporter::port`]).
         let mcp_port = self.keeping.mcp.as_ref().map(mcp::Reporter::port);
         self.readout.print_legend(
             budget,
@@ -251,10 +243,7 @@ impl ApplicationHandler for App {
             material,
             store: self.store.clone(),
             window,
-            // **A run opens with one output.** The projector is a window an
-            // operator asks for from the Outputs row; opening one nobody asked
-            // for would put a second window on their desk and raise what every
-            // frame costs before the first one is drawn.
+            // Projector starts closed; opened on demand via Outputs row.
             projector: None,
             plugin: None,
             gpu,
@@ -288,18 +277,12 @@ impl ApplicationHandler for App {
                 self.costs.say(capacity, &material, gfx.budget_ms, at);
             }
         }
-        // **What a model asked for, taken on the wake it asked to be taken
-        // on** — see [`SERVED`], where the whole of this is argued. It is here
-        // beside the two deadlines above because it is a third one, and
-        // `about_to_wait` is where all three are turned into a control flow.
+        // Process scheduled MCP requests when the timer expires ([`SERVED`]).
         if self.served.is_some_and(|due| due <= now) {
             self.served = Some(now + SERVED);
             if let Some(gfx) = self.gfx.as_mut() {
                 self.keeping.requests(&mut gfx.engine, &self.store);
-                // **And every operation a model named, on the same wake and
-                // beside the same drain** — see [`App::operated`], which is
-                // where the reason it is a second call rather than a third arm
-                // of `requests` is written.
+                // Drain and execute operations requested by the MCP model ([`App::operated`]).
                 App::operated(
                     gfx,
                     event_loop,

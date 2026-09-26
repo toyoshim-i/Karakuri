@@ -127,9 +127,7 @@ impl Presented {
         if size == self.size {
             return false;
         }
-        // Freed **before** the replacement is registered, which is the order
-        // the leak is about rather than a tidiness: the atlas holds the old
-        // bind group until this call and nothing else ever drops it.
+        // Free previous texture bind group before allocating replacement.
         renderer.free_texture(&self.id);
         *freed += 1;
         // Carried across, because a resize is not an un-aiming: the rectangle
@@ -146,10 +144,7 @@ impl Sink for Presented {
     fn acquire(&mut self, _gpu: &Gpu) -> Result<(), Skip> {
         match self.aimed {
             true => Ok(()),
-            // **[`Skip::Transient`] and never a `Fault`.** A folded region is
-            // an operator's choice and the next `f` over it undoes it, so
-            // there is nothing to say about it — and a `Fault` here would be
-            // a line printed the first frame of every fold.
+            // Folded regions skip presentation without faulting.
             false => Err(Skip::Transient),
         }
     }
@@ -162,10 +157,7 @@ impl Sink for Presented {
         self.size
     }
 
-    /// Nothing. The picture and deck A's cell are textures the panel samples in the
-    /// same submission; what reaches a display is the window, and the window is not
-    /// a sink here — `karakuri-cli`'s window shows the canvas, and this one shows
-    /// the panel.
+    /// Textures are sampled into egui UI passes; window handles surface presentation directly.
     fn present(&mut self, _gpu: &Gpu) -> Result<(), String> {
         Ok(())
     }
@@ -181,9 +173,7 @@ pub(crate) fn aims(
 
 /// Determines engine compositing dimensions by selecting the maximum area among enabled outputs (ADR-0171, ADR-0247).
 pub(crate) fn render_size(outputs: &[Option<(u32, u32)>]) -> Option<(u32, u32)> {
-    // **A fold rather than `max_by_key`**, which returns the *last* of several
-    // equal maxima and would give the tie to whichever output happened to be
-    // drawn furthest right. `>` and not `>=` is the tie rule said once.
+    // Select largest output area, breaking ties in favor of earlier enabled outputs.
     outputs.iter().flatten().copied().fold(None, |best, at| {
         let area = |(w, h): (u32, u32)| (w as u64) * (h as u64);
         match best {

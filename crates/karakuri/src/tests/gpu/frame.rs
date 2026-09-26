@@ -48,10 +48,7 @@ mod gpu {
             None,
             mcp::Slots::unpointed(),
         );
-        // **Built at what the file declares**, which is the other half of
-        // `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`:
-        // that one says what the `.kir` says, and this one says the deck was
-        // built with it rather than with a number written here.
+        // Verify deck is built at the capacity declared in its L1 file.
         assert_eq!(
             engine.capacity,
             checked(&shipped().l1)
@@ -187,10 +184,7 @@ mod gpu {
             "a paint callback appeared: it has to be submitted ahead of the pass"
         );
         assert!(refusals.is_empty(), "a sink refused: {refusals:?}");
-        // **Both sinks took the frame, and nothing else was in the slice.**
-        // The panel is not one of them — it is drawn in `finally`, and a
-        // `reached` of 3 here would be the console counting a consumer as an
-        // output. See `frame::compose`.
+        // Verify frame reached both sinks without treating the panel as an output sink.
         assert_eq!(
             outcome,
             karakuri_engine::Outcome {
@@ -256,10 +250,7 @@ mod gpu {
          the panel and there is nothing in it"
         );
 
-        // **And each stayed where it was put.** Three controls, because a
-        // picture drawn over the whole window would satisfy every count above:
-        // deck D's cell is off, so it is the mock's well and nothing else;
-        // and a bay the Program is nowhere near is still the bay's card.
+        // Verify unlit areas and inactive deck cells retain their baseline palette colors.
         let pal = ROOM.palette();
         let panel_rgb = [pal.panel.r(), pal.panel.g(), pal.panel.b()];
         let well_rgb = [pal.well.r(), pal.well.g(), pal.well.b()];
@@ -310,9 +301,7 @@ mod gpu {
             mcp::Slots::unpointed(),
         );
 
-        // The picture's, in both axes, and **neither of them is the window's**
-        // — the picture is narrower than the window by both panes and taller
-        // by nothing like the window's height.
+        // Picture dimensions are sized to picture rect rather than full window dimensions.
         assert_eq!(
             (
                 engine.picture.texture.width(),
@@ -324,9 +313,7 @@ mod gpu {
         assert!(engine.picture.size.0 < W && engine.picture.size.1 < H / 2);
         assert!(renderer.texture(&engine.picture.id).is_some());
 
-        // **And it is not the region's either**, which is the texture this
-        // change removes: the region is the same height and hundreds of pixels
-        // wider, all of it bars.
+        // Texture matches picture rect, excluding surrounding region letterbox padding.
         let region = panel
             .layout()
             .rect(panel.layout().find("program-view").expect("program-view"));
@@ -338,9 +325,7 @@ mod gpu {
             region.w
         );
 
-        // **No bars, asked of the pass that would draw them.** `letterbox` is
-        // what `Present::draw` sets its viewport from, so what it leaves over
-        // at the edges is exactly what gets cleared to black.
+        // Viewport fills texture without letterbox bars.
         let (x, y, w, h) = letterbox(CANVAS, engine.picture.size);
         let (tw, th) = (engine.picture.size.0 as f32, engine.picture.size.1 as f32);
         assert!(
@@ -396,7 +381,7 @@ mod gpu {
             mcp::Slots::unpointed(),
         );
 
-        // **The picture alone**, which is every run this program opens on.
+        // Default configuration without projector composites at picture size.
         engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(
             engine.present.size(),
@@ -413,8 +398,7 @@ mod gpu {
          assertion above cannot tell the derivation from the constant it replaced"
         );
 
-        // **A projector on, and it is larger**, so the frame follows it and
-        // the picture becomes a downscale of one render.
+        // Larger enabled projector raises compositing resolution.
         let projector = (3840, 2160);
         engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(projector));
         assert_eq!(
@@ -424,10 +408,7 @@ mod gpu {
          shown an upscale of the picture's size"
         );
 
-        // **And the deck followed the present pass.** Composing is what says
-        // so: `Frame::render` checks the size it is handed against the deck's
-        // and panics at the call site, so a deck left at the old size is a
-        // panic here rather than a black frame later.
+        // Deck rendering coordinates match updated present pass dimensions.
         let Engine {
             deck,
             present,

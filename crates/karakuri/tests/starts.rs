@@ -232,10 +232,7 @@ mod gpu {
         }
     }
 
-    /// A bare run reaches the window. The command line, the preset library, the
-    /// working copies, the store, the snapshot seed, the event loop, the surface,
-    /// the adapter, the deck and the panel — in that order, in one process, and the
-    /// legend is the far side of all of it.
+    /// Asserts that a standard startup sequence reaches window initialization and prints the startup legend.
     #[test]
     fn the_panel_reaches_a_window_and_prints_its_legend() {
         let mut panel = Panel::launch("bare", &[]);

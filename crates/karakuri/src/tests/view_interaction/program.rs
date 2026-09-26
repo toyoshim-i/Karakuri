@@ -162,7 +162,7 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
         view.library
     );
 
-    // **The kind chips narrow by OR, and none on is everything.**
+    // Kind chips narrow listing by union (OR); empty selection matches all kinds.
     assert!(view.select_scope(Scope::AllSets));
     let cameras = LibraryKinds {
         l3: true,
@@ -266,9 +266,7 @@ fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
         "{said}"
     );
 
-    // **A filter that matched nothing is a different nothing from an empty
-    // store**, and the line says which: the store is not empty, and what to
-    // do about it is press a field rather than save a Set.
+    // Filter matching zero results reports filter exclusion rather than empty store.
     assert!(view.narrow(
         Some("drift_shell"),
         karakuri_operation::LibraryKinds {
@@ -284,10 +282,7 @@ fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
         "{said}"
     );
 
-    // **And the same retain applies to `my sets`**, which is this listing
-    // starred: star one Set, mark the subset, and the filter that named
-    // the other one leaves it with nothing — the narrowing is over what
-    // the store holds and not over which chip is marked.
+    // Active filters also apply when switching scopes to `MySets`.
     assert!(view.narrow(None, karakuri_operation::LibraryKinds::EVERYTHING));
     favourite(
         &root,

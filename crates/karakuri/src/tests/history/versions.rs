@@ -67,15 +67,14 @@ fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
         "142930-004_slot0_L1_drift_shell@x.kir",
         "kind L1\n",
     );
-    // **Under no Set at all**, which is the row that must not match.
+    // Version under no Set must not match a Set-scoped query.
     version_file(
         &root,
         "2026/09/08",
         "142800-000_slot1_L4_soft_points.kir",
         "kind L4\n",
     );
-    // **And under another Set**, so that *narrowed to `x`* is a claim with
-    // something to be wrong about.
+    // Version under another Set ensures queries properly filter by Set ID.
     version_file(
         &root,
         "2026/09/07",
@@ -103,10 +102,7 @@ fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
         "the line does not say what the scope listed: {said}"
     );
 
-    // **A deck running the pair the run launched with**, which is every
-    // deck of a fresh run: the versions under `None` are exactly the rows
-    // this would list if a `None` matched anything, so an empty listing
-    // here is the same claim as above read from the other side.
+    // Queries with None Set ID list nothing for fresh launch pairs.
     let said = listing(&mut view, &root, None, None, None);
     assert!(
         view.library.is_empty(),
@@ -164,9 +160,7 @@ fn a_landing_writes_the_versions_bytes_over_the_nodes_working_copy() {
         "landing on the L4 wrote over the L1 as well"
     );
 
-    // **The file behind the row is gone**, which is the retention policy
-    // being used: the name is still in nothing this program keeps, so the
-    // walk is re-asked and the row is simply not there.
+    // Reverting to a deleted revision reports that the target file is gone.
     std::fs::remove_dir_all(root.join("history")).expect("the operator's own `rm -rf`");
     let said = put_back(
         &root,
@@ -216,8 +210,7 @@ fn a_step_back_lands_the_version_before_the_one_running() {
             body,
         );
     }
-    // **A newer version of another node of the same Set**, which is what
-    // says the walk narrows by the node.
+    // Newer version of a different node ensures revision walk filters by node address.
     version_file(
         &root,
         "2026/09/09",
@@ -252,10 +245,7 @@ fn a_step_back_lands_the_version_before_the_one_running() {
         "stepping the L4 back wrote over the L1 as well"
     );
 
-    // **A node with one version has nothing before what it is playing**,
-    // which is an ordinary state rather than a fault — the first edit of a
-    // node files one version, and a step back at that point has nowhere to
-    // go. P-0083: the sentence names what is in the way.
+    // Stepping back a node with only one revision reports no previous version (P-0083).
     let geometry = karakuri_operation::NodeAddress {
         layer: karakuri_operation::Layer::L1,
         index: 0,
@@ -278,9 +268,7 @@ fn a_step_back_lands_the_version_before_the_one_running() {
         "a refused step back wrote something"
     );
 
-    // **And a node the history has never heard of**, which is the same
-    // refusal one step further out: nothing is filed, so there is not even
-    // a version running.
+    // Stepping back an unrecorded node address is rejected.
     let field = karakuri_operation::NodeAddress {
         layer: karakuri_operation::Layer::Field,
         index: 0,
@@ -353,10 +341,7 @@ fn a_keep_takes_its_own_row_off_the_lane() {
         "a keep took a row it was not addressed to"
     );
 
-    // **A second keep on the same node has no row to take**, which is the
-    // negative control: a version that retired by slot, or one that
-    // ignored the node, would go on answering as though it had done
-    // something.
+    // Duplicate keep on the same node reports no candidate row remaining.
     let said = kept(
         &mut view,
         &Operation::KeepCandidate {

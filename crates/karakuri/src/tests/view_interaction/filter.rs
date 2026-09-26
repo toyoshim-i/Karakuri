@@ -34,8 +34,7 @@ fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
         Point::new(at.min.x + 2.0, at.center().y)
     };
 
-    // **The cursor is somewhere other than the top**, so that the move
-    // back to it is a move and not the state it was already in.
+    // Move cursor away from row 0 to test cursor reset on scope switch.
     assert!(readout.view.walk(1, 0..2), "the cursor did not move");
     assert_eq!(readout.view.cursor_row(), 1);
 
@@ -64,8 +63,7 @@ fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
         "the scope changed and the cursor is still pointing into the listing it left"
     );
 
-    // **The marked chip, pressed** — answered rather than refused, and the
-    // mark does not step off it the way the key would.
+    // Pressing the currently active chip maintains selection rather than clearing it.
     let at = chip(&mut readout, Scope::Presets);
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
     assert_eq!(
@@ -107,7 +105,7 @@ fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
         Point::new(at.center().x, at.center().y)
     };
 
-    // **Nothing starred, so the press asks for the star to go on.**
+    // Unstarred row requests starring.
     let at = star(&mut readout, 1);
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
     let (claim, did) = readout.pointer(&ctx, Pointer::Down);
@@ -126,10 +124,7 @@ fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
     );
     readout.pointer(&ctx, Pointer::Up);
 
-    // **And with the row starred it asks for the star to come off**, which
-    // is the same control reading the state it is drawn from. The marks
-    // are the host's answer, so this is what `listing` would have written
-    // after the write.
+    // Starred row requests unstarring when pressed.
     readout.view.starred.insert("lattice_veil".to_owned());
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
     assert_eq!(
@@ -142,9 +137,7 @@ fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
     );
     readout.pointer(&ctx, Pointer::Up);
 
-    // **The row's own ground is still the row's.** A press at the far end
-    // of the same row takes the Set in hand and names no operation, which
-    // is what a carry is (ADR-0265).
+    // Clicking the row body begins carrying without emitting a favorite operation (ADR-0265).
     readout.panel.solve();
     let row = library_bay(
         readout.panel.layout(),
@@ -185,8 +178,7 @@ fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
     readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
     readout.view.holds = vec!["drift_shell".to_owned(), "soft_points".to_owned()];
     assert!(readout.view.select_scope(Scope::MySets));
-    // **The cursor is somewhere other than the top**, so that the move back
-    // to it is a move and not the state it was already in.
+    // Move cursor away from index 0 to verify reset behavior on filter application.
     assert!(readout.view.walk(1, 0..2), "the cursor did not move");
 
     // The box, asked of the derivation that draws it rather than
@@ -206,9 +198,7 @@ fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
         .expect("the bay draws its filter field");
         Point::new(at.center().x, at.center().y)
     };
-    // **And one kind chip's, asked of the walk that paints them**, which
-    // is the same rule one band down: a chip is as wide as the word in it,
-    // so where it is is `egui`'s answer and never a remembered number.
+    // Kind chip rect derived dynamically from current text layout.
     let kind_chip = |readout: &mut Readout, which: usize| {
         readout.panel.solve();
         let bay = library_bay(
@@ -256,10 +246,7 @@ fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
         "the listing narrowed and the cursor is still pointing into the one it left"
     );
 
-    // **And the kind chips under it, which have to carry the field
-    // through**: a press on a chip names all six and says nothing about
-    // `holds`, so what the console is narrowed to afterwards is the pair as
-    // it now stands (ADR-0338).
+    // Kind chip filter preserves existing field filters such as `holds` (ADR-0338).
     let at = kind_chip(&mut readout, 2);
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
     assert_eq!(

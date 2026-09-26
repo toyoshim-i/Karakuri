@@ -177,9 +177,7 @@ impl Engine {
         });
         Engine {
             deck,
-            // **Nothing wired by hand yet**, which is the state a run begins
-            // in: the launch aims carry whatever `--edge` said, and this is the
-            // list a rewiring writes and every later re-aim restates.
+            // Dynamic edge overrides; empty until modified at runtime.
             edges: Vec::new(),
             capacity,
             present,
@@ -187,10 +185,7 @@ impl Engine {
             previews,
             slot_bind_groups,
             look: LOOK,
-            // **Nothing in it at all**, which is the default chain: with no
-            // slot the mix writes straight into the target the present pass
-            // reads, so the frame this program opens on is the frame it drew
-            // before the chain existed — bit for bit and for free.
+            // Post-processing master chain; empty by default.
             chain: Vec::new(),
             chain_swap: karakuri_engine::ChainSwap::new(&gpu.device, &gpu.queue),
             freed: 0,

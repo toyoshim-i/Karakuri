@@ -145,9 +145,7 @@ pub(crate) fn presets_procedures(
     };
     match presets.list_procedures() {
         Ok(procedures) => procedures,
-        // **Said out loud and then empty**, which is [`presets_listing`]'s own
-        // answer beside it: a tier that is empty because a directory could not
-        // be read looks exactly like one that ships nothing.
+        // Log preset procedure directory read failures and return empty list.
         Err(why) => {
             println!("library: {why}");
             Vec::new()
@@ -261,10 +259,7 @@ pub(crate) fn listing(
         Scope::AllSets | Scope::MySets => library(store),
         _ => Vec::new(),
     };
-    // **What the walk found, and what it did not.** Read here rather than
-    // inside the arm below so that the sentence about it is written where
-    // every other sentence about this listing is; `None` for every scope that
-    // is not a history, which is every scope that is a directory of Sets.
+    // Read history versions for the running Set when in History scope.
     let walked = match scope {
         Scope::History => Some(walked(store, running)),
         _ => None,
@@ -301,10 +296,7 @@ pub(crate) fn listing(
                         .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
                 )
                 .collect();
-            // **Most recent first, and the name breaks a tie**, which is
-            // `library`'s own order applied to the merged list: two files
-            // written inside one tick of a coarse clock tie, and a tied sort
-            // is not an order.
+            // Sort by modification time descending, breaking ties alphabetically by name.
             rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
             rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()
         }

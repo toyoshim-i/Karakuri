@@ -79,9 +79,7 @@ impl Readout {
             // Nothing has been written yet, so the capsule is not drawn.
             health: None,
             sequencer: demonstration_banks(),
-            // **Nothing polled yet**, which draws no playhead column and makes
-            // the first poll a boundary — a bay nobody has run is not a bay at
-            // step zero.
+            // Default playhead initialized at start before first poll.
             playhead: karakuri_pattern::Playhead::default(),
         }
     }
@@ -95,9 +93,7 @@ impl Readout {
         }
     }
 
-    /// The two regions a boundary is between. A split is often unnamed — the
-    /// console's body row is, deliberately — so `split #0` alone does not say which
-    /// boundary the pointer has hold of, and the pair does.
+    /// Returns formatted pair of region labels on either side of the given split boundary.
     pub(crate) fn pair(&self, split: NodeId, index: usize) -> String {
         match self.panel.pair(split, index) {
             Some((a, b)) => format!("{} | {}", self.label(a), self.label(b)),
@@ -247,8 +243,7 @@ impl Readout {
 ///
 /// Verified against window event dispatch in `key_column` tests (ADR-0259, ADR-0333, ADR-0343).
 pub(crate) const KEYS: &[(&str, &str)] = &[
-    // **The two that move the address**, and they are the same in every bay
-    // because they are not addressed to one.
+    // Focus navigation keys common to all bays.
     (
         "tab",
         "focus the next bay, and shift-tab the one before — the ring is the arrangement's own \
@@ -259,10 +254,7 @@ pub(crate) const KEYS: &[(&str, &str)] = &[
         "up one level of the focused bay's address — or, while a name is being typed, abandon \
          the name. it does not quit: close the window",
     ),
-    // **The four that act inside a bay**, and they are the same four in every
-    // bay because they are rules about kinds of thing rather than about bays
-    // (ADR-0259). Which bays have them is
-    // `karakuri_console::focus::BUILT` — the mixer and the library today.
+    // Intra-bay navigation and manipulation keys (ADR-0259).
     (
         "digit",
         "the nth thing one level below the address, counting what the bay drew from one — and 0 \
@@ -298,10 +290,7 @@ pub(crate) const KEYS: &[(&str, &str)] = &[
         "fold the split enclosing the focused bay — the pane it sits in. space folds the bay \
          itself",
     ),
-    // **The seven that survive as global letters**, plus the one the grammar
-    // has not reached yet. A key is global where the operation it names has no
-    // operand for focus to supply, or where its only operand is the choice the
-    // key itself spells.
+    // Global accelerator keys independent of focus state.
     (
         "z",
         "unfold everything folded — the pointer cannot reach one to unfold it",

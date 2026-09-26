@@ -73,8 +73,7 @@ fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() 
     // Deck B, so the letter in the scratch name is not the first one and a
     // hard-coded `A` fails here.
     let (tx, rx) = std::sync::mpsc::channel();
-    // **An [`Aiming`] and not a bare sender**, because a load keeps where it
-    // pointed the watcher — see the assertion at the end of this test.
+    // Uses Aiming to track and retain the watcher's target across loads.
     let mut aiming = Aiming::new(
         tx,
         watch::Aim {
@@ -91,8 +90,7 @@ fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() 
             bindings: Vec::new(),
             edges: Vec::new(),
             authorities: Vec::new(),
-            // **Running material no Set names**, which is where every slot
-            // of this program starts and what the launch seed files under.
+            // Slots start without an assigned Set name.
             set: None,
         },
         // What this test asserts is the *aim*; where the layout is
@@ -156,10 +154,7 @@ fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() 
         "the load did not tell the watcher which Set the slot is running"
     );
 
-    // **And the load kept where it pointed the watcher**, which is what a
-    // later rewiring restates the other twelve fields from: an `Aiming` that
-    // sent an aim and left `at` behind would re-aim this slot at the pair
-    // the run launched with. See [`Aiming`].
+    // Verify the load preserved target state in Aiming::at.
     assert_eq!(
         aiming.at.head.name.as_deref(),
         Some("grid"),
@@ -239,9 +234,7 @@ fn a_load_moves_what_the_mcp_server_resolves_against() {
     )
     .expect("write the Set file");
 
-    // The launch layout: two decks, and the one about to be loaded onto
-    // holds **two** renderers, so `L4:1` is a real address before the press
-    // and the refusal asserted below is a change rather than a constant.
+    // Launch layout with two renderers in deck B to test address resolution changes.
     let launch = |name: &str, kind: &str| {
         let path = root.join(name);
         std::fs::write(&path, format!("proc launched {{\n  kind {kind}\n}}\n"))
@@ -299,7 +292,7 @@ fn a_load_moves_what_the_mcp_server_resolves_against() {
     )
     .unwrap_or_else(|e| panic!("the load failed: {e}"));
 
-    // **The new scratch file, and not the launch copy.**
+    // Resolved path points to the new scratch file rather than the launch copy.
     let landed = pointing
         .file(ASKED_TO_PRIME, "L4", 0)
         .expect("the loaded Set's renderer");
@@ -322,8 +315,7 @@ fn a_load_moves_what_the_mcp_server_resolves_against() {
             .join("B0-lattice_shell.kir")
     );
 
-    // **The second renderer is gone, and the refusal says what is there
-    // now** rather than reporting a range the deck stopped holding.
+    // Accessing the removed second renderer produces an informative out-of-bounds error.
     let refused = pointing
         .file(ASKED_TO_PRIME, "L4", 1)
         .expect_err("`night02` holds one renderer");
@@ -332,8 +324,7 @@ fn a_load_moves_what_the_mcp_server_resolves_against() {
         "the refusal does not name what the deck holds now"
     );
 
-    // **And nothing else moved.** A publication that wrote the deck rather
-    // than the slot would be a worse defect than the one this fixes.
+    // Unaffected deck A maintains its original launch layout.
     assert_eq!(
         pointing.file(ON_AIR, "L4", 0).expect("deck A is untouched"),
         a_l4,
@@ -438,7 +429,7 @@ fn every_deck_runs_from_its_own_copy_and_an_edit_moves_one_deck() {
         }
     }
 
-    // 3. **The claim.** An edit in one place moves one deck.
+    // 3. Modifying one deck's working copy does not affect other decks.
     let before = std::fs::read_to_string(&running[ON_AIR].l1).expect("deck A's L1");
     std::fs::write(&running[ASKED_TO_PRIME].l1, "deck B only").expect("edit deck B");
     assert_eq!(
@@ -497,10 +488,7 @@ fn the_startup_print_names_one_file_per_deck() {
             );
         }
     }
-    // **And the four lines are four different answers.** A print that
-    // named the same two files under all four decks would be a print an
-    // operator cannot act on — which is exactly what this program said
-    // while every deck watched the pair that was typed.
+    // Startup banner lists unique scratch file paths for each deck.
     let lines: Vec<&str> = said
         .lines()
         .filter(|line| line.trim_start().starts_with("deck "))

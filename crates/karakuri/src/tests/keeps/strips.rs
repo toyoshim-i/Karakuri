@@ -21,9 +21,7 @@ fn a_press_on_the_tracker_group_reaches_the_operation_its_key_reaches() {
         // The mock's `landed`, so the group is measured against the row
         // the mock draws rather than a shorter one.
         health: Some(view::Stage::Landed),
-        // **And the mock's `rec`**, for the same reason: the pill takes
-        // the row's right padding, so a row measured without one puts
-        // everything after the bar somewhere the running window does not.
+        // Mock recording pill ensures row measurements match live layout dimensions.
         rec: Some(view::Rec::Idle),
     });
     let mut told = AudioIn::NONE;
@@ -145,9 +143,7 @@ fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
         );
     }
 
-    // **The step against the sentence the operator reads**, and the guard
-    // that keeps that comparison worth making: without the second
-    // assertion the first is a constant checked against a literal.
+    // Verify gain step constant matches documentation legend.
     assert_eq!(
         GAIN_STEP,
         0.1,
@@ -175,9 +171,7 @@ fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
         "a press at the floor did not hold at the floor"
     );
 
-    // **And not ceilinged**, which is the half a clamp would have got
-    // wrong quietly: an up press at unity is an ordinary press into the
-    // HDR mix.
+    // Gain trim is uncapped above unity for HDR mixes.
     let over = gain_key(Step::Up, 1.0);
     assert!(
         over > 1.0 && same(over, 1.0 + GAIN_STEP),
@@ -228,8 +222,7 @@ fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() 
         legend("up")
     );
 
-    // **Both ends, and both of them hold.** A press at either end of the
-    // travel asks past it and gets the end.
+    // Opacity clamps at 0.0 and 1.0 limits.
     assert_eq!(
         opacity_key(Step::Down, 0.05),
         0.0,
@@ -257,18 +250,14 @@ fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() 
         legend("up")
     );
 
-    // **The fader's default is unity too**, which is the one thing this
-    // control gained rather than inherited.
+    // Fader resets to 1.0 default with space.
     assert_eq!(
         opacity_key(Step::Default, 0.3),
         1.0,
         "`space` on an addressed fader did not name the value it was declared at"
     );
 
-    // **The two controls part company at 1.0, and that is the assertion a
-    // clamp copied across would fail.** The same press, at the same level,
-    // on the two controls the page draws two rows for: the fader holds and
-    // the trim goes on up.
+    // Opacity caps at 1.0 while gain trim continues above unity.
     assert_ne!(
         gain_key(Step::Up, 1.0),
         1.0,
@@ -318,10 +307,7 @@ fn every_verdict_says_what_it_does_to_the_lane() {
         verdict(&stopped("a + b")),
         Verdict::Waiting("a + b", view::Stage::Overloaded)
     );
-    // **The checker's refusal, which is a fourth word and not the
-    // build's.** `Rejected` above is a Set that would not assemble;
-    // this is a source that never became one, and the two would be
-    // indistinguishable on the lane if they shared a `Stage`.
+    // Contract checker syntax/type refusals map to NotCompiled stage.
     assert_eq!(
         verdict(&Event::SourceRefused {
             label: "drift_shell.kir".into(),
@@ -353,9 +339,7 @@ fn every_verdict_says_what_it_does_to_the_lane() {
         vec![0, 1],
         "the rows are not in the order the letters are drawn in"
     );
-    // **A verdict with no changed node draws one row with no address**,
-    // which is what a build that did not happen and a rebuild that changed
-    // nothing both come to — see `settle` and ADR-0326.
+    // Verifying zero changed nodes yields an addressless row (ADR-0326).
     assert_eq!(lane[0].at, None, "a verdict with no diff invented a node");
     assert!(lane[0].addr.is_empty(), "and drew an address for it");
 
@@ -457,8 +441,7 @@ fn a_build_that_changed_two_nodes_draws_a_row_each() {
         "a row's payload and its drawn address do not name the same node"
     );
 
-    // **A second slot's rows go after the first's**, which is the order
-    // the letters are drawn in.
+    // Subsequent slot rows are appended in drawn slot order.
     settle(
         &mut lane,
         1,
@@ -473,9 +456,7 @@ fn a_build_that_changed_two_nodes_draws_a_row_each() {
         "the rows are not in slot order"
     );
 
-    // **And the next build on slot 0 replaces both of its rows.** A build
-    // that changed one node leaves one row on that slot, and the row the
-    // build before it drew does not survive its own verdict.
+    // Subsequent builds on a slot replace its existing rows.
     settle(
         &mut lane,
         0,

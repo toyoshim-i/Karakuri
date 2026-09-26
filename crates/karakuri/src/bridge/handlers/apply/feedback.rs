@@ -25,9 +25,7 @@ pub(crate) fn unwritten(operation: &Operation, written: &Written) -> Option<Stri
              decision: {}. nothing moved, and nothing here decides it",
             owed.why()
         )),
-        // **A decision rather than a gap, so it is not the line above**
-        // (ADR-0323). Nothing was scheduled and no record was written, which is
-        // what a replay of this session will also see.
+        // Explicit refusal: no operation was scheduled and no record was emitted (ADR-0323).
         Written::Refused(refusal) => Some(format!(
             "  emitted: {operation:?} -> refused, and nothing was scheduled: {}",
             refusal.why()
@@ -55,9 +53,7 @@ pub(crate) fn refusal(refused: &Go, decks: usize) -> String {
              `Operation::Wipe` is *refused with no shape chosen* at its own definition — and \
              the refusal is here because the shape is this console's own setting",
         ),
-        // A wipe is not a refusal, and this arm exists so that the day a
-        // fourth answer lands somebody has to say what it reads rather than
-        // a wildcard printing one of these two over it.
+        // Non-refusal case; should not be reached when formatting refusals.
         Go::Wipe(operation) => format!(
             "  wipe: {} is not a refusal and this line should not have been reached",
             operation.title()

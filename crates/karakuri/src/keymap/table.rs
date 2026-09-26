@@ -55,10 +55,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         action: KeyAction::Handled(key_save),
         globalize: false,
     },
-    // **The beat, tapped.** The one key on this panel that reaches the room
-    // rather than the deck or the arrangement, and the first of three that
-    // need an input open. What it does and why it does not go through
-    // `written` is [`tapped`].
+    // Tap tempo input for audio room tracking (see [`tapped`]).
     KeyBinding {
         key: BoundKey::Character("b"),
         legend: "b",
@@ -67,9 +64,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         action: KeyAction::Handled(key_tap_beat),
         globalize: false,
     },
-    // **The grid, an octave either way**, and the two keys the page
-    // specifies for it. Refused where the result would leave the trackable
-    // range, which is the beat lock's call — see [`scaled`].
+    // Scale grid divisions by octaves within trackable range (see [`scaled`]).
     KeyBinding {
         key: BoundKey::Character(","),
         legend: ",",

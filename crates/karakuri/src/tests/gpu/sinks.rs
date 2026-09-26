@@ -87,7 +87,7 @@ mod gpu {
             },
             "the press did not ask for the operator after `reinhard`"
         );
-        // **Nothing has been told anything yet.**
+        // Verify look state remains unchanged prior to record execution.
         assert_eq!(
             engine.look, STARTS_AT,
             "the look moved before the record did"
@@ -249,7 +249,7 @@ mod gpu {
         let cell = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen")[0];
         let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None);
 
-        // **Each texture is the size of its own rectangle, at this scale.**
+        // Each texture matches its corresponding scaled layout rectangle.
         assert_eq!(
             engine.picture.size,
             physical(rect, SCALE),
@@ -274,9 +274,7 @@ mod gpu {
             engine.picture.size
         );
 
-        // **And where the console draws it is the same statement**: the
-        // rectangle the texture was just sized from, and the id the sizing may
-        // have just replaced.
+        // Drawn rectangle and texture ID match the resized sink target.
         let drawn = picture.expect("the picture is on screen and the frame aimed nothing at it");
         assert_eq!(
             drawn.rect, rect,
@@ -300,8 +298,7 @@ mod gpu {
          for Live is dark at the one moment it is wanted"
         );
 
-        // **Aimed is what `Sink::acquire` answers from**, and that is the
-        // whole of what `compose` asks either of them.
+        // Sinks acquire successfully once aimed.
         assert_eq!(engine.picture.acquire(&gpu), Ok(()));
         assert_eq!(engine.previews[0].acquire(&gpu), Ok(()));
 

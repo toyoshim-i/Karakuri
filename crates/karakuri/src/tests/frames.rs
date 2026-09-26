@@ -155,9 +155,7 @@ fn a_frames_cost_has_the_wait_in_it_and_the_three_cpu_stretches_do_not() {
     // frame exactly* — measured instead of asserted.
     assert_eq!(frame.elsewhere(), Some(Duration::from_millis(2)));
 
-    // **A frame with no predecessor has no period, and no residue
-    // either.** A zero here would read as a frame that spent nothing
-    // anywhere, which is the shape of answer P-0095 refuses.
+    // First frame has no predecessor and thus no period or residue (P-0095).
     assert_eq!(Cost::default().elsewhere(), None);
 }
 
@@ -575,9 +573,7 @@ fn each_of_the_four_pills_opens_its_own_class_through_a_press() {
             Open::CLOSED.with(*class, true),
             "a press on {class:?}'s pill did not open exactly it"
         );
-        // **The view is written in the same breath as the handle**, or the
-        // very next press is aimed at the capsule that used to be there:
-        // the two words are not the same width.
+        // View state updates synchronously with handle to prevent hit-testing obsolete bounds.
         assert_eq!(readout.view.opening, readout.opening.read());
     }
 }
@@ -658,10 +654,7 @@ fn a_reading_is_read_off_the_cards_and_never_off_a_compile() {
             .collect::<Vec<_>>(),
         vec![
             ("radius", "0 – 8 · 2"),
-            // **One row and two nodes declare it**, over the part of the
-            // range both of them accept, and the default is the first
-            // declarer's — a control is one number and two nodes may
-            // declare two.
+            // Multiple nodes declaring identical key intersect range and take first default.
             ("exposure", "0.2 – 0.8 · 0.4"),
         ],
         "the reading publishes {:?}",
@@ -680,10 +673,7 @@ fn a_reading_is_read_off_the_cards_and_never_off_a_compile() {
     // The head, two knobs, the capacity, what it emits, and the foot.
     assert_eq!(reading.rows(), 6);
 
-    // **A default the card cannot state as a number is a word and not a
-    // blank**, because the `.kir` grammar makes the expression mandatory:
-    // what a blank would say here is that there is no default, which is
-    // false.
+    // Non-numeric default expression displays literal label rather than blank.
     let expr = store.put_artifact(b"g2\n").expect("an artifact");
     store
         .write_meta(&expr, &card(vec![param("hue", 0.0, 1.0, None)]))
@@ -700,8 +690,7 @@ fn a_reading_is_read_off_the_cards_and_never_off_a_compile() {
         Some("0 – 1 · expr".to_owned())
     );
 
-    // **A Set that declares nothing is an answer**: no capacity row, no
-    // emits row, and a head that says `0 knobs`.
+    // Set declaring no controls validly produces empty reading without capacity or emits rows.
     let empty = store.put_artifact(b"e\n").expect("an artifact");
     store.write_meta(&empty, &card(vec![])).expect("a card");
     store

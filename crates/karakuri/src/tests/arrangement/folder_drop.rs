@@ -51,8 +51,7 @@ fn a_folder_dropped_on_the_window_points_the_bay_at_it() {
         "the drop said `{said}`"
     );
 
-    // **And the row is not drawn as a hover**: the release is what was
-    // read, so nothing is on its way in afterwards.
+    // After release, the row is no longer marked as incoming hover.
     assert_eq!(view.pointed().map(|at| at.incoming), Some(false));
 
     // A second drop re-points it, which is the whole of *re-pointing the
@@ -67,9 +66,7 @@ fn a_folder_dropped_on_the_window_points_the_bay_at_it() {
         said.contains(why_nothing(Scope::Folder, true, false)),
         "a folder holding no Set said `{said}`"
     );
-    // **The chip is marked on this one too**, and the sentence says so:
-    // the second drop moved the listing without moving the mark, which is
-    // the one case a *whether it moved* answer would have got backwards.
+    // Folder chip remains marked after re-pointing the listing.
     assert!(
         said.contains("the `folder` chip is marked"),
         "a second drop said `{said}`"
@@ -108,9 +105,7 @@ fn a_drop_that_is_not_one_folder_is_refused_and_the_bay_keeps_what_it_had() {
         said.contains("notes.txt") && said.contains("folder"),
         "the refusal an operator reads is `{said}`"
     );
-    // **And it says where the bay is still pointed**, which is the half
-    // that makes the refusal readable rather than the operator having to
-    // look at the row to find out whether anything moved.
+    // Refusal confirms the bay remains pointed at the existing folder.
     assert!(
         said.contains(&format!("still pointed at `{}`", handed.display())),
         "the refusal does not say where the library is still pointed: `{said}`"
@@ -148,8 +143,7 @@ fn a_drop_that_is_not_one_folder_is_refused_and_the_bay_keeps_what_it_had() {
         "a path that is not there said `{said}`"
     );
 
-    // **And after all four the bay is where it was**, which every one of
-    // them said it would be.
+    // Verify bay targeting and scope remain unchanged across all refusals.
     assert_eq!(folder.as_deref(), Some(handed.as_path()));
     assert_eq!(view.library, listed);
     assert_eq!(view.scope(), Some(Scope::Folder));
@@ -180,9 +174,7 @@ fn a_folder_over_the_window_reads_in_the_path_row_and_two_read_as_none() {
     assert_eq!(view.incoming.as_deref(), Some("/Volumes/stick/handover"));
     assert_eq!(view.pointed().map(|at| at.incoming), Some(true));
 
-    // **Two at once say nothing**, because there is no path a release
-    // would set — and picking the first would be the choice the refusal
-    // above exists to refuse.
+    // Multiple hovered files clear incoming path since only single drops are supported.
     folder_over(&mut view, &[one.clone(), two]);
     assert_eq!(view.incoming, None);
 

@@ -57,10 +57,7 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     (None, "backspace", &[]),
     // Space folds/unfolds any focused bay across all nine bays (ADR-0259).
     (Some(ANY), "space", &["Fold a bay away"]),
-    // **And `g` is the split enclosing the focused bay**, which is a pane
-    // every time — a bay's parent is a split and never another bay. It is
-    // the one route to this row from the keyboard alone, and it is why the
-    // letter survived `f` (ADR-0343).
+    // Folds/unfolds the enclosing split containing the focused bay (ADR-0343).
     (Some(ANY), "g", &["Fold a pane away"]),
     // `Op::UnfoldAll` — the page carries the region and the everything
     // under one heading, as `vocabulary.rs` does.
@@ -68,14 +65,14 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // ------------------------------------------------------------------
     // The Transport's grammar
     // ------------------------------------------------------------------
-    // **The beat, tapped.**
+    // Tap tempo.
     (Some("transport"), "b", &["Tap the beat"]),
-    // **The grid, an octave either way.**
+    // Halve or double grid divisions.
     (Some("transport"), ",", &["Halve or double the grid"]),
     (Some("transport"), ".", &["Halve or double the grid"]),
-    // **Reset the arrangement back to default.**
+    // Reset arrangement layout to default.
     (Some("transport"), "r", &["Reset the arrangement"]),
-    // **Room theme cycle.**
+    // Cycle room themes.
     (Some("transport"), "n", &[]),
     // Transport digit navigation addresses controls without invoking operations.
     (Some("transport"), DIGIT, &[]),
@@ -91,10 +88,7 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
             "Nudge the latency offset",
         ],
     ),
-    // **`space` on the tone map cycles the four operators**, and on the
-    // exposure it is the value the control was declared at. The tempo
-    // figure is not here: it is a track with no value it was declared at,
-    // so there is nothing for `space` to return it to.
+    // Space cycles tone map operators or resets exposure to default.
     (Some("transport"), "space", &["Tone map", "Exposure"]),
     // Enter attaches audio input or executes arrangement save/restore options (ADR-0350).
     (
@@ -137,8 +131,7 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // Staging lane items are stateless log entries; navigation produces no operations (ADR-0259).
     (Some("staging"), DIGIT, &[]),
     (Some("staging"), "arrows", &[]),
-    // **A row's two acts are two controls and a digit chooses between
-    // them**, which is the record's `n 1` and `n 2`.
+    // Candidate action dispatch via digit and enter (keep or restore).
     (
         Some("staging"),
         "enter",
@@ -150,25 +143,20 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // Program bay cells do not bind digits or arrow keys.
     (Some("program"), DIGIT, &[]),
     (Some("program"), "arrows", &[]),
-    // **`space` on the head's `solo`**, which is `s` and `u` collapsed
-    // into the one control they always described (ADR-0259). The class
-    // pill beside it opens a class rather than cycling a state, and it
-    // reaches no row of this page.
+    // Space toggles solo state for the focused bay head (ADR-0259).
     (Some("program"), "space", &["Solo a region"]),
     // ------------------------------------------------------------------
     // The Inspector's grammar
     // ------------------------------------------------------------------
     // Inspector numeric keys navigate panel controls hierarchically.
     (Some("inspector"), DIGIT, &[]),
-    // **`↑↓` on the anchor scrub a quarter beat, and on a parameter row
-    // write it** — a tenth of what the control publishes.
+    // Arrows scrub deck anchor by quarter beats or step parameter values by 0.1.
     (
         Some("inspector"),
         "arrows",
         &["Scrub a deck a quarter beat", "Write a parameter"],
     ),
-    // **`space` on the four chips**, each naming the state it arrives at
-    // rather than a flip, which is the chips' own rule (P-0090).
+    // Space advances through valid sync, composite, renderer, and authority states (P-0090).
     (
         Some("inspector"),
         "space",
@@ -179,11 +167,9 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
             "Set a node's authority",
         ],
     ),
-    // **`enter` on a parameter row takes the attachment back**, which is
-    // the act of the control the row draws: a parameter with nothing
-    // holding it draws no sensitivity row at all.
+    // Enter detaches parameter assignment on selected row.
     (Some("inspector"), "enter", &["Take a parameter back"]),
-    // **Keep what the selected deck is playing.**
+    // Save current deck procedure.
     (Some("inspector"), "k", &["Keep what a deck is playing"]),
     // ------------------------------------------------------------------
     // The Mixer's grammar
@@ -196,10 +182,7 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
         "arrows",
         &["Select a deck", "Gain", "Opacity"],
     ),
-    // **`space` is the whole of this bay's five controls and three of its
-    // head's.** The transition row is the head's (ADR-0343): the settings
-    // decide what the next move means wherever it lands, which is what a
-    // head is for.
+    // Space toggles strip states and transition parameters (ADR-0343).
     (
         Some("mixer"),
         "space",

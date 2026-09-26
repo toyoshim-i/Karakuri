@@ -81,10 +81,7 @@ pub(crate) fn arrangement(
     match operation {
         Operation::SaveArrangement { name } => {
             let (line, kept) = keep_arrangement(root, panel, name);
-            // **The name in use moves only when the file did.** A save that
-            // was refused leaves the pill saying what it said, because
-            // nothing under that name is on the disk — and the listing is
-            // re-read only then, since a refusal added no name to it.
+            // Update active name and refresh listing only on successful save.
             if kept {
                 arr.name = Some(name.clone());
                 arr.filed = arrangements(root);
@@ -182,8 +179,7 @@ pub(crate) fn put_arrangement_back(
     };
     let layout: Layout = match serde_json::from_slice(&bytes) {
         Ok(layout) => layout,
-        // **Refused whole rather than repaired**, which is the loader's own
-        // sentence and not this file's judgement (ADR-0158).
+        // Corrupted arrangement layout files are rejected without partial recovery (ADR-0158).
         Err(e) => {
             return (
                 format!(

@@ -105,10 +105,7 @@ impl Sessions {
         root: &std::path::Path,
         id: &Option<String>,
     ) {
-        // **A capsule types no name and this is the only route there is**, so
-        // a payload naming one would be a press this program cannot make. It
-        // is matched rather than ignored: the day a route that can name one
-        // arrives, this is the line that has to say what it means.
+        // Session recordings use automatic timestamped IDs; custom names are rejected.
         if let Some(named) = id {
             return println!(
                 "  rec: `{named}` — nothing here can name a recording, and the id is a stamp \
@@ -135,9 +132,7 @@ impl Sessions {
         let root = root.to_path_buf();
         let tx = self.tx.clone();
         self.working = true;
-        // **A thread, and detached**: no frame waits for it. Everything below
-        // this line is a store being opened, two files being written and one
-        // being read back.
+        // Spawn background worker thread to initialize session on disk.
         std::thread::spawn(move || {
             let _ = tx.send(began(root, id, starting));
         });
@@ -183,10 +178,7 @@ impl Sessions {
                     );
                     self.open = Some(Stream { id, recorder });
                 }
-                // **Said and nothing claims otherwise**, which is the shape a
-                // save's failure already takes here: a program saying a
-                // recording started when the disk refused is the lie this
-                // codebase is arranged against.
+                // Log failure message if session creation failed on disk.
                 Ended::Failed(why) => println!("  rec: {why}"),
                 Ended::Finished { id, written } => match written {
                     Ok(w) => {
@@ -227,9 +219,7 @@ impl Sessions {
         if self.open.is_some() {
             self.end();
         }
-        // Blocking, unlike [`Sessions::finished`]: this is the end of the run.
-        // Every sender being gone is the other way out, and it means the
-        // thread died without answering — which is nothing left to wait for.
+        // Drain pending completion events during shutdown until channel disconnects.
         while self.working {
             let Ok(ended) = self.done.recv() else {
                 return;
@@ -296,9 +286,7 @@ fn began(root: std::path::PathBuf, id: String, starting: Starting) -> Ended {
             ));
         }
     }
-    // **Read back rather than kept**, which is `karakuri-cli`'s own route to a
-    // head: the writer is what decides the lines a Set file is, so a head
-    // assembled here would be a second spelling of that format.
+    // Read set definition from store to ensure canonical formatting.
     let material = match store.read_set(&name) {
         Ok(head) => head,
         Err(e) => {
@@ -307,9 +295,7 @@ fn began(root: std::path::PathBuf, id: String, starting: Starting) -> Ended {
             ))
         }
     };
-    // **The one function either writer spells a head with.** `karakuri-cli`
-    // calls this same one over its own deck reading, so the two programs cannot
-    // write two shapes of head.
+    // Build canonical session header matching karakuri-cli structure.
     let head = session::head(material, &held);
     match session::Recorder::open(&store, &id, &head) {
         Ok(recorder) => Ended::Began {

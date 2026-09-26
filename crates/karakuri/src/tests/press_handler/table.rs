@@ -30,9 +30,7 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
         &["row.pill.contains("],
     ),
     ("the arrangement pill", "arrangement_pill(", &["pill.ask("]),
-    // **The two look controls, derived once for both** — the exposure
-    // track's place is measured from the tone map capsule's, so they are
-    // two questions about one laid-out group.
+    // Look row controls: exposure track is measured relative to tone map capsule.
     (
         "the look group's two",
         "look_row(",
@@ -50,9 +48,7 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
         "transport_row(",
         &["row.tempo("],
     ),
-    // **The Mixer bay's five, derived once and asked five times on a
-    // press**, plus the drop at the release. `select` is asked last and is
-    // the strip itself — what none of the other four claimed.
+    // Mixer bay: single derivation asked for fader, blend, tally, mask, and select (evaluated last).
     (
         "a mixer strip's five",
         "mixer_bay(",
@@ -113,28 +109,19 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
             "head.compositing(",
         ],
     ),
-    // **The renderer chips**, and the pane is the whole derivation: which
-    // group and which chip are inside `select_renderer`, which is the
-    // `params` chip's arrangement in the Library bay. So the derivation
-    // named here is the *outer* one, unlike the two rows above it.
+    // Renderer chips: outer pane derivation delegates group and chip selection to `select_renderer`.
     (
         "the renderer chips",
         "inspector_pane(",
         &["at_pane.select_renderer("],
     ),
-    // **A parameter row's fader, one Inspector pane at a time**, and it is
-    // the Master bay's `grab` on a third type bound to a third local: the
-    // pane is derived per index and the fader from the pane, so the
-    // derivation named here is the outer one, as the chips' above is.
+    // Parameter row fader: outer pane derivation handles per-index fader interaction.
     (
         "a parameter row's fader",
         "inspector_pane(",
         &["at_pane.grab("],
     ),
-    // **A parameter row's publish mark**, which is the leftmost cell of the
-    // row the fader is on and is derived from the same laid-out pane: one
-    // press arm, one call, and what it asks for is the whole interface
-    // rather than this entry (ADR-0329).
+    // Parameter row publish mark: leftmost cell derived from pane layout (ADR-0329).
     (
         "a parameter row's publish mark",
         "inspector_pane(",
@@ -146,10 +133,7 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
         "inspector_pane(",
         &["laid.uses_chip(", "laid.wired("],
     ),
-    // **A node head's three `man / sug / auto` chips**, and the pane is
-    // the whole derivation for the renderer chips' reason two rows up:
-    // which group, which head and which chip are inside
-    // `InspectorPane::set_authority`.
+    // Node head authority chips: outer pane derivation delegates selection to `InspectorPane::set_authority`.
     (
         "a node head's three authority chips",
         "inspector_pane(",
@@ -161,34 +145,25 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
         "inspector_pane(",
         &["at_pane.keep_procedure("],
     ),
-    // **The sensitivity row's curve chip and `take back`**, the two of its
-    // four chips that are controls — the other two are readouts and answer
-    // `None`, which is `view::SensChip`'s decision and not this file's.
-    // One derivation for both, as the authority chips' row above is.
+    // Sensitivity row controls: curve chip and rollback capsule derived together (`view::SensChip`).
     (
         "a sensitivity row's curve and take back",
         "inspector_pane(",
         &["at_pane.sensitivity("],
     ),
-    // **The Program bay head's `solo`**, and the two calls are the Outputs
-    // sink's arrangement one bay over: the head answers whether the point
-    // is on the capsule, and then which of the two operations it is.
+    // Program bay head solo: queries capsule hit-test followed by operation selection.
     (
         "the Program bay head's solo",
         "program_head(",
         &["head.hit(", "head.op("],
     ),
-    // **The grip in each bay head**, the capsule above's neighbour in the
-    // same head: one derivation asked once per bay, because four heads
-    // cannot be one laid-out box. A pane has no row here and needs none —
-    // it folds by its own boundary, which rule 3 claims (ADR-0300).
+    // Bay head grips: queried per bay header to handle panel folding (ADR-0300).
     (
         "the grip in a bay head",
         "bay_grip(",
         &["grip.hit(", "grip.op("],
     ),
-    // **The four deck preview cells**, asked at the release alone — see
-    // the head of this table.
+    // Deck preview cells: hit-tested on release events.
     (
         "the deck preview cells",
         "program_bay(",
@@ -224,9 +199,7 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
         "library_bay(",
         &["bay.aim("],
     ),
-    // **The star at the left of each row**, asked before the row it is in
-    // so that the smaller box wins — the same derivation again, told apart
-    // from the row below it by the call.
+    // Library bay stars: prioritized before parent row hit-testing.
     ("the Library bay's stars", "library_bay(", &["bay.starred("]),
     // Library and history list rows: handles primary selection, version landing, and secondary context menus.
     (
@@ -234,9 +207,7 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
         "library_bay(",
         &["bay.take(", "bay.land(", "bay.menu_ask("],
     ),
-    // **The four class pills**, one derivation asked four times: they are
-    // in four different regions and cannot be one laid-out box, but they
-    // are one type and one question.
+    // MCP class pills: uniform derivation hit-tested across four distinct regions.
     ("the class pills", "mcp_pill(", &["pill.hit("]),
     // Sequencer bay controls: routes cell triggers, mode pills, bank selection, and lane creation menus.
     (

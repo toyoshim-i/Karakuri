@@ -52,10 +52,7 @@ impl App {
                 let repaint = repaint.soonest(Change::Tip(tip).repaint());
                 App::wants(&gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
-            // **The pointer left the window**, which is not a move to
-            // anywhere: a tip that is up goes, and no dwell is running. Only
-            // the hover layer cares — `egui` is told either way, because this
-            // event is not one `input::claim` has a rule about.
+            // Clear hover tip and forward leave event to egui.
             WindowEvent::CursorLeft { .. } => {
                 App::to_egui(&mut gfx, &mut self.costs, &event);
                 let tip = self.hover.left();

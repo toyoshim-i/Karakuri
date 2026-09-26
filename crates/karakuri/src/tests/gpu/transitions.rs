@@ -51,10 +51,7 @@ mod gpu {
         view.select(UNDER as u8);
         assert_eq!(view.selection(), UNDER as u8);
 
-        // **The row walked to `iris · now · 2 beats`, through the door the
-        // panel has.** `now` rather than the next bar so the record's start is
-        // the beat the grid is on and the arithmetic below has nothing to wait
-        // for; every value is still one the pills can reach.
+        // Configure transition settings to radial wipe with immediate timing over 2 beats.
         for setting in [
             karakuri_operation::TransitionSetting::WipeShape {
                 kind: karakuri_operation::WipeKind::Radial,
@@ -102,9 +99,7 @@ mod gpu {
             "the press did not cover the addressed deck with the next one round"
         );
 
-        // **Nothing has been told anything yet**, which is the middle step the
-        // device is worth: the console asks and the deck moves when the record
-        // does.
+        // Verify deck state remains unchanged before applying the record.
         let before = engine.deck.mask(over_slot);
         assert_eq!(
             engine.deck.transitions_on(over_slot).count(),
@@ -133,10 +128,7 @@ mod gpu {
             unreachable!("just matched")
         };
 
-        // **The transition the row is on, and not one this test spelled.**
-        // `now` is a quantum of 0, which `quantise` answers with the beat the
-        // grid is on, so the start is read off the same oscillator the
-        // conversion read.
+        // Verify scheduled transition start beat matches the quantized grid beat.
         let start = karakuri_engine::transition::quantise(
             engine.deck.signals().oscillator().beats(),
             settings.quantum,
@@ -152,10 +144,7 @@ mod gpu {
             }),
             "the wipe's scheduled move is not the one the row is set to — {records:?}"
         );
-        // **The guard on the start**, and it is what a green run means here: a
-        // quantum this test did not choose would put the move on a different
-        // instant, and without a grid that has been running it would put it on
-        // the same one. `next bar` is the pill's other end of the same cycle.
+        // Guard against start beat accidentally matching next-bar quantization.
         assert_ne!(
             start,
             karakuri_engine::transition::quantise(engine.deck.signals().oscillator().beats(), 4.0),
@@ -293,8 +282,7 @@ mod gpu {
          request would have put deck B on air"
         );
 
-        // **Nothing has been told anything yet**, so the deck is where the
-        // governor left it and so is the strip the frame would draw.
+        // Verify deck residency and strip state remain unchanged before record application.
         assert!(engine.deck.is_parked(EngineSlot(ASKED_TO_PRIME as u8)));
         let mut after = Vec::new();
         mixer(&engine.deck, &material, &mut after);
@@ -478,8 +466,7 @@ mod gpu {
          wipe and nothing on the panel says so"
         );
 
-        // **Nothing has been told anything yet**, so the deck is where it was
-        // and so is the strip the frame would draw.
+        // Verify deck mask kind and strip state remain unchanged before record application.
         assert_eq!(
             engine.deck.mask(EngineSlot(ON_AIR as u8)).kind(),
             MaskKind::Linear

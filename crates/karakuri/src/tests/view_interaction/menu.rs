@@ -47,7 +47,7 @@ fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
         Point::new(at.center().x, at.center().y)
     };
 
-    // **A primary press takes the Set in hand and opens nothing.**
+    // Primary press initiates item carry without opening context menu.
     let row_at = row(&mut readout);
     let at = row_at;
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
@@ -64,7 +64,7 @@ fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
     // into the presses below.
     readout.pointer(&ctx, Pointer::Up);
 
-    // **A secondary press on the same row puts the menu down.**
+    // Secondary press on row opens its context menu.
     assert_eq!(readout.pointer(&ctx, Pointer::Secondary).1, Acted::Nothing);
     assert!(
         readout.view.menu_open(),
@@ -110,9 +110,7 @@ fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
     assert_eq!(readout.pointer(&ctx, Pointer::Secondary).1, Acted::Nothing);
     assert_eq!(readout.view.menued().row, Some(1));
 
-    // **And the send is picked with a primary press on the card**, which
-    // is rule 2: the card is down, so the press is the card's whichever
-    // button it was.
+    // Primary press on open menu item triggers corresponding action.
     readout.panel.solve();
     let bay = library_bay(
         readout.panel.layout(),
@@ -176,7 +174,7 @@ fn a_send_says_where_it_went_and_a_dismissed_dialog_writes_nothing_and_says_so()
     let out = root.join("outbox");
     std::fs::create_dir_all(&out).expect("an outbox");
 
-    // **Dismissed**: nothing is asked of the disk and the sentence says so.
+    // Dismissed: dialog cancellation writes nothing to disk.
     let said = sent(&root, "night01".to_owned(), None);
     assert_eq!(said.to, None);
     assert!(
@@ -190,8 +188,7 @@ fn a_send_says_where_it_went_and_a_dismissed_dialog_writes_nothing_and_says_so()
         "a dismissed dialog left a file behind"
     );
 
-    // **Written**: the file is where the operator sent it and carries the
-    // source inlined, which is what makes it a bundle rather than a copy.
+    // Written: bundle file contains inlined source data.
     let to = out.join("night01.kbset");
     let said = sent(&root, "night01".to_owned(), Some(to.clone()));
     assert_eq!(
@@ -210,8 +207,7 @@ fn a_send_says_where_it_went_and_a_dismissed_dialog_writes_nothing_and_says_so()
         "the file names the source rather than carrying it: {text}"
     );
 
-    // **Refused**: a Set this store does not hold, and the words are the
-    // bundler's rather than a second copy of them.
+    // Refused: error returned when packaging non-existent Set.
     let said = sent(&root, "gone01".to_owned(), Some(out.join("gone01.kbset")));
     assert!(said.outcome.is_err(), "a Set nobody holds was packaged");
     assert!(

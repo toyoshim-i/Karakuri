@@ -38,9 +38,7 @@ pub(crate) fn routed(
     }
     let attrs = Window::default_attributes()
         .with_title("Karakuri — projector")
-        // **The session canvas**, which is the size an output starts at when
-        // nothing else says (ADR-0246). The operator resizes it, or makes it
-        // fullscreen, and the frame follows.
+        // Session canvas inner size (ADR-0246).
         .with_inner_size(winit::dpi::LogicalSize::new(CANVAS.0, CANVAS.1));
     #[cfg(target_os = "macos")]
     let attrs = {
@@ -49,15 +47,10 @@ pub(crate) fn routed(
     };
     let window = match event_loop.create_window(attrs) {
         Ok(window) => Arc::new(window),
-        // **Reported rather than panicked**, for `resumed`'s reason: a panic
-        // here is reached from a `winit` callback and cannot unwind across the
-        // Objective-C frame on macOS, so it aborts with no sentence anywhere.
+        // Log error and report refusal instead of panicking across the winit boundary (ADR-0168).
         Err(e) => return Some(format!("outputs: the projector window did not open: {e}")),
     };
-    // **The instance the adapter came from**, and never a fresh one: a
-    // surface asked about an adapter of another instance is a resource that
-    // instance does not hold, and `wgpu-core` aborts on it inside a `winit`
-    // callback with no sentence anywhere.
+    // Create surface on the adapter's parent GPU instance (ADR-0324).
     let surface = match gfx.gpu.instance.create_surface(window.clone()) {
         Ok(surface) => surface,
         Err(e) => return Some(format!("outputs: the projector has no surface: {e}")),
@@ -79,10 +72,7 @@ pub(crate) fn routed(
         color_space: wgpu::SurfaceColorSpace::Auto,
         width: size.0,
         height: size.1,
-        // **`Fifo`, like the panel's**, and the two are not a stall on each
-        // other: `compose` asks every sink for a target before it commits, and
-        // a projector that has none loses its own frame rather than the
-        // window's (ADR-0171).
+        // Fifo presentation mode matching console window (ADR-0171).
         present_mode: wgpu::PresentMode::Fifo,
         alpha_mode: caps.alpha_modes[0],
         view_formats: vec![],
@@ -167,9 +157,7 @@ pub(crate) fn answered(
             println!("  key: {why}");
             Acted::Nothing
         }
-        // **The address moved and nothing was asked of anything**, which is
-        // `Change::Pointed`'s own case: focus is a pointer this console owns,
-        // so nothing in the arrangement moved and no `Outcome` says so.
+        // Pointer navigation updates focus state without modifying arrangement.
         focus::Asked::Moved => return Change::Pointed(true).repaint(),
         focus::Asked::Emitted(operation) => Acted::Emitted(Some(operation.clone())),
         // Perform arrangement actions (such as bay folding or Program solo) and route through `Readout::op`.
@@ -177,9 +165,7 @@ pub(crate) fn answered(
             let outcome = readout.op(*op);
             return Change::Operated(&outcome).repaint();
         }
-        // **The picture's on and off, which is one press asking for two
-        // things** — `Readout::sink` is where the pair is said out loud, and
-        // it is the same method the Outputs row's dot goes through.
+        // Toggle sink routing via Readout::sink.
         focus::Asked::Routed(asked, op) => {
             let outcome = readout.sink(asked.clone(), *op);
             return Change::Operated(&outcome).repaint();
@@ -302,8 +288,7 @@ pub(crate) fn overlaid(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     let slot = usize::from(*deck);
     let letter = deck_letter(*deck);
     let count = gfx.engine.aimed.len();
-    // **The base before the aim is borrowed**, because the sentence and the
-    // readout both want it and `overlaying` takes the aim mutably.
+    // Extract base material before mutable borrow of aim.
     let base = base_material(
         gfx.engine
             .aimed
@@ -343,9 +328,7 @@ pub(crate) fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
     let Operation::RestoreProcedure { deck, revision } = operation else {
         return None;
     };
-    // **What was asked for, in the words a refusal has to say it in.** Both
-    // arms name a version; one says which and one says where, and this is the
-    // only place in the sentence they differ.
+    // Format requested revision name for refusal reporting.
     let asked = asked_for(revision);
     let slot = usize::from(*deck);
     let letter = deck_letter(*deck);
@@ -367,10 +350,7 @@ pub(crate) fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
              that deck first; nothing moved"
         ));
     };
-    // **The run's one published layout, asked rather than rebuilt** — this
-    // function's own head. [`Engine::pointing`] is written from `Aiming::at` on
-    // every re-point, so a slot that has had a Set loaded onto it resolves to
-    // that Set's scratch files here and answers a model the same way.
+    // Resolve snapshot against current slot pointing layout (ADR-0304).
     Some(put_back(
         &gfx.store,
         slot,

@@ -131,7 +131,7 @@ fn a_rebuilt_nodes_keep_reads_its_source_back_out_of_the_store() {
         asked: Asked::Operator,
         name: "orbit_wide".to_owned(),
         root: root.clone(),
-        // **`None`, which is what a rebuilt node carries.**
+        // Rebuilt nodes carry None for inline source.
         source: None,
         hash,
         addr: "L3:0".to_owned(),

@@ -42,9 +42,7 @@ fn a_model_is_answered_the_refusal_rather_than_told_its_move_was_performed() {
         "a refused move was reported to a model as performed: `{said}`"
     );
 
-    // **A gap, and it is not the refusal's sentence.** A scrub with no
-    // transport read is the reading this window fails to take when the deck it
-    // names is not one it holds.
+    // Scrubbing without a transport read reports an owed reading.
     let scrub = Operation::ScrubDeck {
         deck: 0,
         beats: 0.25,
@@ -73,8 +71,7 @@ fn a_model_is_answered_the_refusal_rather_than_told_its_move_was_performed() {
          same sentence"
     );
 
-    // **A record is performed, and so is a `Silent`.** `None` here is the
-    // drain falling through to the sentence that says so.
+    // Operations that produce records or silent updates report as performed.
     let gain = Operation::SetGain { deck: 0, gain: 0.5 };
     assert_eq!(
         unperformed(gain.title(), &written(&gain, &Current::default())),
@@ -126,8 +123,7 @@ fn the_mcp_flag_takes_a_port_and_is_refused_the_three_ways_a_valued_flag_is() {
 
     let launch = read(&["--mcp", "8000"]).expect("a port is a port");
     assert_eq!(launch.mcp, Some(8000));
-    // **On either side of the pair, like the two flags beside it.** An
-    // operator types the flags in whatever order they think of them.
+    // The --mcp flag can appear before or after positional pair arguments.
     let pair = shipped();
     let (l1, l4) = (pair.l1.display().to_string(), pair.l4.display().to_string());
     let launch = read(&[&l1, &l4, "--mcp", "0"]).expect("after the pair");
@@ -195,8 +191,7 @@ fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() 
             bindings: Vec::new(),
             edges: Vec::new(),
             authorities: Vec::new(),
-            // **A slot running a Set**, which is what makes the assertion
-            // below about `restated` rather than about a default.
+            // Slot initialized with a Set name to assert preservation across re-aiming.
             set: Some("night01".to_owned()),
         },
         karakuri_mcp::Slots::unpointed(),
@@ -218,7 +213,7 @@ fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() 
     );
     let aim = rx.try_recv().expect("the watcher was not re-aimed at all");
     assert_eq!(aim.edges, vec![edge("warp", "shape", "field")]);
-    // **The fields that are not the edges.**
+    // Non-edge fields remain unchanged after rewiring.
     assert_eq!(aim.head.name.as_deref(), Some("grid"));
     assert_eq!(
         aim.set.as_deref(),
@@ -231,10 +226,7 @@ fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() 
     assert_eq!(aim.salts, vec![9], "the salts would repaint every element");
     assert_eq!(aim.layering, Layering::Composite);
 
-    // **The same input again is a replacement and not a second edge**,
-    // because `SetError::SlotBoundTwice` refuses two edges on one input
-    // where the Set is built — an append would make a model unable to
-    // change its mind.
+    // Re-wiring the same input replaces the edge rather than appending a duplicate.
     let said = rewired(
         &[(0, edge("warp", "shape", "other"))],
         &mut edges,

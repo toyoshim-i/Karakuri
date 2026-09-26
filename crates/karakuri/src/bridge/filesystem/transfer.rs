@@ -10,9 +10,7 @@ pub(crate) struct Walked {
 }
 
 pub(crate) fn walked(store: &std::path::Path, running: Option<&str>) -> Walked {
-    // **No Set, no rows, and not an error.** The deck is playing a pair
-    // somebody typed; its versions are filed under no Set, and `why_nothing`
-    // is where that is said in words.
+    // Return empty result when running source is not associated with a Set.
     let Some(id) = running else {
         return Walked {
             rows: Vec::new(),
@@ -21,9 +19,7 @@ pub(crate) fn walked(store: &std::path::Path, running: Option<&str>) -> Walked {
     };
     let found = match karakuri_environment::history::list(store, HISTORY_MOST) {
         Ok(found) => found,
-        // Said rather than swallowed, and the scope lists nothing: a history
-        // that would not open is a different fact from a Set with no versions,
-        // and the two must not draw the same empty list in silence.
+        // Report error and return empty listing when history cannot be read.
         Err(why) => {
             return Walked {
                 rows: Vec::new(),
@@ -34,9 +30,7 @@ pub(crate) fn walked(store: &std::path::Path, running: Option<&str>) -> Walked {
     let rows: Vec<String> = found
         .versions
         .iter()
-        // **`Some(id)` and never `None`.** A version written where there was
-        // no Set is a version of nothing, so it matches no Set rather than
-        // every one of them (ADR-0276).
+        // Filter versions belonging strictly to the requested Set (ADR-0276).
         .filter(|version| version.set.as_deref() == Some(id))
         .map(version_row)
         .collect();
@@ -149,17 +143,12 @@ pub(crate) fn taking_in(
     from: Taking<'_>,
     row: &str,
 ) -> Result<TakenIn, String> {
-    // **Asked again rather than kept**, which is [`listing`]'s shape: the rows
-    // crossed into the console as words, and the file behind a word is found
-    // by asking the library again on the press. A second copy of the listing
-    // held on this side is a copy that goes on naming a file that has moved.
+    // Resolve file from source library at point of invocation.
     let file = from.file(row)?;
     // A property of the listing the row came off, not of the file.
     let came = from.came_from();
     let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
-    // **The form is the file's own and the branch is `karakuri-cli`'s** — see
-    // this function's head. A name is what says which, and nothing is opened
-    // to ask: the two suffixes are the two `folder_files` lists.
+    // Distinguish authoring bundles from bundled ndjson files by file suffix.
     let authored = file
         .file_name()
         .and_then(|name| name.to_str())
@@ -261,9 +250,7 @@ pub(crate) fn loading(
 ) -> Result<String, String> {
     let store = Store::open(root).map_err(|e| format!("{}: {e}", root.display()))?;
     let loaded = karakuri_environment::setfile::load(&store, id)?;
-    // Said rather than swallowed: a note is the reader telling the operator
-    // what it did with a file it could only partly honour, and a load that
-    // quietly ignored one is a picture nobody can account for.
+    // Log load diagnostics and warnings to stdout.
     for note in &loaded.notes {
         println!("  load: {note}");
     }
@@ -277,10 +264,7 @@ pub(crate) fn loading(
             &karakuri_environment::scratch::node_name(slot, at, &checked.name),
             src,
         )?;
-        // **The Set file's node name and not the procedure's**, which is
-        // `--load-set`'s own pairing: an `edge` in the file resolves against
-        // the name the file wrote, and a rebuild that called the node whatever
-        // its procedure declares would break the slot on its first save.
+        // Use Set node identifier for compiler bindings to preserve edge references on save.
         named.push(karakuri_environment::compile::Named { name, path });
     }
     let mut named = named.into_iter();

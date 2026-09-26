@@ -50,10 +50,7 @@ pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, Stri
                         Some([lo, hi, was]) => [lo.max(*min), hi.min(*max), was],
                     })
                 }
-                // **The union, in the order the nodes declare them.** A Set
-                // over two geometries emits what both of them do, and the row
-                // is *what a renderer drawn over it can consume* rather than
-                // any one node's list.
+                // Union of emitted attributes in declaration order across all geometry nodes.
                 Record::Emit { attrs } => {
                     for attr in attrs {
                         if !emits.contains(attr) {
@@ -67,10 +64,7 @@ pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, Stri
     }
     reading.knobs = knobs
         .into_iter()
-        // **Spelled `view::Published` in full**, because
-        // `karakuri_engine::set::Published` is in scope here under the same
-        // name and they are the same idea two levels apart: one is what a
-        // built Set publishes and this is what a file's cards say it will.
+        // Convert to view::Published layout structs.
         .map(|(key, [min, max], default)| view::Published {
             key,
             range: spelled(
@@ -101,9 +95,7 @@ pub(crate) fn spelled(min: &str, max: &str, default: Option<String>) -> String {
 
 /// Reads the Set metadata for the currently selected library row into the view (ADR-0156, P-0091).
 pub(crate) fn read_reading(view: &mut View, store: &std::path::Path) -> String {
-    // **The Sets, which is empty under `history`**: a reading is what a Set
-    // declares and a row of that scope is a version, so the cursor has no
-    // operand there — `view::View::sets`.
+    // Retrieve Set ID at current cursor position (empty in History scope).
     let Some(id) = view.sets().get(view.cursor_row()).cloned() else {
         // Dismiss the reading pane if the selected row is no longer valid.
         view.shut_reading();
@@ -129,9 +121,7 @@ pub(crate) fn read_reading(view: &mut View, store: &std::path::Path) -> String {
             view.read(reading);
             line
         }
-        // **Said out loud and the block put away**, which is [`library`]'s
-        // rule one bay up: a reading that failed to read and a Set that
-        // declares nothing must not draw the same.
+        // Dismiss reading pane on failure and return formatted error message.
         Err(e) => {
             view.shut_reading();
             format!("  read: `{id}` could not be read — {e}")

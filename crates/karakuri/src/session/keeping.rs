@@ -121,10 +121,7 @@ impl Keeping {
             return refused(reply, karakuri_environment::no_such_slot(slot, count));
         }
         let Some(nodes) = self.playing.at(slot) else {
-            // **The only way to reach this in this program**: a build landed
-            // whose sources the store would not take, which the watcher said at
-            // the time. Every slot is seeded at launch, so a slot that has never
-            // rebuilt always has an address.
+            // Missing compile output for slot indicates failure during watcher rebuild.
             return refused(
                 reply,
                 karakuri_environment::nothing_to_save(slot, None, false),
@@ -196,15 +193,12 @@ impl Keeping {
         id: Option<String>,
         reply: Option<mcp::Reply>,
     ) {
-        // **Checked here rather than only where the request came from**, which
-        // is `save_set`'s own guard: a press cannot name a slot this deck does
-        // not hold and a tool call can.
+        // Validate target slot against engine bounds.
         let count = engine.deck.slot_count();
         if !slot_in_range(slot, count) {
             return refused(reply, karakuri_environment::no_such_slot(slot, count));
         }
-        // **The address as the pane draws it** — `node_addr`'s own spelling,
-        // which is the run of text under the operator's eye when they pressed.
+        // Format node address string for logging and display.
         let addr = node_addr(ir_layer(node.layer), node.index);
         let Some(nodes) = self.playing.at(slot) else {
             return refused(
@@ -224,9 +218,7 @@ impl Keeping {
             println!("keep: {said}");
             return refused(reply, said);
         };
-        // **An id an operator typed is checked here**, which is `save_set`'s
-        // own wall and its reason: `<name>` becomes one path component, and
-        // the console emits what was typed including the empty string.
+        // Validate custom identifier against path character rules (ADR-0292).
         if let Some(said) = id
             .as_deref()
             .and_then(|id| karakuri_mcp::checked_id(id).err())
@@ -234,9 +226,7 @@ impl Keeping {
             println!("keep: {said}");
             return refused(reply, said);
         }
-        // **A stamp where nobody typed**, which is `accepted_save`'s own
-        // convention read one file kind along: the capsule is the press that
-        // types nothing (ADR-0128, ADR-0287).
+        // Generate timestamped identifier when no name is explicitly provided (ADR-0128, ADR-0287).
         let name = id.unwrap_or_else(karakuri_environment::history::stamped_id);
         let kept = Kept {
             asked,
@@ -245,16 +235,12 @@ impl Keeping {
             source: found.source.clone(),
             hash: found.hash,
             addr,
-            // **Filled by the thread**, and this value is never read: the
-            // request and the outcome are one type here because the two carry
-            // the same fields, and the `Ok` below is the unwritten state
-            // rather than a claim.
+            // Placeholder outcome populated on background worker thread.
             outcome: Ok(std::path::PathBuf::new()),
             reply,
         };
         let tx = self.keep_tx.clone();
-        // **A thread per keep**, and detached: no frame waits for it — the
-        // save path's own arrangement, and a keep is rarer than a save.
+        // Spawn background thread to persist kept procedure off the frame path.
         self.in_flight += 1;
         std::thread::spawn(move || {
             let _ = tx.send(kept.run());
@@ -302,10 +288,7 @@ impl Keeping {
             return Err(karakuri_environment::nothing_to_save(HEAD_SLOT, None, true));
         }
         let held = session::Held {
-            // **What the frame is composited at, and not [`crate::CANVAS`]** —
-            // the frame follows the largest enabled output (ADR-0247), so the
-            // constant is the size this run *started* at rather than the size
-            // it is running at.
+            // Current composite presentation size (ADR-0247).
             canvas: engine.present.size(),
             look: engine.look,
             master_out: engine.deck.out(),
@@ -322,10 +305,7 @@ impl Keeping {
                         gain: engine.deck.gain(at),
                         opacity: engine.deck.opacity(at),
                         blend: engine.deck.blend(at),
-                        // **The request and not the grant.**
-                        // `Record::Residency` records what a slot was asked to
-                        // do; the governor re-derives the rest on whatever
-                        // machine replays it.
+                        // Record requested residency state for playback reproduction.
                         residency: engine.deck.requested_residency(at),
                         policy: self.slot_policies.policy(slot),
                         mask: engine.deck.mask(at),
@@ -334,9 +314,7 @@ impl Keeping {
                 })
                 .collect(),
         };
-        // **Slot 0's ride inside the `Save`**, which puts them as it writes the
-        // file — see [`setfile::Sources::into_nodes`]. These are the others, and
-        // an empty list for slot 0 keeps the index meaning the deck slot.
+        // Collect secondary slot sources (slot 0 sources are packaged directly in `Save`).
         let others = (0..count)
             .map(|slot| {
                 if slot == HEAD_SLOT {

@@ -97,9 +97,7 @@ pub fn parsed(badge: &str) -> Option<(Vec<String>, Option<&'static str>)> {
     let (keys, bay) = match badge.split_once(IN_THE) {
         Some((keys, bay)) => {
             let bay = bay.trim();
-            // **The any-bay spelling first**, because it is not one of the
-            // nine and resolving it against [`BAYS`] would answer `None`
-            // and read as a badge nobody can parse.
+            // Check ANY_BAY wildcard before matching against specific bays.
             let bay = match bay == ANY_BAY.0 {
                 true => ANY_BAY.1,
                 false => BAYS

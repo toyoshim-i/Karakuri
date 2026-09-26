@@ -35,9 +35,7 @@ mod gpu {
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
-        // **A window 30 wider, and nothing moves.** The region widens and the
-        // picture does not, so `aim` — the call the frame makes — finds the
-        // size it already had and remakes nothing.
+        // Horizontal window expansion without picture resizing avoids recreating textures.
         panel.set_viewport(W as f32 + 30.0, H as f32);
         view::rearrange(&mut panel, CANVAS);
         assert!(
@@ -63,9 +61,7 @@ mod gpu {
         assert_eq!(engine.picture.id, first);
         assert_eq!(engine.picture.size, want);
 
-        // **A drag on the program's bottom edge is what does change it** —
-        // through the panel's own pointer, which is the gesture the leak is
-        // about rather than a size written by hand.
+        // Dragging the program bottom edge resizes the picture texture.
         let program = panel
             .layout()
             .rect(panel.layout().find("program").expect("program"));
@@ -146,8 +142,7 @@ mod gpu {
             mcp::Slots::unpointed(),
         );
 
-        // **A cell has a slot behind it or it has nothing**, and that is the
-        // whole of the gate. Past the last slot there is no view to sample.
+        // Out-of-range deck slots yield no texture view.
         assert_eq!(
             engine.deck.slot_count(),
             DECKS,
@@ -325,10 +320,7 @@ mod gpu {
             mcp::Slots::unpointed(),
         );
 
-        // **The cell's, in both axes** — not the row's, not the picture's and
-        // not the window's. The row holds four of these side by side with
-        // ground between them, so a texture sized from the row is out by a
-        // factor of four in one axis alone.
+        // Preview texture dimensions match the individual cell bounds in both axes.
         assert_eq!(
             (
                 engine.previews[0].texture.width(),
@@ -428,9 +420,7 @@ mod gpu {
         );
         assert_eq!(engine.freed, 2);
 
-        // **The tally is the whole engine's, over both textures.** Fitting the
-        // picture as well takes it to three: a count kept per texture would
-        // read two here, and `mod gpu` would be asserting on half the leak.
+        // Freed texture tally aggregates across all engine sinks.
         assert!(engine.picture.fit(
             &gpu,
             &mut renderer,
