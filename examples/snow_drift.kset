@@ -1,0 +1,10 @@
+{"t":"set","id":"snow_drift","v":1}
+{"t":"part","layer":"L1","path":"fall_field.kir"}
+{"t":"part","layer":"L4","path":"plain_points.kir"}
+{"t":"capacity","layer":"L1","value":8192}
+{"t":"param","layer":"L1","key":"width","value":6.0}
+{"t":"param","layer":"L1","key":"top","value":4.5}
+{"t":"param","layer":"L1","key":"floor","value":-4.5}
+{"t":"param","layer":"L4","key":"point_scale","value":0.006}
+{"t":"param","layer":"L4","key":"exposure","value":1.4}
+{"t":"bind","layer":"L1","key":"sway","signal":"energy","curve":"smooth","range":[0.08,0.4]}

@@ -1,0 +1,6 @@
+{"t":"set","id":"tumble_dots","v":1}
+{"t":"part","layer":"L1","path":"dot_sheet.kir"}
+{"t":"part","layer":"L4","path":"plain_points.kir"}
+{"t":"param","layer":"L4","key":"point_scale","value":0.02}
+{"t":"param","layer":"L4","key":"exposure","value":2.0}
+{"t":"bind","layer":"L1","key":"spin","signal":"energy","curve":"smooth","range":[0.1,0.6]}

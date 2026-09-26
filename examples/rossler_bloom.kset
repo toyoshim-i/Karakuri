@@ -1,0 +1,6 @@
+{"t":"set","id":"rossler_bloom","v":1}
+{"t":"part","layer":"L1","path":"rossler_flow.kir"}
+{"t":"part","layer":"L3","path":"high_orbit.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"streak","value":0.03}
+{"t":"param","layer":"L4","key":"exposure","value":0.12}

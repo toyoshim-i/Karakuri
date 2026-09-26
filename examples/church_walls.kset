@@ -1,0 +1,5 @@
+{"t":"set","id":"church_walls","v":1}
+{"t":"part","layer":"L1","path":"line_bounce.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"church_walls.kir"}
+{"t":"bind","layer":"L4","key":"pace","signal":"energy","curve":"lin","range":[0.6,1.6]}

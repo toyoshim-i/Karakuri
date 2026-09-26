@@ -1,0 +1,77 @@
+// Squares of four laser bars that appear at random places, fade out, and whose
+// bars come loose and spin on their own centres as they fade. Seed / 4 is the
+// square and seed % 4 its bar; each square is reborn with new random values at
+// the end of every `life`.
+// Ported from tmalib example/mv_laser/02_square.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/square_beams.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc square_beams {
+  kind     L1
+  topology lines
+  capacity [64, 4096] = 64
+
+  // Half the width and height of the area squares appear in, in world units.
+  param wide   : float [0.1, 4.0] = 1.9
+  param tall   : float [0.1, 4.0] = 1.05
+
+  // Largest half-side of a square in world units.
+  param scale  : float [0.05, 1.0] = 0.32
+
+  // Seconds a square lives before it is reborn elsewhere.
+  param life   : float [1.0, 20.0] = 7.5
+
+  // Brightness decay per second.
+  param fade   : float [0.0, 3.0] = 0.6
+
+  // Seconds before the bars start to spin, and their fastest spin in radians
+  // per second.
+  param hold   : float [0.0, 4.0] = 0.18
+  param spin   : float [0.0, 12.0] = 6.0
+
+  // Beam width multiplier per world unit of the square's half-side.
+  param thick  : float [0.0, 40.0] = 7.0
+
+  emit position, velocity, tint, size
+
+  element {
+    let sq  = seed / 4u;
+    let bar = seed % 4u;
+    let k   = float(sq);
+    let n   = float(capacity / 4u);
+
+    let off  = (k + hash1(sq * 13u + 5u)) / n * life;
+    let run  = max(t, 0.0) + off;
+    let gen  = floor(run / life);
+    let into = run - gen * life;
+    let g    = sq * 7919u + uint(gen) * 104729u;
+
+    let c   = (hash2(g) * 2.0 - vec2(1.0)) * vec2(wide, tall);
+    let s   = hash1(g + 1u) * scale;
+    let w   = s * hash1(g + 2u) * 3.0;
+    let col = hash3(g + 3u);
+
+    var ctr   = vec2(c.x, c.y - s);
+    var theta = 0.0;
+    if bar == 1u {
+      ctr = vec2(c.x, c.y + s);
+    }
+    if bar == 2u {
+      ctr   = vec2(c.x - s, c.y);
+      theta = 1.5707963;
+    }
+    if bar == 3u {
+      ctr   = vec2(c.x + s, c.y);
+      theta = 1.5707963;
+    }
+
+    let rate = (hash1(g + 11u + bar) * 2.0 - 1.0) * spin;
+    let ang  = theta + max(into - hold, 0.0) * rate;
+    let v    = vec2(cos(ang), sin(ang)) * s;
+
+    position = vec3(ctr + v, 0.0);
+    velocity = vec3(v * 2.0, 0.0);
+    tint     = col * exp(-fade * into);
+    size     = w * thick;
+  }
+}

@@ -1,0 +1,23 @@
+// Repeats the picture in a grid of tiles, slides it with wrap-around and
+// magnifies each tile about its own centre.
+// Ported from tmalib ext/mv/effect/zoom, with the wrap offset of ext/mv/effect/noise.
+
+proc tile_zoom {
+  kind L5
+
+  // Tile count across (x) and down (y); 1 and 1 is one tile.
+  param tiles : vec2 [1.0, 8.0] = vec2(2.0, 2.0)
+  // Magnification of each tile across (x) and down (y); below 1 the edges stretch.
+  param scale : vec2 [0.25, 4.0] = vec2(1.0, 1.0)
+  // Wrap-around shift across (x) and down (y), in tiles.
+  param offset : vec2 [-1.0, 1.0] = vec2(0.0, 0.0)
+  // Brightness gain.
+  param gain : float [0.0, 4.0] = 1.0
+
+  frame {
+    let m  = fract(point_coord * tiles + offset);
+    let at = (m - vec2(0.5)) / scale + vec2(0.5);
+    let s  = tap(src, clamp(at, vec2(0.0), vec2(1.0)));
+    color = vec4(s.xyz * gain, s.w);
+  }
+}

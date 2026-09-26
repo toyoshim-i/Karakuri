@@ -1,0 +1,46 @@
+// A fresh batch of random straight lines across a cube every flash, each in a
+// random colour, with the previous batches still fading behind it.
+// Ported from tmalib ext/mv/frame/nicofarre3d/lines.js and ext/mv/scene/lines.
+//
+//     cargo run -p karakuri-cli -- --set examples/line_storm.kir,examples/line_split.kir,examples/room_eye.kir,examples/room_strokes.kir
+
+proc line_storm {
+  kind     L1
+  topology lines
+  capacity [256, 262144] = 8192
+
+  // Lines drawn per flash. Capacity divided by this is how many past flashes
+  // stay visible.
+  param batch  : float [1.0, 4096.0] = 256.0
+
+  // New batches per second.
+  param flash  : float [1.0, 120.0] = 60.0
+
+  // Brightness kept by a batch from one flash to the next.
+  param trail  : float [0.0, 0.999] = 0.95
+
+  // Half the side of the cube the endpoints are drawn from.
+  param spread : float [0.5, 80.0] = 5.0
+
+  // Brightness multiplier on each line's colour.
+  param bright : float [0.0, 4.0] = 0.35
+
+  emit position, velocity, tint
+
+  element {
+    let per   = uint(max(batch, 1.0));
+    let back  = seed / per;
+    let index = seed % per;
+
+    let shot = floor(t * flash) - float(back);
+    let key  = (uint(shot + 1048576.0) * per + index) * 3u;
+
+    let a = (hash3(key) - vec3(0.5)) * 2.0 * spread;
+    let b = (hash3(key + 1u) - vec3(0.5)) * 2.0 * spread;
+    let c = hash3(key + 2u);
+
+    position = a;
+    velocity = a - b;
+    tint     = srgb_to_linear(c) * pow(trail, float(back)) * bright;
+  }
+}

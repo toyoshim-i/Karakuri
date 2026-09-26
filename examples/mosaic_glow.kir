@@ -1,0 +1,41 @@
+// Spreads a squarish glow around bright areas, adds a blocky copy of the
+// picture on top and can overlay flickering interference stripes.
+// Ported from tmalib ext/mv/effect/glow.
+
+proc mosaic_glow {
+  kind L5
+
+  // Reach of the 5x5 glow; 0 leaves only the centre tap.
+  param glow : float [0.0, 1.0] = 0.1
+  // Spacing of the glow taps as a fraction of the frame height.
+  param spread : float [0.0, 0.01] = 0.0025
+  // Weight of the blocky copy added on top.
+  param mosaic : float [0.0, 1.0] = 0.3
+  // Frequency of the interference stripes; 0 turns them off.
+  param detune : float [0.0, 1.0] = 0.0
+  // Brightness of the interference stripes.
+  param stripes : float [0.0, 1.0] = 0.8
+
+  frame {
+    let d = frame_step(spread);
+    let v = max(glow * 3.0, 0.00001);
+
+    var acc = vec4(0.0);
+    for i in -2..3 {
+      let fi = float(i);
+      for j in -2..3 {
+        let fj    = float(j);
+        let decay = sqrt(fi * fi * fi * fi + fj * fj * fj * fj) / v;
+        acc = acc + tap(src, point_coord + vec2(fi * d.x, fj * d.y)) / (1.0 + decay);
+      }
+    }
+
+    // Blocky copy: the picture sampled at the corner of a 0.005 frame-coordinate block.
+    let q = point_coord - point_coord % vec2(0.005);
+    acc = acc + tap(src, q) * mosaic;
+
+    let a = sin((q.y * 4096.0 - q.x * 57.3) * detune)
+          * sin((q.y * 5963.0 + q.x * 3.3) * detune) * stripes;
+    color = vec4(acc.xyz + vec3(a), clamp(acc.w, 0.0, 1.0));
+  }
+}

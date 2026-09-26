@@ -1,0 +1,41 @@
+// One additive stroke per element, from `position` back to `position -
+// velocity * streak`, coloured by the element's own `tint`.
+//
+//     cargo run -p karakuri -- examples/lorenz_flow.kir examples/tint_strokes.kir
+
+proc tint_strokes {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, tint
+
+  // Stroke width as a fraction of the frame's height.
+  param width    : float [0.00069, 0.0333] = 0.0021
+
+  // Length of the stroke in units of `velocity`; 1 draws the whole vector.
+  param streak   : float [0.0, 4.0]  = 1.0
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0]  = 1.0
+
+  // Exponent of the fade from the stroke's centre line to its edges.
+  param falloff  : float [0.5, 8.0]  = 1.5
+
+  // How much the stroke dims from its head (`position`) to its tail.
+  param taper    : float [0.0, 1.0]  = 0.0
+
+  vertex {
+    clip   = camera * vec4(position, 1.0);
+    clip_b = camera * vec4(position - velocity * streak, 1.0);
+
+    point_rate = width;
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let edge   = pow(max(0.0, 1.0 - across), falloff);
+    let along  = 1.0 - taper * point_coord.x;
+
+    color = vec4(tint * exposure, edge * along);
+  }
+}

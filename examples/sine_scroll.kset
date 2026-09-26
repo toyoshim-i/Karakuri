@@ -1,0 +1,8 @@
+{"t":"set","id":"sine_scroll","v":1}
+{"t":"part","layer":"L1","path":"sine_trace.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.01}
+{"t":"param","layer":"L4","key":"exposure","value":1.0}
+{"t":"param","layer":"L4","key":"falloff","value":1.5}
+{"t":"bind","layer":"L1","key":"amp","signal":"energy","curve":"smooth","range":[0.4,0.95]}

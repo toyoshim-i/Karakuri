@@ -1,0 +1,50 @@
+// A zigzag of 32 chords between random points on a small sphere, repeated at
+// every point of a six-by-six-by-six lattice and redrawn `flicker` times a second,
+// so the space fills with a shivering crystal. Seed / 216 is the chord and
+// seed % 216 the copy; seeds past 6911 draw nothing.
+// Ported from tmalib example/mv_api3d/mv_3g06.html and mv_3g06b.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/chord_lattice.kir,examples/tumble_eye.kir,examples/tint_strokes.kir
+
+proc chord_lattice {
+  kind     L1
+  topology lines
+  capacity [6912, 65536] = 6912
+
+  // Chords drawn in each copy, floored; at most 32.
+  param chords  : float [1.0, 32.0] = 32.0
+
+  // Radius of the sphere the chords span, and the distance between copies.
+  param radius  : float [0.05, 2.0] = 0.5
+  param spacing : float [0.2, 4.0] = 1.0
+
+  // New zigzags per second.
+  param flicker : float [0.0, 60.0] = 30.0
+
+  // Colour of the chords.
+  param ink     : vec3 [0.0, 4.0] = vec3(0.3, 0.3, 1.0)
+
+  emit position, velocity, tint
+
+  element {
+    let j    = seed / 216u;
+    let cp   = seed % 216u;
+    let off  = vec3(float(cp % 6u), float((cp / 6u) % 6u), float(cp / 36u)) - vec3(3.0);
+    let draw = uint(floor(max(t, 0.0) * flicker)) * 4099u;
+
+    let h0 = hash2(draw + j) * 6.2831853;
+    let h1 = hash2(draw + j + 1u) * 6.2831853;
+    let s  = vec3(sin(h0.x) * cos(h0.y), sin(h0.x) * sin(h0.y), cos(h0.x)) * radius;
+    let e  = vec3(sin(h1.x) * cos(h1.y), sin(h1.x) * sin(h1.y), cos(h1.x)) * radius;
+
+    let pa = s + off * spacing;
+    var pb = e + off * spacing;
+    if float(j) >= floor(chords) {
+      pb = pa;
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = ink;
+  }
+}

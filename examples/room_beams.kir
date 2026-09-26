@@ -1,0 +1,75 @@
+// Waves of coloured beams launched from the edges of a large box and flying
+// straight across it on parallel lanes, along z or along x.
+// Ported from tmalib ext/mv/frame/nicofarre3d/beams.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/room_beams.kir,examples/room_eye.kir,examples/room_glow.kir
+
+proc room_beams {
+  kind     L1
+  topology lines
+  capacity [256, 65536] = 2048
+
+  // Seconds between two waves.
+  param period   : float [0.1, 8.0] = 1.0
+
+  // Beams launched per wave.
+  param crowd    : float [1.0, 200.0] = 20.0
+
+  // Flight speed in world units per second.
+  param speed    : float [0.5, 40.0] = 4.8
+
+  // Half the side of the box the beams cross. The flight is twice this long.
+  param span     : float [2.0, 40.0] = 16.4
+
+  // Spacing of the lanes a beam's sideways position snaps to. 0 disables it.
+  param lane     : float [0.0, 4.0] = 1.0
+
+  // Fraction of beams flying along x rather than along z.
+  param sideways : float [0.0, 1.0] = 0.5
+
+  // Fraction of beams flying towards negative rather than positive.
+  param oncoming : float [0.0, 1.0] = 0.5
+
+  emit position, velocity, tint
+
+  element {
+    let per   = uint(max(crowd, 1.0));
+    let slot  = seed / per;
+    let slots = uint(max(float(capacity / per), 1.0));
+
+    let gen    = floor((t / period - float(slot)) / float(slots));
+    let born   = (gen * float(slots) + float(slot)) * period;
+    let travel = (t - born) * speed;
+
+    let key = seed * 747796405u + uint(gen + 4096.0) * 2891336453u;
+    let r   = hash3(key);
+
+    var side = (r.x - 0.5) * span;
+    if lane > 0.0 {
+      side = (floor(side / lane) + 0.5) * lane;
+    }
+    let up = (r.y - 0.5) * span * 0.1;
+
+    var dir = 1.0;
+    if hash1(key + 7u) < oncoming {
+      dir = -1.0;
+    }
+    let along = (travel - span) * dir;
+
+    var p = vec3(side, up, along);
+    var v = vec3(0.0, 0.0, speed * dir);
+    if hash1(key + 13u) < sideways {
+      p = vec3(along, up, side);
+      v = vec3(speed * dir, 0.0, 0.0);
+    }
+
+    if travel < span * 2.0 {
+      position = p;
+      velocity = v;
+    } else {
+      position = vec3(0.0, 0.0, 0.0);
+      velocity = vec3(0.0, 0.0, 0.0);
+    }
+    tint = srgb_to_linear(hash3(key + 29u));
+  }
+}

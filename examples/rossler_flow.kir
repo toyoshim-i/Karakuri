@@ -1,0 +1,86 @@
+// Particles carried along the Rössler attractor: a flat spiral band that
+// lifts into a spike on its outer edge. The band is repeated in `fold` copies
+// turned about the vertical axis, and the cloud cycles through the hue wheel.
+// Ported from tmalib example/core/rossler_attractor.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/rossler_flow.kir,examples/high_orbit.kir,examples/tint_strokes.kir
+
+proc rossler_flow {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 131072
+
+  // Elements born per second, and seconds each one lives.
+  param spawn_rate : float [0.0, 100000.0] = 16000.0
+  param lifetime   : float [0.5, 20.0]     = 7.0
+
+  // Attractor time per second of simulation time.
+  param rate       : float [0.0, 8.0]      = 2.4
+
+  // The Rössler system's a and c; b is fixed at 0.2. c from 4 to 9 walks from
+  // a single loop through period doubling into chaos.
+  param a          : float [0.05, 0.4]     = 0.2
+  param c          : float [2.0, 14.0]     = 5.7
+
+  // World units per attractor unit, and how much of that the spike keeps.
+  param scale      : float [0.05, 0.4]     = 0.23
+  param lift       : float [0.0, 1.0]      = 0.5
+
+  // Copies of the band turned about the vertical axis, and their turns per
+  // second.
+  param fold       : float [1.0, 8.0]      = 5.0
+  param spin       : float [-1.0, 1.0]     = 0.03
+
+  // Hue at t = 0, turns of hue per second, and hue spread across the band's
+  // radius.
+  param hue        : float [0.0, 1.0]      = 0.9
+  param cycle      : float [0.0, 1.0]      = 0.05
+  param spread     : float [0.0, 1.0]      = 0.3
+
+  emit position, velocity, age, normal, tint
+
+  spawn {
+    let r = 2.0 + 5.0 * hash1(seed + 1u);
+    let q = hash1(seed + 2u) * 6.2831853;
+
+    // `normal` holds this element's state in attractor coordinates.
+    normal   = vec3(cos(q) * r, sin(q) * r, 0.0);
+    position = vec3(0.0);
+    velocity = vec3(0.0);
+    age      = 0.0;
+    tint     = vec3(0.0);
+  }
+
+  element {
+    let s  = scale;
+    let zs = s * lift;
+    var p  = normal;
+
+    let h = dt * rate * 0.25;
+    for i in 0..4 {
+      let d = vec3(0.0 - p.y - p.z, p.x + a * p.y, 0.2 + p.z * (p.x - c));
+      p = p + d * h;
+    }
+
+    let k   = floor(hash1(seed + 7u) * floor(fold));
+    let ang = (k / floor(fold) + t * spin) * 6.2831853;
+    let w   = rot_y(vec3(p.x * s, p.z * zs - 1.0, p.y * s), ang);
+
+    let moved = age > 0.0;
+    if moved {
+      velocity = (w - position) / max(dt, 0.0001);
+    } else {
+      velocity = vec3(0.0);
+    }
+    position = w;
+    normal   = p;
+    age      = age + dt;
+
+    let rn = clamp(length(p.xy) / 12.0, 0.0, 1.0);
+    tint = hsv_to_rgb(vec3(fract(hue + t * cycle + spread * rn), 0.8, 1.0));
+
+    if age > lifetime {
+      kill();
+    }
+  }
+}

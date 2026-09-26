@@ -1,0 +1,69 @@
+// A floor grid and a ceiling grid stretching to the horizon, with a wave of
+// brightness running through the cross lines.
+// Ported from tmalib ext/mv/frame/nicofarre3d/harrier.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/harrier_grid.kir,examples/room_eye.kir,examples/room_strokes.kir
+
+proc harrier_grid {
+  kind     L1
+  topology lines
+  capacity [5120, 5120] = 5120   // 2 directions * 2 planes * 20 lines * 64 pieces
+
+  // Half the side of the grid, and half the length of each line.
+  param reach  : float [10.0, 200.0] = 100.0
+
+  // Height of the ceiling above the eye; the floor is as far below.
+  param lift   : float [0.5, 60.0] = 5.0
+
+  // Wave speed along the cross lines, in radians per second.
+  param surge  : float [0.0, 40.0] = 10.0
+
+  // Wave cycles, in radians, across the whole grid.
+  param ripple : float [0.0, 200.0] = 50.0
+
+  // Speed at which the whole grid slides towards positive z.
+  param scroll : float [-40.0, 40.0] = 0.0
+
+  // Brightness of the ceiling relative to the floor. 0 hides it.
+  param roof   : float [0.0, 1.0] = 1.0
+
+  // Line colour, linear RGB.
+  param hue    : vec3 [0.0, 4.0] = vec3(0.13, 0.13, 0.32)
+
+  emit position, velocity, tint
+
+  element {
+    let piece = seed % 64u;
+    let line  = seed / 64u;
+    let cross = line < 40u;
+    let rest  = line % 40u;
+    let upper = rest >= 20u;
+    let k     = float(rest % 20u);
+
+    let step  = reach / 10.0;
+    let slide = mod(scroll * t, step);
+    let at    = -reach + k * step;
+    let len   = reach * 2.0 / 64.0;
+    let from  = -reach + float(piece) * len;
+
+    var y = -lift;
+    var bright = 1.0;
+    if upper {
+      y = lift;
+      bright = roof;
+    }
+
+    var p = vec3(at, y, from + slide);
+    var v = vec3(0.0, 0.0, -len);
+    var c = 0.5;
+    if cross {
+      p = vec3(from, y, at + slide);
+      v = vec3(-len, 0.0, 0.0);
+      c = (1.0 + sin(t * surge + at / reach * ripple)) * 0.5;
+    }
+
+    position = p;
+    velocity = v;
+    tint     = hue * c * bright;
+  }
+}

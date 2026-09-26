@@ -1,0 +1,23 @@
+// A fixed camera on the +z axis looking at the origin, framing the square
+// [-frame, frame] of the xy plane top to bottom. For the pieces drawn in a plane.
+//
+//     cargo run -p karakuri-cli -- --set examples/sweep_disc.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc flat_eye {
+  kind L3
+
+  // Half the visible height of the xy plane, in world units.
+  param frame : float [0.2, 8.0] = 1.1
+
+  // Vertical field of view in radians.
+  param lens  : float [0.2, 1.6] = 0.8
+
+  camera {
+    let d = frame / tan(lens * 0.5);
+
+    eye    = vec3(0.0, 0.0, d);
+    target = vec3(0.0, 0.0, 0.0);
+    fov_y  = lens;
+    far    = d + 50.0;
+  }
+}

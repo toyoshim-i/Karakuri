@@ -1,0 +1,11 @@
+{"t":"set","id":"ray_burst","v":1}
+{"t":"part","layer":"L1","path":"ray_burst.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.0012}
+{"t":"param","layer":"L4","key":"exposure","value":0.6}
+{"t":"param","layer":"L4","key":"taper","value":0.6}
+{"t":"bind","layer":"L1","key":"level_a","signal":"band0","curve":"smooth","range":[0.72,1.0]}
+{"t":"bind","layer":"L1","key":"level_b","signal":"band2","curve":"smooth","range":[0.72,1.0]}
+{"t":"bind","layer":"L1","key":"level_c","signal":"band4","curve":"smooth","range":[0.72,1.0]}
+{"t":"bind","layer":"L1","key":"level_d","signal":"band6","curve":"smooth","range":[0.72,1.0]}

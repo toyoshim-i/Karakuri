@@ -1,0 +1,40 @@
+// Interfering sine bands in red, green and blue wrapped once around the viewer
+// like a continuous wall, so the camera sees a different stretch of it as it
+// turns.
+// Ported from tmalib ext/mv/scene/church.
+//
+//     cargo run -p karakuri-cli -- --set examples/line_bounce.kir,examples/room_eye.kir,examples/church_walls.kir
+
+proc church_walls {
+  kind  L4
+  blend additive
+
+  // How many times the pattern repeats around the viewer.
+  param panels   : float [1.0, 8.0] = 1.0
+
+  // Height of one vertical period of the pattern, relative to the distance to
+  // the wall.
+  param storey   : float [0.05, 4.0] = 0.38
+
+  // Time scale of the animation.
+  param pace     : float [0.0, 4.0] = 1.0
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let x = (atan2(ray.x, -ray.z) + 3.1415927) * floor(panels);
+    let y = ray.y / max(length(ray.xz), 0.0001) / storey * 6.2831853;
+    let s = t * pace;
+
+    let dr = sin(x * 10.0 + s * 3.0) - sin(y + s * 10.0);
+    let dg = sin(x * 20.0 - s * 2.0) - sin(y * 2.0 + s * 5.0);
+    let db = sin(x * 15.0 - s) - sin(y * 1.5 + s * 7.0);
+    let er = sin(x * 12.0 + s * 5.0) - sin(y + s * 11.0);
+    let eg = sin(x * 22.0 - s) - sin(y * 2.0 + s * 9.0);
+    let eb = sin(x * 32.0 - s * 4.0) - sin(y * 1.5 + s * 3.0);
+
+    let c = vec3(dr * dg * er * eg, dg * db * eg * eb, db * dr * eb * er);
+    color = vec4(srgb_to_linear(clamp(c, vec3(0.0), vec3(1.0))) * exposure, 1.0);
+  }
+}

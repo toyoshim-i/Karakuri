@@ -1,0 +1,67 @@
+// Particles carried along the Lorenz attractor, each integrating the flow from
+// a point near one of its two wings; the whole cloud cycles through the hue
+// wheel over time.
+// Ported from tmalib example/core/lorenz_attractor.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/lorenz_flow.kir,examples/tint_strokes.kir
+
+proc lorenz_flow {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 131072
+
+  // Elements born per second, and seconds each one lives.
+  param spawn_rate : float [0.0, 100000.0] = 16000.0
+  param lifetime   : float [0.5, 20.0]     = 7.0
+
+  // Attractor time per second of simulation time.
+  param rate       : float [0.0, 2.0]      = 0.45
+
+  // The Lorenz system's rho; 28 is the classic butterfly.
+  param rho        : float [10.0, 60.0]    = 28.0
+
+  // World units per attractor unit.
+  param scale      : float [0.02, 0.2]     = 0.13
+
+  // Hue at t = 0, turns of hue per second, and the hue spread from the bottom
+  // of the attractor to its top.
+  param hue        : float [0.0, 1.0]      = 0.55
+  param cycle      : float [0.0, 1.0]      = 0.05
+  param spread     : float [0.0, 1.0]      = 0.25
+
+  emit position, velocity, age, tint
+
+  spawn {
+    let side = step(0.5, hash1(seed)) * 2.0 - 1.0;
+    let off  = sphere_point(hash1(seed + 1u), hash1(seed + 2u)) * (2.0 + 5.0 * hash1(seed + 3u));
+    let l    = vec3(side * 8.5, side * 8.5, 27.0) + off;
+
+    position = vec3(l.x, l.z - 25.0, l.y) * scale;
+    velocity = vec3(0.0);
+    age      = 0.0;
+    tint     = vec3(0.0);
+  }
+
+  element {
+    let s = scale;
+    var p = vec3(position.x / s, position.z / s, position.y / s + 25.0);
+
+    let h = dt * rate * 0.25;
+    for i in 0..4 {
+      let d = vec3(10.0 * (p.y - p.x), p.x * (rho - p.z) - p.y, p.x * p.y - 2.6666667 * p.z);
+      p = p + d * h;
+    }
+
+    let w = vec3(p.x, p.z - 25.0, p.y) * s;
+    velocity = (w - position) / max(dt, 0.0001);
+    position = w;
+    age      = age + dt;
+
+    let hz = clamp(p.z / 50.0, 0.0, 1.0);
+    tint = hsv_to_rgb(vec3(fract(hue + t * cycle + spread * hz), 0.8, 1.0));
+
+    if age > lifetime {
+      kill();
+    }
+  }
+}

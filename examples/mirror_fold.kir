@@ -1,0 +1,45 @@
+// Folds one wedge of the picture around the frame centre into a kaleidoscope
+// of alternately mirrored wedges; outside each wedge's rhombus is transparent.
+// Ported from tmalib ext/mv/effect/mirror.
+
+proc mirror_fold {
+  kind L5
+
+  // Number of wedges around the centre, rounded to an even count of at least 4.
+  param division : float [4.0, 16.0] = 4.0
+  // Size of the pattern on screen; larger shows less of the source.
+  param zoom : float [0.5, 4.0] = 1.5
+  // Rotation of the pattern in turns per beat.
+  param spin : float [-1.0, 1.0] = 0.0
+  // Point of the source at the wedge apex, in frame coordinates.
+  param origin : vec2 [0.0, 1.0] = vec2(0.5, 0.5)
+
+  frame {
+    let n      = max(4.0, 2.0 * floor(division * 0.5 + 0.5));
+    let wedge  = 6.2831853 / n;
+    let fs     = frame_step(1.0);
+    let aspect = fs.y / fs.x;
+    let scale  = vec2(max(1.0, 1.0 / aspect), max(1.0, aspect)) * zoom;
+    let p      = vec2(point_coord.x * 2.0 - 1.0, 1.0 - point_coord.y * 2.0) / scale;
+
+    let r = length(p);
+    let a = (atan2(p.y, p.x) - spin * beats * 6.2831853) % 6.2831853;
+    let i = floor(a / wedge);
+    var phi = a - i * wedge;
+    if i % 2.0 >= 1.0 {
+      phi = wedge - phi;
+    }
+    let q = r * vec2(cos(phi), sin(phi));
+
+    // Coefficients of q on the wedge's two unit edges; the rhombus is both in [0, 1].
+    let kb = q.y / sin(wedge);
+    let ka = q.x - kb * cos(wedge);
+    var inside = 0.0;
+    if ka <= 1.0 && kb <= 1.0 {
+      inside = 1.0;
+    }
+
+    let s = tap(src, clamp(origin + vec2(q.x, -q.y), vec2(0.0), vec2(1.0)));
+    color = s * inside;
+  }
+}

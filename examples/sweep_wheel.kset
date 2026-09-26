@@ -1,0 +1,7 @@
+{"t":"set","id":"sweep_wheel","v":1}
+{"t":"part","layer":"L1","path":"sweep_disc.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.003}
+{"t":"param","layer":"L4","key":"exposure","value":0.5}
+{"t":"bind","layer":"L1","key":"sweep","signal":"energy","curve":"smooth","range":[0.8,3.0]}

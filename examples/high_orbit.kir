@@ -1,0 +1,26 @@
+// A camera circling the origin from above, for shapes that lie flat in the
+// horizontal plane.
+//
+//     cargo run -p karakuri-cli -- --set examples/rossler_flow.kir,examples/high_orbit.kir,examples/tint_strokes.kir
+
+proc high_orbit {
+  kind L3
+
+  // Distance from the target, and elevation above the horizontal in radians.
+  param radius    : float [1.0, 30.0] = 7.5
+  param elevation : float [0.0, 1.5]  = 0.75
+
+  // Turns per second around the vertical axis.
+  param speed     : float [-1.0, 1.0] = 0.05
+
+  // Height of the point looked at.
+  param aim       : float [-4.0, 4.0] = 0.0
+
+  camera {
+    let a = t * speed * 6.2831853;
+    let h = cos(elevation) * radius;
+
+    eye    = vec3(cos(a) * h, aim + sin(elevation) * radius, sin(a) * h);
+    target = vec3(0.0, aim, 0.0);
+  }
+}

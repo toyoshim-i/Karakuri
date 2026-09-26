@@ -1,0 +1,70 @@
+// A spectrum meter of short horizontal laser bars: eight columns of sixteen,
+// column i lit from the bottom up to `level<i>`, blue at the low end turning red
+// at the high end and brighter towards the top. Seed / 16 is the column and
+// seed % 16 the row; seeds past 127 draw nothing.
+// Ported from tmalib ext/mv/frame/equalizer/main.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/band_meter.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc band_meter {
+  kind     L1
+  topology lines
+  capacity [128, 4096] = 128
+
+  // Fill of each column, lowest band first.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.75
+  param level2 : float [0.0, 1.0] = 0.6
+  param level3 : float [0.0, 1.0] = 0.7
+  param level4 : float [0.0, 1.0] = 0.5
+  param level5 : float [0.0, 1.0] = 0.4
+  param level6 : float [0.0, 1.0] = 0.3
+  param level7 : float [0.0, 1.0] = 0.2
+
+  // Half the meter's width and height in world units.
+  param wide   : float [0.1, 4.0] = 1.8
+  param tall   : float [0.1, 4.0] = 1.0
+
+  // Gap between neighbouring columns as a fraction of a column's width.
+  param gap    : float [0.0, 0.9] = 0.3
+
+  emit position, velocity, tint, size
+
+  element {
+    let col = seed / 16u;
+    let row = seed % 16u;
+    let c   = float(col);
+    let h   = float(row);
+
+    var lv = level0;
+    if col == 1u { lv = level1; }
+    if col == 2u { lv = level2; }
+    if col == 3u { lv = level3; }
+    if col == 4u { lv = level4; }
+    if col == 5u { lv = level5; }
+    if col == 6u { lv = level6; }
+    if col == 7u { lv = level7; }
+
+    let cw = 2.0 * wide / 8.0;
+    let x0 = -wide + c * cw + cw * gap * 0.5;
+    let x1 = x0 + cw * (1.0 - gap);
+    let y  = (-0.9 + h * 0.12) * tall;
+
+    let hot  = c / 7.0;
+    let loud = h / 15.0;
+    let rgb  = vec3(hot, 0.0, 1.0 - hot) * 0.5 + vec3(0.3 * loud);
+
+    var on = 0.0;
+    if col < 8u && lv * 16.0 > h + 0.5 {
+      on = 1.0;
+    }
+
+    let pa = vec3(x0, y, 0.0);
+    let pb = vec3(mix(x0, x1, on), y, 0.0);
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = rgb;
+    size     = 1.5;
+  }
+}

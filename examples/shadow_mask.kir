@@ -1,0 +1,44 @@
+// Lays a display's phosphor pattern over the picture at full resolution: RGB
+// stripes, round LEDs or square panels.
+// Ported from tmalib ext/mv/effect/mask.
+
+proc shadow_mask {
+  kind L5
+
+  // Height of one pattern cell as a fraction of the frame height.
+  param cell : float [0.004, 0.05] = 0.011
+  // Cell pattern: 0 RGB stripes, 1 round LED, 2 square panel; values between crossfade.
+  param pattern : float [0.0, 2.0] = 0.0
+  // Brightness gain applied through the pattern.
+  param gain : float [0.0, 4.0] = 1.0
+  // Blend from the untouched picture (0) to the masked picture (1).
+  param amount : float [0.0, 1.0] = 1.0
+
+  frame {
+    let s = texel(src);
+    let f = fract(point_coord / frame_step(cell));
+
+    // RGB stripes: three soft-edged vertical bars, one per channel.
+    let k      = floor(f.x * 3.0);
+    let lx     = fract(f.x * 3.0);
+    let bar    = smoothstep(0.05, 0.2, lx) * smoothstep(0.05, 0.2, 1.0 - lx)
+               * smoothstep(0.0, 0.08, f.y) * smoothstep(0.0, 0.08, 1.0 - f.y);
+    let chan   = vec3(1.0 - step(1.0, k), step(1.0, k) - step(2.0, k), step(2.0, k));
+    let stripe = chan * bar;
+
+    // Round LED: a solid core with a halo.
+    let rr     = length(f - vec2(0.5));
+    let led    = min(1.0, 1.0 - smoothstep(0.2, 0.25, rr) + 0.35 * (1.0 - smoothstep(0.2, 0.5, rr)));
+
+    // Square panel: a soft-edged square filling the cell.
+    let e      = smoothstep(vec2(0.0), vec2(0.1), f) * smoothstep(vec2(0.0), vec2(0.1), vec2(1.0) - f);
+    let panel  = e.x * e.y;
+
+    let wr   = max(0.0, 1.0 - abs(pattern));
+    let wl   = max(0.0, 1.0 - abs(pattern - 1.0));
+    let wp   = max(0.0, 1.0 - abs(pattern - 2.0));
+    let mask = stripe * wr + vec3(led * wl + panel * wp);
+
+    color = vec4(mix(s.xyz, s.xyz * mask * gain, vec3(amount)), s.w);
+  }
+}

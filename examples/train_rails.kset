@@ -1,0 +1,7 @@
+{"t":"set","id":"train_rails","v":1}
+{"t":"part","layer":"L1","path":"train_rails.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"room_strokes.kir"}
+{"t":"param","layer":"L3","key":"turn","value":0.0}
+{"t":"param","layer":"L1","key":"bend","value":0.04}
+{"t":"param","layer":"L4","key":"exposure","value":1.8}

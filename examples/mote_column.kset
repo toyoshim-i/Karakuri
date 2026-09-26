@@ -1,0 +1,7 @@
+{"t":"set","id":"mote_column","v":1}
+{"t":"part","layer":"L1","path":"orbit_motes.kir"}
+{"t":"part","layer":"L4","path":"floor_glow.kir"}
+{"t":"part","layer":"L4","index":1,"path":"halo_points.kir"}
+{"t":"bind","layer":"L1","key":"low","signal":"band0","curve":"smooth","range":[0.2,1.0]}
+{"t":"bind","layer":"L1","key":"mid","signal":"band3","curve":"smooth","range":[0.2,1.0]}
+{"t":"bind","layer":"L1","key":"high","signal":"band6","curve":"smooth","range":[0.2,1.0]}

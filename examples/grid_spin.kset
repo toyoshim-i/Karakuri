@@ -1,0 +1,12 @@
+{"t":"set","id":"grid_spin","v":1}
+{"t":"part","layer":"L1","path":"wire_lattice.kir"}
+{"t":"part","layer":"L3","path":"tumble_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L1","key":"lines","value":16.0}
+{"t":"param","layer":"L1","key":"extent","value":4.0}
+{"t":"param","layer":"L1","key":"spin","value":0.0}
+{"t":"param","layer":"L1","key":"hue","value":0.36}
+{"t":"param","layer":"L1","key":"sat","value":0.9}
+{"t":"param","layer":"L1","key":"bright","value":0.3}
+{"t":"param","layer":"L4","key":"width","value":0.0014}
+{"t":"bind","layer":"L1","key":"bright","signal":"energy","curve":"pow2","range":[0.2,1.2]}

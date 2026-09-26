@@ -1,0 +1,26 @@
+// A camera fixed at the origin that tumbles, turning its view direction and its
+// up vector about all three axes at three different rates.
+// Ported from tmalib example/majvj_frames/grid_3d.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/wire_lattice.kir,examples/tumble_eye.kir,examples/tint_strokes.kir
+
+proc tumble_eye {
+  kind L3
+
+  // Turn rates about x, y and z in radians per second.
+  param rate : vec3 [-2.0, 2.0] = vec3(0.31, 0.42, 0.52)
+
+  // Vertical field of view in radians.
+  param lens : float [0.4, 2.2] = 1.05
+
+  camera {
+    let fwd = rot_z(rot_y(rot_x(vec3(0.0, 0.0, -1.0), t * rate.x), t * rate.y), t * rate.z);
+    let top = rot_z(rot_y(rot_x(vec3(0.0, 1.0, 0.0), t * rate.x), t * rate.y), t * rate.z);
+
+    eye    = vec3(0.0);
+    target = fwd;
+    up     = top;
+    fov_y  = lens;
+    near   = 0.05;
+  }
+}

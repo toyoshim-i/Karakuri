@@ -1,0 +1,84 @@
+// A latitude-longitude sphere drawn as its wire edges, every vertex coordinate
+// wobbling on its own sine so the ball churns into a lumpy shape, shaded dark
+// blue with a warm light from the upper left front. Seeds below 1152 are the
+// meridian edges, the next 1104 the parallel edges, and the rest draw nothing.
+// Ported from tmalib ext/mv/frame/morphere/main.js and, at `wobble` 0,
+// example/mv_api3d/mv_3g01.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/morph_mesh.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc morph_mesh {
+  kind     L1
+  topology lines
+  capacity [2304, 65536] = 2304
+
+  // Radius of the undisturbed sphere in world units.
+  param radius : float [0.2, 6.0] = 3.0
+
+  // Largest wobble of one vertex coordinate, as a fraction of `radius`.
+  param wobble : float [0.0, 1.0] = 0.25
+
+  // Fastest wobble rate in radians per second.
+  param rate   : float [0.0, 20.0] = 10.0
+
+  // Base colour of the mesh and the colour the light adds at full facing.
+  param base   : vec3 [0.0, 2.0] = vec3(0.1, 0.1, 0.4)
+  param lit    : vec3 [0.0, 2.0] = vec3(0.9, 0.3, 0.3)
+
+  emit position, velocity, tint
+
+  element {
+    var a0 = 0u;
+    var b0 = 0u;
+    var a1 = 0u;
+    var b1 = 0u;
+    var on = true;
+
+    if seed < 1152u {
+      a0 = seed / 48u;
+      b0 = seed % 48u;
+      a1 = a0 + 1u;
+      b1 = b0;
+    } else {
+      let e = seed - 1152u;
+      a0 = e / 48u + 1u;
+      b0 = e % 48u;
+      a1 = a0;
+      b1 = (b0 + 1u) % 48u;
+      if a0 >= 24u {
+        on = false;
+      }
+    }
+
+    var id0 = 2u + a0 * 48u + b0;
+    var id1 = 2u + a1 * 48u + b1;
+    if a0 == 0u { id0 = 0u; }
+    if a1 == 24u { id1 = 1u; }
+
+    let la0 = float(a0) / 24.0 * 3.1415927;
+    let lo0 = float(b0) / 48.0 * 6.2831853;
+    let la1 = float(a1) / 24.0 * 3.1415927;
+    let lo1 = float(b1) / 48.0 * 6.2831853;
+
+    let s0 = vec3(sin(la0) * cos(lo0), cos(la0), sin(la0) * sin(lo0));
+    let s1 = vec3(sin(la1) * cos(lo1), cos(la1), sin(la1) * sin(lo1));
+
+    let w0 = sin(hash3(id0 * 3u + 1u) * 6.2831853 + hash3(id0 * 3u + 2u) * rate * t)
+           * hash3(id0 * 3u) * wobble;
+    let w1 = sin(hash3(id1 * 3u + 1u) * 6.2831853 + hash3(id1 * 3u + 2u) * rate * t)
+           * hash3(id1 * 3u) * wobble;
+
+    let pa = (s0 + w0) * radius;
+    var pb = (s1 + w1) * radius;
+    if !on {
+      pb = pa;
+    }
+
+    let mid    = normalize(pa + pb + vec3(0.0001));
+    let facing = max(dot(mid, vec3(-0.5, 0.5, 1.0)), 0.0);
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = base + lit * facing;
+  }
+}

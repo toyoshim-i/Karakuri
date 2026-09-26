@@ -1,0 +1,5 @@
+{"t":"set","id":"laser_squares","v":1}
+{"t":"part","layer":"L1","path":"square_beams.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"laser_beams.kir"}
+{"t":"bind","layer":"L1","key":"spin","signal":"energy","curve":"sqrt","range":[2.0,12.0]}

@@ -1,0 +1,6 @@
+{"t":"set","id":"line_storm","v":1}
+{"t":"part","layer":"L1","path":"line_storm.kir"}
+{"t":"part","layer":"L2","path":"line_split.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"room_strokes.kir"}
+{"t":"bind","layer":"L1","key":"trail","signal":"energy","curve":"lin","range":[0.9,0.97]}

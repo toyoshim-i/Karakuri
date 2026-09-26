@@ -1,0 +1,6 @@
+{"t":"set","id":"harrier_grid","v":1}
+{"t":"part","layer":"L1","path":"harrier_grid.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"room_strokes.kir"}
+{"t":"param","layer":"L4","key":"exposure","value":2.0}
+{"t":"bind","layer":"L1","key":"lift","signal":"band0","curve":"pow2","range":[5.0,9.0]}

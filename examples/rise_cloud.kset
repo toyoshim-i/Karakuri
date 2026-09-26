@@ -1,0 +1,7 @@
+{"t":"set","id":"rise_cloud","v":1}
+{"t":"part","layer":"L1","path":"noise_rise.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"plain_points.kir"}
+{"t":"param","layer":"L3","key":"frame","value":4.2}
+{"t":"param","layer":"L4","key":"point_scale","value":0.012}
+{"t":"bind","layer":"L1","key":"sway","signal":"energy","curve":"smooth","range":[0.6,3.0]}

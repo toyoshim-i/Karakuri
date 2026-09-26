@@ -1,0 +1,48 @@
+// 128 long bars strung along a wandering curve in the xy plane, each centred on
+// the curve a little later in time than the one before and turning about its own
+// centre, coloured along a hue ramp. Seed i is bar i; its length is fixed per
+// seed.
+// Ported from tmalib ext/mv/frame/rolline/main.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/roll_bars.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc roll_bars {
+  kind     L1
+  topology lines
+  capacity [128, 4096] = 128
+
+  // Rate the curve is travelled, in curve units per second.
+  param speed  : float [0.0, 2.0] = 0.1
+
+  // Curve time between neighbouring bars.
+  param lag    : float [0.0, 0.2] = 0.02
+
+  // Turns of a bar per unit of curve time, in radians.
+  param twist  : float [0.0, 40.0] = 10.0
+
+  // Longest half-length of a bar, in world units.
+  param reach  : float [0.1, 8.0] = 4.0
+
+  // Size of the curve the bar centres follow.
+  param scale  : float [0.1, 4.0] = 1.0
+
+  // Hue of bar 0, and the hue step per bar.
+  param hue    : float [0.0, 1.0] = 0.0
+  param spread : float [0.0, 0.05] = 0.00278
+
+  emit position, velocity, tint
+
+  element {
+    let i  = float(seed);
+    let tt = t * speed + lag * (i + 1.0);
+    let r  = tt * twist;
+
+    let ctr = vec2(sin(tt + 7.0 * cos(tt + sin(tt))),
+                   cos(tt + 3.0 * sin(cos(tt)))) * scale;
+    let d   = vec2(cos(r), sin(r)) * (floor(hash1(seed) * 127.0) / 127.0) * reach;
+
+    position = vec3(ctr + d, 0.0);
+    velocity = vec3(d * 2.0, 0.0);
+    tint     = hsv_to_rgb(vec3(fract(hue + spread * i), 1.0, 1.0));
+  }
+}

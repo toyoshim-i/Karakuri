@@ -1,0 +1,77 @@
+// A `count`-cubed lattice of small wireframe cubes, each nudged by slow noise, the
+// centre cube red and the rest dim blue. Seed / 12 is the cube and seed % 12 its
+// edge; cubes past `count` per side draw nothing.
+// Ported from tmalib example/mv_api3d/mv_3g04.html, mv_3g07.html and
+// mv_3g07b.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/cube_lattice.kir,examples/beat_jump.kir,examples/tint_strokes.kir
+
+proc cube_lattice {
+  kind     L1
+  topology lines
+  capacity [4116, 65536] = 4116
+
+  // Cubes per side, floored; the lattice holds at most seven.
+  param count   : float [1.0, 7.0] = 7.0
+
+  // Distance between neighbouring cube centres, and a cube's half-side.
+  param spacing : float [0.2, 4.0] = 1.0
+  param half    : float [0.01, 1.0] = 0.1
+
+  // Largest noise nudge in world units, and the noise's rate.
+  param jitter  : float [0.0, 1.0] = 0.05
+  param churn   : float [0.0, 4.0] = 0.6
+
+  // Colours of the centre cube and of the others.
+  param core    : vec3 [0.0, 4.0] = vec3(2.0, 0.02, 0.02)
+  param shell   : vec3 [0.0, 4.0] = vec3(0.08, 0.08, 0.8)
+
+  emit position, velocity, tint
+
+  element {
+    let cube = seed / 12u;
+    let e    = seed % 12u;
+    let ix   = cube % 7u;
+    let iy   = (cube / 7u) % 7u;
+    let iz   = cube / 49u;
+    let m    = floor(count);
+    let hm   = (m - 1.0) * 0.5;
+    let g    = vec3(float(ix), float(iy), float(iz));
+
+    let nudge = vec3(perlin(vec3(g.x * 0.25 + 4.0 + g.z * 0.25, g.y * 0.25, t * churn)),
+                     perlin(vec3(g.y * 0.25 + 4.0 + g.x * 0.25, g.z * 0.25, t * churn)),
+                     perlin(vec3(g.z * 0.25 + 4.0 + g.y * 0.25, g.x * 0.25, t * churn)));
+    let ctr   = (g - vec3(hm)) * spacing + nudge * jitter;
+
+    let ax = e / 4u;
+    let c  = e % 4u;
+    let s1 = float(c % 2u) * 2.0 - 1.0;
+    let s2 = float(c / 2u) * 2.0 - 1.0;
+
+    var a = vec3(-1.0, s1, s2);
+    var b = vec3(1.0, s1, s2);
+    if ax == 1u {
+      a = vec3(s1, -1.0, s2);
+      b = vec3(s1, 1.0, s2);
+    }
+    if ax == 2u {
+      a = vec3(s1, s2, -1.0);
+      b = vec3(s1, s2, 1.0);
+    }
+
+    let pa = ctr + a * half;
+    var pb = ctr + b * half;
+    if g.x >= m || g.y >= m || g.z >= m {
+      pb = pa;
+    }
+
+    var col = shell;
+    if abs(g.x - hm) < 0.1 && abs(g.y - hm) < 0.1 && abs(g.z - hm) < 0.1 {
+      col = core;
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = col;
+  }
+}

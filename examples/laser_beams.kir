@@ -1,0 +1,41 @@
+// One laser beam per element, from `position` to `position - velocity`, `size`
+// times `width` wide: a white-hot core in the element's `tint` with an
+// exponential halo either side.
+// Ported from tmalib ext/mv/frame/laser/shaders.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/lissajous_trace.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc laser_beams {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, tint, size
+
+  // Width of a beam of `size` 1, halo included, as a fraction of the frame's
+  // height.
+  param width    : float [0.00139, 0.0833] = 0.025
+
+  // Steepness of the halo: the centre line is about exp(core / 2) times the
+  // tint and the edge falls to zero.
+  param core     : float [1.0, 12.0] = 7.0
+
+  // Brightness multiplier on the whole beam.
+  param exposure : float [0.0, 4.0] = 0.35
+
+  // Grey added to `tint` before the halo, so a saturated beam burns white.
+  param white    : float [0.0, 0.5] = 0.05
+
+  vertex {
+    clip   = camera * vec4(position, 1.0);
+    clip_b = camera * vec4(position - velocity, 1.0);
+
+    point_rate = width * size;
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let l      = exp(core * (0.5 - across)) - exp(-core * 0.5);
+
+    color = vec4((tint + vec3(white)) * l * exposure, 1.0);
+  }
+}

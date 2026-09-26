@@ -1,0 +1,7 @@
+{"t":"set","id":"chord_crystal","v":1}
+{"t":"part","layer":"L1","path":"chord_lattice.kir"}
+{"t":"part","layer":"L3","path":"tumble_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L1","key":"chords","value":12.0}
+{"t":"param","layer":"L1","key":"radius","value":0.45}
+{"t":"bind","layer":"L1","key":"chords","signal":"energy","curve":"sqrt","range":[4.0,32.0]}

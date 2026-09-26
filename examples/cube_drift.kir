@@ -1,0 +1,83 @@
+// Small wireframe cubes in soft colours, scattered in a wide flat band, turning
+// about x and drifting towards positive z; each one wraps back to the far end
+// after it passes.
+// Ported from tmalib ext/mv/frame/nicofarre3d/cube.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/cube_drift.kir,examples/room_eye.kir,examples/room_strokes.kir
+
+proc cube_drift {
+  kind     L1
+  topology lines
+  capacity [1152, 147456] = 4608   // 256 cubes * 18 segments
+
+  // Edge length of a cube.
+  param cube   : float [0.02, 1.0] = 0.1
+
+  // Half-width of the band along x.
+  param spread : float [0.5, 20.0] = 5.0
+
+  // Half-height of the band along y.
+  param stack  : float [0.0, 5.0] = 0.5
+
+  // Length of the stretch along z a cube travels before it wraps.
+  param depth  : float [2.0, 60.0] = 20.0
+
+  // Drift speed along z in world units per second.
+  param drift  : float [-10.0, 10.0] = 2.0
+
+  // Spin about x in radians per world unit travelled.
+  param spin   : float [0.0, 4.0] = 1.0
+
+  // Brightness multiplier on each cube's colour.
+  param bright : float [0.0, 4.0] = 1.0
+
+  emit position, velocity, tint
+
+  element {
+    let body = seed / 18u;
+    let part = seed % 18u;
+
+    let travel = hash1(body) * depth + drift * t;
+    let lap    = floor(travel / depth);
+    let z      = travel - lap * depth - depth * 0.5;
+    let key    = body * 2654435761u + uint(lap + 65536.0) * 40503u;
+    let r      = hash3(key);
+
+    let centre = vec3((r.x - 0.5) * 2.0 * spread, (r.y - 0.5) * 2.0 * stack, z);
+    let turn   = r.z * 6.2831853 + travel * spin;
+
+    // Local frame: segment start `a` and direction `d` before the axis
+    // permutation. 0..11 are the twelve edges, 12..17 one diagonal per face.
+    var axis = part / 4u;
+    var a    = vec3(-0.5, float(part % 2u) - 0.5, float((part / 2u) % 2u) - 0.5);
+    var d    = vec3(1.0, 0.0, 0.0);
+    if part >= 12u {
+      let f = part - 12u;
+      axis  = f / 2u;
+      a     = vec3(float(f % 2u) - 0.5, -0.5, -0.5);
+      d     = vec3(0.0, 1.0, 1.0);
+    }
+
+    var pa = a;
+    var pd = d;
+    if axis == 1u {
+      pa = a.zxy;
+      pd = d.zxy;
+    }
+    if axis == 2u {
+      pa = a.yzx;
+      pd = d.yzx;
+    }
+
+    // The colour: a random RGB pulled half-way to its mean, then green and blue
+    // pulled from the already adjusted red.
+    let c   = hash3(key + 17u);
+    let avg = (c.x + c.y + c.z) / 3.0;
+    let cr  = (c.x + avg) * 0.5;
+    let cg  = (cr + avg) * 0.5;
+
+    position = centre + rot_x(pa * cube, turn);
+    velocity = -rot_x(pd * cube, turn);
+    tint     = srgb_to_linear(vec3(cr, cg, cg)) * bright;
+  }
+}

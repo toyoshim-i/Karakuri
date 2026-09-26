@@ -1,0 +1,122 @@
+// A railway seen from the cab: sleepers and rails stepping past under the eye,
+// optionally bending into an arc, with rows of wireframe houses of random
+// heights on both sides.
+// Ported from tmalib ext/mv/frame/nicofarre3d/train.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/train_rails.kir,examples/room_eye.kir,examples/room_strokes.kir
+
+proc train_rails {
+  kind     L1
+  topology lines
+  capacity [1920, 1920] = 1920   // 60 sleepers * 32 segments
+
+  // Steps the track advances per beat.
+  param notch : float [0.0, 16.0] = 1.0
+
+  // Distance of one step, in sleepers.
+  param stride : float [0.05, 1.0] = 0.25
+
+  // Change of heading per sleeper, in radians. 0 is a straight line.
+  param bend  : float [-0.5, 0.5] = 0.0
+
+  // How far below the eye the track bed lies.
+  param drop  : float [0.2, 12.0] = 0.5
+
+  // Brightness of sleepers and rails.
+  param steel : float [0.0, 2.0] = 0.12
+
+  // Brightness of the houses.
+  param walls : float [0.0, 2.0] = 0.06
+
+  emit position, velocity, tint
+
+  element {
+    let unit = seed / 32u;
+    let part = seed % 32u;
+
+    let travel = floor(max(beats, 0.0) * notch) * stride;
+    let base   = floor(travel);
+    let k      = float(unit) + base - 30.0;
+    let s      = k - travel;
+    let key    = uint(k + 1048576.0);
+
+    // Arc of constant curvature through the eye, heading down negative z at
+    // s = 0.
+    let h = bend * s;
+    var c = vec3(0.0, -drop, -s);
+    if abs(bend) > 0.0001 {
+      c = vec3((1.0 - cos(h)) / bend, -drop, -sin(h) / bend);
+    }
+    let fwd   = vec3(sin(h), 0.0, -cos(h));
+    let right = vec3(cos(h), 0.0, sin(h));
+    let up    = vec3(0.0, 1.0, 0.0);
+
+    var p   = c;
+    var v   = vec3(0.0);
+    var col = vec3(steel);
+
+    if part < 4u {
+      // Sleeper outline, 0.5 across and 0.2 along the track.
+      let sx = float(part % 2u) * 2.0 - 1.0;
+      if part < 2u {
+        p = c + right * 0.25 * sx - fwd * 0.1;
+        v = -fwd * 0.2;
+      } else {
+        p = c - right * 0.25 + fwd * 0.1 * sx;
+        v = -right * 0.5;
+      }
+    } else {
+      if part < 6u {
+        // Rail, 0.8 long, 0.25 either side of the centre line.
+        let sx = float(part % 2u) * 2.0 - 1.0;
+        p = c + right * 0.25 * sx + up * 0.05 - fwd * 0.4;
+        v = -fwd * 0.8;
+      } else {
+        if part < 30u {
+          // House: one every four sleepers on each side, two to four
+          // sleepers deep, up to five high, centred on the track bed.
+          let left  = part >= 18u;
+          let e     = (part - 6u) % 12u;
+          var sx    = 1.0;
+          var shift = 0.0;
+          if left {
+            sx    = -1.0;
+            shift = 2.0;
+          }
+          let lot   = k + shift;
+          let start = mod(lot, 4.0) < 0.5;
+          let hk    = uint(lot + 1048576.0) * 3u + uint(shift);
+          let deep  = 2.0 + floor(hash1(hk) * 3.0);
+          let tall  = hash1(hk + 1u) * 5.0;
+
+          let axis = e / 4u;
+          let a    = vec3(-0.5, float(e % 2u) - 0.5, float((e / 2u) % 2u) - 0.5);
+          var la   = a;
+          var ld   = vec3(1.0, 0.0, 0.0);
+          if axis == 1u {
+            la = a.zxy;
+            ld = vec3(0.0, 1.0, 0.0);
+          }
+          if axis == 2u {
+            la = a.yzx;
+            ld = vec3(0.0, 0.0, 1.0);
+          }
+          let dims = vec3(2.0, tall, deep);
+          let q    = la * dims;
+          let dq   = ld * dims;
+
+          p   = c + right * (5.0 * sx + q.x) + up * q.y + fwd * q.z;
+          v   = -(right * dq.x + up * dq.y + fwd * dq.z);
+          col = vec3(walls) * (0.9 + 0.1 * hash3(hk + 2u));
+          if !start {
+            v = vec3(0.0);
+          }
+        }
+      }
+    }
+
+    position = p;
+    velocity = v;
+    tint     = col;
+  }
+}

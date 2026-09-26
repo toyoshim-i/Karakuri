@@ -1,0 +1,60 @@
+// Shows the picture on a coarse display: each cell takes one colour from the
+// picture and is lit through a phosphor pattern of RGB stripes, a round LED or
+// a square panel.
+// Ported from tmalib ext/mv/effect/crt.
+
+proc crt_screen {
+  kind L5
+
+  // Height of one display cell as a fraction of the frame height.
+  param cell : float [0.004, 0.05] = 0.011
+  // Cell pattern: 0 RGB stripes, 1 round LED, 2 square panel; values between crossfade.
+  param pattern : float [0.0, 2.0] = 0.0
+  // Magnification about the frame centre; the cells magnify with the picture.
+  param zoom : float [1.0, 4.0] = 1.0
+  // Radial ripple displacement, as a fraction of the frame height, pulsing once per beat.
+  param ripple : float [0.0, 0.05] = 0.0
+  // Brightness gain applied through the pattern.
+  param gain : float [0.0, 4.0] = 1.0
+
+  frame {
+    let fs     = frame_step(1.0);
+    let aspect = fs.y / fs.x;
+    let p      = (point_coord - vec2(0.5)) / zoom;
+
+    // Ripple: displacement along the direction from the centre, in frame-height units.
+    let q   = p * vec2(aspect, 1.0);
+    let r   = length(q);
+    let dir = q / max(r, 0.00001);
+    let w   = sin(r * 40.0 - beats * 6.2831853) * ripple;
+    let at  = vec2(0.5) + p + dir * w * fs;
+
+    let d      = frame_step(cell);
+    let u      = at / d;
+    let s      = tap(src, (floor(u) + vec2(0.5)) * d);
+    let f      = fract(u);
+
+    // RGB stripes: three soft-edged vertical bars, one per channel.
+    let k      = floor(f.x * 3.0);
+    let lx     = fract(f.x * 3.0);
+    let bar    = smoothstep(0.05, 0.2, lx) * smoothstep(0.05, 0.2, 1.0 - lx)
+               * smoothstep(0.0, 0.08, f.y) * smoothstep(0.0, 0.08, 1.0 - f.y);
+    let chan   = vec3(1.0 - step(1.0, k), step(1.0, k) - step(2.0, k), step(2.0, k));
+    let stripe = chan * bar;
+
+    // Round LED: a solid core with a halo.
+    let rr     = length(f - vec2(0.5));
+    let led    = min(1.0, 1.0 - smoothstep(0.2, 0.25, rr) + 0.35 * (1.0 - smoothstep(0.2, 0.5, rr)));
+
+    // Square panel: a soft-edged square filling the cell.
+    let e      = smoothstep(vec2(0.0), vec2(0.1), f) * smoothstep(vec2(0.0), vec2(0.1), vec2(1.0) - f);
+    let panel  = e.x * e.y;
+
+    let wr   = max(0.0, 1.0 - abs(pattern));
+    let wl   = max(0.0, 1.0 - abs(pattern - 1.0));
+    let wp   = max(0.0, 1.0 - abs(pattern - 2.0));
+    let mask = stripe * wr + vec3(led * wl + panel * wp);
+
+    color = vec4(s.xyz * mask * gain, s.w);
+  }
+}

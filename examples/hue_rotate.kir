@@ -1,0 +1,24 @@
+// Rotates every colour's hue around the colour wheel and rescales its
+// saturation; brightness above 1.0 is kept.
+// Ported from tmalib ext/mv/effect/hue.
+
+proc hue_rotate {
+  kind L5
+
+  // Hue offset in turns; 0 and 1 leave hues unchanged.
+  param shift : float [0.0, 1.0] = 0.25
+  // Further hue rotation in turns per beat.
+  param spin : float [-1.0, 1.0] = 0.0
+  // Saturation multiplier; 1 keeps the source saturation.
+  param saturation : float [0.0, 2.0] = 1.0
+
+  frame {
+    let s   = texel(src);
+    // The HSV builtins work in [0, 1]; the colour is divided by its peak and scaled back.
+    let m   = max(max(s.x, s.y), max(s.z, 1.0));
+    let hsv = rgb_to_hsv(s.xyz / m);
+    let h   = fract(hsv.x + shift + spin * beats);
+    let rgb = hsv_to_rgb(vec3(h, clamp(hsv.y * saturation, 0.0, 1.0), hsv.z)) * m;
+    color = vec4(rgb, s.w);
+  }
+}

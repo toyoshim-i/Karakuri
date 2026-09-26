@@ -1,0 +1,65 @@
+// Rays from fixed points scattered over the square [-1, 1] of the xy plane to
+// its centre. Each ray's hue turns at its own rate, and a ray is lit only while
+// the level of the band its hue falls in is above the ray's own threshold, so
+// bands drive colours.
+// Ported from tmalib example/core/phsvdist.html (the rays; its Rössler trace is
+// rossler_flow.kir).
+//
+//     cargo run -p karakuri-cli -- --set examples/ray_burst.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc ray_burst {
+  kind     L1
+  topology lines
+  capacity [256, 262144] = 8192
+
+  // Levels of the four hue quarters, from red round to violet. Meant to be
+  // bound to audio bands.
+  param level_a : float [0.0, 1.0]  = 0.79
+  param level_b : float [0.0, 1.0]  = 0.79
+  param level_c : float [0.0, 1.0]  = 0.79
+  param level_d : float [0.0, 1.0]  = 0.79
+
+  // Fastest hue rate a ray may have, in turns per second.
+  param cycle   : float [0.0, 2.0]  = 0.8
+
+  // Softness of the threshold a ray's level must cross to light it.
+  param soft    : float [0.0, 0.3]  = 0.04
+
+  // Scale of the whole square, in world units.
+  param extent  : float [0.1, 4.0]  = 1.0
+
+  emit position, velocity, tint
+
+  element {
+    let p = (hash2(seed) * 2.0 - vec2(1.0)) * extent;
+
+    let r  = hash3(seed + 1u);
+    let h  = fract(r.x + t * cycle * hash1(seed + 2u));
+    let sa = 1.0 - r.y * 0.25;
+
+    // Level at this hue: the four quarter levels joined linearly round the
+    // wheel.
+    let q  = h * 4.0;
+    let f  = fract(q);
+    var l0 = level_a;
+    var l1 = level_b;
+    if q >= 1.0 {
+      l0 = level_b;
+      l1 = level_c;
+    }
+    if q >= 2.0 {
+      l0 = level_c;
+      l1 = level_d;
+    }
+    if q >= 3.0 {
+      l0 = level_d;
+      l1 = level_a;
+    }
+    let level = mix(l0, l1, f);
+    let lit   = smoothstep(sa - soft, sa + soft, level);
+
+    position = vec3(p, 0.0);
+    velocity = vec3(p, 0.0);
+    tint     = hsv_to_rgb(vec3(h, sa, 1.0)) * (r.z * lit);
+  }
+}

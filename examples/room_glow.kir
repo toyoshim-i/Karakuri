@@ -1,0 +1,43 @@
+// Glowing comets: each element is a soft stroke from its position back along
+// its velocity, as wide as a ball of fixed world size at that distance, in the
+// element's own `tint`.
+// Ported from tmalib ext/mv/frame/nicofarre3d/shaders.html (v_point, f_point).
+//
+//     cargo run -p karakuri-cli -- --set examples/room_beams.kir,examples/room_eye.kir,examples/room_glow.kir
+
+proc room_glow {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, tint
+
+  // Stroke width at one world unit from the eye, as a fraction of the frame's
+  // height. Width falls off as one over distance.
+  param bulk     : float [0.005, 0.6] = 0.12
+
+  // Widest a stroke may get, as a fraction of the frame's height.
+  param widest   : float [0.002, 0.2] = 0.05
+
+  // Seconds of travel drawn behind the head.
+  param trail    : float [0.01, 2.0] = 0.2
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.5
+
+  // How sharply the stroke fades from its centre line to its edge.
+  param falloff  : float [0.5, 8.0] = 1.0
+
+  vertex {
+    let head = camera * vec4(position, 1.0);
+
+    clip       = head;
+    clip_b     = camera * vec4(position - velocity * trail, 1.0);
+    point_rate = min(bulk / max(head.w, 0.05), widest);
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let a      = pow(max(0.0, 1.0 - across), falloff) * (1.0 - point_coord.x);
+    color      = vec4(tint * exposure, a);
+  }
+}

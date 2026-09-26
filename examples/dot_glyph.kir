@@ -1,0 +1,94 @@
+// A twelve-by-eleven matrix of balls spelling a letter in red on dim blue, which
+// bursts apart and snaps back, then tumbles towards the eye, rolls, wraps itself
+// round a cylinder and unwraps as it settles, once per `cycle`. The letter
+// alternates between A and T from one cycle to the next. Seed / 12 is the row
+// and seed % 12 the column; seeds past 131 carry `size` 0 and draw nothing.
+// Ported from tmalib ext/mv/frame/at/main.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/dot_glyph.kir,examples/flat_eye.kir,examples/ball_sprites.kir
+
+proc dot_glyph {
+  kind     L1
+  topology points
+  capacity [132, 4096] = 132
+
+  // Distance between neighbouring balls, and a ball's radius, in world units.
+  param pitch  : float [0.1, 2.0] = 0.5
+  param ball   : float [0.02, 1.0] = 0.25
+
+  // Seconds per full cycle; the choreography stretches to fit.
+  param cycle  : float [4.0, 40.0] = 11.3
+
+  // How far the burst throws a ball, in world units.
+  param burst  : float [0.0, 20.0] = 6.0
+
+  // How far the matrix comes towards the eye at the nearest point.
+  param lunge  : float [0.0, 20.0] = 11.0
+
+  // Radius of the cylinder the matrix wraps round, in world units.
+  param wrap   : float [0.2, 6.0] = 1.75
+
+  // Colours of the letter and of the background balls.
+  param ink    : vec3 [0.0, 2.0] = vec3(0.75, 0.01, 0.0)
+  param paper  : vec3 [0.0, 2.0] = vec3(0.1, 0.1, 0.25)
+
+  emit position, tint, size
+
+  element {
+    let row = seed / 12u;
+    let col = seed % 12u;
+    let x   = float(col);
+    let y   = float(row);
+
+    let run = max(t, 0.0) / cycle * 11.3;
+    let k   = floor(run / 11.3);
+    let u   = run - k * 11.3;
+
+    var mask = 0.0;
+    if mod(k, 2.0) < 0.5 {
+      if row == 2u { mask = 240.0; }
+      if row == 3u || row == 4u { mask = 408.0; }
+      if row == 5u { mask = 1020.0; }
+      if row >= 6u && row <= 8u { mask = 780.0; }
+    } else {
+      if row == 2u { mask = 1020.0; }
+      if row >= 3u && row <= 8u { mask = 96.0; }
+    }
+    let on = mod(floor(mask / exp2(x)), 2.0);
+
+    let s2 = clamp((u - 1.6) / 2.75, 0.0, 1.0);
+    let s3 = clamp((u - 4.35) / 2.1, 0.0, 1.0);
+    let s4 = clamp((u - 6.45) / 2.1, 0.0, 1.0);
+    let s5 = clamp((u - 8.55) / 1.05, 0.0, 1.0);
+    let s6 = clamp((u - 9.6) / 0.67, 0.0, 1.0);
+    let s7 = clamp((u - 10.27) / 1.0, 0.0, 1.0);
+
+    let rx = 3.1415927 * (3.5 * s2 + 0.5 * s5 + 0.5 * s6 + 1.5 * s7);
+    let rz = 3.1415927 * (s3 + s4 + 0.5 * s5 + s6 + 2.5 * s7);
+    let m  = s5 * (1.0 - s7);
+
+    let yy   = y - 5.0;
+    let home = vec3((x - 5.5) * pitch, -yy * pitch, 0.0);
+    let ring = vec3((x - 5.5) * pitch,
+                    -wrap * sin(yy / 12.0 * 6.2831853),
+                    -wrap * cos(yy / 12.0 * 6.2831853));
+
+    let w    = clamp(u / 1.6, 0.0, 1.0);
+    let fly  = w * (1.0 - w) * (1.0 - w) * 6.75;
+    let dir  = hash3(seed * 131u + uint(k) * 7919u) * 2.0 - vec3(1.0);
+    let p    = mix(home, ring, vec3(m)) + dir * (burst * fly);
+
+    let lift = vec3(0.0,
+                    sin(rx) * pitch * 2.0 * (1.0 - s3),
+                    lunge * (s2 + 0.07 * s3 - 0.28 * s4 - 0.15 * s5 - 0.64 * s7));
+
+    var r = ball;
+    if seed >= 132u {
+      r = 0.0;
+    }
+
+    position = lift + rot_x(rot_z(p, rz), rx);
+    tint     = mix(paper, ink, vec3(on));
+    size     = r;
+  }
+}

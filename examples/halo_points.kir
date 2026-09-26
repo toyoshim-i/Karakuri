@@ -1,0 +1,37 @@
+// Additive sprites with a 1/r halo, shrinking with distance from the camera,
+// coloured by each element's `tint`.
+// Ported from tmalib ext/mv/frame/signal and the sprite of
+// ext/mv/frame/specticle.
+//
+//     cargo run -p karakuri-cli -- --set examples/orbit_motes.kir,examples/halo_points.kir
+
+proc halo_points {
+  kind  L4
+  blend additive
+
+  consumes position, tint
+
+  // Sprite side as a fraction of the frame's height at one world unit from
+  // the camera.
+  param point_scale : float [0.01, 2.0] = 0.2
+
+  // Brightness multiplier on `tint`.
+  param exposure    : float [0.0, 8.0]  = 1.0
+
+  // Brightest value the halo may reach at its centre.
+  param core        : float [1.0, 64.0] = 4.0
+
+  vertex {
+    let c = camera * vec4(position, 1.0);
+
+    clip       = c;
+    point_rate = point_scale / max(c.w, 0.1);
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    let l = clamp(1.0 / max(d, 0.0001) - 1.0, 0.0, core);
+
+    color = vec4(tint * exposure * l, 1.0);
+  }
+}

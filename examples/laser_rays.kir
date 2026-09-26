@@ -1,0 +1,57 @@
+// Beams fired from the origin, their far ends swinging round it: in the xy plane
+// at `tilt` 0, over a sphere at `tilt` 1. Seed i is ray i; seeds at or above
+// `count` draw nothing.
+// Ported from tmalib example/mv_laser/01_rotate.html and 05_3dlines.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/laser_rays.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc laser_rays {
+  kind     L1
+  topology lines
+  capacity [64, 4096] = 64
+
+  // Number of rays, spread evenly in phase.
+  param count  : float [1.0, 64.0] = 6.0
+
+  // Length of a ray in world units.
+  param reach  : float [0.1, 4.0] = 1.05
+
+  // Base angular speed in radians per second.
+  param spin   : float [-4.0, 4.0] = 0.6
+
+  // 0 sweeps the rays round the z axis; 1 sends their ends over a sphere at
+  // three and seven times `spin` in the two angles.
+  param tilt   : float [0.0, 1.0] = 0.0
+
+  // Hue of the first ray, and the hue step from one ray to the next.
+  param hue    : float [0.0, 1.0] = 0.66
+  param spread : float [0.0, 1.0] = 0.0
+
+  // Beam width multiplier handed to the renderer.
+  param thick  : float [0.1, 8.0] = 3.0
+
+  emit position, velocity, tint, size
+
+  element {
+    let n  = floor(count);
+    let i  = float(seed);
+    let ph = i / max(n, 1.0) * 6.2831853;
+    let a  = t * spin + ph;
+
+    let flat  = vec3(cos(a), sin(a), 0.0);
+    let t1    = t * spin * 3.0 + ph;
+    let t2    = t * spin * 7.0 + ph * 2.3;
+    let round = vec3(sin(t1) * cos(t2), sin(t1) * sin(t2), cos(t2));
+    let dir   = normalize(mix(flat, round, vec3(tilt)) + vec3(0.0001));
+
+    var far = vec3(0.0);
+    if i < n {
+      far = dir * reach;
+    }
+
+    position = far;
+    velocity = far;
+    tint     = hsv_to_rgb(vec3(fract(hue + spread * i), 1.0, 1.0));
+    size     = thick;
+  }
+}

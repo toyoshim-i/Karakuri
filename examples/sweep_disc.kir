@@ -1,0 +1,53 @@
+// A radius sweeping round a disc in the xy plane, leaving every radius it
+// passes in the hue of the moment it passed; the hue turns more slowly than the
+// sweep, so the disc becomes a colour wheel that keeps repainting itself.
+// Ported from tmalib example/core/lines.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/sweep_disc.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc sweep_disc {
+  kind     L1
+  topology lines
+
+  // One radius per element, evenly spaced round the disc.
+  capacity [256, 65536] = 2048
+
+  // Disc radius in world units.
+  param radius : float [0.1, 4.0]  = 1.0
+
+  // Sweep speed in radians per second.
+  param sweep  : float [-8.0, 8.0] = 1.0
+
+  // Turns of hue per second.
+  param cycle  : float [0.0, 2.0]  = 0.278
+
+  // Decay rate of a painted radius per second; 0 keeps it until repainted.
+  param fade   : float [0.0, 4.0]  = 0.1
+
+  // Saturation of the paint.
+  param sat    : float [0.0, 1.0]  = 1.0
+
+  emit position, velocity, tint
+
+  element {
+    let th = (float(seed) + 0.5) / float(capacity) * 6.2831853;
+    let ph = 1.5707963 + t * sweep;
+    let w  = max(abs(sweep), 0.0001);
+
+    // Seconds since the sweep last passed this radius.
+    let lag   = mod((ph - th) * sign(sweep + 0.0000001), 6.2831853);
+    let since = lag / w;
+    let when  = t - since;
+
+    let rim = vec3(cos(th), sin(th), 0.0) * radius;
+    position = rim;
+    velocity = rim;
+
+    let seen = when >= 0.0;
+    if seen {
+      tint = hsv_to_rgb(vec3(fract(when * cycle), sat, 1.0)) * exp(0.0 - fade * since);
+    } else {
+      tint = vec3(0.0);
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{"t":"set","id":"spin_lattice","v":1}
+{"t":"part","layer":"L1","path":"spin_grid.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.0045}
+{"t":"param","layer":"L4","key":"exposure","value":2.5}
+{"t":"bind","layer":"L1","key":"speed","signal":"energy","curve":"smooth","range":[1.5,6.0]}
