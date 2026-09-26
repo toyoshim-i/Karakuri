@@ -111,6 +111,15 @@ pub enum CliSelection {
     Custom(String),
 }
 
+/// Default shell command used when selecting custom without an explicit command.
+pub fn default_custom_command() -> &'static str {
+    if cfg!(windows) {
+        "powershell"
+    } else {
+        "sh"
+    }
+}
+
 impl CliSelection {
     /// Whether no CLI is currently selected.
     pub fn is_unselected(&self) -> bool {
@@ -122,7 +131,7 @@ impl CliSelection {
         match self {
             Self::Unselected => "prompt".to_owned(),
             Self::Preset(preset) => preset.display_name().to_owned(),
-            Self::Custom(cmd) if cmd.trim().is_empty() => "custom...".to_owned(),
+            Self::Custom(cmd) if cmd.trim().is_empty() => default_custom_command().to_owned(),
             Self::Custom(cmd) => cmd.trim().to_owned(),
         }
     }

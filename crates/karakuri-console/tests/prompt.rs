@@ -47,7 +47,10 @@ fn pill_label_displays_selection() {
     assert_eq!(preset.pill_label(), "claude");
 
     let custom_empty = CliSelection::Custom(String::new());
-    assert_eq!(custom_empty.pill_label(), "custom...");
+    assert_eq!(
+        custom_empty.pill_label(),
+        karakuri_console::view::prompt::default_custom_command()
+    );
 
     let custom_cmd = CliSelection::Custom("sh -c echo".to_owned());
     assert_eq!(custom_cmd.pill_label(), "sh -c echo");

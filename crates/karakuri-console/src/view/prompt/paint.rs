@@ -130,7 +130,8 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
         };
 
         let text_pos = Pos2::new(custom_rect.min.x + 6.0, mid_y - size::BASE * 0.5);
-        let galley = painter.layout_no_wrap("custom...".to_owned(), font_id.clone(), custom_color);
+        let label = super::cli::default_custom_command();
+        let galley = painter.layout_no_wrap(label.to_owned(), font_id.clone(), custom_color);
         painter.galley(text_pos, galley, custom_color);
 
         if is_custom_selected {
