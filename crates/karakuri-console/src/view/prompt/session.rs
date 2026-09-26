@@ -437,14 +437,17 @@ impl TerminalSession {
                 }
 
                 // Check child exit status
-                if let Ok(mut c_lock) = child_clone.lock() {
+                let exit_code = if let Ok(mut c_lock) = child_clone.lock() {
                     if let Some(ref mut c) = *c_lock {
-                        if let Ok(exit_status) = c.wait() {
-                            if let Ok(mut st) = status_clone.lock() {
-                                *st = SessionStatus::Exited(Some(exit_status.exit_code()));
-                            }
-                        }
+                        c.wait().ok().map(|s| s.exit_code())
+                    } else {
+                        None
                     }
+                } else {
+                    None
+                };
+                if let Ok(mut st) = status_clone.lock() {
+                    *st = SessionStatus::Exited(exit_code);
                 }
             })
             .ok();
@@ -513,12 +516,50 @@ impl TerminalSession {
         }
     }
 
-    /// Returns whether the child process is still actively running.
-    pub fn is_running(&self) -> bool {
-        self.status
+    /// Returns the current lifecycle status of this session, actively polling child exit status.
+    pub fn status(&self) -> SessionStatus {
+        let is_running = self
+            .status
             .lock()
             .map(|st| matches!(*st, SessionStatus::Running))
-            .unwrap_or(false)
+            .unwrap_or(false);
+
+        if is_running {
+            if let Ok(mut c_lock) = self.child.lock() {
+                if let Some(ref mut c) = *c_lock {
+                    match c.try_wait() {
+                        Ok(Some(exit_status)) => {
+                            let code = exit_status.exit_code();
+                            if let Ok(mut st) = self.status.lock() {
+                                *st = SessionStatus::Exited(Some(code));
+                            }
+                            if let Ok(mut w_lock) = self.writer.lock() {
+                                *w_lock = None;
+                            }
+                        }
+                        Err(_) => {
+                            if let Ok(mut st) = self.status.lock() {
+                                *st = SessionStatus::Exited(None);
+                            }
+                            if let Ok(mut w_lock) = self.writer.lock() {
+                                *w_lock = None;
+                            }
+                        }
+                        Ok(None) => {}
+                    }
+                }
+            }
+        }
+
+        self.status
+            .lock()
+            .map(|st| st.clone())
+            .unwrap_or(SessionStatus::Exited(None))
+    }
+
+    /// Returns whether the child process is still actively running.
+    pub fn is_running(&self) -> bool {
+        matches!(self.status(), SessionStatus::Running)
     }
 
     /// Returns a snapshot of all output lines from this session.
@@ -630,7 +671,13 @@ impl SessionManager {
         let id = match selection {
             CliSelection::Unselected => return None,
             CliSelection::Preset(preset) => preset.command().to_owned(),
-            CliSelection::Custom(cmd) => format!("custom:{}", cmd.trim()),
+            CliSelection::Custom(cmd) => {
+                let trimmed = cmd.trim();
+                if trimmed.is_empty() {
+                    return None;
+                }
+                format!("custom:{trimmed}")
+            }
         };
         if let Ok(mut lock) = self.sessions.lock() {
             lock.remove(&id);

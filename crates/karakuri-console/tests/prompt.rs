@@ -439,3 +439,60 @@ fn staging_top_boundary_drag_downward_cascades_through_staging_into_prompt() {
         "prompt compressed by 41"
     );
 }
+
+#[test]
+fn terminal_session_detects_child_process_termination() {
+    #[cfg(unix)]
+    {
+        use karakuri_console::view::prompt::{SessionStatus, TerminalSession};
+
+        let session = TerminalSession::spawn("test-exit".to_string(), "true", &[]);
+
+        let mut exited = false;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if matches!(session.status(), SessionStatus::Exited(Some(0))) {
+                exited = true;
+                break;
+            }
+        }
+        assert!(
+            exited,
+            "expected session to terminate with exit code 0, status is: {:?}",
+            session.status()
+        );
+        assert!(
+            !session.is_running(),
+            "exited session should not report is_running"
+        );
+    }
+}
+
+#[test]
+fn session_manager_restarts_exited_session() {
+    #[cfg(unix)]
+    {
+        use karakuri_console::view::prompt::{CliSelection, SessionManager, SessionStatus};
+        use std::sync::Arc;
+
+        let manager = SessionManager::new();
+        let selection = CliSelection::Custom("true".to_string());
+
+        let s1 = manager
+            .get_or_spawn(&selection)
+            .expect("spawn initial session");
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if matches!(s1.status(), SessionStatus::Exited(_)) {
+                break;
+            }
+        }
+        assert!(!s1.is_running());
+
+        let s2 = manager.restart(&selection).expect("restart session");
+        assert!(
+            !Arc::ptr_eq(&s1, &s2),
+            "restart should create a new session instance"
+        );
+    }
+}
