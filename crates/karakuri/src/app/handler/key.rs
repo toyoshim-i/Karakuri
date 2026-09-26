@@ -36,9 +36,23 @@ impl App {
                 .map(|b| b.name)
                 == Some("prompt");
 
-            // If an egui text edit widget or Prompt bay is focused, egui consumes keystrokes
-            // (except Tab / Shift-Tab which navigates the bay ring).
-            if !is_tab && (gfx.egui.egui_ctx().egui_wants_keyboard_input() || prompt_focused) {
+            if prompt_focused {
+                if is_tab {
+                    // Tab always releases prompt input capture and advances to the next/prev bay in the ring.
+                    self.readout.view.prompt.set_captured(false);
+                } else if !self.readout.view.prompt.is_captured() {
+                    // When Prompt bay is focused but not capturing: Enter activates input capture mode!
+                    if matches!(key.logical_key, Key::Named(NamedKey::Enter)) {
+                        self.readout.view.prompt.set_captured(true);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                        return;
+                    }
+                } else {
+                    // In capture mode: all keys except Tab belong strictly to the terminal prompt.
+                    App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                    return;
+                }
+            } else if gfx.egui.egui_ctx().egui_wants_keyboard_input() && !is_tab {
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
                 return;
             }
