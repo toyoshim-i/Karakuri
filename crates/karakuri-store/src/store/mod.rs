@@ -1,20 +1,4 @@
-//! The on-disk artifact store.
-//!
-//! Layout under the store root (`library/` by default):
-//!
-//! ```text
-//! <hash>.kir                        source, immutable
-//! <hash>.meta.ndjson                regenerated metadata
-//! thumbnails/<hash>.mp4
-//! sets/<id>.kbset
-//! sandbox/<id>.kbset
-//! sandbox/<stamp>.kir               one node's source, kept by a model
-//! sessions/<stamp>.ndjson
-//! arrangements/<name>.arrangement.json
-//! procedures/<name>.kir             one node's source, kept under a name
-//! favourites.json                   the ids of the Sets that are starred
-//! ```
-//!
+//! On-disk artifact store managing content-addressed `.kir` sources, sets, and session logs.
 //! Content addresses are stored as 64-character lowercase hex without `sha256:` prefix.
 
 use std::collections::BTreeSet;

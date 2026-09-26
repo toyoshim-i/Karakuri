@@ -3,11 +3,7 @@
 use crate::ndjson::Line;
 use crate::record::{Record, CURRENT_SCHEMA_VERSION};
 
-/// Detect the schema version of an ndjson stream.
-///
-/// - If the first line is `Record::Header { version }`, report that version.
-/// - If the first line is not a header (or if the stream is empty), detect as
-///   Version 1 (legacy unversioned).
+/// Detects the schema version of an ndjson stream (defaults to Version 1 if header is absent).
 pub fn detect_version(lines: &[Line]) -> u32 {
     match lines.first() {
         Some(line) => match line.record() {
@@ -18,15 +14,7 @@ pub fn detect_version(lines: &[Line]) -> u32 {
     }
 }
 
-/// Ensure a `Record::Header { version: CURRENT_SCHEMA_VERSION }` is present at
-/// line 0, preserving all records.
-///
-/// - If line 0 is already `Record::Header { version: CURRENT_SCHEMA_VERSION }`,
-///   returns the lines as-is.
-/// - If line 0 is a `Record::Header` with a different version, replaces it with
-///   `CURRENT_SCHEMA_VERSION` and preserves the rest of the lines.
-/// - If line 0 is not a header, prepends `Record::Header { version:
-///   CURRENT_SCHEMA_VERSION }` and preserves all lines.
+/// Ensures `Record::Header` with `CURRENT_SCHEMA_VERSION` is at line 0, preserving all records.
 pub fn migrate_to_current(lines: &[Line]) -> Vec<Line> {
     match lines.first() {
         Some(line) => match line.record() {

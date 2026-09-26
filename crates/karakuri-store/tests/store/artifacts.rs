@@ -188,11 +188,7 @@ fn list_artifacts_skips_names_this_store_would_not_have_written() {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        // Best-effort: APFS validates filenames and refuses this outright
-        // (EILSEQ), so on macOS the case cannot be staged at all and the
-        // listing is left to prove the rest. On a filesystem that does allow
-        // it — ext4, and every volume this store might be kept on over a
-        // network share — the file lands and an `unwrap` on `to_str` dies here.
+        // Best-effort non-UTF8 filename check: skipped on APFS which validates filenames.
         let name = std::ffi::OsStr::from_bytes(b"\xff\xfe.kir");
         let _ = fs::write(dir.path().join(name), b"not utf-8");
     }
