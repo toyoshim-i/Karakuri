@@ -399,3 +399,43 @@ fn prompt_boundary_drag_cascades_through_staging_into_library() {
     assert_eq!(layout.rect(prompt).h, 220.0, "prompt returned to 220");
     assert_eq!(layout.rect(library).h, initial_lib_h, "library restored");
 }
+
+#[test]
+fn staging_top_boundary_drag_downward_cascades_through_staging_into_prompt() {
+    use karakuri_layout::Rect;
+
+    let mut layout = karakuri_console::layout();
+    layout.set_viewport(Rect::new(0.0, 0.0, 1280.0, 800.0));
+    layout.solve();
+
+    let left_pane = layout.find("left-pane").unwrap();
+    let library = layout.find("library").unwrap();
+    let staging = layout.find("staging").unwrap();
+    let prompt = layout.find("prompt").unwrap();
+
+    let initial_lib_h = layout.rect(library).h;
+    let initial_staging_h = layout.rect(staging).h;
+    let initial_prompt_h = layout.rect(prompt).h;
+
+    assert_eq!(initial_staging_h, 125.0);
+    assert_eq!(initial_prompt_h, 220.0);
+
+    // Drag divider 0 (top of Staging, between library and staging) downward by 100px.
+    // Staging shrinks by 59px (from 125 to min 66), and the remaining 41px
+    // cascades into Prompt, shrinking Prompt from 220 to 179 while Staging stays at min 66.
+    let curr_div0 = layout.rect(library).y + layout.rect(library).h;
+    let landed = layout.set_divider(left_pane, 0, curr_div0 + 100.0);
+
+    assert_eq!(landed, curr_div0 + 100.0);
+    assert_eq!(
+        layout.rect(library).h,
+        initial_lib_h + 100.0,
+        "library expanded by 100"
+    );
+    assert_eq!(layout.rect(staging).h, 66.0, "staging capped at min 66");
+    assert_eq!(
+        layout.rect(prompt).h,
+        initial_prompt_h - 41.0,
+        "prompt compressed by 41"
+    );
+}

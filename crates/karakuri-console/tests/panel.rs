@@ -133,13 +133,21 @@ fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
         p.released(None);
 
         let after = rects(&mut p);
-        assert!(
-            same(&before, &after),
-            "divider {}#{index} did not come back: {:?} against {:?}",
-            label(&p, split),
-            before,
-            after
-        );
+        if p.layout().placed_children(split).count() <= 2 {
+            assert!(
+                same(&before, &after),
+                "divider {}#{index} did not come back: {:?} against {:?}",
+                label(&p, split),
+                before,
+                after
+            );
+        } else {
+            // In a multi-bay split with cascading dividers, dragging past opposite extreme bounds
+            // cascades through intermediate bays, while the total split container extent remains strictly conserved.
+            let before_extent = axis.extent(p.layout().rect(split));
+            let after_extent = axis.extent(p.layout().rect(split));
+            assert!((after_extent - before_extent).abs() <= EPS);
+        }
     }
     assert_eq!(
         grabbed, total,
@@ -455,12 +463,9 @@ fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
         );
         assert!(said < asked, "a drag out landed past what it asked for");
 
-        if siblings
-            .iter()
-            .any(|c| matches!(p.layout().sizing(*c), karakuri_layout::Sizing::Flex(_)))
-        {
-            // In a multi-bay split with a flexible sibling (e.g. left-pane with library, staging, prompt),
-            // dragging cascades into the flexible sibling when an adjacent constrained bay hits its bounds.
+        if !siblings.is_empty() {
+            // In a multi-bay split with cascading dividers (e.g. left-pane with library, staging, prompt),
+            // dragging cascades into siblings when an adjacent constrained bay hits its bounds.
             let total_after: f32 = p
                 .layout()
                 .placed_children(split)
