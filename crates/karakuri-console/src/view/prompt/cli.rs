@@ -9,6 +9,8 @@ pub enum CliPreset {
     Aider,
     /// Anthropic Claude Code CLI (`claude`).
     Claude,
+    /// Open-source autonomous coding agent (`cline`).
+    Cline,
     /// OpenAI Codex CLI (`codex`).
     Codex,
     /// GitHub Copilot CLI (`copilot`).
@@ -17,6 +19,8 @@ pub enum CliPreset {
     DeepSeek,
     /// xAI Grok CLI (`grok`).
     Grok,
+    /// Nous Hermes AI agent CLI (`hermes`).
+    Hermes,
     /// Moonshot Kimi CLI (`kimi`).
     Kimi,
     /// Xiaomi MiMo CLI (`mimo`).
@@ -29,6 +33,8 @@ pub enum CliPreset {
     Muse,
     /// Ollama local LLM runner (`ollama`).
     Ollama,
+    /// OpenCode AI coding assistant CLI (`opencode`).
+    OpenCode,
     /// Pi CLI (`pi`).
     Pi,
     /// Alibaba Qwen CLI (`qwen`).
@@ -41,16 +47,19 @@ impl CliPreset {
         CliPreset::Agy,
         CliPreset::Aider,
         CliPreset::Claude,
+        CliPreset::Cline,
         CliPreset::Codex,
         CliPreset::Copilot,
         CliPreset::DeepSeek,
         CliPreset::Grok,
+        CliPreset::Hermes,
         CliPreset::Kimi,
         CliPreset::Mimo,
         CliPreset::MiniMax,
         CliPreset::Mistral,
         CliPreset::Muse,
         CliPreset::Ollama,
+        CliPreset::OpenCode,
         CliPreset::Pi,
         CliPreset::Qwen,
     ];
@@ -61,16 +70,19 @@ impl CliPreset {
             Self::Agy => "agy",
             Self::Aider => "aider",
             Self::Claude => "claude",
+            Self::Cline => "cline",
             Self::Codex => "codex",
             Self::Copilot => "copilot",
             Self::DeepSeek => "deepseek",
             Self::Grok => "grok",
+            Self::Hermes => "hermes",
             Self::Kimi => "kimi",
             Self::Mimo => "mimo",
             Self::MiniMax => "minimax",
             Self::Mistral => "mistral",
             Self::Muse => "muse",
             Self::Ollama => "ollama",
+            Self::OpenCode => "opencode",
             Self::Pi => "pi",
             Self::Qwen => "qwen",
         }
