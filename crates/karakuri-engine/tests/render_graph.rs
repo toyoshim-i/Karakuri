@@ -25,11 +25,7 @@ fn topological_sorting_orders_passes_by_read_after_write_dependencies() {
         wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
     ));
 
-    // Intentionally register passes out of dependency order:
-    // Pass 3 (reads C)
-    // Pass 1 (reads A, writes B)
-    // Pass 2 (reads B, writes C)
-    // Pass 0 (writes A)
+    // Register passes out of dependency order to verify topological sort.
     let p3 = graph.add_pass("OutputConsumer").read(t_c).id();
     let p1 = graph.add_pass("FilterB").read(t_a).write(t_b).id();
     let p2 = graph.add_pass("FilterC").read(t_b).write(t_c).id();

@@ -1,17 +1,4 @@
-//! Fitting the canvas into a window that is not its shape.
-//!
-//! The window is a preview of what leaves by some other route, so the property
-//! under test is that it never *disagrees* with that route about framing: the
-//! canvas keeps its aspect ratio and the leftover is black. Stretching would be
-//! invisible — a full frame either way — which is exactly why it needs a test
-//! rather than an eye.
-//!
-//! **The fixture is a full-frame wash, and that is the whole of why these tests
-//! can see anything.** A letterbox defect lives at the *edges* of the output:
-//! bars that should be there and are not, bars on the wrong axis, a viewport
-//! one texel out. Material that draws in the middle of the frame — every other
-//! fixture in this crate — leaves the edges black whether the fit is right or
-//! wrong, and would pass with `set_viewport` deleted.
+//! Integration tests for canvas aspect-ratio preservation and letterbox rendering.
 
 use karakuri_engine::{letterbox, Gpu, Present, TonemapOp};
 
@@ -20,14 +7,7 @@ use karakuri_engine::{letterbox, Gpu, Present, TonemapOp};
 /// then a failure in one of the two rather than a pair of compensating errors.
 const CANVAS: u32 = 64;
 
-/// Fill the canvas edge to edge with full white and draw it into a
-/// `target_w x target_h` attachment, returning the attachment as RGBA bytes.
-///
-/// The wash is a render pass that clears and draws nothing — the cheapest way
-/// to get material that reaches all four edges, which is the one thing that
-/// matters here. `Clamp` at exposure 1.0 so a lit texel is exactly 255 and a
-/// bar is exactly 0: this is a test about *where* the light is, and an operator
-/// that compressed the highlight would turn it into a question about how much.
+/// Fills the canvas with pure white to inspect viewport boundaries and letterbox bars.
 fn fit(gpu: &Gpu, target_w: u32, target_h: u32) -> Vec<u8> {
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let present = Present::new(&gpu.device, format, CANVAS, CANVAS);
@@ -111,15 +91,7 @@ fn texel(pixels: &[u8], target_w: u32, x: u32, y: u32) -> u8 {
     pixels[((y * target_w + x) * 4) as usize]
 }
 
-/// The arithmetic on its own, over shapes a GPU test would take a minute to
-/// cover.
-///
-/// **Nothing else checks this.** wgpu validates a viewport against the device's
-/// texture limits, not against the attachment, so a rectangle that hangs
-/// outside is accepted and draws wrong — there is no error to notice and no
-/// pixel comparison above that would catch a one-ulp overhang. The exact-fit
-/// axis is where floating point puts it there: `c * (t / c)` is not promised to
-/// be `t`.
+/// Verifies that letterboxed viewport bounds never exceed attachment dimensions across various resolutions.
 #[test]
 fn the_fitted_rectangle_never_leaves_the_attachment() {
     let sizes = [1u32, 2, 3, 7, 64, 65, 720, 1080, 1920, 4096];
@@ -165,11 +137,7 @@ fn the_tighter_axis_fills_exactly() {
 mod gpu {
     use super::*;
 
-    /// A square canvas in a target twice as wide: a quarter of black, a half of
-    /// canvas, a quarter of black, and the canvas reaching both of its own edges.
-    ///
-    /// The last clause is the one that catches a viewport that is right about the
-    /// bars and wrong about the fill.
+    /// Verifies that rendering a square canvas into a wide target produces centered letterbox side bars.
     #[test]
     fn a_wide_window_gets_bars_at_the_sides() {
         let gpu = Gpu::headless().expect("no GPU");

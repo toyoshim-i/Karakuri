@@ -1,29 +1,4 @@
-//! **Neither real-time host compiles a master chain on its own thread.**
-//!
-//! The invariant is stated in `crates/karakuri-engine/src/lib.rs` and decided in
-//! [ADR-0354](../../../docs/adr/0354-a-chain-is-compiled-on-a-thread-of-its-own-and-lands-at-a-frame-boundary.md):
-//! a chain's shader modules, pipelines and targets are made on `karakuri-chain`
-//! and installed at a frame boundary. `karakuri_engine::ChainSwap` is the only
-//! way to ask for that, and `karakuri_environment::mix::apply_chain` is the only
-//! entry the two hosts use.
-//!
-//! Nothing in a type or a trait can say this: the synchronous functions still
-//! exist and are still correct — the offscreen renderer and replay call them,
-//! having no frame waiting on a clock — so what is wrong is *who* calls them.
-//! That is a fact about two source files, and this reads them.
-//!
-//! # What "the render path" means here
-//!
-//! Both files are read whole rather than by function. `karakuri/src/app/handler.rs`
-//! is the `winit` handler and `karakuri-cli/src/live/mod.rs` is the live loop;
-//! every line of each runs on the thread that encodes frames, so a compile
-//! anywhere in either is a compile on the render thread. A coarse read is the
-//! right one: it cannot be argued out of by moving the call into a helper in the
-//! same file.
-//!
-//! Comments and string literals are blanked first, so the prose in these files
-//! — which names `mix::apply_chain` and ADR numbers freely — is not mistaken for
-//! a call.
+//! Invariant tests ensuring master chains are compiled off the render thread.
 
 use std::path::{Path, PathBuf};
 
@@ -33,11 +8,7 @@ const RENDER_PATH: [&str; 2] = [
     "crates/karakuri-cli/src/live/mod.rs",
 ];
 
-/// Every way a chain's pipelines or targets are made on the calling thread.
-///
-/// `set_chain` is here because installing a chain that carries no targets
-/// allocates them where it is installed, which is the same invariant one step
-/// along.
+/// Signatures allocating or compiling master chains.
 const COMPILES_A_CHAIN: [&str; 5] = [
     "install_chain(",
     "build_chain(",
@@ -59,13 +30,7 @@ fn source(at: &str) -> String {
     blanked(&text)
 }
 
-/// Replace every comment and string literal with spaces of the same length, so
-/// line numbers and offsets survive and nothing downstream has to know they were
-/// there.
-///
-/// Byte-oriented: the sources are UTF-8 and full of non-ASCII prose, and every
-/// delimiter this cares about is ASCII, which a multi-byte character can never
-/// contain.
+/// Blanks comments and string literals with spaces while preserving byte positions.
 fn blanked(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = vec![b' '; bytes.len()];
@@ -149,12 +114,7 @@ fn the_render_path_asks_the_worker_and_installs_at_the_boundary() {
     }
 }
 
-/// **The synchronous path is where it says it is.**
-///
-/// `mix::install_chain` exists for the runs with no frame waiting on a clock —
-/// the offscreen renderer and the replay it drives — and this is the one file
-/// that may call it. Without this, the test above is satisfied by deleting the
-/// synchronous path rather than by keeping it off the render thread.
+/// Verifies that only the offline renderer invokes synchronous chain installation.
 #[test]
 fn the_offline_renderer_is_the_synchronous_path() {
     let code = source("crates/karakuri-environment/src/render.rs");
@@ -168,11 +128,7 @@ fn the_offline_renderer_is_the_synchronous_path() {
     );
 }
 
-/// **`apply_chain` itself compiles nothing.**
-///
-/// The entry the hosts call is in a crate this test cannot scan by thread, so
-/// it is scanned by body: between its signature and the brace that closes it,
-/// nothing builds a slot or a target.
+/// Verifies that apply_chain compiles nothing synchronously on the caller's thread.
 #[test]
 fn apply_chain_builds_nothing_on_the_callers_thread() {
     let code = source("crates/karakuri-environment/src/mix/chain.rs");

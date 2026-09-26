@@ -1,19 +1,4 @@
-//! Stage 7 exercised headlessly: a probe measurement has to be connected to
-//! real GPU cost, not merely shaped like one, so `a_heavier_workload_measures_as_heavier`
-//! is the load-bearing test here — everything else can pass by returning a
-//! plausible constant, that one cannot.
-//!
-//! These tests run on whichever [`MeasurementMethod`] this machine's adapter
-//! actually earns (see `probe.rs`'s module doc, "Calibration"): they never
-//! skip based on `Gpu::timestamps`, because `Probe::new` always produces a
-//! working, labelled measurement — GPU timestamps when calibration trusts
-//! them, a host-clock fallback when it does not. On this crate's own
-//! development machine (Metal, Apple M4 Pro) calibration currently never
-//! survives ten consecutive checks, so every run here exercises the
-//! `HostWallClock` path; on an adapter whose timestamps genuinely work, the
-//! same tests exercise `GpuTimestamp` instead. Either way the assertions
-//! hold, which is the point of labelling the method rather than skipping
-//! around it.
+//! Integration tests for GPU timing probes, timestamp query verification, and host fallbacks.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -52,52 +37,10 @@ mod gpu {
         );
     }
 
-    /// **This test caught a real defect, and it was not in this test.**
-    ///
-    /// It failed intermittently and resisted reproduction; the margin printed below
-    /// was added so the next occurrence would be readable instead of a mystery.
-    /// When it fired, it said this:
-    ///
-    /// ```text
-    /// measured via GpuTimestamp: light 0.103 ms, heavy 0.095 ms, ratio 0.9x
-    /// ```
-    ///
-    /// Two million points at point size 40, measured at a tenth of a millisecond,
-    /// and **lighter than sixty-four points**. Every guess until then had been
-    /// about the host clock and contention; the numbers said the host clock was
-    /// not involved. On the runs that failed, the adapter advertised
-    /// `TIMESTAMP_QUERY`, calibration passed, and the timestamps were meaningless
-    /// — the abstract warning `docs/contributing.md` carries, arriving.
-    ///
-    /// **The defect was the calibration's guard.** It was a constant floor of
-    /// 0.1 ms against a workload costing tens of milliseconds, so a reading of
-    /// 0.095 ms cleared it by five microseconds while measuring nothing. See
-    /// `Probe::plausible`: the guard is now a ratio against what the host clock
-    /// saw of the same submission, checked on every measurement rather than once
-    /// at construction, and a probe that catches its adapter lying stops trusting
-    /// it for good rather than for that reading.
-    ///
-    /// The threshold below was never moved and the comparison never reshaped. A
-    /// test loosened to stop reporting this would have hidden it.
-    ///
-    /// Normal: light ≈ 1.3 ms, heavy ≈ 60 ms.
+    /// Verifies that significantly heavier workloads produce proportionately larger cost measurements.
     #[test]
     fn a_heavier_workload_measures_as_heavier() {
-        // Additive point sprites: cost scales with instance count (more quads to
-        // shade) and with quad size (more fragments per quad). Cranking both by
-        // orders of magnitude makes the two measurements unmistakably different,
-        // which is the point of this test — it is the one that actually proves
-        // `ms` tracks real GPU work rather than a plausible constant. It has to
-        // pass however this machine ends up measuring (see the module doc): the
-        // host-clock fallback is coarser than a working GPU timestamp, but a
-        // workload this much heavier still has to show up in it, or the number
-        // is not connected to reality on either path.
-        //
-        // One `Probe` measures both candidates, deliberately: `Probe::new` binds
-        // `resolution` but not `capacity` for exactly this reason (see its doc)
-        // — two independently-constructed probes could in principle land on
-        // different measurement methods, which would make comparing their
-        // numbers meaningless.
+        // Crank instance count and point scale across orders of magnitude to verify cost tracking.
         let gpu = gpu();
         let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, RESOLUTION);
 
@@ -143,12 +86,7 @@ mod gpu {
 
     #[test]
     fn unavailable_timestamps_fall_back_to_a_labelled_host_measurement() {
-        // The seam: pass `timestamps: false` directly rather than deriving it
-        // from `Gpu::timestamps`, so this path is reachable regardless of what
-        // the machine running the test actually supports. `Probe::new` never
-        // fails — it degrades honestly instead, and the returned `Measurement`
-        // says so via `method` rather than silently standing in a host number
-        // for a GPU one.
+        // Force timestamps: false to verify degradation to HostWallClock measurement.
         let gpu = gpu();
 
         let mut probe = Probe::new(&gpu.device, &gpu.queue, false, RESOLUTION);

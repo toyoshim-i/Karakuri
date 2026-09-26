@@ -1,12 +1,4 @@
-//! `topology fullscreen`, asserted in pixels and in what does *not* run.
-//!
-//! Two kinds of claim here and the second is the one worth having. The first is
-//! that a procedure with no `vertex` block covers the frame and can see where it
-//! is on it — ordinary rendering claims. The second is that the paired L1's
-//! simulation **does not happen**: a fullscreen L4 consumes nothing, the check
-//! pass enforces that rather than assuming it, and the engine skips the compute
-//! passes on the strength of it. That is a claim about absence, and absence is
-//! what a test has to be built deliberately to see.
+//! Integration tests for fullscreen topology shaders and simulation pass skipping.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -161,12 +153,7 @@ proc marcher {{
         assert_eq!(dark, 0, "{dark} texels of {} were not covered", px.len());
     }
 
-    /// **The claim about absence.** A `spawn` block fills an empty procedure, so a
-    /// live count still at zero after several steps is a simulation that did not
-    /// run — which is what a fullscreen L4 is supposed to save.
-    ///
-    /// Paired with the same L1 under a per-element L4, because "the count is zero"
-    /// is also what a broken fixture produces.
+    /// Verifies that compute passes for the paired L1 are skipped when an L4 shader has fullscreen topology.
     #[test]
     fn the_paired_l1_is_not_stepped_at_all() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -281,12 +268,7 @@ proc marcher {{
         );
     }
 
-    /// `eye` is the camera's position, and it is the *same* position the projection
-    /// matrix puts it at — two derivations of one orbit would agree until one of
-    /// them was edited.
-    ///
-    /// Checked by marching nothing: a fullscreen pass that reports `length(eye)`
-    /// should report the orbit's radius, which is `Orbit::default()`'s 8.0.
+    /// Verifies that the eye position uniform matches the camera orbit distance.
     #[test]
     fn the_eye_is_where_the_camera_is() {
         let gpu = Gpu::headless().expect("no GPU available");

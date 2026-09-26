@@ -1,16 +1,4 @@
-//! The element lifecycle, end to end: spawn, kill, compaction, and the
-//! properties the record-stream design rests on.
-//!
-//! `compaction.rs` proves the scan computes an exclusive prefix sum.
-//! `generated.rs` proves `.kir` text reaches the screen. Neither says
-//! anything about the seam between them — that a killed element actually
-//! leaves, that survivors keep their order through the compaction, that
-//! spawning stops at capacity rather than writing past it, and that all of
-//! that stays bit-exact under replay. That is what this file is for.
-//!
-//! Everything here reads state back off the GPU, which is a stall. That is
-//! fine in a test and is exactly why `Set::live_count` documents itself as
-//! one; nothing in this file is a model for what the frame path does.
+//! End-to-end integration tests for element lifecycle: spawning, killing, compaction, and replay.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -308,11 +296,7 @@ proc plain {
             "everything starts alive"
         );
 
-        // Reading an attribute yields the *previous* frame's value, so `age`
-        // inside step k is `(k - 1) * dt`. It first exceeds 0.025 (one and a
-        // half steps at dt = 1/60) during step 3, which is when `kill()` runs.
-        // Step 3 still writes those elements into their compacted slot with a
-        // dead flag; step 4's scan is what reclaims the slot.
+        // Attribute age reads previous frame values; killed elements are reclaimed on step 4.
         for expected in [256, 256, 256, 192] {
             step(&gpu, &mut set, 1);
             assert_eq!(
@@ -413,15 +397,7 @@ proc plain {
         );
     }
 
-    /// The birth-fraction correction exists so that a frame's worth of elements
-    /// do not all start at the same phase, and it must apply exactly once: the
-    /// element's *first* update runs with `dt * birth_frac`, and every update
-    /// after that with unscaled `dt`.
-    ///
-    /// This measures it directly. The elements move at a constant velocity along
-    /// a known axis, so `position.x` after one step is `v * dt * frac` and after
-    /// two is `v * dt * (frac + 1)` — a ratio that pins the correction to one
-    /// step without needing to read `birth_frac` itself.
+    /// Verifies that the birth fraction sub-step offset applies only to an element's initial update.
     #[test]
     fn the_birth_fraction_correction_expires_after_one_step() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -523,21 +499,7 @@ proc plain {
         );
     }
 
-    /// Substepping must not change the simulation, only the frame count — and
-    /// that has to keep holding once spawning is in the loop. The accumulator
-    /// therefore advances once per *substep*, not once per frame: a frame of two
-    /// steps spawns the same two batches, at the same two points in the
-    /// integration, that two frames of one step do. Advancing it once per frame
-    /// would put both batches in before the second element pass, and the
-    /// positions below would come out short by one step's worth of travel.
-    ///
-    /// The comparison covers the element buffer *and* the rendered image. `t` is
-    /// `steps_taken * dt` from an integer counter rather than a running float
-    /// sum, so twenty steps taken one at a time and ten taken two at a time reach
-    /// the same `t` bit for bit — and the built-in orbit camera, which is the one
-    /// thing here that reads `t`, therefore produces the same matrix either way.
-    /// An f32 sum would land the two orders two ULP apart at `dt = 1/60`, which
-    /// is why the pixel comparison used to be impossible at this horizon.
+    /// Verifies that substepping produces identical simulation state and rendering to multiple single-step frames.
     #[test]
     fn two_frames_of_one_step_land_where_one_frame_of_two_steps_does_with_spawning() {
         let gpu = Gpu::headless().expect("no GPU available");
