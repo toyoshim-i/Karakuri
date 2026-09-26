@@ -119,7 +119,6 @@ impl<'a> UniformPacker<'a> {
     /// Finalizes packing and returns a byte slice of the serialized uniform data.
     ///
     /// # Panics
-    ///
     /// Panics if any field defined in the [`UniformLayout`] was not written.
     pub fn finish(self) -> &'a [u8] {
         if self.scratch.written.iter().any(|w| !w) {

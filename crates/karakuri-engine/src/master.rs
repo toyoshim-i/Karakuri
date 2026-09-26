@@ -1,12 +1,4 @@
-//! The master chain: an ordered sequence of L5 post-processing slots.
-//!
-//! Connects the mix composition pass to final tone mapping. Each entry is an
-//! L5 fullscreen image pass that can read either the upstream image or a retained
-//! history buffer.
-//!
-//! When the chain is empty, composited frames pass directly to the tone mapping
-//! target without intermediate copies. Intermediate textures and ping-pong buffers
-//! are allocated only when slots are present.
+//! The master chain: an ordered sequence of L5 post-processing slots connecting mix to tone mapping.
 
 use std::collections::BTreeMap;
 use std::fmt;

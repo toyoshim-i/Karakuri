@@ -1,11 +1,4 @@
-//! Per-slot luminance metering and level measurement.
-//!
-//! Measures linear Rec.709 luminance (mean and peak) across each slot's rendered
-//! target before gain and opacity are applied. Non-finite texels (NaN / Inf) are
-//! excluded from luminance calculations and recorded separately in `bad_texels`.
-//!
-//! Reduction executes on the GPU in two compute dispatches and copies results into
-//! a ring buffer mapped asynchronously with non-blocking status polling.
+//! Per-slot luminance metering and level measurement across linear Rec.709 targets.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 

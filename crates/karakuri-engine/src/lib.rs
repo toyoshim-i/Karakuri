@@ -1,15 +1,5 @@
 //! The render graph, Set lifecycle, and GPU pipeline management.
-//!
-//! # Architectural Invariants
-//! - Zero allocation on the render thread; shaders are never compiled on the render thread.
-//!   This covers both a Set (`swap`) and the master chain (`chain_swap`); each has a worker of its
-//!   own, and freeing is the same invariant as allocating, so what either replaces is dropped there.
-//! - Pipelines are double-buffered; hot-swaps occur strictly on frame boundaries.
-//! - Over-budget pipeline loads disable the offending slot rather than rolling back global state.
-//! - Structural modifications fork a new Set instance; active Sets are never mutated in place.
-//! - Element compaction preserves ordering to guarantee deterministic floating-point accumulation.
-//! - Simulation time advances deterministically by `steps * dt` from tick records.
-//! - Frame recording is serialized through guards owning command encoders to prevent generational tearing.
+//! Coordinates background compilation, frame budgeting, deterministic simulation, and presentation.
 
 pub mod binding;
 pub mod camera;

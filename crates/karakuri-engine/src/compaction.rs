@@ -1,13 +1,4 @@
-//! Order-preserving stream compaction for element buffers.
-//!
-//! Compacts active elements into a contiguous range using hierarchical exclusive prefix sums.
-//! Preserves the relative order of survivors to ensure deterministic blend order.
-//!
-//! The compaction executes as a multi-pass hierarchical scan:
-//! 1. Reduce: Compute block prefix sums across the active range.
-//! 2. Scan: Recursively compute prefix sums of the block sums.
-//! 3. Add offsets: Propagate block offsets down the hierarchy.
-//! 4. Finalize and advance: Update survivor counts, ranges, and indirect dispatch arguments.
+//! Order-preserving stream compaction for element buffers using hierarchical prefix sums.
 
 use karakuri_codegen::layout::{counts, step_args, WORKGROUP_SIZE};
 use wgpu::util::DeviceExt;

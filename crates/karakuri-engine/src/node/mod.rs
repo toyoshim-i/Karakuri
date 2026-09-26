@@ -1,8 +1,4 @@
-//! Pipeline nodes and intermediate edge resources.
-//!
-//! Defines the core node types ([`Simulation`], [`Deform`], [`Camera`], [`Renderer`],
-//! [`Merge`]) and the intermediate data structures passed between them ([`Geometry`])
-//! or provided by the frame environment ([`View`], [`Tick`]).
+//! Pipeline nodes and intermediate edge resources ([`Simulation`], [`Deform`], [`Camera`], [`Renderer`], [`Merge`]).
 
 mod camera;
 mod deform;

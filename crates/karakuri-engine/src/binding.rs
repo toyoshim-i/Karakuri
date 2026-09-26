@@ -1,8 +1,4 @@
-//! Signal binding evaluation and parameter mapping.
-//!
-//! Evaluates mappings between continuous signals (such as oscillator phase, audio
-//! features, or procedural noise) and shader/simulation parameters. Applies shaping
-//! curves, maps to target ranges, and blends with manual settings using signal confidence.
+//! Signal binding evaluation and continuous parameter mapping (audio, oscillator, noise).
 
 use karakuri_ir::Kind;
 use karakuri_signal::{

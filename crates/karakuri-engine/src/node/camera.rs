@@ -1,8 +1,4 @@
-//! Camera edge management and GPU state derivation.
-//!
-//! Manages camera state buffers for either host-driven cameras (such as the built-in
-//! orbit) or compute-driven procedures (L3). Produces derived uniform buffers
-//! containing view-projection matrices, ray-marching bases, and depth ranges.
+//! Camera edge management and GPU state derivation for host and L3 procedural cameras.
 
 use karakuri_codegen::generate_l3;
 use karakuri_codegen::layout::{binding, camera as wire, group, UniformLayout};

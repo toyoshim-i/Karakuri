@@ -1,30 +1,4 @@
-//! Hot swap coordination and watchdog budgeting.
-//!
-//! Hot swapping compiles and validates incoming `Set` pipelines on a background
-//! worker thread, transfers finished Sets across a channel, and atomically installs
-//! them at frame boundaries without stalling the render loop.
-//!
-//! # Architecture
-//!
-//! - **Background Compilation**: Shaders, pipelines, and element buffers are created
-//!   and initialized on a worker thread using cloned `wgpu::Device` and `wgpu::Queue`
-//!   handles. The render thread polls with `try_recv` and never blocks.
-//! - **Frame Boundary Installation**: Swaps occur exclusively at the beginning of a
-//!   frame via [`HotSwap::begin_frame`]. Live Sets are never replaced mid-frame.
-//! - **State Reset**: Incoming Sets arrive cold, with simulation time reset to zero
-//!   and fresh element buffers. Parameter adjustments and bound inputs are carried
-//!   over from the outgoing Set via [`Set::carry_moved_from`] and [`Set::carry_bound_from`].
-//! - **Watchdog Budgeting**: Candidate Sets are measured on the worker thread prior
-//!   to handover, and an `estimate` is fitted there too — two further draws, at the
-//!   output's size rather than at the measurement's. Both travel with the build and
-//!   install with it, so a swapped-in Set is judged and governed on the same
-//!   precedence a cold one is: the estimate where it answers, the measurement where
-//!   it refuses. If the number that answers exceeds the target budget, the slot is
-//!   flagged as overloaded and frozen on its current still to protect the render
-//!   loop from frame drops.
-//! - **Asynchronous Deallocation**: Retired Sets are queued into a graveyard mutex
-//!   and dropped by the background worker, preventing GPU resource deallocations
-//!   from stalling the render thread.
+//! Hot swap coordination and watchdog budgeting (background compilation and atomic installation).
 
 mod types;
 mod worker;

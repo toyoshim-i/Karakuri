@@ -1,10 +1,5 @@
 //! Benchmarks slot cost scaling across decreasing render target resolutions.
-//!
-//! Evaluates sub-pixel rendering floors, `Lines` area tracking, and extrapolation
-//! overhead constants.
-//!
-//! Usage: `cargo run -p karakuri-engine --example small_draw --release`
-//! (Run from repository root; `.kir` paths are relative to root).
+//! Evaluates sub-pixel rendering floors, `Lines` area tracking, and extrapolation overhead.
 
 use karakuri_engine::probe::{Measurement, MeasurementMethod};
 use karakuri_engine::set::{Edge, Layering, Wiring};

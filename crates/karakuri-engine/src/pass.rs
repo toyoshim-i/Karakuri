@@ -1,8 +1,4 @@
-//! Unified render pass and image pass pipeline abstractions.
-//!
-//! Provides abstractions for fullscreen fragment shader passes (L5 image passes),
-//! unified render pass execution ([`RenderPassNode`]), and frame history retention
-//! ([`RetentionManager`]).
+//! Unified render pass and image pass pipeline abstractions (L5 passes and frame history).
 
 use std::fmt;
 
@@ -404,11 +400,7 @@ impl ImagePass {
         &self.uniform_layout
     }
 
-    /// Standard bind group layout for L5 image passes:
-    /// - Binding 0: Uniform buffer
-    /// - Binding 1: `src` texture view
-    /// - Binding 2: `held` texture view
-    /// - Binding 3: Sampler (linear filtering)
+    /// Standard bind group layout for L5 image passes (uniform, src, held, sampler).
     pub fn create_bind_group_layout(
         device: &wgpu::Device,
         label: Option<&str>,
