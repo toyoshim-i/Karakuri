@@ -9,8 +9,9 @@ use common::{console_panel as console, drawn_once, near, PLAUSIBLE};
 use karakuri_console::focus::{bay_head_at, is_bay, ring, PROMPT};
 use karakuri_console::room::size;
 use karakuri_console::view::prompt::{
-    is_executable_on_path, prompt_ask, prompt_menu_rect, prompt_pill, CliPreset, CliSelection,
-    PromptAsk, PromptState, MENU_CARD_W, MENU_ITEM_COUNT, MENU_ITEM_H, PROMPT_TITLE,
+    is_executable_on_path, prompt_ask, prompt_item_rect, prompt_menu_rect, prompt_pill, CliPreset,
+    CliSelection, PromptAsk, PromptState, MENU_CARD_W, MENU_ITEM_COUNT, MENU_ITEM_H,
+    MENU_ROWS_PER_COL, PROMPT_TITLE,
 };
 use karakuri_console::view::{head_of, region, ModalOverlay, View};
 use karakuri_layout::Point;
@@ -116,14 +117,26 @@ fn header_pill_and_menu_geometry() {
     assert!(pill.min.y >= bay_rect.min.y);
     assert!(pill.max.y <= bay_rect.min.y + size::HEAD_H);
 
-    // Menu rect hangs below pill
+    // Menu rect size matches multi-column geometry
     let menu = prompt_menu_rect(pill, viewport);
     assert_eq!(menu.width(), MENU_CARD_W);
-    assert!(menu.min.y >= pill.max.y);
     assert!(near(
         menu.height(),
-        6.0 * 2.0 + MENU_ITEM_H * (MENU_ITEM_COUNT as f32)
+        6.0 * 2.0 + MENU_ITEM_H * (MENU_ROWS_PER_COL as f32)
     ));
+
+    // Menu stays within viewport bounds (flips upward or clamps if needed)
+    assert!(menu.min.x >= viewport.min.x);
+    assert!(menu.max.x <= viewport.max.x);
+    assert!(menu.min.y >= viewport.min.y);
+    assert!(menu.max.y <= viewport.max.y);
+
+    // Each item rect is valid and contained within menu
+    for i in 0..MENU_ITEM_COUNT {
+        let item = prompt_item_rect(menu, i).expect("valid item rect");
+        assert!(menu.contains(item.min));
+        assert!(menu.contains(item.max));
+    }
 }
 
 #[test]
@@ -148,13 +161,23 @@ fn prompt_hit_test_routes_clicks() {
     state.open_menu();
     let menu = prompt_menu_rect(pill, viewport);
 
-    // Clicking custom (last item)
-    let custom_y = menu.min.y + 6.0 + MENU_ITEM_H * (CliPreset::ALL.len() as f32) + 2.0;
-    let custom_point = Point::new(menu.center().x, custom_y);
+    // Clicking custom (last item, in column 1)
+    let custom_rect = prompt_item_rect(menu, CliPreset::ALL.len()).expect("custom item rect");
+    let custom_point = Point::new(custom_rect.center().x, custom_rect.center().y);
     assert_eq!(
         prompt_ask(&ctx, bay_rect, viewport, &state, custom_point),
         Some(PromptAsk::SelectCustom)
     );
+
+    // Clicking item in column 0 (index 0: Agy)
+    let agy_rect = prompt_item_rect(menu, 0).expect("agy item rect");
+    let agy_point = Point::new(agy_rect.center().x, agy_rect.center().y);
+    let agy_ask = prompt_ask(&ctx, bay_rect, viewport, &state, agy_point);
+    if CliPreset::Agy.is_available() {
+        assert_eq!(agy_ask, Some(PromptAsk::SelectPreset(CliPreset::Agy)));
+    } else {
+        assert_eq!(agy_ask, None);
+    }
 
     // Clicking outside open menu returns Shut (Rule 2)
     let outside_point = Point::new(bay_rect.min.x + 10.0, bay_rect.max.y - 10.0);
@@ -238,4 +261,22 @@ fn prompt_bay_retains_27px_header_when_folded() {
     // Now unfolded again
     let rect_reopened = panel.layout().rect(prompt_id);
     assert!(rect_reopened.h >= 96.0);
+}
+
+#[test]
+fn prompt_menu_flips_upward_when_near_viewport_bottom() {
+    let viewport = egui::Rect::from_min_size(egui::Pos2::new(0.0, 0.0), egui::vec2(800.0, 600.0));
+
+    // Case 1: Pill near top of viewport (e.g. y = 100) -> opens downward
+    let pill_top =
+        egui::Rect::from_min_size(egui::Pos2::new(100.0, 100.0), egui::vec2(100.0, 20.0));
+    let menu_down = prompt_menu_rect(pill_top, viewport);
+    assert!(menu_down.min.y >= pill_top.max.y);
+
+    // Case 2: Pill near bottom of viewport (e.g. y = 500 in 600px viewport) -> flips upward
+    let pill_bottom =
+        egui::Rect::from_min_size(egui::Pos2::new(100.0, 500.0), egui::vec2(100.0, 20.0));
+    let menu_up = prompt_menu_rect(pill_bottom, viewport);
+    assert!(menu_up.max.y <= pill_bottom.min.y);
+    assert!(menu_up.min.y >= viewport.min.y);
 }

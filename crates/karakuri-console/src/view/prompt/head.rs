@@ -20,13 +20,26 @@ pub const MENU_ITEM_H: f32 = 18.0;
 pub const MENU_PAD_Y: f32 = 6.0;
 
 /// Menu card horizontal padding.
-pub const MENU_PAD_X: f32 = 8.0;
+pub const MENU_PAD_X: f32 = 6.0;
 
-/// Menu card total width.
-pub const MENU_CARD_W: f32 = 130.0;
+/// Number of columns in the dropdown menu.
+pub const MENU_COLS: usize = 2;
 
-/// Total items in the dropdown menu (9 presets + custom).
+/// Width of each column.
+pub const MENU_COL_W: f32 = 112.0;
+
+/// Gap between columns.
+pub const MENU_COL_GAP: f32 = 4.0;
+
+/// Menu card total width (2 columns + padding + gap).
+pub const MENU_CARD_W: f32 =
+    MENU_PAD_X * 2.0 + (MENU_COL_W * MENU_COLS as f32) + (MENU_COL_GAP * (MENU_COLS - 1) as f32);
+
+/// Total items in the dropdown menu (presets + custom).
 pub const MENU_ITEM_COUNT: usize = CliPreset::ALL.len() + 1;
+
+/// Rows per column in the multi-column menu.
+pub const MENU_ROWS_PER_COL: usize = MENU_ITEM_COUNT.div_ceil(MENU_COLS);
 
 /// User interaction outcome from pressing inside Prompt bay header or menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,14 +68,45 @@ pub fn prompt_pill(ctx: &egui::Context, bay_rect: Rect, selection: &CliSelection
 }
 
 /// Calculates the bounding rectangle of the floating dropdown menu.
+///
+/// Flips upward if there is insufficient room below the pill in the viewport.
 pub fn prompt_menu_rect(pill_rect: Rect, viewport: Rect) -> Rect {
-    let h = MENU_PAD_Y * 2.0 + MENU_ITEM_H * (MENU_ITEM_COUNT as f32);
-    let mut min_x = pill_rect.max.x - MENU_CARD_W;
+    let w = MENU_CARD_W;
+    let h = MENU_PAD_Y * 2.0 + MENU_ITEM_H * (MENU_ROWS_PER_COL as f32);
+
+    let mut min_x = pill_rect.max.x - w;
     if min_x < viewport.min.x + 8.0 {
         min_x = viewport.min.x + 8.0;
     }
-    let min_y = pill_rect.max.y + 4.0;
-    Rect::from_min_size(Pos2::new(min_x, min_y), vec2(MENU_CARD_W, h))
+    if min_x + w > viewport.max.x - 8.0 {
+        min_x = viewport.max.x - 8.0 - w;
+    }
+
+    // Prefer opening downward; if it would clip the viewport bottom, flip upward above the pill.
+    let min_y = if pill_rect.max.y + 4.0 + h <= viewport.max.y - 8.0 {
+        pill_rect.max.y + 4.0
+    } else if pill_rect.min.y - 4.0 - h >= viewport.min.y + 8.0 {
+        pill_rect.min.y - 4.0 - h
+    } else {
+        (viewport.max.y - 8.0 - h).max(viewport.min.y + 8.0)
+    };
+
+    Rect::from_min_size(Pos2::new(min_x, min_y), vec2(w, h))
+}
+
+/// Computes the item rectangle for an item index (0..MENU_ITEM_COUNT).
+pub fn prompt_item_rect(menu_rect: Rect, index: usize) -> Option<Rect> {
+    if index >= MENU_ITEM_COUNT {
+        return None;
+    }
+    let col = index / MENU_ROWS_PER_COL;
+    let row = index % MENU_ROWS_PER_COL;
+    let x = menu_rect.min.x + MENU_PAD_X + (col as f32) * (MENU_COL_W + MENU_COL_GAP);
+    let y = menu_rect.min.y + MENU_PAD_Y + (row as f32) * MENU_ITEM_H;
+    Some(Rect::from_min_size(
+        Pos2::new(x, y),
+        vec2(MENU_COL_W, MENU_ITEM_H),
+    ))
 }
 
 /// Hit-tests a point against the Prompt bay header pill and dropdown menu.
@@ -79,18 +123,26 @@ pub fn prompt_ask(
     if state.menu_open {
         let menu = prompt_menu_rect(pill, viewport);
         if menu.contains(pos) {
+            let rel_x = pos.x - (menu.min.x + MENU_PAD_X);
             let rel_y = pos.y - (menu.min.y + MENU_PAD_Y);
-            if rel_y >= 0.0 {
-                let index = (rel_y / MENU_ITEM_H) as usize;
-                if index < CliPreset::ALL.len() {
-                    let preset = CliPreset::ALL[index];
-                    if preset.is_available() {
-                        return Some(PromptAsk::SelectPreset(preset));
+            if rel_x >= 0.0 && rel_y >= 0.0 {
+                let col_pitch = MENU_COL_W + MENU_COL_GAP;
+                let col = (rel_x / col_pitch) as usize;
+                let in_col_x = rel_x - (col as f32) * col_pitch;
+                let row = (rel_y / MENU_ITEM_H) as usize;
+
+                if col < MENU_COLS && in_col_x <= MENU_COL_W && row < MENU_ROWS_PER_COL {
+                    let index = col * MENU_ROWS_PER_COL + row;
+                    if index < CliPreset::ALL.len() {
+                        let preset = CliPreset::ALL[index];
+                        if preset.is_available() {
+                            return Some(PromptAsk::SelectPreset(preset));
+                        }
+                        // Unavailable presets are disabled / cannot be selected
+                        return None;
+                    } else if index == CliPreset::ALL.len() {
+                        return Some(PromptAsk::SelectCustom);
                     }
-                    // Unavailable presets are disabled / cannot be selected
-                    return None;
-                } else if index == CliPreset::ALL.len() {
-                    return Some(PromptAsk::SelectCustom);
                 }
             }
             return None;
