@@ -9,22 +9,12 @@ pub fn program_body_with_row_h(body: Rect, canvas: (u32, u32), row_h: f32) -> Op
     }
 }
 
-/// How many texels a rectangle is, which is the whole of the decider.
-///
-/// Area rather than width or height, and that is the one of the three that
-/// answers the question being asked: the picture is a preview of what is being
-/// captured, so what an operator gets more of is pixels. Comparing widths would
-/// hand the bay to whichever arrangement is wider at a height where it is also
-/// shorter.
+/// Returns the area in texels of `rect`, used to pick the larger preview arrangement.
 fn area(rect: Rect) -> f32 {
     rect.width() * rect.height()
 }
 
-/// The mock's arrangement: the picture across the top, the four cells in a row
-/// along the bottom.
-///
-/// The row is `row_h` tall, along `.program-body`'s bottom edge; the picture
-/// takes what is left above it, less one `PROGRAM_DIVIDER`.
+/// Layout with picture on top and deck previews across the bottom.
 pub fn below(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
     if body.height() <= row_h + crate::PROGRAM_DIVIDER {
         return None;
@@ -49,11 +39,7 @@ pub fn beside(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
         PREVIEW_ASPECT.0.max(1) as f32,
         PREVIEW_ASPECT.1.max(1) as f32,
     );
-    // `row_h` is a whole cell — the image and the caption band under it — so
-    // the image is what is left when the band comes off, exactly as it is in
-    // the row. A cell beside the picture carries its caption too: the letter
-    // is the only thing naming a deck and it does not stop naming one because
-    // the bay went wide.
+    // Cell height includes both preview image and caption band.
     let cell_h = (row_h - caption_band()).min(body.height());
     let cell_w = (cell_h * aw / ah).round();
     let column = cell_w;
@@ -89,12 +75,7 @@ pub fn beside(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
     drawable(Placement::Beside, picture, cells)
 }
 
-/// One arrangement, or `None` where it cannot be drawn.
-///
-/// [`positive`]'s rule over the whole arrangement rather than over one
-/// rectangle, because the two halves are one answer: a body that holds the
-/// picture and has no room for a cell is not this arrangement with a cell
-/// missing, it is the other arrangement's turn.
+/// Returns the placement if both picture and cell bounds have positive area.
 pub fn drawable(placement: Placement, picture: Rect, cells: [Rect; DECKS]) -> Option<Body> {
     match positive(picture) && cells.iter().copied().all(positive) {
         true => Some(Body {

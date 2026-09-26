@@ -9,15 +9,8 @@ use crate::view::sequencer::{lane_label, Choices, LaneChoice, FADER_ITEM};
 // ---------------------------------------------------------------------------
 
 impl View {
-    /// What the `+ lane` chooser offers this frame — the one value [`sequencer`]
-    /// lays its card out from, and [`View::target`]'s shape one bay along: read
-    /// once for the frame and handed to the paint and to the press, so the item
-    /// that is drawn and the item a press lands on are one derivation of one
-    /// reading.
-    ///
-    /// The faders are every strip the mixer draws, which is [`View::select`]'s
-    /// count read again; the parameters are one deck's, the load pulldown's
-    /// ([`View::target_deck`]) — see [`Choices`], which carries the argument.
+    /// Returns lane chooser options this frame (faders and target deck parameters),
+    /// shared between layout and hit-testing (see [`Choices`]).
     pub fn lane_choices(&self) -> Choices {
         let mut items: Vec<LaneChoice> = (0..self.mixer.len().min(DECKS))
             .map(|deck| {
@@ -65,12 +58,8 @@ impl View {
         self.lane_open
     }
 
-    /// Put the card down, and answer whether it went down.
-    ///
-    /// Refused where there is nothing to point at, which is [`View::open_target`]'s
-    /// rule: a card with no items offers nothing to pick, and
-    /// [`crate::input::claim`]'s rule 2 would give it every press on the console
-    /// until a second press shut it again.
+    /// Opens the lane chooser card if closed and items are available.
+    /// Returns `true` if opened, adhering to Rule 2 modal claim semantics.
     pub fn open_lane(&mut self) -> bool {
         if self.lane_open || self.lane_choices().items.is_empty() {
             return false;
@@ -119,14 +108,8 @@ impl View {
         was
     }
 
-    /// What adding the carried Library row to the chain asks for, or the reason
-    /// it asks for nothing.
-    ///
-    /// The chain holds `kind L5` procedures, so a row that is not one is refused
-    /// and the refusal says what the chain holds
-    /// ([P-0083](../../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
-    /// [`View::chain_add`] is the list a row is resolved against: it is the
-    /// library's `kind L5` rows, by the name each is listed under.
+    /// Resolves a library row to a chain operation, or returns a refusal reason
+    /// if not a `kind L5` procedure ([P-0083](../../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
     pub fn chain_landing(&self, row: &str) -> Result<Operation, &'static str> {
         self.chain_add
             .iter()

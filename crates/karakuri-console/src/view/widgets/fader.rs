@@ -6,14 +6,7 @@ use egui::{Color32, CornerRadius, FontFamily, Pos2, Rect, Stroke, StrokeKind, Ui
 // Fader, meter, and shared drawing primitives
 // ---------------------------------------------------------------------------
 
-/// How much of a track a value fills, from the track's own zero — the left end
-/// of a row, and the bottom of a column, because a fader stands up and a meter
-/// fills from the floor.
-///
-/// The whole of what a [`Fader`] and a [`Meter`] share, and it is a function
-/// rather than a shared type for the reason [`Meter`] gives. Three call sites
-/// the day it is written: the trim's fill, the opacity fader's fill, and the
-/// meter's column.
+/// How much of a track a value fills from zero (left for row, bottom for column).
 pub(crate) fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
     let at = unit(at);
     match axis {
@@ -28,27 +21,9 @@ pub(crate) fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
     }
 }
 
-/// The fader, and it is one component with two call sites on the day it is
-/// written: the horizontal trim and the vertical opacity. That is this
-/// repository's rule about an abstraction satisfied when it lands rather than
-/// promised for later, which [`bay_head`] is the other instance of.
+/// Computes fader layout (track, fill, knob) along `axis` given value `at`.
 ///
-/// What the two disagree about is an argument each — the axis, the inset the
-/// fill sits inside its track by (`.fader b` fills its 5px track edge to edge
-/// where `.vfader b` is `left: 3px; right: 3px; bottom: 3px` inside its 17px
-/// one), and the knob's size. Everything else is this.
-///
-/// One number drives the fill and the knob, which is what stops the two
-/// disagreeing: the knob is centred on the fill's moving edge. The mock sets
-/// them by hand and a few percent apart — `width: 72%` with `left: 66%`,
-/// `height: 97%` with `bottom: 94%` — which is an author centring a 9px knob on
-/// a fill's end in percentages, and this is the same mark with the arithmetic
-/// done once.
-///
-/// So the knob overhangs its track by half its length at either end, and the
-/// mock's own boxes have the room: [`size::STRIP_GAP_Y`] above and below the
-/// fader column, and [`size::TRIM_PAD_X`] plus [`size::STRIP_PAD_X`] either
-/// side of the trim.
+/// The knob is centred on the fill's moving edge, with custom inset and knob dimensions.
 pub(crate) fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Vec2) -> Fader {
     let inside = track.shrink(inset);
     let fill = filled(inside, axis, at);
@@ -68,14 +43,7 @@ pub(crate) fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Ve
     }
 }
 
-/// One laid-out fader, taken hold of at `p` — or `None` where `p` is not on its
-/// knob.
-///
-/// The inverse of [`fader`], off the same three numbers it laid out: the
-/// track's zero end, which is the fill's fixed edge; the travel, which is the
-/// length the value rides; and where the knob's centre is now, which is the
-/// fill's moving edge. The offset is the pointer less that centre, so a press
-/// keeps whatever it grabbed at and the value does not jump.
+/// Hit-tests a fader knob at pointer `p`, returning the drag offset from knob center.
 pub(crate) fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
     if !fader.knob.contains(p) {
         return None;
@@ -99,40 +67,9 @@ pub(crate) fn span_at(text: &str, size: f32, colour: Color32) -> LayoutJob {
     )
 }
 
-/// The drop mark: `.strip.drop` and `.cell.drop`'s `outline: 2px solid
-/// var(--c-text)`, round the one rectangle a carried Set would land on.
+/// Draws the drop target outline around `rect` when carrying a Set.
 ///
-/// # One function, because it is one mark in two places
-///
-/// A strip and a deck preview cell wear the same ring — `style.css` gives the
-/// two selectors one declaration and says why: the release names a deck, and
-/// which of the two rectangles it was let go over is not something the mark has
-/// to distinguish. What each caller brings is the target's own corner,
-/// [`size::STRIP_RADIUS`] or [`size::PREVIEW_RADIUS`], because the ring is on
-/// the rectangle's edge and an edge has the corner it has.
-///
-/// # `--c-text`, and it is free ink
-///
-/// Every state this console has is spelled in one of four colours — lavender is
-/// the deck the keys are addressed to, pink is live, sun is priming and the
-/// star, mint is armed — and the text ink is what a word is drawn in when
-/// nothing is being said about it. That is exactly what this mark has to say:
-/// it says where the release lands and never whether it is allowed
-/// ([ADR-0265](../../../../docs/adr/0265-a-release-names-the-deck-and-nothing-is-refused.md)).
-/// Lavender is ruled out twice over — the selection is already a lavender ring
-/// round a strip, and the deck being carried to is usually the deck already
-/// selected, so the two would be one mark on one strip in the moment it is read
-/// fastest.
-///
-/// # [`StrokeKind::Outside`], and it is what makes the pair legible
-///
-/// `.strip.focus` is an inset `box-shadow` and this is an `outline` at
-/// `outline-offset: 0`, so a strip that is both selected and under the pointer
-/// wears the inner ring and the outer one at once instead of one clobbering the
-/// other. Unclipped, unlike the selection above: the ink is outside the
-/// target's rectangle, and a painter clipped to it would draw nothing at all.
-/// It fits — `.mixer-strips` has a `gap: 4px` between strips and the
-/// `.previews` grid a `gap: 6px`, against two of ink each side.
+/// Indicates where a drop will land per [ADR-0265](../../../../docs/adr/0265-a-release-names-the-deck-and-nothing-is-refused.md).
 pub(crate) fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
     ui.painter().rect_stroke(
         at,
@@ -142,13 +79,9 @@ pub(crate) fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
     );
 }
 
-/// The focus indicator on the bay a key press is addressed to, replacing the
-/// legacy dashed sun outline with a clean, solid lavender accent (`pal.lav`).
+/// Draws the focus indicator on the bay addressed by key presses.
 ///
-/// For headless rows (Transport at the top, Outputs at the bottom), an accent
-/// line is drawn along the boundary edge rather than an off-screen clipping box.
-/// For headed bays, a solid inset stroke frames the bay head with top corners
-/// matching the card radius.
+/// Uses an accent line along the boundary for headless rows or an inset frame for headed bays.
 pub(crate) fn wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
     let painter = ui.painter();
     let stroke = Stroke::new(1.5, pal.lav);
@@ -183,27 +116,9 @@ pub(crate) fn folded_wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
         .rect_stroke(at, radius, stroke, StrokeKind::Inside);
 }
 
-/// A fader: the well, the fill and the knob.
+/// Paints a fader component: the well background, gradient fill, and knob.
 ///
-/// - `.fader` / `.vfader` — `background: var(--c-well)` with
-///   `box-shadow: inset 0 0 0 1px var(--c-hair)`, which is a 1px stroke on the
-///   inside, exactly as a preview cell's is.
-/// - `.fader b` / `.vfader b` — `linear-gradient(90deg, var(--c-mint),
-///   var(--c-lav))` lying down and `linear-gradient(0deg, …)` standing up,
-///   which is the same colour ramp the tempo carries and is drawn the same way
-///   — see [`gradient`].
-/// - `.fader s` / `.vfader s` — `background: var(--c-panel)` with
-///   `box-shadow: 0 0 0 1px var(--c-line)`, which is a 1px stroke on the
-///   outside because a `0 0 0 1px` shadow sits around the box rather than
-///   inside it. Its `0 1px 4px rgba(0,0,0,0.18)` drop shadow is dropped for
-///   the reason `room` collapses the day palette's pair: `epaint` draws one
-///   shadow and the rim is the one that says where the knob is.
-///
-/// `live` is the one thing about a fader that is not the fader's:
-/// `.strip.live .vfader s` is `box-shadow: 0 0 0 1px var(--c-pink),
-/// 0 0 9px var(--c-glowp)`, so the knob of a slot that is on air takes a pink
-/// rim and a pink halo and no other knob does. It is the mock saying *the
-/// fader you are about to move is the one the audience is watching*.
+/// If `live` is true, renders a pink rim and halo indicating on-air status.
 pub(crate) fn fader_into(
     painter: &egui::Painter,
     pal: &Palette,
@@ -213,21 +128,7 @@ pub(crate) fn fader_into(
 ) {
     slider_track_into(painter, pal, fader.track, fader.fill, fader.axis);
 
-    // **The band, over the fill and under the knob**: it is the fill setting
-    // off, so it is drawn where the fill is drawn and the truth stays on top
-    // of it. `.vfader em`'s 20% wash of `var(--c-lav)` — the mock's own ink
-    // for *an address*, which is what a destination is — square rather than a
-    // capsule, because it is a stretch of the track rather than a value's own
-    // shape.
-    //
-    // **The mock draws it standing up only**, on deck B's fader: the trim's is
-    // the same band lying down, and no strip in the mock has a gain fade armed
-    // on it to draw one in.
-    //
-    // **Nothing at all while it rests**, which is where two thirds of an armed
-    // strip's frames are: at a displacement of zero the band has no area, and
-    // an empty rectangle painted every frame is a shape on the frame's budget
-    // (ADR-0164) that draws nothing.
+    // Lavender destination wash over the fill when moving towards an armed target (ADR-0164).
     if let Some(reach) = reach.filter(|reach| positive(reach.band)) {
         painter.rect_filled(reach.band, CornerRadius::ZERO, tint(pal.lav, 20));
     }
@@ -258,24 +159,13 @@ pub(crate) fn fader_into(
         StrokeKind::Outside,
     );
 
-    // **The mark last, over everything, and it is one pixel.** `.vfader i`'s
-    // `background: var(--c-lav)`. It is the only thing here that may not be
-    // lost: painted under the knob it would vanish inside it for every move
-    // shorter than the knob is long, which is where a mark saying *not yet* is
-    // needed most. A hairline over a 9px knob hides nothing of where the
-    // control is.
+    // Destination tick mark on top of knob indicating target position.
     if let Some(reach) = reach {
         painter.rect_filled(reach.mark, CornerRadius::ZERO, pal.lav);
     }
 }
 
-/// One `.mini`: a capsule with a 1px border and whatever goes in it.
-///
-/// `sel` is `.mini.sel` — `color: var(--c-lav)`, `border-color: transparent`,
-/// and a 15% wash of the same behind it. The blend's mini is always `.sel` and
-/// the mask's never is, which is the mock's and reads: the blend names which of
-/// `Blend::ALL` is in force, where the mask is a picker showing the shape it is
-/// set to.
+/// Draws a `.mini` capsule widget with 1px border.
 pub(crate) fn mini_into(
     painter: &egui::Painter,
     pal: &Palette,
@@ -306,19 +196,9 @@ pub(crate) fn mini_into(
     );
 }
 
-/// A two-colour ramp along `axis`, which is `linear-gradient` and a painter
-/// that has none.
+/// Renders a two-colour gradient mesh along `axis`.
 ///
-/// The same problem [`bpm_job`] answers for a line of type, and a different
-/// answer because this is a shape rather than a run of glyphs: a `Mesh` of two
-/// triangles with a colour at each corner, which `epaint` interpolates across
-/// exactly. One shape, and no stepping.
-///
-/// `capsule` is `border-radius: 999px` on the fill: a fader's fill is a capsule
-/// and its two ends are circles at the ramp's own ends, where a meter's column
-/// is square and is clipped by the well around it instead. Everything is
-/// clipped to `rect`, so an end cap on a fill shorter than it is wide is a
-/// sliver rather than a bulge.
+/// If `capsule` is true, rounds the ends into circles.
 pub(crate) fn gradient(
     painter: &egui::Painter,
     rect: Rect,

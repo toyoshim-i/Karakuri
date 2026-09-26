@@ -45,11 +45,7 @@ impl PaneTarget {
         ))
     }
 
-    /// Where the `index`th deck's row is, from the top of `card` — the decks in
-    /// [`DECK_LETTERS`] order, which is [`Load::row`]'s own reading.
-    ///
-    /// Panics on a row this card has not got, which is that method's rule: a caller
-    /// has invented a deck.
+    /// Returns the bounding rectangle for row `index` in the deck target card.
     pub fn row(&self, card: Rect, index: usize) -> Rect {
         assert!(index < self.rows, "deck {index} of a list of {}", self.rows);
         Rect::from_min_size(
@@ -61,11 +57,7 @@ impl PaneTarget {
         )
     }
 
-    /// What a press at `p` on the card asks for, or `None` off every row.
-    ///
-    /// The pane is named by [`PANE_NAMES`], which is the arrangement's own handle
-    /// for it — `karakuri-operation` has no dependencies and cannot hold one, which
-    /// is [`Operation::FoldPane`]'s spelling and its reason.
+    /// Returns which deck is selected by a press at `p` on the card, or `None`.
     pub fn picked(&self, viewport: Rect, p: karakuri_layout::Point) -> Option<Operation> {
         let card = self.list(viewport)?;
         let at = Pos2::new(p.x, p.y);
@@ -77,12 +69,7 @@ impl PaneTarget {
     }
 }
 
-/// The pulldown on one pane head, derived — [`deck_name`] answers where the run
-/// is and this answers where the mark after it is, which is [`keep_pill`]'s
-/// division along the same row.
-///
-/// `None` is a head with no run drawn in it, which is [`deck_name`]'s own
-/// Arguments for resolving a pane load target and its pulldown chevron.
+/// Derives the pane target dropdown chevron and optional selection card.
 #[derive(Clone, Copy)]
 pub struct PaneTargetCtx<'a> {
     pub at: &'a InspectorPane,
@@ -121,17 +108,7 @@ pub fn pane_target(ctx: &egui::Context, target_ctx: PaneTargetCtx<'_>) -> Option
     })
 }
 
-/// A pane head's deck list, painted — [`deck_list_into`]'s card one bay along,
-/// with the deck the pane is *showing* in the panel's own text colour and the
-/// rest dim.
-///
-/// Where everything goes is [`PaneTarget`]'s, so this paints and derives
-/// nothing, which is [`deck_list_into`]'s own sentence.
-///
-/// The marked row is what this pane is pointed at and never the deck selection,
-/// which is the whole of what this mark is: a pane showing deck C while the
-/// keys are on deck A draws `C` in the text colour here and the ring stays on
-/// A's strip, one bay over.
+/// Paints the pane target deck selection card, highlighting the currently displayed deck.
 pub fn pane_list_into(ui: &Ui, pal: &Palette, target: &PaneTarget, showing: usize, card: Rect) {
     let painter = ui.painter();
     popup_card(painter, pal, card);

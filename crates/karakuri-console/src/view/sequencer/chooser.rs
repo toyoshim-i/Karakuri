@@ -1,13 +1,6 @@
 use super::*;
 
-/// One item of the `+ lane` chooser: a target a lane may be pointed at, and the
-/// words drawn on it.
-///
-/// The words are the lane label the pick will make, plus what it is. A fader
-/// item reads `A ▮ fader` and a parameter item `B ∿ L2:0 twist`, so the row
-/// that appears after the press reads as the item that was picked — the deck's
-/// letter and [`lane_mark`], which is [`lane_label`]'s own derivation asked one
-/// control earlier.
+/// One selectable target in the `+ lane` chooser and its formatted label.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LaneChoice {
     /// What a pick points the lane at — the payload of `Operation::PointLane`,
@@ -17,36 +10,7 @@ pub struct LaneChoice {
     pub words: String,
 }
 
-/// What the `+ lane` chooser offers this frame, read off the [`View`] once and
-/// handed in — [`Target`]'s shape one bay along, and for its reason: the item
-/// that is painted and the item a press lands on are one derivation of one
-/// reading.
-///
-/// # What is in the list, and why it is one deck's parameters and every deck's
-/// fader
-///
-/// A lane's target is `Fader { deck }` or `Param { deck, param }`
-/// ([ADR-0321](../../../../docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)),
-/// so the list is the faders of every deck the mixer draws a strip for —
-/// [`View::select`]'s own count read a fourth time — and the published controls
-/// of one deck: the Library bay's load pulldown's ([`View::target_deck`],
-/// ADR-0305).
-///
-/// That mark and not a second one. It is the console's one pointer meaning *a
-/// deck named without moving the keys*, which is exactly what pointing a lane
-/// wants — a lane on deck C while deck A is playing — and a chooser of its own
-/// in this bay would be a fourth pointer on a panel that already explains three
-/// (ADR-0305's counting argument). Listing every deck's keys instead would put
-/// the same key in the list once per deck, so the operator would pick a deck by
-/// reading a list four times as long rather than by a control.
-/// [ADR-0327](../../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md).
-///
-/// What the console does not hold, it does not offer. The parameters are
-/// [`View::inspector`]'s, which is written when a Set lands, and the inspector
-/// holds [`PANES`] panes — so a target deck no pane is pointed at contributes
-/// no parameters and the list is its faders alone. That is the reading's own
-/// limit rather than this control's, and it is written down in
-/// `docs/manual/console.html`'s `+ lane` tip.
+/// Available targets for the `+ lane` chooser (faders across decks and selected deck parameters) (ADR-0305, ADR-0321, ADR-0327).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Choices {
     /// Every target on offer: the faders first, then the parameters.
@@ -89,12 +53,7 @@ pub struct LaneCard {
 }
 
 impl LaneCard {
-    /// Where one item is, from the top of the card — the faders stacked with no
-    /// gap, then the band, then the parameters. [`RowMenu::load`]'s own reading,
-    /// with the rule in the middle rather than at the end.
-    ///
-    /// Panics on an item this card has not got, which is that method's rule: a
-    /// caller has invented a target.
+    /// Returns the bounding rectangle for the item at `index`.
     pub fn item(&self, index: usize) -> Rect {
         assert!(
             index < self.items,
@@ -143,12 +102,7 @@ impl LaneCard {
     }
 }
 
-/// What a press on the `+ lane` control asks for.
-///
-/// [`Aim`]'s shape three bays along, and the same division: every arm is either
-/// this console's own state moving or one named operation, and never a lane
-/// appended here
-/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// Result of activating the `+ lane` control (open, shut, or point operation) (P-0090).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Chose {
     /// Put the card down — a press on `+ lane` with it up.
@@ -163,24 +117,7 @@ pub enum Chose {
 }
 
 impl Sequencer {
-    /// What a press at `p` asks of the `+ lane` control, or `None` where
-    /// the press was on nothing it owns.
-    ///
-    /// # Two questions, and which one it is depends on whether the card is down
-    ///
-    /// [`LibraryBay::menu_ask`]'s rule, and it is that method's word for word:
-    ///
-    /// - With the card up this is the pill alone — a press on it opens the
-    ///   card, and a press anywhere else answers `None` so the arms above can
-    ///   have it.
-    /// - With one down every press is the card's, which is
-    ///   [`crate::input::claim`]'s rule 2: on an item it picks, on the
-    ///   separator, on the card's padding or anywhere else on the console it
-    ///   dismisses. So this never answers `None` while the card is down.
-    ///
-    /// A pick names the bank this bay is reading, exactly as
-    /// [`Sequencer::press`]'s arms do: the lane lands in the pattern that was
-    /// drawn rather than in whichever is armed by the time it is performed.
+    /// Evaluates clicks on the `+ lane` button or popup card at `p`.
     pub fn chose(&self, p: karakuri_layout::Point, choices: &Choices) -> Option<Chose> {
         let Some(card) = self.card else {
             return self
@@ -194,11 +131,7 @@ impl Sequencer {
                     pattern: self.bank as u8,
                     target: choice.target.clone(),
                 }),
-                // **A card drawn from a longer list than the one handed in
-                // here** is a caller asking two questions of two readings, and
-                // the dismissal is the answer that invents nothing — the
-                // re-check `LibraryBay::menu_ask` does against its listing,
-                // for its reason.
+                // Dismiss if choice index is invalid under current reading.
                 None => Chose::Shut,
             },
             None => Chose::Shut,
@@ -247,9 +180,5 @@ pub(crate) fn lane_card_into(ui: &Ui, pal: &Palette, card: &LaneCard, choices: &
 /// The word on the foot's pill, the mock's own — `+ lane`.
 pub(crate) const ADD_LANE: &str = "+ lane";
 
-/// What a fader item says it is, after the lane label the pick will make: `A ▮
-/// fader`.
-///
-/// A parameter item says the node and the published name instead — `B ∿ L2:0
-/// twist`, which is the mock's own way of naming the fourth lane's target.
+/// Target kind label appended for fader lane choices (e.g. `A ▮ fader`).
 pub(crate) const FADER_ITEM: &str = "fader";

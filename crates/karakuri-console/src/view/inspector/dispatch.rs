@@ -25,13 +25,7 @@ impl View {
         (pane.deck == usize::from(deck)).then(|| naming.typed().to_owned())
     }
 
-    /// Ask for a name in pane `index`'s head, starting from empty.
-    ///
-    /// Starting from empty rather than from the material's name. The run under the
-    /// caret read `drift_night` a moment ago and the field does not keep it: a
-    /// buffer seeded with what was there is a name an operator commits by pressing
-    /// return once, which is the shape of an overwrite nobody typed. What ADR-0128
-    /// makes an instruction is a name that was *typed*.
+    /// Ask for a name in pane `index`'s head, starting from empty per ADR-0128.
     pub fn name_set(&mut self, index: usize) {
         self.naming = Some(Naming {
             pane: index,
@@ -86,12 +80,7 @@ impl View {
         self.wiring_open
     }
 
-    /// Put one `uses` line's card down, and answer whether anything moved.
-    ///
-    /// Refused for a console with no pane, which is [`View::open_target`]'s own
-    /// guard and its reason: a card with no line under it offers nothing to pick
-    /// and nothing to leave by, and `input::claim`'s rule 2 would hand it every
-    /// press until a second one shut it.
+    /// Lowers one `uses` line's card, returning whether state changed.
     pub fn open_wiring(&mut self, pane: usize, node: usize, input: usize) -> bool {
         if self.inspector.get(pane).is_none() {
             return false;
@@ -109,38 +98,12 @@ impl View {
         was
     }
 
-    /// How far one Inspector pane is scrolled, as it is stored — the number
-    /// [`inspector`] clamps and never the one it clamped.
-    ///
-    /// Zero for a pane index past [`PANES`], which is a caller's error and not a
-    /// state: the bay has two panes and `PANE_NAMES` is what says so.
+    /// Stored scroll offset for pane `index`, clamped to content height.
     pub fn scroll_in(&self, pane: usize) -> f32 {
         self.scroll.get(pane).copied().unwrap_or(0.0)
     }
 
-    /// Turn one pane's wheel by `by` pixels, positive down the list, and answer
-    /// whether the stored position moved.
-    ///
-    /// # Two clamps, and only one of them is here
-    ///
-    /// This one is against the content — how tall everything the deck publishes
-    /// comes to — and it is a reading of the deck rather than of a viewport, so a
-    /// stored position bounded by it is not a position any resize can rewrite.
-    /// Without it a wheel spun over a short Set would put the number in the
-    /// thousands and an operator would have to spin it all the way back before
-    /// anything moved, which is *"a control you cannot see being moved"* by another
-    /// name.
-    ///
-    /// The other clamp is against the pane's own height and belongs where the pane
-    /// is laid out — [`InspectorPane::scroll`], which is
-    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md): a
-    /// shorter pane draws less of the same position and stores nothing, so dragging
-    /// it back reproduces the picture exactly rather than nearly (ADR-0250's
-    /// argument one region in).
-    ///
-    /// A pane this console is not showing anything in refuses the wheel rather than
-    /// storing a position for it, which is [`View::point_at`]'s rule: what a
-    /// pointer can be at is something drawn.
+    /// Scrolls pane `index` by `by` pixels, clamped to content height per P-0082 and ADR-0250.
     pub fn scroll_by(&mut self, pane: usize, by: f32) -> bool {
         let Some(showing) = self.inspector.get(pane) else {
             return false;
@@ -168,31 +131,7 @@ impl View {
         self.pane_deck
     }
 
-    /// Point one pane at `deck`, put the card away, and answer whether anything
-    /// moved.
-    ///
-    /// A deck the mixer has no strip for is refused, which is [`View::select`]'s
-    /// rule and [`View::aim_at`]'s read a third time rather than a third rule: the
-    /// head says which deck it is showing, so a target past the deck's slots would
-    /// be a letter naming a deck with nothing under it.
-    ///
-    /// It refuses rather than clamping, for `select`'s reason: a pick of deck D at
-    /// a two-slot deck means *deck D*, and clamping would point the pane at deck B
-    /// — a different deck than the one asked for.
-    ///
-    /// Nothing else moves, and that is the whole of what this mark is for: not the
-    /// deck selection, not the pane next door, not the Library bay's load target.
-    /// Each of those is a pointer of its own with a writer of its own, and this one
-    /// touches none of them.
-    ///
-    /// The card goes away here, which is [`View::aim_at`]'s clause: a pick is one
-    /// gesture and this is the whole of it, so a card left down would go on
-    /// claiming every press on the console. It is put away even where the pane did
-    /// not move — picking the deck a pane already shows is still a hand finishing
-    /// what it started.
-    ///
-    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not on a
-    /// press.
+    /// Targets pane `index` to `deck`, dismisses the card, and returns whether state changed.
     pub fn point_pane(&mut self, pane: usize, deck: u8) -> bool {
         if usize::from(deck) >= self.mixer.len() {
             return false;
@@ -214,12 +153,7 @@ impl View {
         self.pane_open
     }
 
-    /// Put one pane head's card down, and answer whether anything moved.
-    ///
-    /// Refused for a pane this console is not showing, which is
-    /// [`View::open_wiring`]'s own guard and its reason: a card with no head under
-    /// it offers nothing to pick and nothing to leave by, and `input::claim`'s rule
-    /// 2 would hand it every press until a second one shut it.
+    /// Opens the deck selection card for pane `index` if valid, returning whether state changed.
     pub fn open_pane_target(&mut self, pane: usize) -> bool {
         if pane >= PANES || self.inspector.get(pane).is_none() {
             return false;
@@ -236,15 +170,7 @@ impl View {
         was
     }
 
-    /// What one pane head's pulldown is, laid out — the mark and, while it is down,
-    /// the card under it.
-    ///
-    /// Read once for the frame and handed to the paint and to the press, exactly as
-    /// [`View::target`] is: the mark that is drawn and the mark a press lands on
-    /// are one derivation of one reading.
-    ///
-    /// `None` is a head with no run in it, which is [`deck_name`]'s refusal — see
-    /// [`pane_target`].
+    /// Laid-out target pulldown mark and active card for pane `index`, or `None`.
     pub fn pane_pulldown(
         &self,
         ctx: &egui::Context,

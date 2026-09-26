@@ -28,12 +28,7 @@ mod transport;
 // which needs the derivation and not the row.
 pub(crate) use transport::next_tonemap;
 
-/// The Transport bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`transport`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::transport` or `view::TransportRow` has to learn a
-/// second path for it.
+/// Transport bay module re-exports (ADR-0121).
 pub use transport::{
     arrangement, audio_in, beat_at, exposure_at, learn_pill, look, map_pill, offset_at,
     tracker_group, transport, unit_of, unit_of_offset, Arrangement, ArrangementPill, Ask, AudioAsk,
@@ -45,12 +40,7 @@ pub use transport::{
 
 mod mixer;
 
-/// The Mixer bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`mixer`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::mixer` or `view::TransitionRow` has to learn a second
-/// path for it.
+/// Mixer bay module re-exports (ADR-0121).
 pub use mixer::{
     after, mixer, roll_at, roll_moves_in, transition, Fader, Go, Level, Mask, Meter, Mixer, Phase,
     Reach, Strip, StripBox, TransitionRow, TransitionSettings, ROLL_PERIOD, ROLL_REACH,
@@ -60,12 +50,7 @@ pub(crate) use mixer::{next, next_shape, residency, wipe_kind};
 
 mod library;
 
-/// The Library bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`library`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::library` or `view::LibraryBay` has to learn a second
-/// path for it.
+/// Library bay module re-exports (ADR-0121).
 pub use library::{
     library, load_item, Aim, Block, Chosen, Field, Filters, KindChip, LibraryBay, Load, Menued,
     Opened, Picked, Pointed, Pointing, Published, Read, Reading, RowItem, RowKind, RowMenu, Rows,
@@ -74,12 +59,7 @@ pub use library::{
 
 mod inspector;
 
-/// The Inspector bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`inspector`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::inspector` or `view::InspectorPane` has to learn a
-/// second path for it.
+/// Inspector bay module re-exports (ADR-0121).
 pub use inspector::{
     auth_chips, count_text, deck_head, deck_name, inspector, keep_pill, node_keep, pane_count,
     pane_target, rend_chips, sens_chips, slot_mcp_pill, AimChips, Aimed, DeckHead, DeckName,
@@ -94,12 +74,7 @@ pub(crate) use inspector::next_sync;
 
 mod program;
 
-/// The Program bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`program`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::program` or `view::ProgramBay` has to learn a second
-/// path for it.
+/// Program bay module re-exports (ADR-0121).
 pub use program::{
     band_of, caption_of, picture_rect, preview_rects, program_bay, program_body,
     program_body_with_row_h, program_head, rearrange, Band, Basis, Body, Budgeted, Picture,
@@ -109,62 +84,32 @@ pub use program::{
 
 mod master;
 
-/// The Master bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`master`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::master` or `view::MasterRow` has to learn a second
-/// path for it.
+/// Master bay module re-exports (ADR-0121).
 pub use master::*;
 
 mod sequencer;
 
-/// The Sequencer bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`sequencer`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::sequencer` or `view::Sequencer` has to learn a second
-/// path for it.
+/// Sequencer bay module re-exports (ADR-0121).
 pub use sequencer::*;
 mod staging;
 
-/// The Staging bay's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`staging`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::staging` or `view::StagingBay` has to learn a second
-/// path for it.
+/// Staging bay module re-exports (ADR-0121).
 pub use staging::*;
 
 mod layout;
 
-/// The layout and geometry placement module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`layout`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::to_egui` or `view::Placed` has to learn a second path
-/// for it.
+/// Layout and geometry placement module re-exports (ADR-0121).
 pub use layout::*;
 pub(crate) use layout::{held_inside, positive, track};
 
 mod outputs;
 
-/// The Outputs row's own module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`outputs`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::outputs` or `view::Outputs` has to learn a second path
-/// for it.
+/// Outputs row module re-exports (ADR-0121).
 pub use outputs::*;
 
 pub mod widgets;
 
-/// The shared interactive widgets module, split out under
-/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
-/// rule that a move carries its reasoning with it: every symbol below is
-/// [`widgets`]'s, re-exported here so that nothing outside this crate that
-/// already writes `view::FoldGrip` or `view::bay_grip` has to learn a second
-/// path for it.
+/// Shared interactive widgets module re-exports (ADR-0121).
 pub use widgets::card::{bay_card, popup_card};
 pub use widgets::chip::Tally;
 pub use widgets::field::CARET;
@@ -180,78 +125,19 @@ pub mod regions;
 pub use modal::*;
 pub use regions::*;
 
-/// The whole of a texture, in `egui`'s texture coordinates. The picture fills
-/// its rectangle, and that is now one answer rather than two.
-///
-/// # What changed, and why the argument is not deleted
-///
-/// This used to read *"the fitting happened when the engine drew into it, and
-/// doing it again here would be two answers to how does a 16:9 canvas sit in
-/// this box"*. That was true while [`picture_rect`] handed the engine the whole
-/// `program-view` region: the region was not the canvas's shape, so
-/// `Present::draw` had to choose where the canvas sat inside it, and a second
-/// fit here would have chosen differently.
-///
-/// The console decides the box now. [`picture_rect`] gives the picture the
-/// canvas's own aspect, so the engine is handed a target it already agrees with
-/// and its fit has nothing left to do. The two answers did not become one by
-/// one of them being dropped — one of them became the identity.
-///
-/// # The engine's letterbox stays, and it is not redundant
-///
-/// [`fitted`] rounds to whole pixels and the caller's own `physical` rounds
-/// again to whole texels, so the target is never exactly the canvas's ratio:
-/// the mock's 466 x 262 is 16:9 to a quarter of a pixel and no closer.
-/// `letterbox` is what absorbs that, and after this rule the bars it draws are
-/// sub-texel where they used to be the black half of a region.
+/// Normalized uv coordinates mapping the full texture rectangle in egui.
 const WHOLE_TEXTURE: Rect = Rect {
     min: Pos2::new(0.0, 0.0),
     max: Pos2::new(1.0, 1.0),
 };
 
-/// How many deck preview cells there are, and it is derived rather than picked
-/// off the mock.
-///
-/// `karakuri_engine`'s `deck::MAX_SLOTS` is 4 — *"a deck holds 1 to 4 slots"*,
-/// asserted in `Deck::new` — so four is the most auditions there can ever be at
-/// once, and a fifth cell would be a cell no deck can ever fill. The mock
-/// agrees from the other end: `.previews` is `grid-template-columns: repeat(4,
-/// 1fr)` with four `.preview` cells in it, and the Program bay's head reads
-/// *previews 3 of 4*. Two readings, one number.
-///
-/// `karakuri-engine` is not a dependency of this crate and is not becoming one
-/// for a `usize` — `src/` takes no device, which is the seam ADR-0156 left
-/// standing. The number is transcribed with its derivation, the way every
-/// number read off the mock is.
+/// Maximum deck slots and preview cells supported simultaneously (ADR-0156).
 pub const DECKS: usize = 4;
 
-/// The letters the mock puts in the four cells, which is how an operator says
-/// *which* deck. `A` through `D`, in slot order.
-///
-/// Public because a harness saying *which deck a fader moved* has to say it in
-/// the letters the cells are drawn with, and a second list written out there
-/// would be a copy that goes on saying `A B C D` the day this one does not —
-/// [ADR-0179](../../../../docs/adr/0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md)
-/// on a word instead of on a number.
+/// Deck identifier letters in slot order (ADR-0179).
 pub const DECK_LETTERS: [&str; DECKS] = ["A", "B", "C", "D"];
 
-/// How many cells go down one side when they are beside the picture: half of
-/// [`DECKS`], which is two — A and B down the left, C and D down the right.
-///
-/// Two columns of two rather than one column of four, and the arithmetic is
-/// worth writing down because it does not point where a reader expects. A
-/// column of *n* cells stacked down a body *H* tall is about `H / n` per cell,
-/// so it is `(H / n) * 16 / 9` wide, and all four of them cost `(4 / n) * (H /
-/// n) * 16 / 9` — one column of four is the cheapest arrangement and four
-/// columns of one is the dearest. So this is not the choice that leaves the
-/// picture the most room; one side of four would leave more.
-///
-/// It is chosen for the two things that are not width. The picture stays
-/// centred in the bay with equal ground either side, which is what [`fitted`]
-/// gives every other box on this panel; and a cell stays `H / 2` rather than `H
-/// / 4` tall, which at the mock's own body is 163 against 79 — a preview an
-/// operator can read a cut in against one that is a smaller thumbnail than the
-/// row it replaced.
+/// Preview cell count per side when displayed beside the main picture (half of [`DECKS`]).
 const PER_COLUMN: usize = DECKS / 2;
 
 /// Two columns divide [`DECKS`] exactly, and a `DECKS` that stopped being even
@@ -261,15 +147,7 @@ const PER_COLUMN: usize = DECKS / 2;
 const _: () = assert!(DECKS % 2 == 0 && DECKS == PER_COLUMN * 2);
 
 // ---------------------------------------------------------------------------
-// Shared across more than one bay
-//
-// Each of these physically sat inside the Transport bay's own range of the
-// file this crate used to be one module, and stayed here rather than moving
-// to `transport` under the Mixer and Library extractions' rule (ADR-0121):
-// a symbol moves with the bay that owns it, and none of these is Transport's
-// alone. `cargo build` is what found each one — a private item is visible to
-// a child module but not to a sibling, so a first attempt at moving every one
-// of them into `transport.rs` failed to compile at exactly these names.
+// Shared cross-bay constants (ADR-0121)
 // ---------------------------------------------------------------------------
 
 /// The tempo this row is drawn at in the mock — `.bpm`'s `128.0` — in
@@ -360,17 +238,9 @@ impl View {
             // row. Room for the four the mock draws, so a host that says so
             // at startup does not grow it — `mixer`'s reason, one row up.
             scopes: Vec::with_capacity(Scope::ALL.len()),
-            // And nothing to narrow by, which is the same console again: the
-            // `holds` field is drawn wherever the scope row is and a press on
-            // it asks for the listing over again until a host says what this
-            // store's Sets are made of. No capacity is reserved, for
-            // `library`'s reason one field up.
+            // Holds filter criteria; unallocated until configured by store metadata.
             holds: Vec::new(),
-            // **And pointed nowhere**, which is where every run begins: no
-            // folder has been dropped on the window, so there is no `.path`
-            // row and the scopes sit straight on the filters. Nothing over the
-            // window either — the second is a drag that is happening now, and
-            // one is not.
+            // Active folder path or incoming drag payload.
             folder: None,
             incoming: None,
             // Neither field set, which is the whole library rather than a
@@ -394,11 +264,7 @@ impl View {
             // **No pulldown down**, which is where a run starts and is every
             // test in this crate that does not open one.
             pane_open: None,
-            // Nothing outstanding on any slot, which is a console with no
-            // engine behind it and is also every ordinary frame of one that
-            // has. Room for as many rows as a deck can ever have slots, so
-            // the caller's write never grows it — `mixer`'s reason, one bay
-            // up.
+            // Pre-allocated for max deck slots to avoid frame reallocations.
             staging: Vec::with_capacity(DECKS),
             // As many panes as the inspector has, so the frame path never
             // grows it — the same reason `mixer` is built with a capacity.
@@ -409,15 +275,7 @@ impl View {
             opening: Open::CLOSED,
             slot_policies: [SlotPolicy::Auto; DECKS],
             phase: Phase::ZERO,
-            // **Nothing addressed and no bay named**, which is the honest
-            // start rather than a table of zeroes: `Focus::bay` answers *the
-            // first bay the traversal reaches* off the arrangement, and every
-            // bay's remembered address is the first thing it drew until
-            // somebody moves it. So deck A and the first library row are still
-            // where the marks are — the mock's own two — and neither is a
-            // reading of anything, so neither has a *nothing* to be: a console
-            // with no deck draws no strips and so no ring, and one with no
-            // store draws no rows and so no cursor.
+            // Initial focus defaults to the first reachable bay in traversal order.
             focus: Focus::default(),
             // **Deck A, and it is a third mark rather than a copy of the
             // first.** Both start on A because that is where the mock draws

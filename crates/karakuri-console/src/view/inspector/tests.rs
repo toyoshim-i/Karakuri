@@ -60,11 +60,7 @@ fn pane_at(height: f32) -> Rect {
     Rect::from_min_size(Pos2::new(0.0, 0.0), egui::vec2(237.0, height))
 }
 
-/// The two heads are the mock's boxes and the leftover is the groups'.
-///
-/// `.half-head` is `5 + 16.5 + 5` over its own `border-bottom`, and
-/// `.deck-head` is `5 + 15.5 + 5` with none — the stylesheet's own arithmetic
-/// for that row. Everything under them is the body.
+/// Verifies half-head, deck-head, and body layout bounds match mock heights.
 #[test]
 fn a_pane_is_two_heads_and_what_is_left() {
     let pane = one_node(2);
@@ -200,14 +196,7 @@ fn the_pane_head_says_which_deck_it_is_showing() {
     assert_eq!(showing_text(&pane), "deck B · drift_shell + soft_points");
 }
 
-/// Every level the vocabulary names is on the node head.
-///
-/// `karakuri_operation::Authority` carries no `ALL` — *"it arrives with the
-/// first reader"* — so [`AUTHORITIES`] is this crate's list, and the thing that
-/// can go wrong is the list falling behind the vocabulary while [`auth_word`]
-/// is updated. This holds the two together: every level [`auth_word`] can spell
-/// is in the array exactly once, and the array is in the vocabulary's own
-/// declaration order.
+/// Verifies every vocabulary authority level is present in order on the node head.
 #[test]
 fn every_authority_the_vocabulary_names_is_on_the_node_head() {
     // A `match` that a fourth level would not compile past, which is what
@@ -249,15 +238,7 @@ fn a_pane_with_no_room_across_it_draws_nothing() {
     assert!(pane_box(narrow, &pane.nodes, 0.0).is_none());
 }
 
-/// There are two panes and there is no third.
-///
-/// The mock's `2 up ▾` is an operator choosing how many while running, and a
-/// [`Spec`](karakuri_layout::Spec) builds a [`Layout`](karakuri_layout::Layout)
-/// once — so the count is the arrangement's, and a caller asking for a pane it
-/// has not got gets `None` rather than one of the two it has.
-///
-/// And a console with no deck behind it hands over no pane at all, which is
-/// every test in this crate.
+/// Verifies pane lookup returns None for indices beyond configured panes.
 #[test]
 fn there_are_two_panes_and_no_third() {
     let mut layout = crate::layout();
@@ -283,15 +264,7 @@ fn there_are_two_panes_and_no_third() {
     assert!(View::new(Room::Day).inspector.is_empty());
 }
 
-/// A pane starts under the bay head and not on top of it.
-///
-/// The one thing `pane_box`'s own tests cannot see. They are handed a rectangle
-/// and the head has already been taken off it — the fixture says so in the
-/// arithmetic, `151.5 - size::HEAD_H` — so every one of them passes whether or
-/// not the caller does the subtraction. It did not: `.half-head` was drawn at
-/// the top of `inspector-1`, which is the top of the bay, which is where
-/// [`bay_head`] paints the word `Inspector`. Read against the arrangement
-/// rather than against a fixture, because the fixture is what could not tell.
+/// Verifies inspector panes are positioned beneath the bay header rather than overlapping.
 #[test]
 fn a_pane_starts_under_the_bay_head() {
     let mut layout = crate::layout();

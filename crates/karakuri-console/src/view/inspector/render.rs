@@ -1,45 +1,13 @@
 use super::*;
 
-/// Whether the deck a pane is showing is on air, off the Mixer bay's own
-/// reading of it.
-///
-/// [`Strip::tally`] through [`residency`], which is the one place a tally
-/// becomes a residency on this console — a second reading of it here would be
-/// two statements about one fact, and the mock draws the pane's `keep` and the
-/// strip's tally in one pink for exactly the reason that they are one fact.
-///
-/// A deck with no strip is not on air, which is a state rather than a
-/// fallback: [`View::mixer`] is as long as the deck has slots, so a pane
-/// pointed past the end is pointed at nothing, and nothing is not live.
+/// Determines if the deck displayed in a pane is currently on air based on mixer strips.
 pub(crate) fn on_air(strips: &[Strip], deck: usize) -> bool {
     strips
         .get(deck)
         .is_some_and(|strip| residency(strip.tally) == Residency::Live)
 }
 
-/// One pane of the Inspector, painted.
-///
-/// Where everything goes is [`inspector`]'s, so this paints and derives
-/// nothing but the position of one chip after another along a row, which is
-/// what a flex row is.
-///
-/// Term for term from `style.css`:
-///
-/// - `.half-head` — `color: var(--c-faint)` for the label, `.what`'s
-///   `color: var(--c-text)` for the deck and its material, over a
-///   `border-bottom: 1px solid var(--c-hair)`.
-/// - `.deck-head` — a `.mini` for the sync mode, `.anchor` at
-///   [`size::ANCHOR_SIZE`] beside it, and the fold's `.mini` pushed to the
-///   right by `.sep`'s `flex: 1`.
-/// - `.node-head` — `background: var(--c-tint)`, `.addr`'s
-///   `color: var(--c-lav)`, the name in `var(--c-dim)`, and `.auth`'s three
-///   words at the right.
-/// - `.rend-row` — `.rend` chips, the live one in `var(--c-pink)` over a 15%
-///   wash of it.
-/// - `.param` — the mock's four tracks, with the fader taking what the other
-///   three leave.
-///
-/// Context for rendering an inspector pane into a UI layout.
+/// Rendering context for an inspector pane within a layout frame.
 #[derive(Clone, Copy)]
 pub(crate) struct InspectorIntoCtx<'a> {
     pub at: &'a InspectorPane,
@@ -67,11 +35,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         naming,
         target,
     } = ctx;
-    // **Derived here and hit-tested by `claim` off the same call**, and asked
-    // before the words are painted rather than after: `.half-head` is a flex
-    // row with `.sep` between them, so the readout is what gives way when the
-    // pane is narrow and the pill keeps its place. `None` is a head with no
-    // room for the capsule, which draws none — see [`keep_pill`].
+    // Hit-test and paint keep pill before words to preserve spacing in narrow panes.
     let keep = keep_pill(ui.ctx(), at, pane);
     let mcp = slot_mcp_pill(ui.ctx(), at, pane, policy);
     // **And the count beside it**, which is what rule 04 asks of a pane that
@@ -84,11 +48,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         naming,
         mcp.as_ref().map(|pill| pill.pill),
     );
-    // What is left of the head for the two words: everything up to whatever is
-    // next along the row, one `.half-head` gap short of it. A name too long for
-    // that is clipped, which is the row's own answer to a long name either way
-    // — the head is a clip rectangle and there is no ellipsis in this console
-    // to draw.
+    // Remaining width in the half-head for the deck name and material, clipped if too long.
     let words = match count
         .map(|c| c.min.x)
         .or(mcp.map(|pill| pill.pill.min.x))
@@ -119,13 +79,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         naming,
         mcp.as_ref().map(|pill| pill.pill),
     ) {
-        // **A ground under the field while it is asking, and none while it is
-        // reading.** A caret says letters are going *somewhere*; the tint says
-        // where, which is the one thing a run of text in a row of readouts
-        // cannot say for itself. It is `.node-head`'s own `--c-tint`, so the
-        // console spends no new colour on it — and the pink a capsule is lit
-        // in is deliberately not reached for here, because that pink means
-        // *on air* two controls away.
+        // Tint the deck name field while being actively edited to highlight text entry.
         let text = match naming {
             Some(typed) => naming_text_in_head(pane, typed),
             None => showing_text(pane),
@@ -144,29 +98,12 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         ],
         Stroke::new(size::HAIRLINE, pal.hair),
     );
-    // **The pulldown's mark, after the run and inside the head's own clip** —
-    // the mock's `▾` beside `deck A · drift_night`, drawn rather than typed
-    // for [`CHEVRON_W`]'s reason. It is painted in the label's ink rather than
-    // the run's: the mark is a control and the name beside it is a readout,
-    // and the console draws every `▾` it has in `--c-faint`.
+    // Draw pulldown chevron indicator in faint ink next to the target name.
     if let Some(target) = target {
         let mark = target.chevron;
         chevron_down(&painter, mark, pal.faint);
     }
-    // **The mock draws the first pane's `keep` as `.pill.on` and the second
-    // pane's as a plain `.pill`**, and what the lit one reads is now on the
-    // page: the deck this pane is *showing* is on air. Deck A in the mock is
-    // on air *and* holds the selection *and* is the first pane, and the wash
-    // is the first of the three for two reasons the console already holds —
-    // `.pill.on`'s pink *is* the pink a tally on air is drawn in
-    // ([`on_pill_at`]), and the selection is drawn in lavender everywhere
-    // else on this panel, so a pink wash meaning *selected* would be the one
-    // colour on the console saying two things.
-    //
-    // **It is handed in rather than asked here**, which is `mixer_into`'s
-    // `marked` and `selection` one bay over: residency is the *mixer's*
-    // reading of a deck — [`Strip::tally`] — and a second derivation of it in
-    // this bay would be two statements about one fact.
+    // Paint the keep pill, lit with tally pink if the deck is currently on air.
     if let Some(pill) = keep {
         match on_air {
             true => on_pill_at(ui, pal, pill.pill, KEEP_LABEL),
@@ -207,22 +144,13 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         deck_head_into(ui, pal, &head, pane);
     }
 
-    // **The clip is what makes a scrolled pane safe**, and it is the same
-    // rectangle [`InspectorPane::grip`] refuses a press outside: a group cut
-    // by the top edge is painted with its head under the deck head and clipped
-    // away there, and a press on the part that is not on screen reaches
-    // nothing.
+    // Clip body contents so scrolled node groups do not bleed into header areas.
     let painter = ui.painter().with_clip_rect(at.body);
     for index in at.drawn(&pane.nodes) {
         let node = &pane.nodes[index];
         let rect = at.group(&pane.nodes, index);
         node_into(&painter, pal, rect, node);
-        // `.node-group`'s `border-bottom: 1px solid var(--c-hair)`, which
-        // `:last-child` does not carry — so it goes *between* two groups, and
-        // the last node's is not drawn whether or not the pane is scrolled far
-        // enough to have it on screen. It is `nodes.len()` and no longer the
-        // count of what is drawn, because a group cut by the bottom edge has
-        // a rule under it and the next group is what it separates from.
+        // Draw hairline border between adjacent node groups (omitted on the last node).
         if index + 1 < pane.nodes.len() {
             let rule = rect.max.y + size::HAIRLINE * 0.5;
             painter.line_segment(

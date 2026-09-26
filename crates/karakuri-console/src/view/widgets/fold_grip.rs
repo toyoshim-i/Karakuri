@@ -12,13 +12,7 @@ const GRIP_R: f32 = 1.0;
 /// Centre to centre, both ways.
 const GRIP_STEP: f32 = 3.5;
 
-/// How wide a grip is, which [`head_pills`] steps back by before it places the
-/// first pill. A constant rather than a return value, because the pills are now
-/// laid out where nothing is painting.
-///
-/// Public since the mark became a control ([`bay_grip`]): 5.5 is what says a
-/// target grown the way a `.pill` grows would reach into the capsule beside it,
-/// and that measurement is a test's rather than this module's.
+/// Width of a fold grip, which [`head_pills`] steps back by before placing the first pill.
 pub const GRIP_W: f32 = GRIP_STEP * (GRIP_COLS - 1) as f32 + GRIP_R * 2.0;
 
 /// The mock's `.grip`, `⋮⋮` — drawn rather than typed, because whether a
@@ -87,47 +81,9 @@ pub(crate) fn pane_dividers(ui: &Ui, pal: &Palette, panel: &Panel, id: NodeId, r
     }
 }
 
-/// A fold, as a rectangle to press and the node it folds — the console's own
-/// shape, reached from the panel instead of from `f`.
+/// A fold control: a clickable grip rectangle that folds node `id`.
 ///
-/// # It was two controls and it is one, because a pane stopped needing a shape
-///
-///
-/// [ADR-0295](../../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
-/// gave *Fold a pane away* a second derivation here — `pane_edge`, a band
-/// `GRAB` deep on the pane's outer edge with nothing drawn in it — and it was
-/// never registered, because that band lay over the outer three pixels of every
-/// row of the Library bay's list.
-/// [ADR-0300](../../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
-/// replaced it with a drag: a pane's boundary pulled out past the pane's own
-/// minimum closes it, and the divider it leaves behind at the window's edge is
-/// what pulls it back. There is no band while the pane is open, nothing
-/// overlaps a library row, and the control needs no derivation at all — a
-/// boundary is `karakuri_console::input`'s rule 3, claimed before any control
-/// is asked. So this type is one control now: the grip, which never had the
-/// conflict.
-///
-/// The two are still one row's worth of operation apiece and one variant here —
-/// [`Op::Fold`] of a node — and `tests/vocabulary.rs`'s `rows_of` gives it both
-/// of *Fold a bay away* and *Fold a pane away*.
-///
-/// # There is no unfold on it, and that is the arrangement rather than a gap
-///
-/// [`Outputs::op`] and [`ProgramHead::op`] each choose between two operations,
-/// because the thing they act on is still on screen when it is off. A folded
-/// node has no rectangle, so this control is not drawn once its press has
-/// landed: the grip goes with the head it is in. That is `Op`'s own sentence
-/// about the pointer — *"a folded region has no rectangle, so the pointer could
-/// never be over one, so `f` on the keyboard only ever folded"* — met by a
-/// control instead of by a key, and the way back is `z` for the same reason it
-/// is for `f`.
-///
-/// # A fold writes no session record
-///
-/// `karakuri-operation-record` answers `Silent::Surface` for all four fold
-/// operations — *a surface's own state* — so nothing here routes through the
-/// window's `written`, and there is no `Operation` for it to route as: this is
-/// [`Op`] and the two unnamed splits are why (ADR-0204).
+/// Pane drag folding replaces legacy edge controls per [ADR-0295](../../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md), [ADR-0300](../../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md), and ADR-0204.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FoldGrip {
     /// The control: what a press has to land in.

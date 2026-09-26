@@ -8,20 +8,7 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 impl LibraryBay {
-    /// The `index`th row's rectangle, with [`scroll`](Self::scroll) already taken
-    /// off — so a row above the list has a negative-going top and one below it a
-    /// top past `list.max.y`.
-    ///
-    /// Derived rather than stored for [`TransportRow::dot`]'s reason: the rows are
-    /// a stride and a count, and a `Vec` of them would be an allocation a frame
-    /// does not need.
-    ///
-    /// Every index in the listing is an answer, where this used to be a caller's
-    /// error past [`rows`](Self::rows): a scrolled bay has rows off both edges and
-    /// [`drawn`](Self::drawn) is what says which of them reach the picture, so the
-    /// rectangle has to exist before that question can be asked.
-    /// [`InspectorPane::group`] is the same change one bay over (ADR-0312,
-    /// ADR-0307).
+    /// Returns the bounding rectangle for row `index`, adjusted for current scroll offset (ADR-0307, ADR-0312).
     pub fn row(&self, index: usize) -> Rect {
         Rect::from_min_size(
             Pos2::new(
@@ -32,21 +19,7 @@ impl LibraryBay {
         )
     }
 
-    /// Which rows reach the picture, as a range into the listing — the ones a
-    /// scrolled list has any of on screen, cut edges included.
-    ///
-    /// It is what [`library_into`] paints and what [`LibraryBay::take`],
-    /// [`LibraryBay::land`], [`LibraryBay::starred`] and [`LibraryBay::menu_ask`]
-    /// walk, so a control is hit-tested over exactly the rows that were drawn. It
-    /// is not [`rows`](Self::rows), which counts the whole ones and is the foot's
-    /// number: a star in a row cut by the bottom edge is drawn and is pressable,
-    /// and the row it is in is not counted.
-    ///
-    /// Arithmetic rather than a walk, which is where this parts company with
-    /// [`InspectorPane::drawn`]: the rows are a stride, and the one thing that is
-    /// not is the reading block, which [`pushed`](Self::pushed) already holds. So
-    /// the range is found by asking the two ends rather than by walking every row
-    /// of a listing a store answered.
+    /// Returns the range of row indices that overlap the visible listing area.
     pub fn drawn(&self) -> std::ops::Range<usize> {
         let touching = |index: usize| {
             let row = self.row(index);
@@ -67,16 +40,7 @@ impl LibraryBay {
         }
     }
 
-    /// How far a reading pushes the `index`th row down, which is nothing at all for
-    /// every row above it and the whole block for every row below.
-    ///
-    /// The block is between two rows and not over them, which is what makes this a
-    /// mode of the list rather than a card drawn on top of one: the rows under the
-    /// cursor keep their order and their stride and start lower down. So the block
-    /// scrolls with them — it is part of [`library_content_h`]'s content, and the
-    /// rows it pushes past the bottom are one notch of the wheel away rather than
-    /// out of reach (ADR-0312). The foot's `n of m` says how many are whole, in the
-    /// words it says it in for a library taller than its list.
+    /// Vertical offset added to rows below an open reading block (ADR-0312).
     fn pushed(&self, index: usize) -> f32 {
         match self.reading {
             Some(block) if index >= block.under => {
@@ -86,17 +50,7 @@ impl LibraryBay {
         }
     }
 
-    /// The `index`th row's star, at the left of the row inside `.lib-row`'s own
-    /// padding — [`STAR_SIZE`] square, centred across the row's height.
-    ///
-    /// Derived rather than stored for [`LibraryBay::row`]'s reason, and off that
-    /// method rather than off the list, so a star follows the row a reading pushed
-    /// down exactly as the name beside it does.
-    ///
-    /// One derivation for the paint and the press, which is [`LibraryBay::load`]'s
-    /// rule two capsules along: `library_into` paints from this and
-    /// [`LibraryBay::starred`] hit-tests it, so the mark a press lands on is the
-    /// mark that is drawn.
+    /// Returns the bounding rectangle for the star icon in row `index`.
     pub fn star(&self, index: usize) -> Rect {
         let row = self.row(index);
         Rect::from_min_size(
@@ -108,45 +62,12 @@ impl LibraryBay {
         )
     }
 
-    /// Where the name in the `index`th row starts, which is one star and one
-    /// [`STAR_GAP`] in from where it used to.
-    ///
-    /// It is derived here rather than at the paint so that the mark and the word
-    /// are placed by one arithmetic — `.lib-row` is a flex row, and a name laid out
-    /// from the row's padding while the star was laid out from the same padding
-    /// would draw the two on top of each other.
+    /// X-coordinate where item name text begins for row `index`.
     pub(crate) fn named(&self, index: usize) -> f32 {
         self.star(index).max.x + STAR_GAP
     }
 
-    /// What a press at `p` on a row's star asks for, or `None` where there is no
-    /// star under it.
-    ///
-    /// # It names the state, and the state is the one the row is not in
-    ///
-    /// `Operation::SetFavourite { id, favourite }` is not a toggle (ADR-0299) — *"a
-    /// map with a button per direction, a model that says which one it wants and a
-    /// key all have to be able to say star this and mean it"* — so the control is
-    /// what reads the row's present state and asks for the other one. That is
-    /// [`TransitionRow::shape`]'s division three bays along: the press names where
-    /// it arrived, and the arithmetic that got it there is the surface's
-    /// ([P-0090]).
-    ///
-    /// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
-    ///
-    /// # The listing and the marks both go in with the point
-    ///
-    /// [`LibraryBay::take`]'s arrangement one control along and for its reason: the
-    /// operand is a name this crate reads no store for (ADR-0156), so the rows the
-    /// host handed in are what a row index means, and which of them are starred is
-    /// the host's answer too — see [`View::starred`].
-    ///
-    /// A listing shorter than the rows drawn asks nothing, which is `take`'s
-    /// refusal rather than a clamp: a star answered bare would name a Set nobody
-    /// can see. A procedure row has no star and answers nothing, which is
-    /// [`Rows::set`]'s whole job: a star is refused on an id `<store>/sets/` does
-    /// not hold — `StoreError::NoSet`, ADR-0299 — so a procedure row draws the
-    /// column with nothing in it and a press there is a press on the row.
+    /// Returns an operation to toggle the star at `p`, or `None` if unhit (ADR-0156, ADR-0299, P-0090).
     pub fn starred(
         &self,
         rows: Rows<'_>,
@@ -167,22 +88,7 @@ impl LibraryBay {
         })
     }
 
-    /// Which row `p` is on, or `None` for a point on the list's own ground, on the
-    /// reading between two rows, or outside the list altogether.
-    ///
-    /// # It is bounded by the list and not only by the row
-    ///
-    /// A scrolled bay has rows off both edges and [`LibraryBay::row`] answers for
-    /// every one of them, so a rectangle under the filter fields or over the foot
-    /// is a rectangle a press could land in while the row it belongs to is not on
-    /// screen. That is [`InspectorPane::grip`]'s *refuses a press outside the body*
-    /// one bay over, and it is the one thing here that would fail silently: the bay
-    /// would claim a press on a row nobody can see, under controls that are drawn
-    /// there (ADR-0312, ADR-0307).
-    ///
-    /// [`drawn`](Self::drawn) and not [`rows`](Self::rows), so a press on the
-    /// visible half of a cut row reaches it — the row is drawn, and a control
-    /// claims what it acts on.
+    /// Returns the index of the drawn row containing `p`, or `None` if outside bounds (ADR-0307, ADR-0312).
     fn at_row(&self, p: Pos2) -> Option<usize> {
         if !self.list.contains(p) {
             return None;
@@ -195,20 +101,7 @@ impl LibraryBay {
         format!("{} of {}", self.rows, self.total)
     }
 
-    /// A capsule `width` wide at the far end of the foot, which is where the
-    /// pulldown goes and what everything else in the row is measured back from.
-    ///
-    /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the three
-    /// capsules, so the count is one [`size::LIB_FOOT_PAD_X`] in from the left and
-    /// the last item is one in from the right with the whole of the leftover
-    /// between them. Nothing else in the row has a width, so the spacer's share is
-    /// the only arithmetic and it is a subtraction.
-    ///
-    /// Taken as an argument rather than derived, because a capsule is as wide as
-    /// the words in it and this derivation asks `egui` for nothing — [`library`]'s
-    /// own rule. The caller measures the galley it is about to paint and hands the
-    /// number in, so the box the capsule is drawn in and the box a test asks about
-    /// are one statement.
+    /// Returns bounding box for a capsule of `width` anchored at the right side of the foot.
     pub fn pill(&self, width: f32) -> Rect {
         Rect::from_min_size(
             Pos2::new(
@@ -219,28 +112,7 @@ impl LibraryBay {
         )
     }
 
-    /// The foot's load control, measured and laid out: the `load` button, the `→`
-    /// label between them, the pulldown and how many decks its list holds.
-    ///
-    /// One derivation for the paint and for the press, which is
-    /// [`ArrangementPill`]'s arrangement one bay along: each capsule is as wide as
-    /// what is in it, and two measurements would be a control drawn in one box and
-    /// pressed in another. [`library_into`] paints from this,
-    /// [`crate::input::claim`] hit-tests it and `tests/library.rs` asks it where
-    /// the capsules are.
-    ///
-    /// Laid out from the right, because the pulldown is the far end of the row.
-    /// `.lib-foot`'s `gap: 8px` ([`size::LIB_FOOT_GAP`]) is between every pair of
-    /// children, so the label and the button are stepped back from the pulldown by
-    /// it and [`LibraryBay::params_chip`] is stepped back from the button by it
-    /// again. The pulldown is as wide as a one-letter deck name and the button is
-    /// as wide as `load`, so a row measured forwards from the count would move both
-    /// capsules whenever the letter did.
-    ///
-    /// Why it takes the context: a word's width is `egui`'s to answer and nobody
-    /// else's, which is [`pill_width`]'s reason and [`mixer`]'s. Before the first
-    /// pass there are no fonts, and a zero-width word makes a capsule of the
-    /// padding and the mark — which is what a console that has drawn nothing has.
+    /// Computes layout rectangles for the footer load control and deck pulldown menu.
     pub fn load(&self, ctx: &egui::Context, at: Target) -> Load {
         let run = |text: &str| {
             if ctx.cumulative_pass_nr() == 0 {
@@ -300,19 +172,7 @@ impl LibraryBay {
         }
     }
 
-    /// The foot's `params` chip, laid out: the capsule between the count and the
-    /// `load` button.
-    ///
-    /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the
-    /// capsules one [`size::LIB_FOOT_GAP`] apart, so this is measured back from
-    /// where [`LibraryBay::load`] put the button rather than forward from the
-    /// count: the capsules to its right are as wide as the words and the letter in
-    /// them, and a chip placed from the left would move whenever any of them did.
-    ///
-    /// One derivation for the paint and the press, which is [`LibraryBay::load`]'s
-    /// own rule one capsule along — [`library_into`] paints this and
-    /// [`LibraryBay::read`] hit-tests it, so the capsule a press lands on is the
-    /// capsule the word is in.
+    /// Computes bounding box for the footer `params` chip.
     pub fn params_chip(&self, ctx: &egui::Context, at: Target) -> Rect {
         let load = self.load(ctx, at).button;
         let width = pill_width(ctx, PARAMS_PILL);
@@ -347,42 +207,7 @@ impl LibraryBay {
         }
     }
 
-    /// What a press at `p` on the foot's load control asks for, or `None`
-    /// where the press was on nothing this control owns.
-    ///
-    /// The same derivation [`crate::input::claim`] hit-tests, asked a second
-    /// time rather than copied — [`ArrangementPill::ask`]'s arrangement, and
-    /// the reason is the same: the control that claims a press and the control
-    /// that acts on it cannot come apart.
-    ///
-    /// # The three answers a press can give, and which mark each one moves
-    ///
-    /// - The pulldown puts its list down, or takes it away again. Neither
-    ///   is an operation and neither moves a deck.
-    /// - A row of that list is [`Aim::Deck`]: the target moves to the deck
-    ///   that was picked and nothing is asked for, exactly as a press on a
-    ///   row of the listing above asks for nothing (`LibraryBay::take`). The
-    ///   deck selection does not move — that is the whole of what the second
-    ///   mark is for, and `View::select` is not called from here.
-    /// - The button is `Operation::LoadSet { deck, set }`, with the deck
-    ///   off [`Target::deck`] and the Set off the cursor — or
-    ///   `Operation::LoadProcedure` where the row under the cursor is a
-    ///   procedure, which is one file written over what the deck is playing
-    ///   rather than every layer replaced (ADR-0338). With no row under the
-    ///   cursor it is [`Aim::NoSet`] and nothing is emitted: a load with one
-    ///   operand missing is not a load, and answering `None` would leave the
-    ///   press claimed and unaccounted for.
-    ///
-    /// While the list is down, every press is the dismissal, which is
-    /// [`ArrangementPill::ask`]'s rule and `input::claim`'s rule 2: the card
-    /// is drawn over this bay's own list, so a press on the rows underneath it
-    /// belongs to the card and not to what it is covering. So the button
-    /// answers [`Aim::Shut`] while the list is down rather than loading
-    /// through it.
-    ///
-    /// `None` before the first pass, which is [`LibraryBay::read`]'s guard
-    /// and [`mixer`]'s: there are no fonts until `egui` has run one, so there
-    /// is no capsule width to measure and nothing has been drawn to press.
+    /// Returns the operation or action for a click at `p` in the footer load area (ADR-0338).
     pub fn aim(
         &self,
         ctx: &egui::Context,
@@ -411,12 +236,7 @@ impl LibraryBay {
         if !load.hit_button(p) {
             return None;
         }
-        // **Which of the two loads it is is the row's, and the operand is the
-        // same word either way.** A Set row names every layer of what the deck
-        // will play; a procedure row names one file written over what it is
-        // playing already (ADR-0338). The button, the row menu and the drag all
-        // arrive at this pair, which is why the division is here rather than
-        // three times over.
+        // Dispatches LoadProcedure or LoadSet based on row type (ADR-0338).
         Some(match (rows.name(cursor), rows.procedure(cursor)) {
             (Some(name), true) => Aim::Load(Operation::LoadProcedure {
                 deck: at.deck,
@@ -430,27 +250,7 @@ impl LibraryBay {
         })
     }
 
-    /// A row's menu, laid out, or `None` where none is down.
-    ///
-    /// # It hangs down off the row, where the deck pulldown's card hangs up
-    ///
-    /// Both hang into the room there is, which is [`Load::list`]'s own rule read
-    /// from the other end: that card stands on a capsule in the bay's foot and so
-    /// has only this bay's list above it, and this one stands on a row of that list
-    /// and has the rest of the list below it. It is inset from the row's left edge
-    /// by [`size::ROW_MENU_INSET`] so that it hangs under the name that was pressed
-    /// rather than under the star beside it, and it is held inside the viewport, so
-    /// a press on the last row of a bay at the bottom of the window draws the card
-    /// over the bay rather than off the screen.
-    ///
-    /// The rows are not counted against the room, which is [`Load::list`]'s clause
-    /// and the same argument: this card lists at most [`DECKS`] loads and one send,
-    /// and a window too short for five rows of type has no transport row in it
-    /// either.
-    ///
-    /// Why it takes the context: the items are as wide as the words in them, which
-    /// is `egui`'s to answer and nobody else's — [`LibraryBay::load`]'s reason one
-    /// control along. `None` before the first pass for that reason too.
+    /// Computes layout for the row context menu popup, hanging downward from row bounds.
     pub fn menu(&self, ctx: &egui::Context, viewport: Rect, at: Menued) -> Option<RowMenu> {
         if ctx.cumulative_pass_nr() == 0 {
             return None;
@@ -513,31 +313,7 @@ impl LibraryBay {
         })
     }
 
-    /// What a press at `p` asks of a row's menu, or `None` where the press
-    /// was on nothing this control owns.
-    ///
-    /// # Two questions, and which one it is depends on whether a menu is down
-    ///
-    /// - With none down this is *the secondary press*: which row it named,
-    ///   and nothing else. A press on the list's own ground below the last row
-    ///   answers `None`, exactly as [`LibraryBay::take`] does, and so does a
-    ///   press on a row with no Set behind it — a `history` row is a version,
-    ///   and every item this menu carries names a Set.
-    /// - With one down every press is the card's, which is
-    ///   [`crate::input::claim`]'s rule 2 and [`ArrangementPill::ask`]'s rule:
-    ///   on an item it picks, on the separator or anywhere else it dismisses.
-    ///   So this never answers `None` while a menu is down.
-    ///
-    /// Both operands are in hand here, which is why the arms carry whole
-    /// operations: the deck is the item and the Set is `sets[at.row]`, the row
-    /// the menu was opened on rather than the cursor's — a menu opened on the
-    /// fourth row and picked at `Load to Slot C` loads the fourth Set onto
-    /// deck C whatever the cursor and the pulldown are doing.
-    ///
-    /// The row is re-checked against the listing rather than trusted, for
-    /// [`LibraryBay::take`]'s reason: a listing that shrank between the press
-    /// that opened the menu and the press that picked from it would otherwise
-    /// name a Set nobody can see. A menu over a row that has gone dismisses.
+    /// Handles clicks on the row menu or context triggers at `p`.
     pub fn menu_ask(
         &self,
         ctx: &egui::Context,
@@ -561,11 +337,7 @@ impl LibraryBay {
             return Some(Picked::Shut);
         };
         Some(match menu.picked(p) {
-            // **The item names the deck and the row names which load it
-            // is**, which is [`LibraryBay::aim`]'s division arriving by the
-            // third route: four items on a procedure row load that one file
-            // over that deck's layer, and four on a Set row load every layer
-            // (ADR-0338).
+            // Dispatches LoadProcedure or LoadSet to target deck (ADR-0338).
             Some(RowItem::Load(deck)) => Picked::Load(match rows.procedure(row) {
                 true => Operation::LoadProcedure {
                     deck,
@@ -614,24 +386,7 @@ impl LibraryBay {
         })
     }
 
-    /// The `index`th row's badges, right to left from the row's own padding — one
-    /// box per word, in the order [`Rows::badges`] hands them and laid out so the
-    /// last word ends where the row's padding starts.
-    ///
-    /// A badge is as wide as the word in it, which is [`kind_chips`]' sentence one
-    /// row up: `.badge` is `font-size: 8px; padding: 0 4px`, so the box is the word
-    /// at [`size::BADGE_SIZE`] inside [`size::BADGE_PAD_X`] either side, and
-    /// `.badges`' `gap: 3px` is [`size::BADGE_GAP`].
-    ///
-    /// One derivation for the paint and the hover, which is [`LibraryBay::load`]'s
-    /// rule: `library_into` paints from this and `hover`'s probe asks it whether
-    /// the pointer is on one, so the readout a tip explains is the readout that is
-    /// drawn. Nothing presses it — what narrows the list by kind is the row of
-    /// chips above.
-    ///
-    /// Laid out from the right, because the mock puts the badges at the end of the
-    /// row after the name: a row measured forwards from the name would move every
-    /// badge whenever a name got longer.
+    /// Returns an iterator over badges and their bounding boxes for row `index`, aligned right to left.
     pub fn badges<'a>(
         &self,
         ctx: &'a egui::Context,
