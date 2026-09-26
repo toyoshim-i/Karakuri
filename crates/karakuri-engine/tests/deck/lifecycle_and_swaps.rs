@@ -3,32 +3,9 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    // ---------------------------------------------------------------------------
-    // ADR-0258: an operator sees a slot's own material without putting it on air
-    //
-    // Three tests, one per case the requirement names, each asserting on the
-    // slot's own target — `Deck::slot_target` — because that is the texture a
-    // console cell samples through `Deck::slot_view`. What the mix does with the
-    // slot is a separate question and is asserted separately in each.
-    // ---------------------------------------------------------------------------
+    // ADR-0258: verifies that each slot renders into its dedicated target before composite mix.
 
-    /// **A running slot's own target holds its own texels, with no fader on
-    /// them.**
-    ///
-    /// ADR-0258's *the fader is not in the monitor*, and the clause that decides
-    /// where a monitor may sample from. `gain`, `opacity`, `blend` and `mask` are edge
-    /// properties applied in `Composite`, so a slot's target is upstream of all
-    /// four — which is what lets a cell show *the level the material arrives at*
-    /// rather than the level the operator has already set.
-    ///
-    /// Asserted as bit equality between a slot faded to silence and the same slot
-    /// at unity, in the same deck on the same ticks. It is exact because nothing
-    /// between `Set::draw` and the readback rounds; "close enough" here would
-    /// tolerate a fader that had leaked upstream by a hair.
-    ///
-    /// **And the mix is checked to differ**, or the whole thing would pass with
-    /// the fader deleted: two identical slot targets prove nothing if the fader
-    /// was never applied anywhere.
+    /// Verifies that a slot's dedicated target reflects its rendered texels before channel faders are applied.
     #[test]
     fn a_running_slot_shows_its_own_texels_with_no_fader_on_them() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -80,33 +57,7 @@ mod gpu {
         }
     }
 
-    /// **An off-air slot is drawn into its own target every frame, and stepped
-    /// every frame.**
-    ///
-    /// ADR-0258's *residency does not gate a cell*, and ADR-0269's *a slot that
-    /// is drawn is stepped*. The slot an operator most needs to look at is the
-    /// one that is not on air yet, and what they need to see is the material
-    /// running rather than the still it stopped at.
-    ///
-    /// **`t` still moves for the deck's reason and not the monitor's**, which is
-    /// what keeps
-    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
-    /// intact: the step is the residency's, and taking every cell off this
-    /// console would not stop one of them. What the test can see of that is that
-    /// the two off-air levels advance by the frame's steps and by nothing else —
-    /// a draw that stepped the slot as well would show up as a slot that took
-    /// two.
-    ///
-    /// **The resize is what makes this a test of *this* frame's draw.** A slot
-    /// target persists, so a parked slot that was Live a moment ago keeps the last
-    /// picture in it and "the target is lit" would pass with the draw deleted —
-    /// that is ADR-0072's own correction to itself, made after it shipped the
-    /// wrong reason. `Deck::resize` reallocates every target, so the frame after
-    /// one is the only frame on which the target's contents can only have come
-    /// from a draw recorded on it.
-    ///
-    /// Both off-air levels are covered even though they are now one branch,
-    /// because they are two *residencies* and a surface reads them apart.
+    /// Verifies that off-air slots (Allocated and Priming) are rendered and stepped every frame (ADR-0258, ADR-0269).
     #[test]
     fn an_off_air_slot_is_drawn_every_frame_and_steps_every_frame() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -179,32 +130,8 @@ mod gpu {
         }
     }
 
-    /// **A slot whose build was rejected shows what is still running.**
-    ///
-    /// One of the failure cases ADR-0258 has to answer honestly. A rejected build
-    /// changes nothing — `swap.rs` is explicit that the running Set keeps
-    /// running, with its `t` and its live count untouched — so the honest picture
-    /// is the material that is still there, drawn on the frame after the
-    /// rejection exactly as on the frame before. Anything else would be the cell
-    /// inventing a state the deck is not in. What says a build was refused is
-    /// `Event::Rejected`, which the Staging lane draws; the cell's job is the
-    /// picture.
-    ///
-    /// **The other half of this test is gone, and it is gone because the state
-    /// it asserted is unreachable.** It read: *a Set that has never stepped has
-    /// no element state, so its draw is a pass over zeroed buffers — every
-    /// element at the origin, a handful of texels in the middle of an otherwise
-    /// black frame*, which is the cold end of a slot and was what priming
-    /// existed to fix. ADR-0269 steps every slot on every frame, so the first
-    /// frame a slot is drawn on is a frame it has already stepped: no deck can
-    /// show a never-stepped Set, and a test asserting one would be asserting
-    /// against a fixture rather than against the engine.
-    ///
-    /// **Nothing-drew and drew-nothing are still told apart by the resize.**
-    /// `Deck::resize` reallocates the target and wgpu hands it back zeroed, so
-    /// the count is checked at zero *before* the frame and above zero after it:
-    /// the pass ran, and what it put there is this Set's own answer rather than
-    /// a leftover.
+    /// Verifies that a rejected build preserves the actively running set in the slot target.
+    /// Resizing reallocates the target to verify subsequent frames render the surviving set.
     #[test]
     fn a_rejected_build_shows_what_is_still_running() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -317,18 +244,7 @@ mod gpu {
         );
     }
 
-    /// **The same tick sequence and the same seeds composite to the same pixels.**
-    ///
-    /// The ticks are deliberately uneven. A run of identical steps would pass even
-    /// if the deck were advancing slots by whatever each one felt like, since they
-    /// would all feel like the same thing; varying `steps` frame to frame is what
-    /// makes "every Live slot advances by the same `steps` from the same tick" the
-    /// thing being tested.
-    ///
-    /// Bit equality, not similarity. Floating-point addition is not associative,
-    /// so a composite whose order depended on a `HashMap`, or on which slot last
-    /// had a build land on it, would show up here — which is the whole reason the
-    /// order is the slot index and the shader's sum is unrolled.
+    /// Verifies deterministic bit-identical compositing across runs with identical seed sequences and uneven ticks.
     #[test]
     fn the_same_ticks_and_seeds_composite_bit_identically() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -355,14 +271,7 @@ mod gpu {
         );
     }
 
-    /// **Per-slot hot swap still works, and a swap in one slot does not disturb
-    /// another.**
-    ///
-    /// A slot is the unit that gets replaced — that is what it means for each slot
-    /// to own its own `HotSwap` rather than for the deck to own one over all of
-    /// them. The neighbouring slot must come through with its `t`, its element
-    /// buffers and its live count untouched, exactly as the running Set does
-    /// through a failed build in `tests/hot_swap.rs`.
+    /// Verifies that hot-swapping one slot does not perturb execution or buffers of neighbouring slots.
     #[test]
     fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -474,34 +383,13 @@ mod gpu {
         );
     }
 
-    /// **An off-air slot's candidate is judged at the install, like every other
-    /// slot's, because the number is the candidate's own.**
+    /// Verifies that candidate sets on off-air slots are evaluated at install time against their own cost (ADR-0313).
     ///
-    /// `Deck::begin_frame` gives every slot its frame boundary, off-air ones
-    /// included — a build has to be able to land on a slot that is not showing,
-    /// and retired Sets have to keep reaching the worker.
-    ///
-    /// **This test used to assert the opposite half of the same problem.** It was
-    /// `an_off_air_slot_is_not_judged_against_its_neighbours_frames`, and what it
-    /// pinned was that a parked slot's trial was *frozen*: the frame interval is
-    /// one number for the whole deck, so judging a candidate nobody was drawing
-    /// against it accepted it on a budget it never spent and, with a tight budget
-    /// and busy neighbours, rolled one back for cost it never caused. The freeze
-    /// was the best an interval-based watchdog could do and it left the case that
-    /// mattered untouched — a *Live* slot's candidate was still judged on its
-    /// neighbours' cost — and it cost an off-air slot an unbounded wait for a
-    /// verdict, which is the second half of what
-    /// [ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
-    /// repairs. The verdict is now the candidate's own measured cost, which does
-    /// not move with residency, so there is nothing to freeze.
-    ///
-    /// The budget here is zero, so nothing can pass it: the verdict must arrive
-    /// while the slot is still parked, and it must be against.
+    /// Off-air slots still receive frame boundaries during `Deck::begin_frame`.
+    /// With a zero budget, the candidate must be rejected while the slot is parked.
     #[test]
     fn an_off_air_slots_candidate_is_judged_at_the_install() {
-        /// What the old freeze cost: eight warmup and thirty judged frames, and
-        /// slack. Kept as the *upper* bound this now has to beat — a verdict that
-        /// took this many frames would be one that had gone back to waiting.
+        // Upper bound to verify candidate verdict arrives promptly.
         const A_FULL_WINDOW: usize = 8 + 30 + 12;
 
         let gpu = Gpu::headless().expect("no GPU available");

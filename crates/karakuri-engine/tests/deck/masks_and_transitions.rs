@@ -5,26 +5,7 @@ mod gpu {
 
     // ---------------------------------------------------------------------------
 
-    /// **A deck of one behaves exactly as a bare Set does today.**
-    ///
-    /// The load-bearing test of the whole slice, and the reason it asserts bit
-    /// equality rather than similarity: every single-Set expectation in
-    /// `tests/generated.rs`, `tests/lifecycle.rs` and `tests/hot_swap.rs` is about
-    /// the path a bare Set takes, and they only keep meaning anything about the
-    /// deck if the deck reproduces that path exactly. It can be exact — the mix
-    /// reads the texel under the fragment with `textureLoad`, adds it to a zeroed
-    /// accumulator at a gain and an opacity of exactly 1.0, and writes an `f16`
-    /// that came from an `f16`.
-    ///
-    /// **The material here writes a coverage in `[0, 1]`, which is the one thing
-    /// this comparison assumes.** The mix saturates what it reads into that range
-    /// and a bare Set's target holds whatever L4 accumulated, so an L4 writing an
-    /// alpha of 1.5 makes the two disagree in alpha and nowhere else — see
-    /// `Blend::Add`. Every expectation this test exists to protect is about
-    /// colour.
-    ///
-    /// A failure here is not a tolerance to widen. It means the mix is filtering,
-    /// or resampling, or applying something it should not.
+    /// Verifies bit-exact compositing equivalence between a single-slot deck and a standalone Set.
     #[test]
     fn a_deck_of_one_is_a_bare_set_bit_for_bit() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -47,14 +28,7 @@ mod gpu {
             lit(&expected) > 100,
             "the bare Set drew nothing, so this test would pass on two black frames"
         );
-        // And it has to be a *bright* frame, not merely a non-empty one. The colour
-        // invariant is that values above 1.0 are expected and are what feeds
-        // bloom — see
-        // `docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`
-        // — so a mix that only agreed on [0, 1] would be agreeing on the
-        // uninteresting half. Asserted rather than assumed, because the material
-        // this test renders is free to get dimmer later and take the property with
-        // it silently.
+        // Verifies the frame contains HDR values exceeding 1.0.
         let brightest = decode(&expected).into_iter().fold(0.0f32, f32::max);
         assert!(
             brightest > 1.0,
@@ -188,16 +162,7 @@ mod gpu {
         }
     }
 
-    /// **A mask that reveals nothing is a skip, not a multiply by zero.**
-    ///
-    /// The only way to see the difference, and the reason the skip is there: a
-    /// slot's target may hold a NaN — `sqrt` of a negative is a procedure that
-    /// passes every stage of this pipeline — and `0.0 * NaN` is NaN. With clean
-    /// material a mask at position 0 and a skipped layer are the same picture, so
-    /// this is the case that tells them apart, exactly as it does for the fader.
-    ///
-    /// It is also what makes a mask a third escape from broken material, beside
-    /// residency and the fader.
+    /// Verifies that fully closed masks skip slot evaluation, preventing NaNs from entering the composite.
     #[test]
     fn a_mask_that_reveals_nothing_keeps_a_nan_out_of_the_mix() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -248,12 +213,7 @@ mod gpu {
         }
     }
 
-    /// **A mask in the middle shapes the frame rather than dimming it.**
-    ///
-    /// The difference between a mask and a fader, and the only assertion that can
-    /// tell them apart: half way across, part of the frame is exactly what it would
-    /// be with the slot present and part exactly what it would be without. A fader
-    /// at 0.5 is neither, everywhere.
+    /// Verifies that intermediate masks spatially shape the layer rather than uniformly dimming it.
     #[test]
     fn a_mask_half_way_leaves_one_part_untouched_and_removes_another() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -326,13 +286,7 @@ mod gpu {
         );
     }
 
-    /// **A wipe is a mask and one scheduled move**, and neither had to know about
-    /// the other.
-    ///
-    /// The claim the whole design rests on: `Control::MaskPosition` carries the
-    /// front, the mask reads a number, and the picture between the two ends is
-    /// neither of them. Checked at three points, because a wipe that jumped would
-    /// pass a two-point test.
+    /// Verifies that wipes progress smoothly as scheduled transitions controlling mask positions.
     #[test]
     fn a_wipe_is_a_transition_carrying_a_masks_front() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -438,11 +392,7 @@ mod gpu {
         );
     }
 
-    /// A Set drawn by two renderers over one simulation, composited.
-    ///
-    /// The shape a selection is about: one L1, two L4s, and an L5 folding
-    /// them — which is what gives each renderer an edge with a `live` flag on
-    /// it.
+    /// Creates a Set with one L1 geometry and two L4 renderers composited via L5.
     fn set_of_two_renderers(gpu: &Gpu) -> Set {
         let (l1, a, b) = (compile(L1), compile(L4), compile(L4_B));
         let mut set = Set::build_many(
@@ -463,19 +413,7 @@ mod gpu {
         set
     }
 
-    /// **A scheduled selection lands on the beat it was given and not before.**
-    ///
-    /// The claim that makes a selection a *musical* control rather than a key
-    /// press: it is quantised once, where the operator asked, and every frame
-    /// until that beat leaves the Set exactly as it was. A selection applied
-    /// where it was scheduled would pass every arithmetic test there is and
-    /// still be the wrong instrument — the picture would change on the hand
-    /// rather than on the bar.
-    ///
-    /// The queue is asserted as well as the edges, because the two failures
-    /// look alike from outside: a selection that never lands and one that
-    /// lands and is applied again every frame afterwards both leave the right
-    /// renderer live.
+    /// Verifies that scheduled selections execute precisely on their target beat boundaries.
     #[test]
     fn a_scheduled_selection_lands_on_the_beat_it_was_given_and_not_before() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -537,13 +475,7 @@ mod gpu {
         );
     }
 
-    /// **A scheduled fade moves the fader on the beat grid and nowhere else.**
-    ///
-    /// The claim that makes a transition reproducible: it is a function of the
-    /// session's beat count, so two runs given the same ticks fade identically —
-    /// and a run at a different frame rate reaching the same beat is at the same
-    /// point in the fade. Checked against the arithmetic rather than against a
-    /// second run of the deck, which would agree with any implementation.
+    /// Verifies that scheduled fades evaluate deterministically from the session beat count.
     #[test]
     fn a_scheduled_fade_is_a_function_of_the_beat_count() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -584,12 +516,7 @@ mod gpu {
         );
     }
 
-    /// **A hand on the fader wins.**
-    ///
-    /// The one place an operator reaches when something is wrong is the one place
-    /// an automatic thing is writing, so a transition that kept going after a
-    /// manual move would be the worst control on the deck. Asserted for both ways
-    /// of touching it, since either is what a hand does.
+    /// Verifies that manual control adjustments cancel active transitions on the target parameter.
     #[test]
     fn moving_a_control_by_hand_cancels_the_transition_moving_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -673,12 +600,7 @@ mod gpu {
         assert_eq!(deck.transitions_on(karakuri_engine::DeckSlot(0)).count(), 0);
     }
 
-    /// **A move onto a slot the deck does not have is refused where it is asked
-    /// for**, not three seconds later inside a frame.
-    ///
-    /// `advance_transitions` indexes the slots directly, so an unchecked schedule
-    /// is a panic on the render thread at some unrelated moment. `set_gain` and
-    /// `set_opacity` panic at the call site; this joins them.
+    /// Verifies that scheduling transitions on nonexistent slots panics immediately at the call site.
     #[test]
     #[should_panic(expected = "no slot 3")]
     fn scheduling_a_move_onto_a_slot_that_is_not_there_is_refused_at_the_call() {
@@ -695,17 +617,7 @@ mod gpu {
         ));
     }
 
-    /// **The composite sees this frame's fader, not the last one's.**
-    ///
-    /// A transition that ran *after* the mix was recorded would put every fade one
-    /// frame late — invisible in a four-beat fade and exactly wrong in a cut, which
-    /// is the case this uses. Compared against a deck whose fader was moved by hand
-    /// before the frame, which is the path that was already exact: the two are the
-    /// same picture if and only if the scheduled cut landed on the frame it was
-    /// scheduled for.
-    ///
-    /// The comparison it replaces was `assert_ne!` against an earlier frame, which
-    /// this material passes with no transition scheduled at all — it rotates on `t`.
+    /// Verifies that scheduled cuts take effect on the frame they are scheduled for without single-frame lag.
     #[test]
     fn a_scheduled_cut_lands_on_the_frame_it_was_scheduled_for() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -760,13 +672,7 @@ mod gpu {
         );
     }
 
-    /// **A scheduled move cannot reach a value a hand could not.**
-    ///
-    /// It writes the slot's field directly rather than through `set_gain` and
-    /// `set_opacity`, because those cancel it — so the clamps they carry have to be
-    /// applied on the way past, or a `transition` record would be the one path into
-    /// the mix with no bound on it. An opacity above 1.0 makes an `over` layer
-    /// subtract more than it covers.
+    /// Verifies that values written by scheduled transitions respect the same clamps as manual adjustments.
     #[test]
     fn a_scheduled_move_is_clamped_the_way_a_manual_one_is() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -807,13 +713,7 @@ mod gpu {
         );
     }
 
-    /// **A crossfade is two scheduled moves**, and what makes that a crossfade
-    /// rather than two fades is that they share a start and a length.
-    ///
-    /// The mix is checked rather than the fields: halfway through, the outgoing
-    /// slot is dimmer than it was and the incoming one is brighter, and the frame
-    /// carries both. That is the whole of what a crossfade is, and it needed no type
-    /// of its own.
+    /// Verifies crossfade transitions configured as coordinated moves across outgoing and incoming slots.
     #[test]
     fn a_crossfade_is_two_moves_sharing_a_start_and_a_length() {
         let gpu = Gpu::headless().expect("no GPU available");

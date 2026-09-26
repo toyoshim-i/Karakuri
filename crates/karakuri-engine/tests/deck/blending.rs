@@ -3,22 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// **`over` hides what is under it and `add` does not**, which is the whole of
-    /// what the blend vocabulary buys.
-    ///
-    /// Slot 1 is [`L4_CARD`] — black, opaque, and contributing no colour at all —
-    /// so the two modes differ by exactly one thing: whether the coverage it drew
-    /// is allowed to take the layer under it away. The expectation is not a
-    /// direction but a number, read from the card's own target:
-    ///
-    /// ```text
-    ///   add:   A + 0        = A
-    ///   over:  0 + A*(1 - c)         c = the card's coverage at that texel
-    /// ```
-    ///
-    /// Inexact for the same single reason as `gain_is_linear_...`: the GPU works in
-    /// `f32` and rounds once to `f16` on write, while the expectation is computed
-    /// in `f32` from values already rounded to `f16`.
+    /// Verifies that `over` blend hides occluded layers while `add` sums them.
     #[test]
     fn over_hides_what_is_under_it_and_add_does_not() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -95,13 +80,7 @@ mod gpu {
         );
     }
 
-    /// **`max` stacks without summing.**
-    ///
-    /// Two lit slots. Under `add` the mix is `A + B`; under `max` it is the larger
-    /// of the two per channel, which is what makes four layers of the same bright
-    /// material stay that bright instead of reaching four times it. `A` and `B` are
-    /// measured on their own — same deck, same seeds, same ticks, one slot off air
-    /// each time — so both are sampled at the same `t` as the mix.
+    /// Verifies that `max` blend selects the channel-wise maximum rather than summing.
     #[test]
     fn max_takes_the_larger_of_two_layers_rather_than_their_sum() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -158,20 +137,7 @@ mod gpu {
         );
     }
 
-    /// **An opacity outside `[0, 1]` is clamped where the engine takes it**, not
-    /// where a key press produces it.
-    ///
-    /// `karakuri-cli` clamps at the key so that the `opacity` record carries the
-    /// value that took effect, but a record is also how a *replay* drives the deck,
-    /// and a stream is allowed to say anything. Past 1.0 an `over` layer subtracts
-    /// more than it covers; below 0.0 it adds what it should have hidden. Unlike
-    /// gain — a level into an HDR mix, deliberately open above 1.0 — every value
-    /// outside this range has exactly one sensible reading, so it is clamped rather
-    /// than refused.
-    ///
-    /// NaN silences, which is the third value a fader can carry and the one with no
-    /// obvious reading: the two available are "this slot goes dark" and "the whole
-    /// mix goes dark".
+    /// Verifies that opacity values are clamped to `[0.0, 1.0]`, with NaN defaulting to 0.0.
     #[test]
     fn an_opacity_a_record_could_carry_is_clamped_to_a_fader() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -197,18 +163,7 @@ mod gpu {
         }
     }
 
-    /// **A gain a record could carry is floored at zero, and a NaN reads as zero.**
-    ///
-    /// The same hole as the one above and it needed the same answer: `karakuri-cli`
-    /// floors at the key press, which says plainly that a negative gain is wrong,
-    /// but a replayed `{"t":"gain","slot":1,"value":-2.0}` does not go through a
-    /// key press. Unbounded *above*, unlike opacity, because gain is a level into
-    /// an HDR mix and 4.0 is an ordinary thing to want.
-    ///
-    /// The NaN case is the one that cannot be recovered from. A NaN gain puts a NaN
-    /// in every channel of the mix from one slot, and unlike the material's own
-    /// NaN — which the fader skips past — no fader undoes a gain that has already
-    /// multiplied by one.
+    /// Verifies that gain values are floored at zero without an upper bound, with NaN defaulting to 0.0.
     #[test]
     fn a_gain_a_record_could_carry_is_floored_but_not_ceilinged() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -307,38 +262,14 @@ mod gpu {
         }
     }
 
-    /// **Opacity moves the mix at settings between silence and full, under every
-    /// mode.**
-    ///
-    /// Every other test here pins the fader at 0.0 or 1.0, where a composite that
-    /// ignored `opacity` outright is indistinguishable from one that honours it —
-    /// 0.0 is the skip, which [`Blend::silent_at`] decides on the host, and 1.0 is
-    /// the identity. So without this test the one control this whole slice exists
-    /// to make real has nothing saying it does anything.
-    ///
-    /// Each mode gets its own reference, and none of them is a second run of the
-    /// composite at a different fader:
-    ///
-    /// ```text
-    ///   add:   a half fader at gain g is bit-identical to a full fader at g/2
-    ///   over:  A*(1 - o*c)              c = the card's coverage
-    ///   max:   mix(A, max(A, B), o)     A and B measured on their own
-    /// ```
+    /// Verifies that opacity scales the composite between 0.0 and 1.0 across all blend modes.
     #[test]
     fn opacity_moves_the_mix_at_settings_between_zero_and_one() {
         let gpu = Gpu::headless().expect("no GPU available");
         const HALF: f32 = 0.5;
         const GAIN: f32 = 1.4;
 
-        // --- `add`: **in colour**, opacity is the same multiply gain is, so it can
-        // be checked against gain exactly. This is the collapse the deck's two
-        // numbers used to be justified by, asserted rather than asserted about.
-        //
-        // Colour and not the whole texel, because the collapse stops at the alpha
-        // channel: opacity scales coverage and gain does not, so the same picture
-        // under the two settings carries a different coverage. That is the
-        // difference between a fader and a level, showing up in the one channel
-        // where `add` cannot hide it.
+        // In colour, opacity is the same multiply as gain under `add`.
         let add_run = |gain: f32, opacity: f32| -> Vec<f32> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
@@ -481,18 +412,7 @@ mod gpu {
         );
     }
 
-    /// **Zero gain silences `add` and `max`, and still covers under `over`.**
-    ///
-    /// The other half of [`Blend::silent_at`] — the fader's half is asserted
-    /// against material that has gone NaN, in
-    /// `a_slot_faded_to_silence_cannot_take_the_mix_with_it`, because that is where
-    /// a skip and a multiply by zero stop agreeing.
-    ///
-    /// Here the material is clean and the asymmetry is what is being pinned: a
-    /// layer at zero level contributes no colour, so under `add` and `max` it is
-    /// not there at all — and under `over` it is a black card, which covers. Slot 1
-    /// is [`L4_CARD`], so that difference is most of the frame rather than a few
-    /// bits.
+    /// Verifies that zero gain silences layers in `add` and `max`, but acts as an opaque black card in `over`.
     #[test]
     fn zero_gain_silences_add_and_max_and_still_covers_under_over() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -531,16 +451,8 @@ mod gpu {
                 blend.name()
             );
         }
-        // ...and does not under `over`, where zero gain is a black card and a black
-        // card covers. Asserted rather than left as a comment, because it is the
-        // one place the two faders stop being interchangeable and an operator
-        // reaching for the wrong one gets a frame that goes dark instead of a
-        // layer that goes away.
-        //
-        // **Colour channels only.** A whole-buffer `assert_ne!` would pass on the
-        // alpha channel alone — coverage composes whatever the colour mode does, so
-        // a slot that reached the mix and changed nothing visible still moves it —
-        // and this claim is about what the picture does.
+        // Under `over`, zero gain acts as an opaque black card that occludes underlying content.
+        // Asserts on color channels only, as alpha represents coverage.
         let dark = decode(&run(Residency::Live, Blend::Over, 0.0, 1.0));
         let bright = decode(&parked);
         let darkened = (0..dark.len())
@@ -554,16 +466,7 @@ mod gpu {
         );
     }
 
-    /// **Two slots at gain 1.0 and 0.0 render what slot 0 alone renders.**
-    ///
-    /// Exact, for the same reason as above with one addition: `acc + 0.0 * x` is
-    /// `acc` for every finite `x`, so a silenced slot contributes nothing at all
-    /// rather than something below a threshold.
-    ///
-    /// Note what is *not* silenced: the slot is still `Live`, so it is still
-    /// stepped and still rendered into its own target. Gain is a mixer fader, not
-    /// a residency level, and conflating the two is how a fader move would come to
-    /// cost a simulation.
+    /// Verifies that a slot at gain 0.0 contributes nothing to the mix while remaining active in simulation.
     #[test]
     fn a_slot_at_zero_gain_contributes_nothing_to_the_mix() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -595,16 +498,7 @@ mod gpu {
         assert_eq!(both.live_slots(), 2);
     }
 
-    /// **Each Live slot renders into its own HDR target**, and the mix is a sum of
-    /// exactly those targets.
-    ///
-    /// This is the decision the module doc defends — additive-only would allow one
-    /// shared target, blend modes and masks will not — so it is worth an assertion
-    /// rather than only a comment. Slot 0's own target is checked against what a
-    /// deck of one holding the same Set mixes, which is the same picture by
-    /// definition if and only if the slot rendered alone into somewhere of its
-    /// own; two Sets sharing a target would have summed there instead, and slot
-    /// 0's target would hold the sum.
+    /// Verifies that each Live slot renders into its own HDR target before compositing.
     #[test]
     fn each_live_slot_renders_into_its_own_target() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -678,28 +572,7 @@ mod gpu {
         );
     }
 
-    /// **Gain is linear, and applied per slot before the sum rather than to the
-    /// sum.**
-    ///
-    /// The two are only distinguishable with more than one slot at more than one
-    /// gain, and they differ by an entire slot's contribution:
-    ///
-    /// ```text
-    ///   before (what this asserts):   2*A + B
-    ///   after  (what it must not be): 2*(A + B)
-    /// ```
-    ///
-    /// So `A` and `B` are measured on their own — same deck, same seeds, same
-    /// ticks, one slot silenced each time, so both are sampled at the same `t` as
-    /// the mix is — and the mix is checked against the first expression and
-    /// against the second.
-    ///
-    /// This is the one comparison here that cannot be exact. The GPU sums in `f32`
-    /// and rounds once, to `f16`, on write; the expectation is computed in `f32`
-    /// from values that are already `f16`. The gap is that single rounding, which
-    /// is 2^-11 relative, so the tolerance is 2^-10 — tight enough that the
-    /// alternative hypothesis misses it by three orders of magnitude, which the
-    /// second half of the test asserts rather than assumes.
+    /// Verifies that gain scaling is linear and applied per-slot prior to compositing rather than to the sum.
     #[test]
     fn gain_is_linear_and_applied_before_the_composite() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -732,12 +605,7 @@ mod gpu {
         let mut before_misses = 0;
         let mut after_misses = 0;
         let mut worst = 0.0f32;
-        // **Colour only.** The fourth channel is coverage rather than a colour —
-        // `1 - prod(1 - a_i)`, composed as `over` under every blend mode — and gain
-        // deliberately does not reach it: turning a layer's level down dims what it
-        // draws and does not change what it covers. So alpha is neither `2*A + B`
-        // nor `2*(A + B)`, and including it here would be asserting linearity of a
-        // channel this deck promises is not linear.
+        // Asserts on color channels only; alpha represents coverage rather than color.
         for i in (0..mixed.len()).filter(|i| i % 4 != 3) {
             let before = 2.0 * a[i] + b[i];
             let after = 2.0 * (a[i] + b[i]);

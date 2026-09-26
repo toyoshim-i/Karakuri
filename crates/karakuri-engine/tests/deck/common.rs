@@ -47,20 +47,7 @@ age      = age + dt;
 }
 "#;
 
-/// The renderer every assertion in this file draws with.
-///
-/// **`point_rate` is a fraction of the target's height**, so the number
-/// below is a sprite size only once a height is named: 0.015625 is four
-/// texels at [`HEIGHT`]. The assertions render 128, 256 or 512 high and
-/// compare pictures taken at one size against each other, so what a sprite
-/// costs never enters them. **A test that renders somewhere else and cares
-/// what a sprite costs scales the rate to its own height instead of reusing
-/// this one** — 0.015625 is 11.25 texels at 720, which is 7.9 times the
-/// area, and additive blending is paid by area.
-/// [`the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`]
-/// renders at 1280x720 and does that; it did not between 2026-09-02 and
-/// 2026-09-07, and a quarter to two fifths of every figure it printed in
-/// that window was this constant rather than the deck.
+/// Baseline additive sprite renderer for deck integration tests.
 pub const L4: &str = r#"
 proc soft_points {
   kind  L4
@@ -82,12 +69,7 @@ color = vec4(vec3(1.0, 1.0, 1.0) * exposure, max(0.0, 1.0 - d));
 }
 "#;
 
-/// A second renderer over the same geometry, differing only in its name.
-///
-/// Which is the whole point: two ways of drawing one simulation is what a
-/// Set holds several L4s *for*, and what selecting between them is about.
-/// A name of its own because a name addresses a node and two nodes cannot
-/// share one.
+/// Alternative additive renderer over the same geometry with distinct name and point rate.
 pub const L4_B: &str = r#"
 proc harder_points {
   kind  L4
@@ -106,11 +88,7 @@ color = vec4(1.0, 0.5, 0.25, 1.0);
 }
 "#;
 
-/// The same shape, rendering a NaN. `sqrt` of a negative is a procedure that
-/// parses, type-checks, costs, compiles and runs — nothing in the pipeline
-/// rejects it, and a generated L4 reaches this by dividing by a parameter or
-/// normalizing a zero vector as easily as by this. What a slot holding one
-/// must not be able to do is reach a mix it was faded out of.
+/// Test renderer evaluating sqrt(-exposure) to produce NaN values.
 pub const L4_NAN: &str = r#"
 proc nan_points {
   kind  L4
@@ -133,14 +111,7 @@ color = vec4(vec3(bad, bad, bad), max(0.0, 1.0 - d));
 }
 "#;
 
-/// **A layer that covers**: big black sprites at full coverage.
-///
-/// Black *and* opaque is the pair that separates the modes with nothing else
-/// moving. Its colour contribution is zero under every mode — `blend additive`
-/// multiplies colour by the sprite's own alpha on the way into the slot target,
-/// and zero times anything is zero — so whatever the mix does with this layer
-/// is entirely what it did with the coverage. Under `add` it is invisible;
-/// under `over` it is a hole.
+/// Fully opaque black card fixture to verify coverage and blend-mode compositing.
 pub const L4_CARD: &str = r#"
 proc opaque_card {
   kind  L4
@@ -185,18 +156,7 @@ color = vec4(vec3(1.0, 1.0, 1.0) * exposure, max(0.0, 1.0 - d));
 }
 "#;
 
-/// The same card, writing a coverage that is **not a coverage** — one per
-/// spelling of "outside `[0, 1]`", named by what the alpha expression is.
-///
-/// Nothing in this pipeline stops any of them: the IR calls `color` linear RGB
-/// with straight alpha, says values above 1.0 are expected, and no pass clamps
-/// what a `fragment` block assigns. Each parses, type-checks, costs, compiles
-/// and runs, and a generated L4 reaches all four by dividing by a parameter as
-/// easily as by writing the constant. Black, so that whatever the mix does with
-/// one of them is what it did with the coverage and not with the colour.
-///
-/// `exposure` defaults to 1.0 and every expression is written against it, so
-/// none of them folds to a constant the compiler could reject before it runs.
+/// Fixture expressions generating non-standard alpha values (out of [0, 1] range).
 pub const OVERDRAWN_ALPHA: [(&str, &str); 4] = [
     ("above one", "1.5 * exposure"),
     ("negative", "0.0 - exposure"),
@@ -228,18 +188,7 @@ color = vec4(vec3(0.0, 0.0, 0.0) * exposure, {alpha});
     )
 }
 
-/// **A wash over the whole frame**, for the mask tests.
-///
-/// Every other fixture here draws a sphere in the middle, and a mask's ends are
-/// at the *edges*: a front that stops short of the corner, or a radial one that
-/// stops at the inscribed circle, is invisible against material that never
-/// reaches either. Four such defects walked past the first version of those
-/// tests for exactly that reason.
-///
-/// The vertex stage ignores `position` and puts every sprite at the origin, so
-/// one of them covers a target of [`MASK_SIZE`]. It still `consumes position`,
-/// because an L4 is compiled against its L1's element layout and dropping the
-/// attribute would change what is being tested.
+/// Full-frame wash fixture spanning beyond frame boundaries for mask transition tests.
 pub const L4_WASH: &str = r#"
 proc wash {
   kind  L4
@@ -340,17 +289,7 @@ pub fn candidate(id: u64) -> Request {
     }
 }
 
-/// **A verdict, as the three things it is**: whether the candidate was kept,
-/// the number it was decided on, and which of the slot's two numbers that
-/// was. `None` for every other event.
-///
-/// `cost_ms` is an `Option` on the favourable side and not on the other,
-/// which is `swap::Event`'s own asymmetry: a candidate nothing could measure
-/// is kept, run, and reported as unjudged, and a slot can only be stopped
-/// through a number.
-///
-/// **The `bool` is whether the slot goes on running, not whether the
-/// candidate stayed.** Since ADR-0316 the candidate stays either way.
+/// Extracts acceptance status, cost in ms, and decision basis from a lifecycle event.
 pub fn said_verdict(e: Event) -> Option<(bool, Option<f32>, karakuri_engine::Basis)> {
     match e {
         Event::Accepted { cost_ms, basis, .. } => Some((true, cost_ms, basis)),
@@ -359,13 +298,7 @@ pub fn said_verdict(e: Event) -> Option<(bool, Option<f32>, karakuri_engine::Bas
     }
 }
 
-/// One frame, shaped the way a caller has to shape it: the guard owns the
-/// encoder, so there is no other shape available.
-///
-/// The `poll` afterwards is the harness standing in for vsync, exactly as in
-/// `tests/hot_swap.rs`: it bounds a headless loop that would otherwise queue
-/// thousands of command buffers ahead of the GPU. It is the submit-and-wait
-/// the render thread must never do, and it is not inside the frame.
+/// Drives deck frame rendering with explicit completion polling.
 pub fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, steps: u8) {
     let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
     f.render(present.hdr_view(), present.size(), steps);
@@ -452,11 +385,7 @@ pub fn lit(pixels: &[u16]) -> usize {
         .count()
 }
 
-/// Simulation steps a Set has taken, recovered as an integer. `Set::time` is
-/// `steps * dt`, and comparing that against a float expression meaning the
-/// same thing is exactly the last-bit trap `Set` derives `t` from an integer
-/// counter to avoid — see `tests/hot_swap.rs`, which does this for the same
-/// reason.
+/// Recovers the integer simulation step count from Set time.
 pub fn steps_taken(set: &Set) -> u64 {
     (set.time() * 60.0).round() as u64
 }

@@ -3,15 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// A frame the way a sink sees it: the canvas through the present pass —
-    /// tone mapped, then sRGB encoded by the hardware — into a target of the
-    /// canvas's own size, so `Present::draw`'s letterbox is the whole
-    /// attachment exactly as it is on every offscreen render.
-    ///
-    /// Only the master-out tests below need it. Everything else in this file
-    /// reads the HDR target, because everything else is about the mix; these
-    /// are about the difference between the mix's output and the picture drawn
-    /// from it, and that difference is this pass.
+    /// Encodes canvas output through the tone mapper and sRGB present pass into a target.
     fn shown(gpu: &Gpu, present: &Present) -> Vec<u8> {
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("shown"),
@@ -69,14 +61,7 @@ mod gpu {
         out
     }
 
-    /// One run of a fixed deck under one master out and one exposure: the
-    /// composited frame as written, and the picture drawn from it.
-    ///
-    /// A `Present` per run, at a **window's** surface format rather than
-    /// [`Present::HDR_FORMAT`] — every other test in this file renders and
-    /// never draws, so this is the only place the encode's own target has to
-    /// exist. The HDR target is the same either way; the format only decides
-    /// what `Present::draw` may be pointed at.
+    /// Evaluates deck rendering across test steps under specified master output and exposure.
     fn under(gpu: &Gpu, out: f32, exposure: f32) -> (Vec<u16>, Vec<u8>) {
         const STEPS: usize = 12;
         let present = Present::new(
@@ -103,17 +88,7 @@ mod gpu {
         a.iter().zip(b).filter(|(x, y)| x != y).count()
     }
 
-    /// **The master out is a level on the composited frame, and coverage is not
-    /// a level.**
-    ///
-    /// Half the master out is half the colour, exactly: the mix folds in `f32`
-    /// and rounds once on write, and scaling by a power of two commutes with
-    /// that rounding for every normal `f16`, so the tolerance here is one
-    /// subnormal step rather than a relative one. The fourth channel is
-    /// coverage — `1 - prod(1 - a_i)`, composed as `over` under every blend
-    /// mode — and it is asserted **bit for bit unchanged**, which is the same
-    /// asymmetry `gain` has: turning a level down dims what a frame draws and
-    /// does not change what it covers.
+    /// Verifies that master output scales RGB channels while leaving coverage alpha bit-for-bit unchanged.
     #[test]
     fn the_master_out_scales_the_composited_frame_and_leaves_its_coverage_alone() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -175,22 +150,7 @@ mod gpu {
         );
     }
 
-    /// **The two levels multiply in different places, and this is where the
-    /// difference is visible today.** The master out is applied where the mix
-    /// *writes* the composited frame; the tone mapper's exposure is applied
-    /// where the present pass *reads* it. So halving the master out moves the
-    /// HDR target and halving the exposure leaves it bit for bit identical —
-    /// while both move the picture drawn from it.
-    ///
-    /// That last assertion is the one that keeps this test honest. Without it,
-    /// an exposure that had been quietly disconnected would pass the middle
-    /// assertion perfectly, and the test would be reporting "the two are in
-    /// different places" on the strength of one of them doing nothing at all.
-    ///
-    /// **This is the whole of what `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`
-    /// can assert until the master chain exists**, and it is enough: a build
-    /// that folded the two into one multiplication — either of the rejected
-    /// options — fails here, whichever end it folded them at.
+    /// Verifies separation of master output (mix write) and tonemap exposure (present read).
     #[test]
     fn the_master_out_is_at_the_chains_entry_and_exposure_is_at_the_tonemaps_input() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -265,27 +225,7 @@ mod gpu {
         );
     }
 
-    /// **`Allocated` leaves the mix and keeps running.** A slot taken off air
-    /// goes on advancing at the room's tempo, and comes back on the beat the
-    /// rest of the deck is on rather than at the `t` it left on.
-    ///
-    /// `t` is the sharpest witness available: simulation time only moves through
-    /// `Set::prepare`, and every slot is handed one on every frame
-    /// (ADR-0269) — so what going off air changes is the mix and nothing else.
-    ///
-    /// **It used to assert the opposite**, and the sentence it asserted —
-    /// *`Allocated` keeps its state; a slot taken off air does not advance while
-    /// it is off, and resumes where it stopped* — is the behaviour ADR-0269
-    /// removed. What made it wrong is the cell: a slot that stands still while
-    /// it is off air is a slot whose preview is a still, and the operator is
-    /// deciding from that preview. The property it leaned on is still true
-    /// somewhere, and that somewhere is `swap.rs`, which parks an *outgoing
-    /// Set* across a watchdog window — a Set held outside the deck, which no
-    /// residency reaches.
-    ///
-    /// Substepped while it is off air, so that "kept up" is a claim about steps
-    /// rather than about frames: three steps a frame for ten frames is thirty,
-    /// and a slot stepping once a frame regardless would read ten.
+    /// Verifies that an allocated slot continues simulation off-air to remain synchronized (ADR-0269).
     #[test]
     fn a_slot_taken_off_air_keeps_running_and_comes_back_on_the_beat() {
         let gpu = Gpu::headless().expect("no GPU available");
