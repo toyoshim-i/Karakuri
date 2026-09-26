@@ -17,11 +17,7 @@ fn slot_bounds_reject_the_slot_count_itself_and_beyond() {
     assert!(!slot_in_range(1, 1));
 }
 
-/// A parked slot is `Residency::Allocated`, exactly like a slot nobody asked
-/// about, and the operator's request is the only thing that tells them apart.
-/// Showing one as the other is not a cosmetic loss: it says a standing request
-/// was discarded, when the governor is reconsidering it every pass and will
-/// grant it the moment a slot comes off air.
+/// Verifies that parked slots display distinct residency tags from unrequested allocated slots.
 #[test]
 fn a_parked_slot_does_not_read_as_one_nobody_asked_about() {
     assert_ne!(
@@ -97,11 +93,7 @@ fn exposure_clamps_into_a_finite_positive_range() {
     assert_eq!(clamp_exposure(1.0), 1.0);
 }
 
-/// The cycle visits every operator and closes — and, because `next_tonemap` is
-/// an exhaustive match while `TONEMAPS` is a hand-written list, this is also
-/// what checks the list is complete. An operator added to the enum forces a new
-/// arm in the cycle; if `TONEMAPS` is not updated with it the two disagree
-/// here, before it can reach a `look` record that spells a name nothing parses.
+/// Verifies that tone mapping operator cycling traverses all operators and wraps back.
 #[test]
 fn tonemap_cycles_through_all_four_and_back_to_the_start() {
     let start = TonemapOp::Clamp;
@@ -152,14 +144,7 @@ fn no_two_tonemap_operators_share_a_spelling() {
     assert_eq!(before, wire.len(), "two operators share a wire spelling");
 }
 
-/// A `save` after the last tick is named, not counted.
-///
-/// The `ir-spec` rule is that a replay says which effects outside the stream it
-/// skipped, and a save at the end of a set is the one that lands after the last
-/// tick rather than inside a frame. Paired with its control — a trailing record
-/// that is *not* a save gets the count and nothing more, so the assertion is
-/// about the `save` arm rather than about a function that prints an extra line
-/// whatever it is given.
+/// Verifies that save records occurring after the final tick are noted individually rather than just counted.
 #[test]
 fn a_trailing_save_is_named_and_not_only_counted() {
     let notes = trailing_notes(&[
@@ -245,13 +230,7 @@ mod value_tests {
         }
     }
 
-    /// `--size` is the preview window's, and these three runs have no window.
-    ///
-    /// Refused rather than ignored because of what it used to mean: it was the
-    /// render size, so a reader typing `--render out.png --size 1920x1080` means
-    /// `--canvas`. Quietly rendering at the default instead would be the worst of
-    /// the three outcomes — a PNG at a size nobody asked for, with nothing on
-    /// stderr.
+    /// Verifies that `--size` is refused when running in headless or offscreen modes without a window.
     #[test]
     fn the_preview_windows_size_is_refused_where_there_is_no_window() {
         for args in [
@@ -277,11 +256,7 @@ mod value_tests {
         assert!(parse(&["--render", "out.png", "--canvas", "1920x1080"]).is_none());
     }
 
-    /// A surface with nobody at it, and one more reason besides.
-    ///
-    /// The other refusals are "an offscreen run takes no live input". This one is
-    /// that plus the sharper version: a port that can rewrite a procedure
-    /// mid-render is the opposite of an output that is a function of its arguments.
+    /// Verifies that `--mcp` is refused when no interactive or headless run is being driven.
     #[test]
     fn an_mcp_port_is_refused_where_there_is_no_run_to_drive() {
         for args in [
@@ -299,11 +274,7 @@ mod value_tests {
         assert!(parse(&["--mcp", "eight-thousand"]).is_some());
     }
 
-    /// A tempo source is a live input, and an offscreen run has none.
-    ///
-    /// The replay half has its own reason and it is the stronger one: a replay
-    /// follows the grid the session recorded, so a live source would be overwriting
-    /// the performance it is supposed to be reproducing.
+    /// Verifies that `--tempo-source` is refused when running offline without a live performance.
     #[test]
     fn a_tempo_source_is_refused_where_there_is_no_performance_to_follow() {
         for args in [
@@ -325,13 +296,7 @@ mod value_tests {
         assert!(parse(&["--tempo-source", "helper", "--audio-in", "default"]).is_none());
     }
 
-    /// A recorder that never gets built is refused rather than dropped.
-    ///
-    /// It used to exit 0 having written the PNG and no session at all — no warning,
-    /// no file — because the recorder is only constructed on the path that opens a
-    /// window. The worst shape of failure this program has: not a wrong output but
-    /// a missing one, reported as success, from a flag whose whole purpose is to
-    /// leave something behind.
+    /// Verifies that `--record-session` is refused for non-interactive rendering.
     #[test]
     fn recording_is_refused_where_there_is_no_performance() {
         for args in [
@@ -356,14 +321,7 @@ mod value_tests {
         assert!(parse(&["--record-session", "s", "--load-set", "base"]).is_none());
     }
 
-    /// A replay renders at the size the session recorded, and `--canvas` is refused
-    /// only when there is something to refuse it against.
-    ///
-    /// The refusal was unconditional and at parse time, which was wrong for exactly
-    /// the streams that need the flag: a session written before this record existed
-    /// carries no size, so the flag was rejected with the words "the session
-    /// records what it rendered at" and the replay then ran at the untouched
-    /// default. That is a regression against the old `--size`, which could set it.
+    /// Verifies that `--canvas` is refused during replay only when the stream records canvas dimensions.
     #[test]
     fn a_replay_refuses_the_canvas_flag_only_when_the_stream_has_one() {
         let performed = Some((1280, 720));
