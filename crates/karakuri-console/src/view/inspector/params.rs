@@ -11,77 +11,28 @@ pub const SENS_LABEL: &str = "sensitivity";
 /// half.
 pub const TAKE_BACK: &str = "take back";
 
-/// What a parameter row's leftmost cell reads where the control is not on the
-/// interface — the mock's `&middot;`, in `.param.unpub .ord`'s hairline colour.
-///
-/// A dot where a number would be, because a control off the interface has no
-/// position and a position is exactly what a MIDI knob counts. It is the same
-/// cell either way: the number and the mark are one control's two states rather
-/// than a mark drawn beside a number (`docs/adr/0329-…`).
+/// Glyph shown in the leftmost cell when a parameter is not published
+/// on the interface (ADR-0329).
 const UNPUBLISHED: &str = "·";
 
 /// One parameter row: what the mock's `.param` reads.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
-    /// The position in the deck's published interface, counting from one and
-    /// spanning nodes — the mock's `.ord`, and the number a MIDI control is learned
-    /// against: *"knob 3 is knob 3 whatever Set is loaded"*.
-    ///
-    /// `None` is a control the interface does not carry, and it is the one state of
-    /// this field rather than a missing value: a control off the interface has no
-    /// position, and a position is exactly what a knob counts. Such a row keeps its
-    /// place in its group and loses its number, its fader and its figure — drawn so
-    /// the mark can be pressed again, because this bay is where publishing is
-    /// chosen and a choice nobody can see is one nobody can unmake
-    /// ([ADR-0100](../../../../docs/adr/0100-a-published-interface-is-a-choice-of-attention.md),
-    /// `docs/adr/0329-…`).
-    ///
-    /// It is not *hidden* and it is not *locked*: `--param`, a `param` record and a
-    /// model naming the address all still reach the value, which is ADR-0100's
-    /// whole sentence — publishing is a choice of attention and never one of
-    /// authority.
+    /// 1-based position in the deck's published interface, or `None` if
+    /// unpublished ([ADR-0100](../../../../docs/adr/0100-a-published-interface-is-a-choice-of-attention.md), ADR-0329).
     pub ord: Option<usize>,
     /// What the Set published it as, which may be an alias for the key inside the
     /// node.
     pub name: String,
     /// What it holds.
     pub value: f32,
-    /// What the Set published it over, low then high — `Published::range`, which
-    /// *"narrows, never redefines"* the range the procedure declared.
-    ///
-    /// # It used to be the position and is now the range, and that is a decision
-    /// rather than a widening
-    ///
-    /// This field read `at: f32`, *"where it sits in its published range, `[0,
-    /// 1]`"*, and its own argument was that the fader is the only reader, so a
-    /// range plus a value would be a second derivation of *where along the track*.
-    /// A fader a hand can move has a second reader — the grab, which turns a
-    /// pointer back into a value — and that one needs the range whichever way this
-    /// field is spelled. So the position is [`Param::at`], derived here, and the
-    /// two directions are one statement in one place: [`ParamGrip`] and
-    /// [ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+    /// Published range `[low, high]` used to map fader position and grip
+    /// ([ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)).
     pub range: [f32; 2],
-    /// Which control this row is, as the vocabulary addresses one — `Published::at`
-    /// and `Published::key`, carried over unchanged.
-    ///
-    /// Not the group the row was drawn in, which is the other reading and is the
-    /// one ADR-0286 refuses: a wildcard covering exactly one node is *drawn* in
-    /// that node's group, and it goes on meaning every node that declares the key.
-    /// See [`ParamGrip`].
-    ///
-    /// The vocabulary's own type rather than a pair of this crate's, because the
-    /// operation carries exactly this and a second spelling of an address is what
-    /// `karakuri-operation` exists to stop
-    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// Target parameter address identifying the control across wildcards and nodes
+    /// ([ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md), [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     pub param: karakuri_operation::ParamAt,
-    /// What is holding this control, or `None` for a row nothing is driving — the
-    /// mock's `.param.bound` and the `.sens` row under it.
-    ///
-    /// Written by whoever read the Set, off its bindings, and it is the seventh
-    /// reading the harness takes: `Set::bindings` was the one of them this pane did
-    /// not ask for, on ADR-0191's terms, because nothing bound anything and a bound
-    /// row was a state the program could not enter. What changed is that a press
-    /// can now attach one.
+    /// Active signal source driving this control, or `None` if manual (ADR-0191).
     pub bound: Option<Source>,
 }
 
@@ -97,25 +48,13 @@ pub struct Source {
     /// What the signal is mapped onto, low then high — the attachment's, not the
     /// row's. See the type's own note.
     pub range: [f32; 2],
-    /// Which attachment this is, as the vocabulary addresses one.
-    ///
-    /// `karakuri_operation::BindAt` and not [`Param::param`]'s `ParamAt`, carried
-    /// over from the binding rather than derived from the row: an attachment is one
-    /// layer's, where a value's wildcard names no layer at all, and the two are two
-    /// facts rather than two spellings (see `BindAt`). It is also what makes a
-    /// row's *take back* remove the attachment it is drawn from rather than one
-    /// that happens to match by name.
+    /// Binding address identifying the layer attachment for operations like take-back.
     pub at: karakuri_operation::BindAt,
 }
 
 impl Param {
-    /// Where the value sits in the published range, `[0, 1]` — the fader's fill,
-    /// and what a knob's centre is put on.
-    ///
-    /// A range of no width is a control with one position, and the fader sits at
-    /// its start rather than at a division by zero. That is the guard the harness
-    /// used to carry when this was a field; it is here now, so there is one place a
-    /// degenerate range is answered for.
+    /// Normalized position in `[0, 1]` within the published range (defaulting to 0.0
+    /// for zero-width ranges).
     pub fn at(&self) -> f32 {
         let [low, high] = self.range;
         match high > low {
@@ -124,55 +63,14 @@ impl Param {
         }
     }
 
-    /// What this control holds with its fader at `at` — [`Param::at`] inverted, and
-    /// the whole of what a hand on this row asks for.
-    ///
-    /// `at` is a position on `[0, 1]`, which is what [`Grab::value`] answers, and
-    /// it is clamped here for [`unit`]'s reason rather than trusted: a published
-    /// range narrows and never redefines, so a value outside it is one the
-    /// procedure did not say it still looks like itself over.
+    /// Computes the parameter value corresponding to normalized position `at` in `[0, 1]`.
     pub fn valued(&self, at: f32) -> f32 {
         let [low, high] = self.range;
         low + (high - low) * unit(at)
     }
 
-    /// Whether a hand can move this row at all.
-    ///
-    /// `Grab::new`'s refusal read on the value axis instead of on the track: a
-    /// published range of no width is a control with one position, so a knob on it
-    /// is a handle with nowhere to go and every drag of it would ask for the value
-    /// it already holds. The row is still drawn — the fill and the figure say what
-    /// it is — and it is not taken hold of.
-    ///
-    /// # A bound row is drawn and is not taken hold of either
-    ///
-    /// The number a hand would write is not the number the row is showing. A knob a
-    /// hand moves writes the value a binding blends *from*, and at a measurement's
-    /// full confidence that value carries no weight at all — so the handle would
-    /// move under the hand and the picture would not, which is the one thing
-    /// [ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)
-    /// refuses a track press for: *"a handle that jumped to the pointer would be a
-    /// lie about what a handle is"*, read on the value axis.
-    ///
-    /// It is not a refusal of the write, and that distinction is
-    /// [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)'s:
-    /// `Operation::WriteParam` on a bound parameter is legal, lands, and leaves the
-    /// attachment where it is — a `--param` does exactly that today. What this says
-    /// is that *this row's fader* is not the affordance for it while something else
-    /// is holding the control, and the affordance that is there is `take back`, one
-    /// row down. After it the row is a handle again.
-    ///
-    /// That is the question ADR-0286 left open — *"whether a hand may move a knob a
-    /// signal is holding is Take a parameter back's question"* — and
-    /// `docs/manual/console.html`'s *Who is holding a control* is where the page
-    /// says it. This row as an entry of a published interface — the shape
-    /// [`Operation::Publish`](karakuri_operation::Operation::Publish) carries,
-    /// which is `karakuri_engine::set::Published`'s.
-    ///
-    /// The address and the range are the ones the row was drawn from, not ones
-    /// re-derived here: a wildcard stays a wildcard and a narrowed range stays
-    /// narrowed, which is [`ParamGrip`]'s own rule about writing the control the
-    /// row draws rather than the group it was placed in (ADR-0286).
+    /// Returns the published control definition for this parameter row
+    /// ([ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md), [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     pub(crate) fn control(&self) -> karakuri_operation::Control {
         karakuri_operation::Control {
             name: self.name.clone(),
@@ -209,15 +107,7 @@ pub struct ParamGrip<'a> {
     pub fader: Fader,
 }
 
-/// How tall one parameter row and whatever is under it comes to: a
-/// [`size::PARAM_H`] row, and a [`size::SENS_H`] sensitivity row where
-/// something is holding the control.
-///
-/// One function because three callers must agree. [`group_h`] sums it,
-/// [`param_rect`] walks it as an offset, and [`sens_rect`] steps off the end of
-/// one row — and a group as tall as *n* rows with a press resolved against a
-/// stride of *n* is a chip drawn where a hand cannot reach it. That is
-/// [`param_rect`]'s own argument about a running sum, one level down.
+/// Total height of a parameter row including its sensitivity row if bound.
 pub(crate) fn rows_h(param: &Param) -> f32 {
     size::PARAM_H
         + match param.bound {
@@ -226,33 +116,8 @@ pub(crate) fn rows_h(param: &Param) -> f32 {
         }
 }
 
-/// One chip on a sensitivity row, and which of the four a press landed on.
-///
-/// # Two are controls and two are readouts, and that is the decision
-///
-/// The mock draws four pills and this crate claims two of them, which is
-/// [`InspectorPane::select_renderer`]'s arrangement on an inert renderer row:
-/// *a control claims what it acts on and no more*.
-///
-/// - [`SensChip::Signal`] is a readout. The signal bus is open by
-///   design — `SignalBus::sample` cannot fail and a name nobody provides
-///   comes back at confidence 0.0 — so there is no list of sources anywhere
-///   for a chooser to be built over, and a console inventing one would be the
-///   surface deciding what may be asked for, which is
-///   [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-///   exactly inverted. A source is named where a source can be named: a Set
-///   file's `bind` line, or `--bind`.
-/// - [`SensChip::Curve`] is the control, and it is the blend chip's shape
-///   one bay along: four destinations, a cycle drawn over them here, and
-///   `Operation::AttachSignal` naming the one it arrives at. It re-attaches
-///   the same signal over the same range through the next shape.
-/// - [`SensChip::Range`] is a readout, because a range is the procedure's
-///   declaration and not an operator's to write —
-///   `karakuri_operation::ParamValue`'s own sentence — and there is no second
-///   number on this row for a confidence either: a value arrives with how well
-///   it is known.
-/// - [`SensChip::TakeBack`] is the other control, and it is the row this
-///   whole arrangement exists for.
+/// Chip on a parameter's sensitivity row representing signal source, curve,
+/// range, or take-back action ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SensChip {
     Signal,
@@ -285,14 +150,7 @@ impl SensChip {
         }
     }
 
-    /// What a press on this chip asks for, or `None` for the two that are readouts
-    /// — see the type's own note for why those two are not controls.
-    ///
-    /// The curve chip restates the attachment. An `AttachSignal` carries the whole
-    /// of what an attachment is, so changing one field means sending the other
-    /// three back unchanged — the source and the range come off [`Source`] rather
-    /// than being rebuilt, which is what stops a press for a different shape from
-    /// silently re-mapping the signal.
+    /// The operation requested by clicking this chip, or `None` for readout chips.
     pub fn operation(self, deck: u8, source: &Source) -> Option<Operation> {
         match self {
             SensChip::Signal | SensChip::Range => None,
@@ -321,13 +179,7 @@ fn next_curve(curve: karakuri_operation::Curve) -> karakuri_operation::Curve {
     all[(at + 1) % all.len()]
 }
 
-/// Where each chip of a sensitivity row goes, laid end to end from the row's
-/// left-hand track.
-///
-/// [`rend_chips`]' shape one row down and for its reason: the row is painted
-/// *and* pressed, and two copies of where a chip is would be a chip painted
-/// where a hand cannot reach it. A chip is as wide as the word in it, so this
-/// costs a galley lookup per chip.
+/// Layout positions of each chip in a sensitivity row, measured from left to right.
 pub fn sens_chips<'a>(
     ctx: &'a egui::Context,
     row: Rect,
@@ -362,24 +214,11 @@ fn sens_width(ctx: &egui::Context, text: &str) -> f32 {
     }) + size::SENS_CHIP_PAD_X * 2.0
 }
 
-/// One parameter row, in the mock's own four tracks: the ordinal at
-/// [`size::PARAM_ORD_W`] right-aligned, the name at [`size::PARAM_NAME_W`], the
-/// fader taking what is left, and the value at [`size::PARAM_VAL_W`]
-/// right-aligned.
-///
-/// The value is two places, which is the mock's `2.40`, `0.71`, `1.20` — every
-/// number in its `.pval` column. It is not a second spelling of the transport's
-/// tempo: that one is a BPM and this is a parameter, and the mock writes the
-/// two differently for that reason.
+/// Paints a single parameter row: ordinal, name, fader track/knob, and value readout.
 pub(crate) fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, param: &Param) {
     let left = row.min.x + size::PARAM_PAD_L;
     let right = row.max.x - size::PARAM_PAD_R;
-    // **The mark is the number**, and a control the interface does not carry
-    // has none: `.param.unpub .ord` is the mock's dot in the hairline colour,
-    // where a published row's is its position in `--c-faint`. One cell, two
-    // states, and the state *is* whether it is published — a second mark beside
-    // the number would be two spellings of one fact
-    // (`docs/adr/0329-…`).
+    // Display ordinal number if published, or hairline dot if unpublished (ADR-0329).
     let (word, ink) = match param.ord {
         Some(ord) => (ord.to_string(), pal.faint),
         None => (UNPUBLISHED.to_owned(), pal.hair),
@@ -394,14 +233,7 @@ pub(crate) fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, para
         ink,
     );
     let name_x = left + size::PARAM_ORD_W + size::PARAM_GAP;
-    // `.param .pname`'s `overflow: hidden; text-overflow: ellipsis` — one row,
-    // broken anywhere, with an ellipsis for what did not fit. The mock says so
-    // for this column and not for the library's, which is why one elides and
-    // the other clips.
-    // `.param.unpub .pname` is a shade further back than `.param`'s, which is
-    // the whole of what an unpublished row looks like beside a published one:
-    // the name is still legible — the row is drawn so it can be pressed again —
-    // and nothing about it invites a hand.
+    // Ellipsize parameter name when it exceeds column width, muting ink if unpublished.
     let name_ink = match param.ord {
         Some(_) => pal.dim,
         None => pal.faint,
@@ -419,19 +251,11 @@ pub(crate) fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, para
         name,
         name_ink,
     );
-    // **A control the interface does not carry stops here.** The fader and the
-    // figure are what publishing decides the panel shows, so a row that is off
-    // the list is a mark and a name and nothing else — and a value drawn beside
-    // a control this pane says it is not showing would be the page's own
-    // sentence contradicted in the same row.
+    // Unpublished rows omit the fader track and value readout.
     if param.ord.is_none() {
         return;
     }
-    // **A bound row shows its source instead of a number** — `.param.bound`'s
-    // `.pval.src`, and the readout the manual calls *where disagreeing with
-    // the system begins*. The mock draws it in the same right-aligned track
-    // the figure is in, so this is one galley either way, and it is the mint
-    // `.src` carries rather than `.pval`'s text colour.
+    // Bound parameters display their signal source name instead of numeric value.
     let (text, colour) = match &param.bound {
         None => (format!("{:.2}", param.value), pal.text),
         Some(source) => (source.signal.clone(), pal.mint),
@@ -450,20 +274,7 @@ pub(crate) fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, para
     }
 }
 
-/// One sensitivity row: the word in `.sens`'s first track, then the chips that
-/// say what is holding the control and offer the two things a hand can do about
-/// it.
-///
-/// Where each chip goes is [`sens_chips`]', so this paints and derives nothing
-/// — [`rend_row_into`]'s rule one row down, and the reason a press has
-/// somewhere to ask what it landed on.
-///
-/// Two of the four are drawn as readouts and two as controls, and nothing in
-/// the paint says which: the mock gives the source pill `.pill.armed` and the
-/// other three a plain `.pill`, and *armed* here is the mint of something that
-/// is holding a control rather than of something that can be pressed. Which
-/// chips are claimed is [`SensChip::operation`]'s, and a panel that drew the
-/// difference would be drawing a rule the mock does not.
+/// Paints a sensitivity row beneath a bound parameter showing its active signal chips.
 pub(crate) fn sens_into(painter: &egui::Painter, pal: &Palette, row: Rect, source: &Source) {
     let label = painter.layout_job(span_at(SENS_LABEL, size::SENS_SIZE, pal.faint));
     painter.galley(
@@ -523,25 +334,7 @@ pub(crate) fn sens_into(painter: &egui::Painter, pal: &Palette, row: Rect, sourc
     }
 }
 
-/// One parameter row's fader, laid out — the track between the name and the
-/// figure, what the value fills of it, and the knob on the fill's moving edge.
-/// `None` where the row is too narrow to have a track at all.
-///
-/// # One derivation, asked twice
-///
-/// [`param_into`] paints this and [`InspectorPane::grip`] hit-tests it, which
-/// is [`Mixer::grab`]'s rule and [`MasterRow::grab`]'s: two copies of where a
-/// knob is would be a knob painted where a hand cannot take hold of it. The
-/// value is part of the geometry — the knob sits on the fill's moving edge, so
-/// where it is depends on what the deck said this frame, and the row a hand
-/// grabs is the row it saw.
-///
-/// `.param`'s middle track, which is the `1fr` of `grid-template-columns: 15px
-/// 88px 1fr 58px`: the ordinal, the name and the figure are stated widths and
-/// this is what is left between them. `lib.rs` measures the pane's own minimum
-/// off exactly that — *"the fader is the `1fr` track and is drawn only where
-/// what is left over is positive"* (ADR-0279) — and this is where that
-/// `positive` is asked.
+/// Calculates fader track and knob geometry within a parameter row (ADR-0279).
 pub(crate) fn param_fader(row: Rect, param: &Param) -> Option<Fader> {
     let left = row.min.x + size::PARAM_PAD_L;
     let right = row.max.x - size::PARAM_PAD_R;
@@ -570,16 +363,7 @@ pub(crate) fn param_fader(row: Rect, param: &Param) -> Option<Fader> {
     }
 }
 
-/// Where the `index`th parameter row of `node` goes inside the group rectangle
-/// [`InspectorPane::group`] answered.
-///
-/// [`InspectorPane::group`]'s walk one level in, and a function rather than a
-/// running sum inside [`node_into`] for the reason the deck head was lifted out
-/// of `inspector_into`: a press had nowhere to ask what it had landed on. The
-/// head is [`size::NODE_HEAD_H`], the renderer row is [`size::REND_ROW_H`]
-/// where the group has one, and the rows are [`size::PARAM_H`] each from there
-/// — which is [`group_h`] read as an offset instead of as a total, and the two
-/// are checked against each other in `tests/param_fader.rs`.
+/// Computes the bounding rectangle for a parameter row within its node group.
 pub(crate) fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
     let top = group.min.y
         + size::NODE_HEAD_H
@@ -599,20 +383,7 @@ pub(crate) fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
     )
 }
 
-/// The leftmost cell of a parameter row, which is the mark that publishes it:
-/// [`size::PARAM_ORD_W`] wide at the row's left padding, the full height of the
-/// row.
-///
-/// The whole cell and not the ink in it. A published row's number is one or two
-/// glyphs and an unpublished row's is a dot, so a target the size of what is
-/// drawn would be a control that shrank as the interface grew past nine — which
-/// is the *drawn and not claimed* mistake made in the other direction. The cell
-/// is a fixed track of the mock's own grid, so the target is the same size on
-/// every row.
-///
-/// `param` is taken so that this cannot be asked of a row that has none to
-/// give; there is no such row today, and the argument for the cell being one
-/// control's two states is at [`UNPUBLISHED`].
+/// Returns the hit-test rectangle for the parameter publishing ordinal cell (ADR-0329).
 pub(crate) fn ord_cell(row: Rect, _param: &Param) -> Rect {
     let left = row.min.x + size::PARAM_PAD_L;
     Rect::from_min_max(
@@ -621,13 +392,7 @@ pub(crate) fn ord_cell(row: Rect, _param: &Param) -> Rect {
     )
 }
 
-/// Where the `index`th row's sensitivity row goes — directly under the row
-/// itself, the full width of the group and [`size::SENS_H`] tall — or `None`
-/// where nothing is holding that control.
-///
-/// [`param_rect`] stepped off the end of the row it belongs to, which is the
-/// one place that relationship is written: the `.sens` row is not a row of its
-/// own in the mock's list, it is what a `.param.bound` grows.
+/// Returns the bounding rectangle for a parameter's sensitivity row, if bound.
 pub(crate) fn sens_rect(group: Rect, node: &Node, index: usize) -> Option<Rect> {
     let param = node.params.get(index)?;
     param.bound.as_ref()?;

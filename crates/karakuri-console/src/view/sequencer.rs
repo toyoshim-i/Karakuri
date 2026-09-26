@@ -13,13 +13,7 @@ pub use chooser::*;
 /// the source.
 pub(super) const SEQUENCER_TITLE: &str = "Sequencer";
 
-/// The mark a lane's label carries after the deck's letter: `▮` for a fader and
-/// `∿` for a parameter, which are the two glyphs `docs/manual/console.html`
-/// draws on the four lane labels.
-///
-/// A `match` over the target and not a field on the reading, for
-/// `karakuri_operation::Sync::name`'s reason one crate down: a target added to
-/// that enum does not compile until it has a mark to be drawn with.
+/// Returns the indicator mark for a lane target (`▮` for fader, `∿` for parameter).
 fn lane_mark(target: &LaneTarget) -> &'static str {
     match target {
         LaneTarget::Fader { .. } => "\u{25AE}",
@@ -40,23 +34,7 @@ pub(crate) fn lane_label(target: &LaneTarget) -> String {
     format!("{letter} {}", lane_mark(target))
 }
 
-/// What the sequencer bay reads this frame: the armed pattern, which bank it
-/// is, and where the playhead was left.
-///
-/// A pattern and not a copy of one, taken apart. The bay draws the mode, the
-/// lanes, what each drives, its steps and its mute, which is the whole of what
-/// a pattern is — so a reading with a field per drawn thing would be a second
-/// spelling of `karakuri_pattern::Pattern` that could disagree with it. This
-/// crate holds no pattern and applies nothing to one (ADR-0156); the host
-/// writes this per frame beside the frame it is about, which is
-/// [`View::mixer`]'s seam.
-///
-/// `step` comes from the poll and not from `beats`. Where the playhead is is
-/// what the *producer* last answered — `karakuri_pattern::Playhead` — and
-/// deriving it here from the transport's beats would be a second derivation
-/// that could name a step the sequencer never emitted (P-0087). `None` before
-/// the first poll, which draws no column: a bay that has not been polled is not
-/// a bay at step zero.
+/// Sequencer state for the current frame: armed pattern, bank, and playhead position (ADR-0156, P-0087).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sequenced {
     /// The armed pattern, as the host read it this frame.
@@ -78,11 +56,7 @@ pub struct SeqRow {
     /// sixteenth and eight at an eighth: the row keeps its width and the cells
     /// halve in the finer one (ADR-0306).
     pub cells: Vec<Rect>,
-    /// The minus at the far end of the row, which takes this lane out of the
-    /// pattern — the Master bay's chain slot glyph on a lane's row
-    /// ([ADR-0352](../../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
-    /// The cells stop short of it, so the label, the track and the glyph are
-    /// three columns and nothing on the row moves when the mode changes.
+    /// Row removal glyph button (`-`) to take this lane out of the pattern (ADR-0352).
     pub remove: Rect,
     /// What the row draws from: the lane's own label, which slots are on, and
     /// whether it is muted.
@@ -98,35 +72,9 @@ pub struct SeqRow {
     pub slots: Vec<usize>,
 }
 
-/// The Sequencer bay, laid out: the head's mode pill and step readout, the
-/// ruler, the playhead column and a row per lane.
+/// Lays out the Sequencer bay: mode/bank pills, step readout, ruler, playhead, and lane rows.
 ///
-/// # What is drawn and what is not
-///
-///
-/// [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
-/// is satisfied here for the first time in this bay, and ADR-0222 said why it
-/// could not be before: every part of the drawing now reads a value that
-/// exists, because a pattern exists. One thing the mock draws is still not
-/// drawn: the foot's sentence, which is a readout and not a control.
-///
-/// The bank pills and the `+ lane` pill landed on 2026-09-09. The pills are
-/// [`Head::banks`] — the head machinery gained one field and every other head's
-/// [`HeadWords`] is what it was — and they are laid out here a second time
-/// rather than copied ([`bank_capsules`]), which is [`program_head`]'s
-/// arrangement: the capsule an operator sees and the capsule a press lands on
-/// are one derivation. Four pills and no `+`: with four fixed banks the mock's
-/// `+` is `Operation::SelectPattern` at an empty bank, which is what a press on
-/// `seq 3` already is
-/// ([ADR-0327](../../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
-///
-/// # The cells are the row divided by the count, and the count follows the mode
-///
-/// `.seq-lane` is `repeat(16, 1fr)` with a [`size::SEQ_CELL_GAP`] between, so a
-/// cell is as wide as what is left of the row after the gaps — and at an eighth
-/// there are eight of them over the same width, which is the mock's *"the row
-/// keeps its width, so the cells halve in the finer one"* read the other way
-/// round.
+/// Implements ADR-0200, ADR-0222, ADR-0306, and ADR-0327.
 pub fn sequencer(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -302,24 +250,7 @@ pub fn sequencer(
     })
 }
 
-/// The `+ lane` chooser's card, or `None` while it is up — and `None` for a
-/// chooser with nothing in it, which is a console the mixer draws no strip for.
-///
-/// # It hangs up off the pill, where a row's menu hangs down off a row
-///
-/// [`Load::list`]'s rule, and the same one: this pill is in the foot of a bay,
-/// so what is under it is the bay's own edge and the card stands on the pill's
-/// top edge, one [`size::PILL_GAP`] clear of it, over this bay's rows. It is
-/// held inside the viewport, so a Sequencer bay at the bottom of a short window
-/// draws the card over the bays above rather than off the top.
-///
-/// The rows are not counted against the room, which is that method's other
-/// clause: the list is at most [`DECKS`] faders and however many controls one
-/// deck published, and a window too short to hold it is a window with no
-/// transport row in it either.
-///
-/// The items are as wide as the words in them, which is `egui`'s to answer —
-/// [`View::menu`]'s reason one bay along, and why this takes the context.
+/// Layout for the `+ lane` chooser popup card, or `None` if closed or empty.
 fn lane_card(
     ctx: &egui::Context,
     viewport: Rect,
@@ -372,14 +303,7 @@ fn lane_card(
     })
 }
 
-/// What the head's readout says — `step 6 of 16`, counting from one as the
-/// ruler does, and `step — of 16` before the first poll.
-///
-/// The count is in it and the mock's is not. `docs/manual/console.html` draws
-/// `step 6` and says *"Step 6 of sixteen"* in its tip; the count follows the
-/// mode now and the pill beside it can be pressed, so a readout that said only
-/// `6` would leave a hand that had just halved the grid reading the same figure
-/// against a different bar.
+/// Formats the step readout string (`step X of Y`), counting 1-based.
 fn step_words(step: Option<usize>, mode: StepMode) -> String {
     match step {
         Some(step) => format!("step {} of {}", step + 1, mode.count()),
@@ -387,12 +311,7 @@ fn step_words(step: Option<usize>, mode: StepMode) -> String {
     }
 }
 
-/// The Sequencer bay's controls, as rectangles to press.
-///
-/// Everything here is derived from the pattern the host handed in this frame,
-/// so the cell that is painted is the cell that is pressed — the rule every
-/// other bay in this module follows, and the one that makes
-/// [`crate::input::claim`] and the press handler ask the same question.
+/// Hit-testable layout and interactive geometry for the Sequencer bay.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sequencer {
     /// The mode pill, reading `1/16` or `1/8`. A press asks for the other of the
@@ -419,12 +338,7 @@ pub struct Sequencer {
     /// acted on rather than implying the armed one (`Operation::SelectDeck`'s
     /// rule).
     pub bank: usize,
-    /// The four bank pills in the bay head, in bank order — the same capsules
-    /// [`bay_head`] paints, laid out a second time here ([`bank_capsules`]).
-    ///
-    /// Empty for a bay too short to hold its own head, which is a head with no
-    /// capsule to press; short of four it never is, because renumbering the ones
-    /// that fit would put `seq 2`'s press on `seq 1`.
+    /// Bank selection pill button rectangles in the bay head ([`bank_capsules`]).
     pub banks: Vec<Rect>,
     /// The foot's `+ lane` pill. A press puts [`LaneCard`] down; it emits nothing
     /// on its own, because what is being added is *what the lane drives* and a lane
@@ -435,35 +349,10 @@ pub struct Sequencer {
 }
 
 impl Sequencer {
-    /// What a press at `p` asks for, or `None` where there is nothing under it.
-    ///
-    /// Five controls and one answer, in the order the mock draws them: a bank pill
-    /// chooses the pattern, a cell sets a step, a label mutes a lane, the minus at
-    /// the end of the row takes that lane out, and the pill chooses what a step is
-    /// worth. The mode pill is asked last and none of the five can overlap another,
-    /// so the order is arbitrary rather than a precedence — it is written down so
-    /// that this file and the window that acts on it ask in one order.
-    ///
-    /// The `+ lane` control is not here, because its press is not an operation: it
-    /// puts a card down, and what comes back from that card is
-    /// [`Sequencer::chose`]. That is [`LibraryBay::aim`]'s division one bay along,
-    /// and the same one: a control whose press moves the console's own state
-    /// answers an enum rather than an `Option<Operation>`.
-    ///
-    /// Every arm names the bank, which is why [`Sequencer::bank`] is carried:
-    /// implying the armed one is the shape `Operation::SelectDeck`'s rule refuses,
-    /// and a press that arrived while a bank press was in flight would otherwise
-    /// land on whichever pattern won.
+    /// Resolves pointer press at `p` to the corresponding sequencer [`Operation`].
     pub fn press(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let at = Pos2::new(p.x, p.y);
-        // **The bank pills first, and they are in the bay head** — outside
-        // every rectangle below, so this is the order the mock reads in and
-        // not a precedence either.
-        //
-        // **A press asks for that bank and never for the next one**, which is
-        // the `+`'s whole argument turned round: with four fixed banks a press
-        // on `seq 3` *is* the choice landing on an empty pattern, so there is
-        // nothing left for a `+` to mean (ADR-0320, ADR-0327).
+        // Bank pills in bay head evaluated first (ADR-0320, ADR-0327).
         if let Some(bank) = self.banks.iter().position(|pill| pill.contains(at)) {
             return Some(Operation::SelectPattern {
                 pattern: bank as u8,
@@ -517,13 +406,7 @@ impl Sequencer {
             })
     }
 
-    /// Whether `p` is on anything here a press means something on, which is what
-    /// [`crate::input::claim`] asks. The ruler, the readout and the playhead are
-    /// readouts and answer `false`.
-    ///
-    /// The `+ lane` pill is one of them, and the card is not: a card that is down
-    /// claims every press on the console under rule 2, which is answered before
-    /// rule 4 is reached and is why this is only ever asked with the card up.
+    /// Returns whether `p` targets any interactive control in this bay (Rule 4 claim).
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
         self.press(p).is_some() || self.add.contains(Pos2::new(p.x, p.y))
     }
@@ -662,14 +545,7 @@ pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
     pill_into(ui, pal, bay.add, ADD_LANE, false);
 }
 
-/// How many numbers the ruler draws: four, which is the beats in a bar.
-///
-/// It is the bar's own count rather than a division of the cells, which is what
-/// makes the ruler read the same in both modes — four numbers over sixteen
-/// cells is a group of four, and over eight is a group of two.
-/// `docs/manual/console.html` draws exactly this: *"Four numbers over sixteen
-/// cells makes a group of four, which is a bar of sixteenths counted in
-/// beats."*
+/// Beat subdivision markers displayed along the ruler (4 beats per bar).
 const RULER_GROUPS: usize = 4;
 
 /// `.seq-play .lane i.at`'s `color-mix(in srgb, var(--c-lav) 22%,
@@ -681,28 +557,7 @@ const PLAYHEAD_WASH: u8 = 22;
 /// steps are still drawn and are drawn dim.
 const MUTED_LANE: u8 = 30;
 
-/// How stale the sequencer's picture may get, which is what this bay declares
-/// under
-/// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
-/// and what the harness turns into a deadline.
-///
-/// One sixteenth at the mock's tempo — 117.19 ms, which is [`BEAT_MICROS`]
-/// quartered. The unit this picture moves in is a whole cell: the playhead
-/// stands over one step and then over the next, so there is nothing between two
-/// positions to be smooth about and the step *is* the step. The finer of the
-/// two modes is the one written down, because a declaration made for the eighth
-/// would be half the rate the sixteenth needs and the mode is one press away.
-///
-/// Stated at the mock's tempo, for [`BEAT_STALENESS`]'s reason: a staleness
-/// that fell with the tempo would make `Σ (cost / staleness)` a function of how
-/// fast the music is, and the two schedulability conditions could then only be
-/// asserted against a fastest tempo nobody has written down (ADR-0212). What
-/// the music moves is [`step_moves_in`], which is the deadline and not the
-/// rate.
-///
-/// It is the first declaration on this panel whose unit is a beat subdivision,
-/// so it is what `moves_in >= staleness` is tightest against (ADR-0322,
-/// ADR-0283).
+/// Maximum allowable display staleness for sequencer animation (P-0091, ADR-0212, ADR-0283, ADR-0322).
 pub const STEP_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / 4);
 
 /// Computes duration until the playhead advances to the next step at current tempo.

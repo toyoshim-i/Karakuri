@@ -6,13 +6,7 @@ use super::super::*;
 use super::paint::reach;
 use super::state::*;
 
-/// One strip's furniture: a rectangle for each of the six things stacked in it,
-/// and the two tracks a value rides.
-///
-/// The fills and the knobs are not fields, because each is a function of a
-/// value this already knows where to put — see [`StripBox::trim_at`],
-/// [`StripBox::fader_at`] and [`StripBox::meter_at`]. A fill stored beside its
-/// track is two statements about one number.
+/// Layout bounding boxes for a channel strip's controls and indicators.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StripBox {
     /// `.strip` itself: the 9px well everything else is inside.
@@ -40,12 +34,7 @@ pub struct StripBox {
     /// word is painted into — [`Mixer::blend`](crate::view::mixer::Mixer::blend) hit-tests exactly this rectangle. As
     /// wide as the word in it, inside `.mini`'s padding and border.
     pub blend: Rect,
-    /// The mask `.mini`, which is the chip a press acts on and not only the box a
-    /// mark is drawn into — [`Mixer::mask`](crate::view::mixer::Mixer::mask) hit-tests exactly this rectangle, the
-    /// way [`StripBox::blend`] and [`StripBox::tally`] are. It holds a mark rather
-    /// than a word, so it is the same width whichever shape it is showing: a target
-    /// that stands still while the deck moves under it, which the tally's capsule
-    /// buys by being the widest word's and the blend chip cannot say at all.
+    /// Bounding rectangle for the mask shape selection chip.
     pub mask: Rect,
 }
 

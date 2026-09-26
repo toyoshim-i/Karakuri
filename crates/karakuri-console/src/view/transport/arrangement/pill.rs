@@ -4,12 +4,7 @@ use super::super::*;
 // learn, and the map it writes into
 // ---------------------------------------------------------------------------
 
-/// What the `map` pill reads — the name of the map file in use, or `None` for a
-/// surface running without one.
-///
-/// [`AudioIn`]'s shape one pill along, and it is the same seam: a map is a
-/// file, `src/` reads none (ADR-0156), so whoever loaded one writes its name
-/// here and this crate draws it.
+/// Readout information for the active MIDI/control surface map file (ADR-0156).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MapPill {
     /// What the map is called — the file's stem, which is the name an operator gave
@@ -41,12 +36,7 @@ const LEARN_LABEL: &str = "learn";
 /// The `map` pill's first word, the mock's own abbreviation — `map · <name>`.
 const MAP_LABEL: &str = "map";
 
-/// The `learn` pill: the capsule, and whether it is lit.
-///
-/// A pill and not a capsule with two ends, which the `rec` control is: a press
-/// means *the other state* and the word never changes, because *learn* is what
-/// the control is rather than what a press will do. It is `.pill.lav` in the
-/// mock, lit while armed.
+/// Layout and state for the transport MIDI learn toggle button.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LearnPill {
     /// The control: the capsule a press has to land in.
@@ -61,45 +51,20 @@ impl LearnPill {
         self.pill.contains(Pos2::new(p.x, p.y))
     }
 
-    /// What a press asks for, which is a state and never a direction (P-0090): the
-    /// arming, the other way round.
-    ///
-    /// It is a `bool` and not an [`Operation`] because a learn is not an operation
-    /// — it is a setting of the map layer every surface reaches the vocabulary
-    /// through, which is `Vocabulary::Setting`'s own shape
-    /// ([ADR-0236](../../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md),
-    /// and
-    /// [ADR-0336](../../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)
-    /// for the argument against the other reading). The four `mcp` pills are the
-    /// same kind of control and carry no operation either.
+    /// Returns the inverted arming state requested by clicking the learn pill (ADR-0236, ADR-0336, P-0090).
     pub fn next(&self) -> bool {
         !self.armed
     }
 }
 
-/// The `map` pill: where the readout goes.
-///
-/// No press and no menu, which is what makes this a readout rather than the
-/// control the mock draws. The mock's tip says *"Click to save, load, or start
-/// a new one"*, and reaching a map while running is not built — the pill says
-/// which file is loaded and nothing else. A capsule that looked like a menu and
-/// opened none is the scaffolding [`transport`] refuses; a capsule that says a
-/// true thing is not.
+/// Layout bounding rectangle for the map filename readout pill.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MapRow {
     /// The capsule, painted.
     pub pill: Rect,
 }
 
-/// Where the `learn` pill goes, or `None` where there is no room or nothing to
-/// say.
-///
-/// `None` where the console has not been told about a map — `View::map` — for
-/// [`audio_in`]'s reason exactly: a program with no surface has nothing to
-/// learn onto, and a lit-able pill drawn for it would be this crate answering a
-/// question about a device on its own authority.
-///
-/// `layout` must be solved.
+/// Computes layout for the `learn` pill button, or `None` if unconfigured or insufficient room.
 pub fn learn_pill(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -138,13 +103,7 @@ pub fn learn_pill(
     Some(LearnPill { pill, armed })
 }
 
-/// Where the `map` pill goes, or `None` where there is no room or nothing to
-/// say.
-///
-/// It follows [`learn_pill`], which is the mock's order — `learn`, then `map ·
-/// nanoKONTROL2` — and falls back through the same chain where the `learn` pill
-/// did not fit, so one control dropping for want of room does not take the next
-/// with it.
+/// Computes layout for the `map` readout pill, placed after the learn button or preceding group.
 pub fn map_pill(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -224,14 +183,7 @@ pub(crate) fn learn_into(ui: &Ui, pal: &Palette, pill: &LearnPill) {
     );
 }
 
-/// The `map` pill, painted — `map · default`, and no chevron.
-///
-/// The chevron is the one thing left off the mock's own drawing, and it is left
-/// off on purpose: `▾` on this console means *there is a menu under this*,
-/// which the arrangement pill and the `audio-in` pill both keep, and there is
-/// no menu here. Drawing one over a readout would be the scaffolding
-/// [`transport`] refuses — a control that looks like a control and does
-/// nothing.
+/// Paints the map name readout pill without dropdown chevron.
 pub(crate) fn map_into(ui: &Ui, pal: &Palette, pill: &MapRow, map: &MapPill) {
     let painter = ui.painter();
     painter.rect_stroke(

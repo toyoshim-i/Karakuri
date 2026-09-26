@@ -12,23 +12,10 @@ pub struct Placed {
     pub rect: karakuri_layout::Rect,
 }
 
-/// Every region to draw this frame, in tree order, appended to `out` after
-/// clearing it.
+/// Collects visible regions into `out` in tree order, rearranging the Program bay first.
 ///
-/// Tree order is load bearing and not a convenience. The inspector is a split:
-/// its bay card and head cover the same rectangle its two panes tile, so the
-/// card has to be painted before them. Tree order gives that for nothing, and
-/// any other order would need the rule written out.
-///
-/// Arranges the Program bay first, which is [`rearrange`] and is where the
-/// solve happens: `Layout::rect` refuses to answer from a dirty layout, and a
-/// plan taken before the bay had arranged itself would list `deck-previews` as
-/// a region to draw on the very frame its cells went somewhere else. On a frame
-/// where nothing moved both solves are flag tests and the bit is written with
-/// the value it already had, which marks nothing dirty (ADR-0183).
-///
-/// `canvas` is the picture's shape, which is what decides that arrangement —
-/// [`program_bay`]. It is [`View::canvas`] at the one call site that draws.
+/// Tree order guarantees parent cards render before child panes. Program bay
+/// rearrangement triggers layout solving without dirtying unchanged flags (ADR-0183).
 pub fn plan_into(panel: &mut Panel, canvas: (u32, u32), out: &mut Vec<Placed>) {
     rearrange(panel, canvas);
     out.clear();
@@ -48,40 +35,16 @@ pub fn plan_into(panel: &mut Panel, canvas: (u32, u32), out: &mut Vec<Placed>) {
     }
 }
 
-/// Whether there is anything of this rectangle to draw, which is the one rule
-/// [`picture_rect`], [`preview_cells`] and [`program_body`] each answer `None`
-/// from.
+/// Returns whether the rectangle has positive width and height.
 ///
-/// It is asked of the *fitted* rectangle rather than of the box it was fitted
-/// into, always: a box under half a pixel rounds to nothing, which is nothing
-/// to draw and nothing to render into, and a box the inset turned inside out
-/// gives a negative extent `egui` draws back-to-front rather than refuses. The
-/// three call sites had a copy of this comparison each before they had a
-/// function; the sentence is the same one in all three, and now so is the
-/// answer. [`kept`] is the same rule as an `Option`, for the callers that hand
-/// the rectangle straight back.
+/// Protects callers like [`picture_rect`] against subpixel collapse or negative
+/// dimensions from inverted insets.
 pub(crate) fn positive(rect: Rect) -> bool {
     rect.width() > 0.0 && rect.height() > 0.0
 }
 
-/// One of `count` equal tracks laid along `axis` inside `strip`, with `gap`
-/// between them and nowhere else.
-///
-/// That last clause is the whole of it, and it is the reading the mock's grids
-/// and flex rows all take: `repeat(4, 1fr)` with a `gap` is four tracks and
-/// three gaps, not four tracks each carrying one. The same sentence is written
-/// on [`size::PREVIEW_GAP`], on [`size::BEAT_GAP`] and on [`size::STRIP_GAP`],
-/// and this is the arithmetic all three describe — [`TransportRow::dot`] is the
-/// fourth, and it steps a fixed dot width rather than dividing a strip, so it
-/// states the rule and does not call this.
-///
-/// Three call sites, and the third is what made it worth a function. The row of
-/// previews and the mixer's page of strips were the same six lines written
-/// twice with a different gap in them; a column beside the picture is the
-/// third, and it is those six lines read one axis along. A track spans `strip`
-/// across the axis, exactly as a node of the arrangement spans its parent
-/// across its own — which is why the axis is [`karakuri_layout::Axis`] rather
-/// than a `bool`.
+/// Computes the bounding rectangle for track `index` of `count` equal divisions
+/// along `axis` within `strip`, spaced by `gap` between adjacent tracks.
 pub(crate) fn track(strip: Rect, count: usize, index: usize, gap: f32, axis: Axis) -> Rect {
     let gaps = gap * (count.max(1) - 1) as f32;
     let (along, across) = match axis {

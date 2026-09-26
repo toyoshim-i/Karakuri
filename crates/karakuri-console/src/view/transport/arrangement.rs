@@ -13,23 +13,7 @@ pub use pill::*;
 /// is the same two-part label.
 const ARRANGEMENT_LABEL: &str = "arr";
 
-/// What the pill says where no arrangement has been named, and it is
-/// deliberately not a name.
-///
-/// The default arrangement *has* no name: it reaches [`crate::layout`] rather
-/// than a file, so it is the one arrangement nobody could have saved and
-/// nothing filed can shadow it
-/// ([ADR-0221](../../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
-/// §2). Writing `default` here would be this console inventing one — and a
-/// worse invention than most, because an operator *may* save an arrangement
-/// called `default` and it shadows nothing, so the pill would read the same for
-/// two different states.
-///
-/// A space is what makes it safe as well as honest: a name is one path
-/// component of letters, digits, `-` and `_`, so `the default` is not a name
-/// anything can be filed under and no save can make this line ambiguous. It is
-/// the preview cell's `C · no slot` one row up — a word for a state, where a
-/// name would be a reading invented for a console that has none.
+/// Fallback label when using the unnamed default layout (ADR-0221).
 const NO_ARRANGEMENT: &str = "the default";
 
 /// What *save* is called in the menu. The ellipsis is the one thing on this
@@ -45,37 +29,15 @@ const NEW_ITEM: &str = "start a new one";
 /// Current arrangement state and dropdown menu presentation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Arrangement {
-    /// The arrangement in use, or `None` for the default — which is not a name and
-    /// is drawn as [`NO_ARRANGEMENT`].
-    ///
-    /// A save and a restore both put a name here, because both leave that
-    /// arrangement the one in use; a reset takes it away, because the default is
-    /// what is now on screen and it has no name.
+    /// Active arrangement name, or `None` for the unnamed default layout.
     pub name: Option<String>,
-    /// Every name already filed, in the order whoever read the store listed them —
-    /// `Store::list_arrangements` sorts by name, so this is alphabetical and the
-    /// menu does not sort it again.
-    ///
-    /// Read when it changes rather than per frame, which is [`View::library`]'s
-    /// rule for its reason: a listing is a directory read and that is not a thing
-    /// to do on a frame path (P-0091). It changes exactly when a save lands, and
-    /// whoever performed the save is who re-reads it.
-    ///
-    /// Empty is a console with no store behind it — every test in this crate — and
-    /// the menu then offers *save* and *start a new one* and lists nothing, which
-    /// is honest: there is nothing to put back.
+    /// Saved arrangement names retrieved from storage, sorted alphabetically (P-0091).
     pub filed: Vec<String>,
     /// What the control is doing. See [`Menu`].
     pub menu: Menu,
 }
 
-/// What the pill's menu is doing, and the console's only state that is neither
-/// the arrangement nor a value handed in.
-///
-/// Three states rather than a `bool` and a buffer beside it: *shut*, *open*,
-/// and *open with a name being typed into it*. The third is a state of the menu
-/// and not a fourth thing, which is what stops a buffer being read while
-/// nothing is asking for one.
+/// Modal state of the arrangement dropdown menu (closed, open list, or naming text field).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Menu {
     /// The pill alone.
@@ -83,31 +45,12 @@ pub enum Menu {
     Shut,
     /// The menu is down: *save*, *start a new one*, and the names filed.
     Open,
-    /// The one flow on this panel that asks for letters, with what has been typed
-    /// so far.
-    ///
-    /// The buffer is a `String` this crate owns and whoever holds the keyboard
-    /// fills, one character at a time, through [`Arrangement::typed`] and
-    /// [`Arrangement::rubbed_out`] — the same split as everything else here, since
-    /// `src/` has no key events to read (ADR-0156).
-    ///
-    /// Nothing in it is checked. A name that is not one path component is refused
-    /// where the record is applied, in one sentence, by whoever writes the file —
-    /// the surface owns the affordance and never the authority
-    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md),
-    /// [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-    /// A pill that quietly dropped the characters it did not like would be a rule
-    /// an operator could only find by experiment.
+    /// Text input buffer for naming an arrangement being saved (ADR-0156, ADR-0221, P-0090).
     Naming(String),
 }
 
 impl Arrangement {
-    /// A console with no store behind it: the default arrangement, nothing filed,
-    /// and the menu shut.
-    ///
-    /// A `const` rather than a `Default` impl alone so that a test — and
-    /// [`crate::input::claim`]'s own documentation — can name the state without
-    /// building one. Every test in this crate is this.
+    /// Default arrangement configuration with no active saved name and menu closed.
     pub const NONE: Arrangement = Arrangement {
         name: None,
         filed: Vec::new(),
@@ -154,12 +97,7 @@ impl Arrangement {
         self.menu = Menu::Naming(String::new());
     }
 
-    /// One character into the name being typed, and `false` where nothing was
-    /// asking for one.
-    ///
-    /// Control characters are not a name and never reach the buffer — a newline is
-    /// Return arriving as text, which is the commit and not a letter. Everything
-    /// else does, unchecked, for the reason [`Menu::Naming`] gives.
+    /// Appends a printable character to the active naming buffer, returning true if accepted.
     pub fn typed(&mut self, c: char) -> bool {
         match (&mut self.menu, c.is_control()) {
             (Menu::Naming(name), false) => {
@@ -179,13 +117,7 @@ impl Arrangement {
         }
     }
 
-    /// How many rows the open menu has: *save*, *start a new one*, and one per name
-    /// filed. Zero while the menu is shut or asking for a name, which is a menu
-    /// with a field in it rather than a list.
-    ///
-    /// The address descends into this menu and a digit names the nth row of it,
-    /// which is the same number [`ArrangementPill`] lays out
-    /// ([ADR-0350](../../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)).
+    /// Returns the number of menu rows available (save, reset, and filed items) (ADR-0350).
     pub fn rows(&self) -> usize {
         match self.menu {
             Menu::Open => VERBS + self.filed.len(),
@@ -206,12 +138,7 @@ impl Default for Arrangement {
 /// which a hand can pick without typing anything."*
 const VERBS: usize = 2;
 
-/// What a press on one of the menu's rows lands on.
-///
-/// [`ArrangementPill::ask`] turns one of these into what the press *asks for*;
-/// this is only which row it was. Split in two so that the hit test and the
-/// operation are one derivation asked twice rather than one function that does
-/// both — [`Outputs::op`]'s arrangement, over a list.
+/// Categorizes which item or action in the arrangement menu was selected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Item {
     /// *save*. With no name in use it asks for one; with a name in use it means
@@ -224,15 +151,7 @@ pub enum Item {
     Filed(usize),
 }
 
-/// What a press on the pill or on one of its rows asks for.
-///
-/// Every arm is either a move of this control's own state or one named
-/// operation, and never a change to the arrangement made here: the pill asks,
-/// and whoever applies the record decides
-/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-/// Nothing is refused in this list. A name nothing is filed under and a file
-/// that disagrees with itself are both refused where the bytes are, in one
-/// sentence each, and this control cannot see either.
+/// Outcome or operation requested by interacting with the arrangement pill/menu (P-0090).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ask {
     /// Put the menu down — a press on the pill with the menu shut.
@@ -252,24 +171,7 @@ pub enum Ask {
     Operation(Operation),
 }
 
-/// The arrangement pill, laid out: the capsule, what is written in it, and the
-/// menu under it while it is down.
-///
-/// # One derivation, for [`Outputs`]' reason
-///
-/// [`View::draw`] paints exactly these rectangles and [`crate::input::claim`]
-/// hit-tests exactly these rectangles. Two copies of the arithmetic is a menu
-/// row that lights under a pointer that cannot pick it, with nothing on screen
-/// saying so.
-///
-/// # It carries no name and no list
-///
-/// The rectangles are here and the words are [`Arrangement`]'s, which is why
-/// [`ArrangementPill::ask`] takes one: a laid-out pill that had *copied* the
-/// name it was measured from is a second copy to drift, and the caller has the
-/// first one in its hand already. It is [`Mixer`]'s split with the borrow
-/// turned round — the mixer keeps the strips because a knob's position *is* a
-/// value, and nothing here moves with the name except the width.
+/// Layout metrics and menu bounds for the arrangement selector pill.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrangementPill {
     /// The capsule, which is what a press has to land in to open the menu. The mock
@@ -282,13 +184,7 @@ pub struct ArrangementPill {
     /// The menu, or `None` while it is shut — the whole card, which is what a press
     /// has to land in to be a pick rather than a dismissal.
     pub menu: Option<Rect>,
-    /// How many of [`Arrangement::rows`] the menu has room for, between the pill
-    /// and the bottom of the console.
-    ///
-    /// Fewer than there are is a store with more arrangements than the window is
-    /// tall, and the foot says so in the Library bay's own words — `n of m` —
-    /// rather than the list quietly ending. Zero while the menu is shut, and while
-    /// it is asking for a name: that menu is a field, not a list.
+    /// Number of menu rows that fit vertically in the viewport.
     pub rows: usize,
     /// What the menu would list if the window were tall enough, carried so that the
     /// foot and the rows are one number rather than two.
@@ -309,12 +205,7 @@ impl ArrangementPill {
         self.pill.contains(at) || self.menu.is_some_and(|menu| menu.contains(at))
     }
 
-    /// Where one row of the menu is, from the top. The rows stack with no gap
-    /// between them, which is `.lib-list`'s own reading — the one list in the mock
-    /// that has none.
-    ///
-    /// Panics on a row this menu has not got, which is [`TransportRow::dot`]'s
-    /// rule: a caller has invented an item.
+    /// Returns bounding box for the menu row at `index`.
     pub fn row(&self, index: usize) -> Rect {
         assert!(index < self.rows, "row {index} of a menu of {}", self.rows);
         let menu = self.menu.expect("a menu with rows in it");
@@ -343,29 +234,7 @@ impl ArrangementPill {
             })
     }
 
-    /// What a press at `p` asks for, or `None` where the press was on
-    /// nothing this control owns.
-    ///
-    /// The same derivation [`crate::input::claim`] hit-tests, asked a second
-    /// time rather than copied — [`Outputs::op`]'s arrangement, and the reason
-    /// is the same: the pill that claims a press and the pill that acts on it
-    /// cannot come apart.
-    ///
-    /// # The three answers a press on a row can give
-    ///
-    /// - Save with a name in use is [`Operation::SaveArrangement`] naming
-    ///   it. *"Once a name is in use, saving again means that name: saving
-    ///   over it is what saving it again is."* With no name in use there is
-    ///   nothing to save over, so it asks for one instead.
-    /// - Start a new one is [`Op::Reset`] — the same operation `r`
-    ///   performs, reached from the other end of the panel exactly as the
-    ///   Outputs row's dot reaches `f`'s fold.
-    /// - A name is [`Operation::RestoreArrangement`] naming it, which is
-    ///   the reset's own sentence with a name in it.
-    ///
-    /// A press on the pill toggles the menu; a press anywhere else on the menu
-    /// — its padding, its foot — shuts it, because a press that did nothing at
-    /// all is the one thing worse than a press that declines.
+    /// Hit-tests a click at `p` against the pill or open menu items (ADR-0208, ADR-0221).
     pub fn ask(&self, arr: &Arrangement, p: karakuri_layout::Point) -> Option<Ask> {
         if self.hit(p) {
             return Some(match arr.open() {
@@ -395,60 +264,14 @@ impl ArrangementPill {
     }
 }
 
-/// The arrangement pill's furniture, derived: the capsule, the words in it, and
-/// the menu under it.
-///
-/// # Where it sits, and why it is after the bar
-///
-/// `docs/manual/console.html`'s `.transport` is a flex row and this pill is the
-/// last item in it before the `.sep`, immediately after `map · nanoKONTROL2 ▾`.
-/// Everything the mock draws between the tracker group and this pill — `learn`,
-/// and then `map` — is one of the controls [`transport`] names and does not
-/// draw, so a flex row closes up and this lands one [`size::TRANSPORT_GAP`]
-/// after the octave's second half — or after the audio-in pill on a console
-/// with no tracker behind it, or after `bar 37` on one with neither. That is
-/// the mock's own layout with the undrawn items taken out, and not a position
-/// chosen here.
-///
-/// It moves with the tempo, by a glyph or two. `92.5` is narrower than `128.0`
-/// and everything after it slides, which is what a flex row is and what the
-/// beat grid and the bar already do. The alternative — pinning it to the right
-/// edge, where the mock's `landed` and `rec` sit — buys a control that never
-/// moves and puts it in the group the manual does not put it in.
-///
-/// # No row means no pill, and that is the row's answer rather than a second
-/// one
-///
-/// `None` wherever [`transport`] answers `None`: the row folded away, soloed
-/// away, too narrow, or a console with no engine behind it. The last is the one
-/// worth stating, because the arrangement exists whether or not a tempo does —
-/// but the *row* does not, and a pill floating in a bay that is drawing nothing
-/// at all would be a control in a row that is not there. Where the row is, this
-/// asks it for the bar's right edge and lays out from there, so the pill's
-/// place and the readouts' places are one derivation.
-///
-/// # What it costs to ask
-///
-/// One galley lookup for the pill's own words, always. While the menu is down
-/// it is one more per row — the two verbs and every name filed — since the card
-/// is as wide as the widest thing in it, and a name this crate never measured
-/// would be a name drawn outside its own card. Paid on a pointer event and on a
-/// frame, and only while the menu is open, which is a menu an operator is
-/// looking at.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one.
+/// Computes layout rectangles for the arrangement pill and open dropdown menu.
 pub fn arrangement(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     values: Option<Transport>,
     audio: Option<&AudioIn>,
     tracker: Option<Tracker>,
-    // **The map, only so this pill knows where the group before it ended.**
-    // `learn` and `map` sit between the tracker group and this one in the
-    // mock, and a console that has not been told about a surface draws
-    // neither — so this is `None` on every run without one and the pill lands
-    // exactly where it did before they existed.
+    // Map configuration used to anchor layout offset following the previous group.
     map: Option<&MapPill>,
     arr: &Arrangement,
 ) -> Option<ArrangementPill> {
@@ -470,26 +293,17 @@ pub fn arrangement(
         })
     };
 
-    let words = pill_text(arr);
-    let text_w = width(&words);
-    // `.pill`'s `padding: 0 8px` around the words, one `.sink` gap, and the
-    // chevron — the one gap the mock states inside a capsule.
+    let text_w = width(&pill_text(arr));
     let pill_w = size::PILL_PAD_X * 2.0 + text_w + size::SINK_GAP + CHEVRON_W;
     let mid = strip.center().y;
-    // **Where the group before this one ended**, which is the tracker group's
-    // last chip where the console has been told about the tracker, the
-    // audio-in pill where it has been told only about audio, and the bar where
-    // it has been told neither — the same one-answer arrangement [`look`]
-    // takes of *this* pill, asked one item further back. The gap is the row's
-    // own either way: what ends before this pill is a whole group, and
-    // `.tracker`'s tighter 5 is the gap *inside* that group.
+    // Anchors after map pill, learn pill, tracker group, audio-in, or bar.
     let after = match (
         map_pill(ctx, layout, values, audio, tracker, map),
         learn_pill(ctx, layout, values, audio, tracker, map, false),
         tracker_group(ctx, layout, values, audio, tracker),
         audio_in(ctx, layout, values, audio),
     ) {
-        (Some(map), _, _, _) => map.pill.max.x,
+        (Some(pill), _, _, _) => pill.pill.max.x,
         (None, Some(learn), _, _) => learn.pill.max.x,
         (None, None, Some(group), _) => group.double.max.x,
         (None, None, None, Some(before)) => before.pill.max.x,
@@ -499,9 +313,9 @@ pub fn arrangement(
         Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
         egui::vec2(pill_w, size::PILL_H),
     );
-    // The same rule [`outputs_row`] states: a capsule that does not fit in the
-    // row it is drawn in is no control at all, rather than half of one over
-    // the frame readout.
+    // The rule `outputs_row` states: a capsule that does not fit in the row it
+    // is drawn in is no control at all, rather than half of one over the frame
+    // readout.
     if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
         return None;
     }
@@ -525,34 +339,12 @@ pub fn arrangement(
     })
 }
 
-/// The pill's words: `arr · night`, or `arr · the default`.
-///
-/// One string rather than three galleys laid end to end, for [`frame_job`]'s
-/// reason: the mock writes one run of text and laying it out as one keeps the
-/// spaces round the `·` the type's own rather than a gap this file invented.
+/// Formats the arrangement pill label as `arr · <name>`.
 fn pill_text(arr: &Arrangement) -> String {
     format!("{ARRANGEMENT_LABEL} · {}", arr.word())
 }
 
-/// The menu card under the pill: where it is, how many rows fit in it, and how
-/// many there are.
-///
-/// `(None, 0, 0)` while the menu is shut, which is the ordinary state and costs
-/// one branch.
-///
-/// # It hangs from the pill and is held inside the console
-///
-/// Down from the pill's bottom edge by one [`size::PILL_GAP`], left-aligned
-/// with it, and pushed back inside the viewport's right edge where a long name
-/// would take it past — a card half outside the window is a list with items
-/// nobody can read.
-///
-/// The bottom is a count and not a clip. The transport row is at the top of the
-/// console, so a menu hanging down has the whole window; where a store holds
-/// more arrangements than that window is tall, the card lists as many as fit
-/// and says `n of m` in the Library bay's own foot. Truncating in silence is
-/// the failure P-0094 is about, and this is that bay's answer to the same
-/// question rather than a second one.
+/// Computes position, size, and capacity for the arrangement dropdown menu card.
 fn menu_card(
     pill: &Rect,
     layout: &karakuri_layout::Layout,
@@ -564,34 +356,33 @@ fn menu_card(
     }
     let viewport = to_egui(layout.viewport());
     let top = pill.max.y + size::PILL_GAP;
+    let furniture = size::LIB_LIST_PAD * 2.0;
 
-    // **Asking for a name is a field and not a list**, so the card is one row
-    // wide enough to type into and there is nothing to pick.
+    // A name being typed: one row with the buffer in it, and nothing else.
     if let Some(typed) = arr.naming() {
-        let field = width(&naming_text(typed)).max(pill.width());
         let card = held_inside(
             &viewport,
             pill.min.x,
             top,
-            field + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
-            size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H,
+            width(&naming_text(typed)).max(pill.width())
+                + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
+            furniture + size::LIB_ROW_H,
         );
         return (Some(card), 0, 0);
     }
 
     let of = arr.rows();
-    let widest = std::iter::once(save_word(arr))
-        .chain(std::iter::once(NEW_ITEM))
-        .chain(arr.filed.iter().map(String::as_str))
-        .map(width)
+    // Widest of the two verbs, every name filed, and the pill itself.
+    let widest = [width(save_word(arr)), width(NEW_ITEM)]
+        .into_iter()
+        .chain(arr.filed.iter().map(|name| width(name)))
         .fold(pill.width(), f32::max);
-    // How many rows there is room for between the card's top and the bottom of
-    // the console, once the padding and the rule under the verbs are paid for.
-    // The foot is only owed where something is left out, so it is asked for
-    // twice: once assuming it is not there and once assuming it is.
-    let furniture = size::LIB_LIST_PAD * 2.0 + size::HAIRLINE;
+    // How many rows there is room for between the menu's top and the bottom of
+    // the console. Asked twice: the foot is only owed where something is left
+    // out, so the first ask sees whether everything fits without one.
     let room = |foot: f32| {
-        (((viewport.max.y - top - furniture - foot) / size::LIB_ROW_H).floor()).max(0.0) as usize
+        (((viewport.max.y - top - furniture - size::HAIRLINE - foot) / size::LIB_ROW_H).floor())
+            .max(0.0) as usize
     };
     let rows = match room(0.0) >= of {
         true => of,
@@ -620,12 +411,7 @@ fn save_word(arr: &Arrangement) -> &'static str {
     }
 }
 
-/// The name being typed, with the caret after it — `night▏`.
-///
-/// One run of text rather than a galley and a drawn bar, so that measuring the
-/// field and painting it cannot be two different runs: the caret is the width
-/// of the caret whatever the face is, and a field measured without it would put
-/// the caret outside its own card at the moment the name filled it.
+/// Formats the naming buffer with trailing cursor caret (`night▏`).
 fn naming_text(typed: &str) -> String {
     format!("{typed}{CARET}")
 }

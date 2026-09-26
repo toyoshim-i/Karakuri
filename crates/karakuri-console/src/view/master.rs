@@ -20,14 +20,8 @@ const ADD_LABEL: &str = "+ add";
 /// chain — `docs/manual/console.html`'s own mark for it.
 pub(super) const REMOVE_GLYPH: &str = "\u{2212}";
 
-/// The Master bay's body, laid out: the out row, then one well per slot of the
-/// running chain, then `+ add`.
-///
-/// # One derivation, for [`Outputs`]' reason
-///
-/// [`View::draw`] paints exactly these rectangles and [`crate::input::claim`]
-/// hit-tests exactly these controls. Two copies of the arithmetic is a knob
-/// painted where a hand cannot take hold of it.
+/// Layout of the Master bay's body: out row, chain slot wells, and `+ add`.
+/// Shared by rendering and hit-testing to prevent drift.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MasterRow {
     /// The faint `out` at the head of the row.
@@ -35,27 +29,13 @@ pub struct MasterRow {
     /// The fader: `.fader`'s 5px well lying down, what the level fills of it, and
     /// the knob centred on the fill's moving edge.
     pub fader: Fader,
-    /// `1.00`, at the far end of the row and in a box that does not move.
-    ///
-    /// As wide as the widest reading this control can ask for rather than as wide
-    /// as the one it is showing, which is [`LookRow::tone`]'s rule met by a figure
-    /// instead of by a word: the track between the label and this box is what is
-    /// left over, so a figure that changed width as it was dragged would take the
-    /// track — and the knob on it — with it.
+    /// Fixed-width rectangle for the level figure, sized to the widest possible reading.
     pub value: Rect,
     /// The value these rectangles were measured from, carried for
     /// [`LookRow::values`]' reason: whoever measured the type and whoever paints it
     /// are one statement.
     pub out: f32,
-    /// One well per slot of the running chain, in the chain's own order, and
-    /// short of the chain's length where the bay has no room for the rest.
-    ///
-    /// The chain is an ordered list of slots an operator puts in it
-    /// ([ADR-0340](../../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)),
-    /// so how many rows there are is a reading rather than a constant.
-    ///
-    /// A row drops out from the bottom up when the bay is short, on
-    /// [`mixer::strips_row`]'s rule.
+    /// Visible chain slot wells in order (ADR-0340). Rows drop from bottom up if space is short.
     pub slots: Vec<SlotRow>,
     /// `+ add` at the end of the list, or `None` where the bay has no room for
     /// it. A press puts [`AddCard`] down and asks for nothing on its own; the
@@ -63,23 +43,11 @@ pub struct MasterRow {
     pub add: Option<Rect>,
     /// The chooser's card, or `None` while it is up.
     pub card: Option<AddCard>,
-    /// The list a carried row lands on: the slots' wells and `+ add` together,
-    /// and `None` for a bay drawing no list at all.
-    ///
-    /// The third set of rectangles a release can land on
-    /// ([ADR-0273](../../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
-    /// One rectangle for the whole list: an add appends, so every point of it
-    /// names the same landing.
+    /// Landing rectangle for drag-and-drop carry release over the slot list (ADR-0273).
     pub list: Option<Rect>,
 }
 
-/// One slot of the running chain, laid out: the well, the dot, the procedure's
-/// name, the cut chip where the procedure declares `retains`, the `−` that
-/// takes the slot out, and a parameter row per declared parameter under them.
-///
-/// `.fx` in `docs/manual/console.html` — a well with [`size::FX_PAD_X`] either
-/// side and [`size::FX_PAD_Y`] above and below, its items [`size::FX_GAP`]
-/// apart.
+/// Layout of a chain slot: well, status dot, procedure name, cut chip, remove button, and param rows.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SlotRow {
     /// Where this slot sits in the chain, counted from the mix's output, which is
@@ -93,11 +61,7 @@ pub struct SlotRow {
     pub name: Rect,
     /// The word in it, measured once and painted from the same string.
     pub words: String,
-    /// The cut chip, on a slot whose procedure declares `retains` and on no
-    /// other — a `.mini`, the mixer's own blend chip: the same 9px word inside
-    /// the same padding, one value of a closed list shown and cycled.
-    ///
-    /// `None` is *this procedure declares no `retains`*.
+    /// Cut chip rectangle for procedures declaring `retains`, or `None`.
     pub cut: Option<Rect>,
     /// Which cut the slot reads, `None` where it reads none. The chip is laid
     /// out from it and the operation a press asks for carries it.
@@ -108,11 +72,7 @@ pub struct SlotRow {
     pub params: Vec<ParamRow>,
 }
 
-/// One declared parameter of a slot, laid out: the key, the track and the
-/// figure.
-///
-/// The out row's arrangement one line down: the word, the track taking what is
-/// left, and the figure in a box that does not move.
+/// Layout of a slot parameter row: label key, slider track, and value figure.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamRow {
     /// Which slot this row moves.
@@ -158,16 +118,7 @@ impl ParamRow {
 }
 
 impl SlotRow {
-    /// What a press on this slot's cut chip asks for, or `None` where `p` is not
-    /// on one — which is every point of a slot whose procedure declares no
-    /// `retains`.
-    ///
-    /// The next cut and not a step, which is the difference between the affordance
-    /// and the operation: the chip cycles because a surface may, and what it emits
-    /// names where the slot is going
-    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). The list is
-    /// two long and the cycle is this crate's arithmetic over it, exactly as the
-    /// blend chip's is.
+    /// Operation requested by pressing the cut chip (P-0090), or `None` if outside.
     pub fn chip(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let chip = self.cut?;
         if !chip.contains(Pos2::new(p.x, p.y)) {
@@ -199,12 +150,7 @@ impl SlotRow {
     }
 }
 
-/// What the master chain is running at, as the Master bay reads it: one entry
-/// per slot, in the chain's order.
-///
-/// A reading and not the chain — `karakuri_engine::present::Present::chain_reading`
-/// is what a host reads it from, and this is that value mirrored into a crate
-/// with no engine in it (ADR-0156).
+/// Master chain state snapshot mirrored for console display (ADR-0156).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Chain {
     /// The slots, in the chain's own order. Empty is the default chain.
@@ -254,12 +200,7 @@ pub struct AddChoice {
 }
 
 impl AddChoice {
-    /// What adding this procedure asks for.
-    ///
-    /// The cut is `Some` exactly where the procedure declares `retains`; the
-    /// build refuses the other way round (ADR-0348). It is
-    /// [`karakuri_operation::Cut::default`] — the mix, the frame as the mixer
-    /// wrote it. The chip on the slot's row moves it afterwards.
+    /// Builds [`Operation::AddChainEffect`] with default cut if `retains` is declared (ADR-0348).
     pub fn operation(&self) -> Operation {
         Operation::AddChainEffect {
             procedure: self.procedure.clone(),
@@ -343,22 +284,7 @@ pub enum Added {
 }
 
 impl MasterRow {
-    /// What a press at `p` takes hold of, or `None` where there is nothing under it
-    /// that a hand can move.
-    ///
-    /// # It is the knob, and the track is deliberately not a target
-    ///
-    /// [`Mixer::grab`]'s rule, and this control is the one on the panel it is most
-    /// obviously right for: a master out at 0.3 whose track was clicked would put
-    /// the whole programme at 1.0, on stage, because a hand landed three pixels off
-    /// a knob.
-    ///
-    /// # One derivation, asked twice
-    ///
-    /// [`crate::input::claim`] asks this and so does the caller that acts on the
-    /// press, exactly as [`Mixer::grab`] is. The value is part of the geometry: the
-    /// knob sits on the fill's moving edge, so where it is depends on what the deck
-    /// said this frame, and this is the same reading the row was laid out from.
+    /// Resolves which knob is grabbed at point `p`. The track itself is not a target.
     pub fn grab(&self, p: karakuri_layout::Point) -> Option<Grab> {
         let at = Pos2::new(p.x, p.y);
         grabbed(self.fader, Knob::Out, at).or_else(|| {
@@ -377,12 +303,7 @@ impl MasterRow {
             .find_map(|slot| slot.chip(p).or_else(|| slot.minus(p)))
     }
 
-    /// What a press at `p` asks of the `+ add` control and its card, or `None`
-    /// where `p` is on neither.
-    ///
-    /// The card is asked first: while it is down a press inside it picks and a
-    /// press anywhere else dismisses it, which is [`LibraryBay::menu_ask`]'s
-    /// rule and `input::claim`'s rule 2.
+    /// Resolves `+ add` click or card pick/dismissal at point `p` (Rule 2).
     pub fn chose(&self, p: karakuri_layout::Point, choices: &AddChoices) -> Option<Added> {
         if let Some(card) = self.card {
             return Some(match card.picked(p) {
@@ -397,12 +318,7 @@ impl MasterRow {
         add.contains(Pos2::new(p.x, p.y)).then_some(Added::Open)
     }
 
-    /// Where a carried row would land, or `None` where `p` is not over the
-    /// chain's list.
-    ///
-    /// One rectangle for the whole list: the vocabulary's add has no position,
-    /// so every point of the list names the same landing. The mark says *where*
-    /// and never *whether* (ADR-0273).
+    /// Returns the landing rectangle if `p` is over the chain's slot list (ADR-0273).
     pub fn dropped(&self, p: karakuri_layout::Point) -> Option<Rect> {
         self.list.filter(|list| list.contains(Pos2::new(p.x, p.y)))
     }
@@ -425,40 +341,8 @@ impl MasterRow {
     }
 }
 
-/// The Master bay's body, derived: the out row, the chain's slots and `+ add`.
-///
-/// # Where it sits
-///
-/// `docs/manual/console.html`'s `.master-body` is a column inside the bay,
-/// under the head, inset by [`size::MASTER_PAD_X`] either side and
-/// [`size::MASTER_PAD_TOP`] from the head; `.master-row` is a flex row of three
-/// items, [`size::MASTER_GAP`] apart, with the fader taking what is left
-/// between the label and the figure.
-///
-/// # The figure's box is fixed and the track is what flexes
-///
-/// The mock gives the fader `flex: 1` and puts the figure after it, so the
-/// track's far end is wherever the figure begins. A figure sized to what it
-/// says would therefore move the track *while the track is being dragged*, so
-/// the box is as wide as the widest reading this control can ask for.
-///
-/// The widest is measured and not assumed: all ten `d.dd` strings are laid out
-/// and the widest of them wins, because whether `0.00` is wider than `1.11` is
-/// a fact about whatever font the room is drawn in and not one to take on trust
-/// ([`docs/contributing.md`](../../../../docs/contributing.md) §1).
-///
-/// # None where there is nothing to draw
-///
-/// `None` for a console with no engine behind it — which is every test in this
-/// crate that does not hand a level in — and `None` for a bay with no room for
-/// the out row, which is [`mixer::strips_row`]'s rule one bay up.
-///
-/// A chain the bay has no room for is drawn short rather than not at all: the
-/// wells drop out from the bottom up, and `+ add` is drawn only where there is
-/// room under the last one it drew.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one.
+/// Derives layout for the Master bay body: out row, chain slots, and `+ add`.
+/// Returns `None` if engine state is absent or space is insufficient.
 pub fn master(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -720,19 +604,7 @@ fn slot_row(
     })
 }
 
-/// The `+ add` chooser's card, or `None` while it is up — and `None` for a
-/// chooser with nothing in it, which is a library listing no `kind L5`
-/// procedure.
-///
-/// # It hangs down off the control
-///
-/// [`Load::list`]'s rule: the card stands on `+ add`'s bottom edge, one
-/// [`size::PILL_GAP`] clear of it. It is held inside the viewport, so a Master
-/// bay at the bottom of a short window draws the card over the bays beside it
-/// rather than off the edge.
-///
-/// The items are as wide as the words in them, which is `egui`'s to answer, so
-/// this takes the context.
+/// Derives the `+ add` chooser card, clamped to the viewport, or `None` if shut/empty.
 fn add_card(
     ctx: &egui::Context,
     viewport: Rect,
@@ -780,16 +652,7 @@ fn master_text(out: f32) -> String {
     format!("{out:.2}")
 }
 
-/// The Master bay's body, painted.
-///
-/// Where everything goes is [`master`]'s, so this paints and derives nothing.
-/// Term for term from `style.css`:
-///
-/// - the `out` before the track — `style="color:var(--c-faint)"` in the
-///   markup, which is `pal.faint`.
-/// - `.fader`, `.fader b` and `.fader s` — [`fader_into`], which is the one
-///   place a knob, a well and a fill are drawn.
-/// - the figure — `.val`, `pal.text`, *a value*.
+/// Paints the Master bay body (label, fader, level value, slots, and add button).
 pub(super) fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
     let painter = ui.painter();
     let centred = |rect: Rect, galley: std::sync::Arc<egui::Galley>, colour: Color32| {
@@ -832,15 +695,7 @@ pub(super) fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
     }
 }
 
-/// One slot of the chain, painted. Term for term from `style.css`:
-///
-/// - `.fx` — a `--c-well` recess with an 8px radius, and `.fx.sel`'s inset mint
-///   ring, which on this bay means the chain holds this slot: a slot runs at
-///   every value it holds.
-/// - `.fx .dot` — mint with a glow.
-/// - the cut chip — `.mini`, the mixer's own blend chip, on a slot whose
-///   procedure declares `retains`.
-/// - `.fx .amt` — `--c-text`, right-aligned in a box that does not move.
+/// Paints a single chain slot (well, mint indicator dot, name, cut chip, and remove button).
 pub(super) fn slot_into(ui: &Ui, pal: &Palette, slot: &SlotRow) {
     let painter = ui.painter();
     painter.rect_filled(slot.well, CornerRadius::same(size::FX_RADIUS), pal.well);

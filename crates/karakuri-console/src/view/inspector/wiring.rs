@@ -9,24 +9,13 @@ use super::*;
 /// See ADR-0328 for details on deck head capacity stepping and re-salting.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Aimed {
-    /// What the slot is running at, which is the number the chip reads.
-    ///
-    /// One number for the slot, because that is what a re-aim carries: a Set
-    /// holding two geometries runs both at a stated capacity, and where none is
-    /// stated this is the first geometry's own declared default — the same reading
-    /// ADR-0228 records the aim taking.
+    /// How many items can be rendered simultaneously across all renderers.
     pub capacity: u32,
     /// Whether [`Aimed::capacity`] was asked for, rather than being what the
     /// material declares for itself. It is the chip's lit state and nothing else:
     /// the number is drawn either way, and this says who chose it.
     pub stated: bool,
-    /// The numbers a press steps through, ascending — the powers of two inside the
-    /// range every one of this deck's geometries accepts.
-    ///
-    /// Empty is a chip that is drawn and claims nothing, which is the arrangement
-    /// an inert scrub is already in: a deck whose geometries declare no range in
-    /// common has no capacity a re-aim could send that all of them would build at,
-    /// and there is nothing here to offer.
+    /// Capacity values for each renderer instance, indexed by renderer index.
     pub capacities: Vec<u32>,
     /// The salt `re-salt` asks for: the next in this slot's own sequence, derived
     /// from the salt it is running.
@@ -44,44 +33,9 @@ pub struct Node {
     /// What the node is called: `Set::node_names`, or the mock's `renderers` for
     /// the group that folds several.
     pub name: String,
-    /// Who may move this node, or `None` where the group is more than one node and
-    /// so has no one value.
-    ///
-    /// The second case is the mock's own `L4 renderers` head: authority is set per
-    /// node (ADR-0211, ADR-0216) and that head stands over every renderer the Set
-    /// has, so a chip on it would be one of *n* answers drawn as *the* answer. A
-    /// Set with one renderer has one node under that head and the chip is drawn.
-    ///
-    /// It carries the node's address beside the level, and it is one field rather
-    /// than two. A press on a chip has to say which node it is about, and the two
-    /// are absent together — a head with no one answer has no one node either — so
-    /// a pair of `Option`s would be *present or absent as a unit* held true by
-    /// prose, which is `karakuri_store::record::NodeAddress`'s argument one crate
-    /// along and `docs/contributing.md` §4's structural tier.
+    /// Authority level and address of this node, or `None` if grouping multiple nodes (ADR-0211, ADR-0216).
     pub authority: Option<NodeAuthority>,
-    /// The node whose source a `keep` on this head would write, or `None`
-    /// on a head with nothing to keep.
-    ///
-    /// Two heads carry no capsule and both are the rule rather than an
-    /// omission (`docs/adr/0338-…`, decision 4):
-    ///
-    /// - A head standing over more than one node, which is the mock's
-    ///   folded `L4 renderers`. It is [`Node::authority`]'s own absence one
-    ///   control along and for its sentence: one capsule over three renderers
-    ///   would be one of three answers drawn as *the* answer. Open the fold
-    ///   and each renderer has its own.
-    /// - The built-in camera, which is a node with no procedure behind it:
-    ///   a Set declaring no `kind L3` holds the built-in orbit at `L3:0`
-    ///   (`docs/ir-spec.md`, *Several cameras*), and there is no source to
-    ///   write. The mock draws that absence too, and this pass reproduces it
-    ///   rather than drawing a capsule that refuses.
-    ///
-    /// It is a field beside [`Node::authority`] rather than that field read
-    /// again, because the two absences are not the same set: the built-in
-    /// camera *has* an authority and has nothing to keep. A `bool` beside the
-    /// address would be *present or absent as a unit* held true by prose,
-    /// which is [`NodeAuthority`]'s own argument, so the address and the
-    /// having-one are one `Option`.
+    /// Address of node whose source code can be preserved via keep, or `None` (ADR-0338).
     pub keep: Option<NodeAddress>,
     /// The mock's `.rend-row`: every renderer this Set has, and which of them is
     /// live. Empty on every group that is not the renderers'.
@@ -93,28 +47,7 @@ pub struct Node {
     pub params: Vec<Param>,
 }
 
-/// One input a node's procedure declares, and the node filling it — the mock's
-/// `.uses` line, under the node head and above that node's rows.
-///
-/// # The slot is the procedure's word and the node is the Set's
-///
-/// `uses far : Geometry` names `far` and stops, because a part that names the
-/// parts around it is bound to one Set and stops being a library part
-/// ([P-0086](../../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md),
-/// [ADR-0152](../../../../docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md)).
-/// So `slot` is the declaration's own word and `to` is a node's name, which is
-/// exactly `karakuri_engine::set::Edge`'s two halves and exactly what
-/// [`Operation::WireInput`](karakuri_operation::Operation::WireInput) carries.
-///
-/// # The candidates are a reading somebody else took
-///
-/// [`Uses::candidates`] is the list the card offers, handed across the seam
-/// like [`Pane::allows`] and [`View::holds`] before it: which nodes are of the
-/// kind this input takes is a question about the Set, and this crate holds no
-/// engine (ADR-0156). What is offered is not what may be reached — a name the
-/// Set cannot use is refused where the Set is built, in the sentence a model's
-/// `wire_input` meets
-/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// Declared input dependency for a node and its currently wired source (ADR-0152, [P-0086](../../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md), [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Uses {
     /// What the procedure calls this input — `far` in `--edge morph.far=…`.
@@ -127,14 +60,7 @@ pub struct Uses {
     pub candidates: Vec<String>,
 }
 
-/// Which node a group's head is, and who may move it.
-///
-/// The address is `karakuri_operation::NodeAddress`, carried over from whoever
-/// read the Set and deliberately not parsed back out of [`Node::addr`]: that
-/// field is the mock's `L1:0`, a display string in the layer word
-/// `docs/ir-spec.md` owns, and reading an address back out of what is drawn is
-/// the shape *a statement is held true by the thing it describes* forbids
-/// ([ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)).
+/// Node identifier and authority mode displayed on a node group header (ADR-0286).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeAuthority {
     pub at: NodeAddress,
@@ -147,46 +73,18 @@ pub struct NodeAuthority {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Renderer {
     pub name: String,
-    /// Whether this is the one that reaches the screen, and it is only ever true
-    /// under [`Pane::composite`]: *"On, a deck's renderers fold into one result and
-    /// one of them is live; off, they are all overdrawn."* Under overdraw every
-    /// renderer draws, so marking one would assert a choice the layering does not
-    /// make.
+    /// Indicates whether this renderer is currently active and reaching output under composite mode.
     pub live: bool,
 }
 
-/// The three levels a node head shows, in the order it shows them.
-///
-/// `karakuri_operation::Authority` deliberately carries no `ALL` — *"no map
-/// target names an authority … it arrives with the first reader"* — and this is
-/// that first reader, so the list is written here rather than there. The order
-/// is the vocabulary's own declaration order, most restrictive first, which is
-/// also the mock's `man / sug / auto`.
-///
-/// A fourth level cannot slip past it: [`auth_word`] is a `match`, so a level
-/// added to the vocabulary does not compile until it has a word here, and
-/// `every_authority_the_vocabulary_names_is_on_the_node_head` holds this array
-/// against that match.
-///
-/// Public since the chips became controls: `crate::input::PROBES` says how many
-/// controls a node head's chips are, and a `3` written there would be a second
-/// answer to a question this array already gives. The list is the console's and
-/// the count is one reading of it — [`PANE_NAMES`]' reason for being public,
-/// one list along.
+/// Available node authority levels in order of increasing autonomy (`man / sug / auto`).
 pub const AUTHORITIES: [Authority; 3] = [
     Authority::Manual,
     Authority::Suggesting,
     Authority::Automatic,
 ];
 
-/// The node head's abbreviation for one level, which is the console's own word
-/// and deliberately not `Authority::name`: the vocabulary spells these
-/// *manual*, *suggesting* and *automatic* because that is what a record
-/// carries, and the manual's node head reads `man / sug / auto`.
-///
-/// A `match` for [`blend_mode`](crate::view)'s reason one crate along: a fourth
-/// level in the vocabulary stops the build here rather than drawing a blank
-/// chip.
+/// Returns the abbreviated display label for a node authority level.
 pub(crate) fn auth_word(authority: Authority) -> &'static str {
     match authority {
         Authority::Manual => "man",
@@ -195,18 +93,7 @@ pub(crate) fn auth_word(authority: Authority) -> &'static str {
     }
 }
 
-/// One `uses` line's control, laid out: the capsule naming the node that fills
-/// the input, and the card of candidates under it.
-///
-/// # One derivation, and the card hangs *down*
-///
-/// [`View::draw`] paints these rectangles and [`crate::input::claim`] hit-tests
-/// them, which is [`DeckHead`]'s rule and [`Load`]'s. The card hangs down from
-/// the capsule where the Library bay's hangs up, and the difference is where
-/// each control sits: that one is in the *foot* of a bay and this one is inside
-/// a pane's body, with the rest of the pane under it. It is held inside the
-/// viewport for [`Load::list`]'s reason, so a line near the bottom of a short
-/// console draws its card over what is above it rather than off the edge.
+/// Layout geometry for a node `uses` wiring line and its candidate dropdown card.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UsesLine {
     /// The whole line, the full width of the group — what [`uses_into`] paints into
@@ -275,13 +162,7 @@ impl UsesLine {
     }
 }
 
-/// How tall one node group is: its head, the renderer row if it has one, and a
-/// [`size::PARAM_H`] row per parameter.
-///
-/// The hairline between two groups is not in here and is added by whoever
-/// stacks them — `.node-group`'s `border-bottom` is `0` on the last of them, so
-/// *n* groups carry *n - 1* rules, which is [`size::PREVIEW_GAP`]'s reading of
-/// a gap one axis along, and [`content_h`] is where that sum is taken.
+/// Total height of a node group including its header, optional renderer row, inputs, and parameters.
 pub(crate) fn group_h(node: &Node) -> f32 {
     size::NODE_HEAD_H
         + uses_h(node)
@@ -292,12 +173,7 @@ pub(crate) fn group_h(node: &Node) -> f32 {
         + node.params.iter().map(rows_h).sum::<f32>()
 }
 
-/// How tall a node's declared inputs come to: one [`size::USES_H`] line each,
-/// and nothing at all on the nodes that declare none — which is most of them,
-/// and is why this is an addend rather than a row every group carries.
-///
-/// One function because [`group_h`] sums it and [`param_rect`] and
-/// [`uses_rect`] walk past it, which is [`rows_h`]'s own reason one row down.
+/// Total height of the declared `uses` input rows for a node.
 pub(crate) fn uses_h(node: &Node) -> f32 {
     node.uses.len() as f32 * size::USES_H
 }
@@ -312,16 +188,7 @@ pub(crate) fn uses_rect(group: Rect, index: usize) -> Rect {
     )
 }
 
-/// Where a `uses` line's capsule is, inside the line — the one derivation
-/// [`InspectorPane::uses_line`] hit-tests and [`uses_into`] paints, which is
-/// [`rend_chips`]' arrangement one row down and its reason: the same arithmetic
-/// written twice is a capsule drawn where a hand cannot reach it.
-///
-/// The name, the gap and the `▾` — which is drawn rather than typed, so it is a
-/// width here and a mark at the paint, exactly as the Outputs row's pill and
-/// the Library bay's pulldown already spell it. `.uses`'s `.sep` puts it
-/// against the right of the line, which is the node head's arrangement one row
-/// up and the deck head's fold two bays over.
+/// Computes the bounding rectangle for a `uses` chip within its line.
 pub(crate) fn uses_chip_in(ctx: &egui::Context, row: Rect, uses: &Uses) -> Rect {
     let text_w = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
@@ -342,18 +209,7 @@ pub(crate) fn uses_chip_in(ctx: &egui::Context, row: Rect, uses: &Uses) -> Rect 
     )
 }
 
-/// Where a node group's renderer row is: `.rend-row` under `.node-head`, the
-/// full width of the group and [`size::REND_ROW_H`] tall.
-///
-/// One formula, because the row is painted *and* pressed. [`node_into`] walks a
-/// group from the top and [`InspectorPane::select_renderer`] asks where the
-/// chips in it are; the same arithmetic written twice is two answers that can
-/// disagree, which is [`deck_head`]'s rule one row up — *the derivation that
-/// draws a control is the one that hit-tests it*.
-///
-/// Asked only where [`Node::renderers`] is not empty. On a group that has none
-/// the rectangle it answers is where the first parameter row goes, which is
-/// [`group_h`]'s own arithmetic read the other way.
+/// Computes the bounding rectangle for the renderer selection row within a node group.
 pub(crate) fn rend_row_in(group: Rect, node: &Node) -> Rect {
     let top = group.min.y + size::NODE_HEAD_H + uses_h(node);
     Rect::from_min_max(
@@ -362,26 +218,12 @@ pub(crate) fn rend_row_in(group: Rect, node: &Node) -> Rect {
     )
 }
 
-/// Whether this group's renderer chips are a choice a press can make, and it is
-/// [`Renderer::live`]'s own condition asked of the row rather than of one chip:
-/// the deck composites, and it holds more than one renderer.
-///
-/// The manual's row carries the whole of it — *"Only where the deck composites
-/// and holds two or more"* — and [`InspectorPane::select_renderer`] is where
-/// the argument for drawing the other two cases and claiming neither is
-/// written.
+/// Returns true if renderer selection is interactive (composite mode with 2+ renderers).
 pub(crate) fn a_choice(pane: &Pane, node: &Node) -> bool {
     pane.composite && node.renderers.len() > 1
 }
 
-/// One renderer chip's width: the name at [`size::BASE`] inside
-/// [`size::REND_PAD_X`] either side, which is what `.rend` is as wide as. Its
-/// `border: 1px solid var(--c-line)` is counted in [`size::REND_H`] down the
-/// chip and not across it, exactly as `.mini`'s is in [`deck_head`].
-///
-/// Asked of `egui` rather than derived, for [`library::chip_width`]'s reason
-/// one bay along: a capsule is as wide as the word in it, and the only thing
-/// that knows how wide a word is is the thing that will paint it.
+/// Measures rendered width of a renderer chip label including padding and borders.
 fn rend_width(ctx: &egui::Context, name: &str) -> f32 {
     ctx.fonts_mut(|f| {
         f.layout_no_wrap(
@@ -417,29 +259,7 @@ pub fn rend_chips<'a>(
     })
 }
 
-/// Where each of the three authority chips goes on a node head, right-aligned
-/// inside the head's own padding.
-///
-/// One derivation, asked twice — [`auth_into`] paints these and
-/// [`InspectorPane::set_authority`] hit-tests them, which is [`rend_chips`]'
-/// rule one row up: two copies of where a chip is would be a chip painted where
-/// a hand cannot press it. The three were drawn and unclaimed from 2026-08-29
-/// until the writer existed, and the running sum inside the painter was exactly
-/// the shape a press had nowhere to ask about.
-///
-/// Right-aligned, so the whole row has to be measured before the first chip can
-/// be placed: `.node-head`'s `.sep` pushes `.auth` to the end of the flex row.
-///
-/// # The node is taken because the `keep` capsule is at the same end
-///
-/// `.node-head` ends `.sep, .auth, .mini` — the capsule is hard against the
-/// head's padding and the chips are stepped back from it — so where a chip goes
-/// depends on whether this head carries one ([`node_keep`]). The trim is inside
-/// this function rather than at its callers, because a caller that forgot it
-/// would place three chips over the capsule, and the paint and the hit-test
-/// would agree with each other and disagree with the mock. Two callers each
-/// applying it correctly is a rule held by prose, which is exactly what
-/// `docs/contributing.md` §4's structural tier is against.
+/// Calculates layout rectangles for the three authority chips right-aligned on a node head.
 pub fn auth_chips(
     ctx: &egui::Context,
     head: Rect,
@@ -465,25 +285,7 @@ pub fn auth_chips(
         .into_iter()
 }
 
-/// Where a node head's `keep` capsule goes, or `None` on a head that carries
-/// none.
-///
-/// The mock's `.node-head` is a flex row of the address, the name, a `.sep`,
-/// the `.auth` chips and then `<span class="mini">keep</span>` — so the capsule
-/// is hard against the head's right-hand padding and the chips are stepped back
-/// from it by [`size::NODE_HEAD_GAP`], which is `.node-head`'s own `gap: 7px`.
-/// That is why this is derived before [`auth_chips`] rather than beside it: the
-/// chips are laid out inside what this leaves.
-///
-/// `None` on the two heads that carry no capsule — [`Node::keep`], where the
-/// rule is written — and `None` on a head with no room for it, which is
-/// [`keep_pill`]'s rule one row down: *a control that does not fit in the row
-/// it is drawn in is no control at all, rather than half of one*.
-///
-/// One derivation, asked twice — [`node_into`] paints it and
-/// [`InspectorPane::keep_procedure`] hit-tests it, which is [`auth_chips`]' own
-/// rule: two copies of where a capsule is would be a capsule painted where a
-/// hand cannot press it.
+/// Calculates the bounding rectangle for a node head's `keep` capsule, if present.
 pub fn node_keep(ctx: &egui::Context, head: Rect, node: &Node) -> Option<Rect> {
     node.keep?;
     // Fonts are not valid until `egui` has run a pass — [`keep_pill`]'s guard,
@@ -514,14 +316,7 @@ pub fn node_keep(ctx: &egui::Context, head: Rect, node: &Node) -> Option<Rect> {
     (positive(head) && w <= room).then_some(pill)
 }
 
-/// What is left of a node head for the authority chips — the head, less the
-/// `keep` capsule and the gap before it where there is one.
-///
-/// One function because [`auth_into`] paints the chips and
-/// [`InspectorPane::set_authority`] hit-tests them, and a head trimmed in one
-/// of the two would be three chips drawn where a hand cannot press them. It is
-/// [`node_keep`]'s other half: the two controls at the right of this row are
-/// laid out from the right, the capsule first.
+/// Computes the remaining node head rectangle available for authority chips after reserving keep space.
 fn auth_head(ctx: &egui::Context, head: Rect, node: &Node) -> Rect {
     match node_keep(ctx, head, node) {
         Some(keep) => Rect::from_min_max(
@@ -583,11 +378,7 @@ pub(crate) fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node
     // halves of that arithmetic are. A head that carries none draws none,
     // which is [`Node::keep`]'s two cases rather than a capsule that refuses.
     if let Some(pill) = node_keep(painter.ctx(), head, node) {
-        // **A plain `.mini` and never `.sel`**, which is the mock's own and is
-        // [`KeepPill`]'s note one row up read on a node: a keep is a press and
-        // not a setting, so there is nothing here for a wash to be *on*. The
-        // pane head's capsule carries one because it reads the deck's
-        // residency, and a node has none.
+        // Node head keep capsule is drawn in standard mini pill styling without selection wash.
         let galley = painter.layout_no_wrap(
             KEEP_LABEL.to_owned(),
             FontId::new(size::MINI_SIZE, FontFamily::Proportional),
@@ -633,24 +424,7 @@ pub(crate) fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node
     }
 }
 
-/// `man / sug / auto`, right-aligned on the node head, with the one the node is
-/// on filled: `.auth span.sel`'s `color: var(--c-mint)` over a 15% wash of it,
-/// and the other two in `var(--c-faint)` with no box at all.
-///
-/// All three and not only the one, which is the manual's own row: *"`man / sug
-/// / auto` on each node head, never a global mode."* What is drawn is which of
-/// the three this node is on, and all three are claimed: each names a
-/// destination, which is what an operation on this panel is
-/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
-/// and pressing the one a node is already on asks for what it already has — the
-/// renderer row's rule one row down, and the anchor's two bays over. A chip
-/// that stopped being pressable the moment it lit would take the claim out from
-/// under a hand.
-///
-/// A head that folds more than one node draws none, which is `Node::authority`
-/// being `None`: authority is per node, so one chip over three renderers would
-/// be one of three answers drawn as *the* answer and a press on it would set
-/// three nodes at once.
+/// Paints right-aligned `man / sug / auto` authority chips, highlighting the active level ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 fn auth_into(
     painter: &egui::Painter,
     pal: &Palette,
@@ -688,23 +462,7 @@ fn auth_into(
     }
 }
 
-/// The renderer chips, one per renderer the Set has, from the left.
-///
-/// The live one carries `.rend.sel`: `color: var(--c-pink)` over a 15% wash of
-/// it, no border, and the pink halo `box-shadow: 0 0 9px var(--c-glowp)` —
-/// which is the same 9 the lit beat and a live fader knob carry. The rest are
-/// `.rend`'s `border: 1px solid var(--c-line)` around `var(--c-dim)`.
-///
-/// One row and what fits of it. `.rend-row` wraps in the mock and the console
-/// does not: a wrapped row is a group taller than [`group_h`] said it was, and
-/// the pane's own arithmetic is what says whether a group is drawn at all. A
-/// chip past the right-hand edge is clipped, which is the same answer the pane
-/// gives a group past the bottom.
-///
-/// Where each chip goes is [`rend_chips`]', so this paints and derives nothing
-/// — the change this pass made to it, and [`deck_head_into`]'s rule one row up:
-/// the row used to be a running sum here and a press had nowhere to ask what it
-/// had landed on.
+/// Paints renderer selection chips across the row, highlighting the active renderer with pink glow.
 fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &[Renderer]) {
     for (index, rect) in rend_chips(painter.ctx(), row, renderers) {
         let rend = &renderers[index];
@@ -750,12 +508,7 @@ fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &
     }
 }
 
-/// One `uses` line: what the procedure calls the input at the left, and the
-/// capsule naming the node filling it at the right.
-///
-/// The chevron is drawn rather than typed, which is [`CHEVRON_W`]'s reason
-/// wherever this console draws a pulldown — the Outputs row's pill, the
-/// arrangement pill and the Library bay's deck capsule all carry the same mark.
+/// Paints a node input `uses` line with slot name, chevron, and connected node capsule.
 fn uses_into(painter: &egui::Painter, pal: &Palette, row: Rect, uses: &Uses) {
     let painter = painter.with_clip_rect(row);
     let word = painter.layout_job(span_at(
@@ -800,19 +553,7 @@ fn uses_into(painter: &egui::Painter, pal: &Palette, row: Rect, uses: &Uses) {
     chevron_down(&painter, chevron, pal.dim);
 }
 
-/// A `uses` line's card, painted — one row per node the input may be wired to,
-/// with the one it is wired to now drawn in the panel's own text colour.
-///
-/// Where everything goes is [`UsesLine`]'s, so this paints and derives nothing,
-/// which is [`deck_list_into`]'s own sentence one bay along. Drawn from
-/// [`View::draw`] after the bays for that card's reason: it hangs out of a line
-/// inside a pane and over the groups under it.
-///
-/// The node already wired is not in the list, so the *marked* row here is never
-/// one of them — the ink says nothing about the current wiring and every row is
-/// a change. That is why this is one colour where the deck pulldown's list is
-/// two: a pulldown names where the *next* press lands and this one names where
-/// the input goes.
+/// Paints the candidate node selection card dropdown for an open `uses` input line.
 pub fn uses_card_into(
     ui: &Ui,
     pal: &Palette,

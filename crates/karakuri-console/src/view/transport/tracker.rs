@@ -9,12 +9,7 @@ use super::*;
 /// [`size::TRIM_GAP`], a horizontal [`fader`], another gap and the figure.
 const OFFSET_LABEL: &str = "offset";
 
-/// The unit, written into the figure and never left off.
-///
-/// `docs/manual/console.html` is plain about why: *"Two things on this panel
-/// are called an offset, and they are not the same thing … The unit is what
-/// tells them apart, so neither is ever drawn without it."* The other is the
-/// deck head's anchor, which is in beats and is one deck's.
+/// Suffix unit appended to the latency offset readout.
 const OFFSET_UNIT: &str = " ms";
 
 /// What is written in the tap capsule, and the whole of it — the mock writes
@@ -28,18 +23,7 @@ const TAP_LABEL: &str = "tap";
 const HALVE_MARK: &str = "½";
 const DOUBLE_MARK: &str = "×2";
 
-/// The two ends of the latency offset, in milliseconds.
-///
-/// `karakuri_environment::audio::LATENCY_OFFSET_RANGE` is `-200.0..=200.0` and
-/// this is that range restated, for [`EXPOSURE_STOPS`]' reason one control
-/// along: this crate depends on nothing that could reach it (ADR-0156), and a
-/// control has to know its own ends to lay a track out.
-///
-/// The copy is held to the original where both are visible, which is
-/// `crates/karakuri` — the binary that has this crate and that one as
-/// dependencies — rather than asserted here. That is the difference between
-/// this restatement and [`EXPOSURE_STOPS`]': the exposure's ends are private to
-/// `karakuri-cli` and nothing can compare them, and these are public.
+/// Latency offset range limits in milliseconds (ADR-0156).
 pub const LATENCY_OFFSET_MIN_MS: f32 = -200.0;
 pub const LATENCY_OFFSET_MAX_MS: f32 = 200.0;
 
@@ -53,74 +37,23 @@ pub const LATENCY_OFFSET_STEP_MS: f32 = 5.0;
 const OFFSET_PRESSES: f32 =
     (LATENCY_OFFSET_MAX_MS - LATENCY_OFFSET_MIN_MS) / LATENCY_OFFSET_STEP_MS;
 
-/// The track, in pixels: one pixel a press — [`EXPOSURE_TRACK_W`]'s whole
-/// argument, one control along and on a value that is a difference rather than
-/// a ratio
-/// ([ADR-0277](../../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)).
-///
-/// A pointer on this track can ask for any of the eighty positions along it and
-/// `o` and `p` can ask for any of the eighty values between the ends, so
-/// neither surface can reach a value the other cannot — which is what stops a
-/// track and a pair of keys nearly agreeing. `docs/manual/console.html` carries
-/// the same sentence for the exposure and now for this.
+/// Width of the latency offset slider track in pixels (ADR-0277).
 pub const OFFSET_TRACK_W: f32 = OFFSET_PRESSES;
 
-/// What a point `unit` of the way along the track asks for, in milliseconds.
-///
-/// Linear, and that is not the exposure's arithmetic. An exposure is a *ratio*
-/// and its track is logarithmic for a stated reason — *"an additive step would
-/// be enormous at 0.1 and invisible at 8.0"*. A latency offset is a difference
-/// between two arrival times: five milliseconds is five milliseconds at either
-/// end of the range, which is why the key steps by an addition and why equal
-/// distances along this track are equal numbers of milliseconds. The middle of
-/// the track is exactly zero, because the range is symmetric and the
-/// subtraction is exact at a half.
+/// Maps normalized slider position `[0, 1]` to linear millisecond latency offset.
 pub fn offset_at(at: f32) -> f32 {
     LATENCY_OFFSET_MIN_MS + unit(at) * (LATENCY_OFFSET_MAX_MS - LATENCY_OFFSET_MIN_MS)
 }
 
-/// Where an offset sits on the track, on `[0, 1]` — [`offset_at`] inverted, and
-/// clamped to the ends for [`unit_of`]'s reason: a value past either end is
-/// drawn at that end and the figure beside the track is what says the number.
-/// Nothing on the way in is held to these ends — the clamp is
-/// `karakuri_environment::audio`'s, at the one place an offset is applied — so
-/// this is drawing a reading rather than enforcing a bound.
+/// Maps millisecond latency offset to normalized `[0, 1]` track position.
 pub fn unit_of_offset(ms: f32) -> f32 {
     unit((ms - LATENCY_OFFSET_MIN_MS) / (LATENCY_OFFSET_MAX_MS - LATENCY_OFFSET_MIN_MS))
 }
 
-/// What the three controls beside the audio-in pill read this frame: the offset
-/// the session is holding, and which way the grid can still be moved an octave.
-///
-/// # The same seam as [`View::transport`], and it is the beat lock's rather
-/// than the engine's
-///
-/// Every field is a number or a `bool` and none of them is a device. Whether an
-/// octave is available is `karakuri_audio`'s `BPM_RANGE` against the tempo the
-/// session is running at, and the offset is a value
-/// `karakuri_environment::audio::Audio` holds — `src/` has neither (ADR-0156),
-/// so whoever owns them reads them and writes this per frame, exactly as
-/// whoever owns the engine writes [`View::look`].
-///
-/// It carries what cannot be derived and nothing that can. The console holds
-/// the tempo already — [`Transport::bpm`] — but not the range the tracker
-/// searches, so *which half is live* is one of the two things it cannot work
-/// out for itself. `docs/manual/console.html` says the panel can work it out
-/// *before the press*, and this is what makes that true.
-///
-/// A second value rather than three more fields on [`Transport`], for
-/// [`Look`]'s reason: a tempo and a frame cost are what the session is doing,
-/// and these are what the *tracker* is doing. A console driving one and not the
-/// other is a state the type should be able to say.
+/// Transport tracker control state (latency offset, octaving availability) (ADR-0156).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Tracker {
-    /// The latency offset the open session is holding, in milliseconds, or `None`
-    /// where nothing is open.
-    ///
-    /// `None` draws no offset control at all rather than a track at a plausible
-    /// figure, which is [`View::audio`]'s own rule one control to the left: an
-    /// offset belongs to a session, and until one is open there is no value being
-    /// held anywhere for a track to point at. The page says so.
+    /// Active latency offset in milliseconds, or `None` if unconfigured.
     pub offset_ms: Option<f32>,
     /// Whether halving the grid is available at this tempo — the tracker's range
     /// against half of what the session is running at.
@@ -131,11 +64,7 @@ pub struct Tracker {
     pub double: bool,
 }
 
-/// The offset control, laid out: the word, the track, what the value fills of
-/// it, the band a press has to land in, and the figure.
-///
-/// [`LookRow`]'s exposure half, on a linear value — and a type of its own
-/// because it is the one part of [`TrackerGroup`] that is not always there.
+/// Layout bounding boxes and hit zones for the latency offset track control.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OffsetTrack {
     /// The faint `offset` before the track.
@@ -153,26 +82,7 @@ pub struct OffsetTrack {
     pub value: Rect,
 }
 
-/// The three controls that finish the tracker group, laid out: the offset, the
-/// tap and the two halves of the octave.
-///
-/// # One derivation, for [`LookRow`]'s reason
-///
-/// [`View::draw`] paints exactly these rectangles and [`crate::input::claim`]
-/// hit-tests exactly these rectangles. They are laid end to end from the
-/// audio-in pill's right edge, so where the octave is depends on how wide the
-/// offset's figure is — three questions about one laid-out group, and a second
-/// walk would put the chip a press lands on somewhere the mark is not.
-///
-/// # Why they are one group and not three controls in a row
-///
-/// `docs/manual/style.css` says it at `.tracker`, which is the class the mock
-/// puts round exactly these four: *"the pill that says whether there is an
-/// audio input, the latency offset … the tap, and the octave. None of them
-/// means anything without an input, so they are one item at the pills' own 5px
-/// rather than four at the row's 14."* So the gap inside this group is
-/// [`size::PILL_GAP`] and the gap between the group and what follows it is
-/// [`size::TRANSPORT_GAP`].
+/// Layout metrics for the tracker controls group (offset, tap tempo, octave multipliers).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TrackerGroup {
     /// The offset, or `None` where no session is open to be holding one.
@@ -209,14 +119,7 @@ impl TrackerGroup {
             .is_some_and(|offset| offset.grip.contains(Pos2::new(p.x, p.y)))
     }
 
-    /// Which half of the octave `p` is on, as the factor it asks for — or `None`
-    /// off both, and `None` on either while that direction is refused.
-    ///
-    /// Inert is not claimed, which is [`DeckHead::arrow`]'s rule word for word and
-    /// [`crate::input`]'s *a control claims what it acts on and no more*. Both
-    /// halves are drawn on every tempo, because the range is under two octaves wide
-    /// and a pair that vanished would move the rest of the row under the hand every
-    /// time the grid crossed 100 or 120 BPM.
+    /// Returns the scale factor if `p` lands on an active octave button, or `None`.
     fn half(&self, p: karakuri_layout::Point) -> Option<GridScale> {
         let p = Pos2::new(p.x, p.y);
         match (
@@ -235,17 +138,7 @@ impl TrackerGroup {
         self.hit_tap(p) || self.hit_offset(p) || self.half(p).is_some()
     }
 
-    /// What a press at `p` asks for when it lands on the tap capsule:
-    /// [`Operation::TapBeat`], which carries nothing because a tap is an instant
-    /// and the instant is when the operation arrives.
-    ///
-    /// It is emitted with no input open too, and that is the decision rather than a
-    /// gap: the operations page says the refusal *"says where to open one rather
-    /// than doing nothing, because a key that declines and a key that is not bound
-    /// are the same experience"*, and the surface that could see there was no room
-    /// is not this one — this crate has no device (ADR-0156). So the press names
-    /// the operation and whoever performs it says what happened, exactly as `b`
-    /// already does.
+    /// Emits [`Operation::TapBeat`] if `p` hits the tap tempo capsule (ADR-0156).
     pub fn tapped(&self, p: karakuri_layout::Point) -> Option<Operation> {
         self.hit_tap(p).then_some(Operation::TapBeat)
     }
@@ -256,22 +149,7 @@ impl TrackerGroup {
         self.half(p).map(|by| Operation::ScaleGrid { by })
     }
 
-    /// What a press at `p` asks the offset to become, or `None` where there is no
-    /// track under it.
-    ///
-    /// # The press sets it outright, and that is the decision
-    ///
-    /// Where along the track the press landed *is* the value, through
-    /// [`offset_at`], and what comes out is [`Operation::SetLatencyOffset`] naming
-    /// it. The manual is where the words come from — *"The value is absolute and
-    /// the keys are the nudge … because a control that could only be nudged is a
-    /// control no fader can reach"* — and it is [`LookRow::exposure`]'s argument
-    /// arriving one control earlier, because that control was built from this
-    /// sentence.
-    ///
-    /// It is not [`Mixer::grab`], for [`LookRow::exposure`]'s reason: there is no
-    /// knob here and no gesture to be mid-way through, so a press that names a
-    /// value cannot move the mix under a hand.
+    /// Computes [`Operation::SetLatencyOffset`] based on click position on the offset track.
     pub fn nudge(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let offset = self.offset?;
         self.hit_offset(p).then(|| Operation::SetLatencyOffset {
@@ -280,60 +158,7 @@ impl TrackerGroup {
     }
 }
 
-/// The tracker's other three controls, derived: the offset, the tap and the
-/// octave.
-///
-/// # Where they sit, and why it is after the audio-in pill
-///
-/// `docs/manual/console.html`'s `.tracker` is the four things that need an
-/// input, in this order: the pill that says whether there is one, the offset,
-/// the tap, the octave. [`audio_in`] is the head of it and this is the rest,
-/// laid out from that pill's right edge at [`size::PILL_GAP`] — the group's own
-/// tighter gap and not the row's — which is exactly what [`audio_in`]'s own
-/// documentation said would happen the day these were drawn.
-///
-/// With no pill it lands after the bar, at [`size::TRANSPORT_GAP`], which is
-/// where [`arrangement`] used to land and is the same fallback: a console told
-/// about the tracker and not about audio is a state nothing in this workspace
-/// produces, and it is laid out rather than refused because a derivation that
-/// panicked on it would be answering a question about a device on its own
-/// authority.
-///
-/// # The order inside the group, and where the figure goes
-///
-/// The mock's, unchanged. The figure is after the track for [`look`]'s reason,
-/// which is the one piece of this layout decided by what a hand does rather
-/// than by what the mock draws: it is the only part whose width moves with its
-/// value, so putting it last leaves the track and everything after it where
-/// they were, and a target that walked away from the pointer as it was set
-/// would be worst at the moment it was being used most precisely.
-///
-/// # No row and no values means none of this
-///
-/// `None` wherever [`transport`] answers `None` — the row folded away, soloed
-/// away, too narrow, or a console with no engine behind it — and `None` again
-/// where `tracker` is `None`, which is a console nobody has told anything about
-/// the beat tracker and is every test in this crate that does not say
-/// otherwise. Drawing a tap on a console with no tracker behind it would be the
-/// scaffolding this module refuses.
-///
-/// # What it costs to ask
-///
-/// Five galley lookups of its own, and two of them go with the offset: the
-/// `tap` word, the `offset` word, the figure — which is the one whose width
-/// moves with its value — and one for each of `½` and `×2`, since a capsule
-/// here is as wide as the mark in it. A console with nothing open pays three of
-/// the five.
-///
-/// And it re-derives the row and the pill, which is [`look`]'s honest cost one
-/// group to the left and for the same reason: the derivation that draws a
-/// control is the one that hit-tests it.
-///
-/// Paid on a pointer event and on a frame, and a console with no tracker behind
-/// it pays none of it: the `tracker?` is the first line.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one.
+/// Computes layout for the tracker group controls (offset track, tap tempo, octave multipliers).
 pub fn tracker_group(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -448,27 +273,7 @@ pub fn tracker_group(
     })
 }
 
-/// The figure after the track: the offset, signed both ways and never without
-/// its unit — `−15 ms`, and `+0 ms` at the middle.
-///
-/// The sign is always drawn, which is the page's own instruction: *"the sign is
-/// the half that gets read wrong at two in the morning, so the panel says it in
-/// words rather than leaving −15 ms to be interpreted."* The words are
-/// `karakuri`'s, in the line it prints; the mark is this control's, and a `+`
-/// that only appeared above zero would be a control that says less exactly
-/// where it matters.
-///
-/// Whole milliseconds, because the step is five of them and the ends are two
-/// hundred: a decimal place here would be a precision no surface can ask for.
-///
-/// The sign is written in ASCII, as the deck head's anchor writes its own
-/// signed offset — the `−` in the mock and in this comment is the page's
-/// typography, and the panel paints what a `{:+}` writes.
-///
-/// And the rounding is taken before the sign, so there is no `-0 ms`. A press a
-/// fraction of a pixel left of the middle asks for a value that rounds to zero,
-/// and `{:+.0}` writes `-0` for it: two spellings of the one value an operator
-/// is most likely to be aiming at.
+/// Formats the millisecond offset with explicit sign and unit (`+0 ms`, `−15 ms`).
 fn offset_text(ms: f32) -> String {
     // `-0.0 == 0.0` in IEEE, so this is the whole of the normalisation.
     let whole = match ms.round() == 0.0 {
@@ -478,22 +283,7 @@ fn offset_text(ms: f32) -> String {
     format!("{whole:+.0}{OFFSET_UNIT}")
 }
 
-/// The tracker's three controls, painted.
-///
-/// Where everything goes is [`tracker_group`]'s, so this paints and derives nothing.
-/// Term for term from `style.css`:
-///
-/// - the `offset` before the track — `style="color:var(--c-faint)"` in the
-///   markup, which is `pal.faint`, and is [`look_into`]'s treatment of `exp`.
-/// - `.fader` and `.fader b` — the well and the ramp [`look_into`] paints, and
-///   `.fader s` is deliberately not drawn for its reason: the mock's knob is a
-///   handle and this control has none.
-/// - `.pill` — the tap capsule, which is [`arrangement_into`]'s treatment with
-///   no `▾`.
-/// - `.octave i` — `border: 1px solid var(--c-line); color: var(--c-dim)` at
-///   `border-radius: 999px`, and `.octave i.idle` is `color: var(--c-faint);
-///   border-color: var(--c-hair)`. Never grey without a reason is the
-///   stylesheet's own comment, and the reason is on the mock's tooltip.
+/// Paints the tracker controls (offset track, tap capsule, octave buttons).
 pub(crate) fn tracker_into(ui: &Ui, pal: &Palette, group: &TrackerGroup) {
     let painter = ui.painter();
     let centred = |rect: Rect, galley: std::sync::Arc<egui::Galley>, colour: Color32| {

@@ -2,11 +2,7 @@ use egui::Painter;
 
 use super::super::*;
 
-/// `.tally.off` went with it as the one rule only that strip used. The argument
-/// is kept in the past tense rather than deleted, because it is still why there
-/// is no fourth variant here — the three below are the residencies a `Deck`
-/// has, and a fourth would have to be invented whether or not a mock is drawing
-/// one.
+/// Tally states representing the three valid residencies a [`Deck`] can have.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tally {
     /// `.tally.live` — stepped and composited. On air.
@@ -21,15 +17,7 @@ pub enum Tally {
 }
 
 impl Tally {
-    /// Every residency there is, so that anything which has to hold all three
-    /// cannot be given two.
-    ///
-    /// One customer today and it is [`mixer`], which measures the chip against the
-    /// widest word rather than the current one. A `match` cannot express *the
-    /// widest of them*, and a list written at the call site would be a second list
-    /// of the residencies — the exact drift a fourth variant would walk straight
-    /// past. Here it is one line under the enum, and a fourth variant that is not
-    /// added to it is a `[Tally; 3]` that no longer compiles.
+    /// All tally variants, used for measuring bounds against the widest word.
     pub const ALL: [Tally; 3] = [Tally::Live, Tally::Priming, Tally::Allocated];
 
     /// The mock's own word, lower-case here and upper-cased at paint time because
@@ -151,38 +139,8 @@ pub fn tally_job(tally: Tally, colour: Color32) -> LayoutJob {
     )
 }
 
-/// `.tally`: a capsule with the residency's word in it, in the residency's own
-/// colours.
-///
-/// - `.tally.live` — `color-mix(in srgb, var(--c-pink) 18%, transparent)`
-///   behind `var(--c-pink)`, with `box-shadow: 0 0 10px var(--c-glowp)`. The
-///   halo is an [`egui::epaint::Shadow`], the mechanism the transport's lit
-///   beat and the Outputs row's dot both use.
-/// - `.tally.priming` — a 20% wash of `var(--c-sun)` behind `var(--c-sun)`,
-///   and no halo: priming is warming out of sight, not on air.
-/// - `.tally.alloc` — `var(--c-tint)` behind `var(--c-dim)`, which is the
-///   palette's own *"the wash behind a node head, and the allocated tally"* —
-///   the first use of `--c-tint` in this crate, and it was transcribed against
-///   this day.
-///
-/// # And the roll, where the request has not landed
-///
-/// `pending` is [`Strip::pending`] — the residency this slot was asked for and
-/// has not reached. While it is `Some`, the word rolls part of the way toward
-/// it and falls back, once a second, and never arrives: [`roll_at`] is the
-/// displacement and [ADR-0190](../../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
-/// is why it is a roll and not two lamps side by side — 53 pixels, and the
-/// pair the rule exists for is 85.125 of them.
-///
-/// # The clip is new, not narrowed
-///
-/// Nothing called `with_clip_rect` on a tally before this: the chip painted a
-/// filled rect and a galley that fitted inside it, so there was nothing to
-/// clip and no clip to get wrong. A second word travelling through the box is
-/// the first thing here that is drawn to be cut off, and the cut is what makes
-/// the roll a roll rather than two words overlapping the trim row underneath.
-/// It is introduced deliberately and it is on the type alone — see the note at
-/// the clip itself, because the halo has to go on spilling.
+/// Draws `.tally`: a capsule with the residency word in residency colours.
+/// If `pending` is set, rolls toward the target residency per [ADR-0190](../../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
 pub fn tally_into(
     painter: &Painter,
     pal: &Palette,
@@ -211,22 +169,11 @@ pub fn tally_into(
     }
     painter.rect_filled(rect, radius, fill);
 
-    // **The clip is the capsule, and it is on the words alone.** The halo is
-    // drawn to spill — `.tally.live`'s `box-shadow: 0 0 10px` is 10px of it
-    // outside the box — so a clip taken before the shadow would trim the one
-    // shape in this chip that is meant to leave it. Everything after this
-    // line is type that may be halfway out of the box on purpose.
+    // Clip the capsule to the words alone; the outer halo is intended to spill.
     let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
 
     let galley = painter.layout_job(tally_job(tally, ink_now));
-    // **The pitch is the travel's, not the geometry's**, and it is at least
-    // the box: at the natural row pitch the two words would both be partly
-    // visible with nothing between them, which at 9px is mud. One box height
-    // apart leaves a blank band of exactly the slack the chip already has —
-    // 13.5 less a 10.0 ink row is 3.5 — for every displacement, because the
-    // band is the difference of two constants and not a function of how far
-    // the roll has got. It costs the chip nothing: the second word is
-    // outside the capsule at rest and clipped away.
+    // Pitch between words is at least the box height to prevent overlap during roll.
     let pitch = size::TALLY_H.max(galley.size().y);
     let rolled = match pending {
         Some(_) => roll_at(phase) * pitch,
@@ -243,11 +190,7 @@ pub fn tally_into(
         );
     };
     word_into(&painter, galley, ink_now, -rolled);
-    // **The destination in its own ink**, which is the second half of what is
-    // being said: the word names where the slot is going and the colour is the
-    // one that slot will be drawn in when it gets there. It comes up from
-    // below — one pitch under the settled word — so a still frame of a chip
-    // that is not rolling is the chip as it was.
+    // Draw destination word below in its target colour when rolling.
     if let Some(to) = pending {
         let (_, ink_to) = ink(to);
         let galley = painter.layout_job(tally_job(to, ink_to));

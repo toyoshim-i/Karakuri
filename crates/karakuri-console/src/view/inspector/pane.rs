@@ -1,93 +1,8 @@
 use super::*;
 
-/// The Inspector's pane, laid out: the head that says which deck, the deck
-/// head under it, and what is left for the node groups.
+/// Solved Inspector pane layout: pane head, deck head, and stacked node groups.
 ///
-/// # What is in the mock's pane and is deliberately not here
-///
-/// This is [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
-/// applied to the bay it named as the next one and the hardest: *draw every
-/// part of the mock that has a value behind it and omit the rest outright — no
-/// placeholder, and no empty case the mock did not itself draw.* Nine things
-/// are omitted and each one is named with what it waits on. Three of the
-/// nine have since been drawn, and they are the deck head's — see
-/// [`DeckHead`], which is where their argument now lives.
-///
-/// Two are controls and are still not here.
-///
-/// - `showing … ▾`, the chooser in the pane head. Which deck a pane shows
-///   is a per-pane pointer this console does not keep, and it is not the
-///   deck selection: that one is what a key press is addressed to and there is
-///   one of it, where there is a caret in every pane head — see
-///   [`Pane::deck`]. So the pane is *pointed* by whoever fills that field and
-///   the caret is not drawn. The word `showing` and the deck it names are a
-///   readout and are.
-/// - `keep`, the pill beside it: *"Keep deck A as a Set, exactly as it is
-///   on screen … It goes into the library under a name."* That is a write into
-///   the store, which is the Library bay's `load` from the other end —
-///   and it is the end that is still open. A load re-points a slot's source
-///   and lets the worker build it; a keep has to read a *running* Set back out
-///   and name it, which is `Set::published`'s side of the seam and a different
-///   question entirely.
-///
-/// A third was `composite`, called a readout here until 2026-09-09, and it
-/// is a control — [`Pane::composite`] and [`DeckHead::composite`]. The
-/// sentence that stood here said layering is a build decision in the engine so
-/// a press on it is a rebuild rather than a write, and *"there is no operation
-/// in the vocabulary for it to name"*, which was wrong twice:
-/// `Operation::SetCompositing` has been in the vocabulary the whole time, and a
-/// rebuild is exactly how this instrument changes what a slot is running. A
-/// press re-aims the slot — the layering is one field of `watch::Aim` — and the
-/// worker builds it off the render thread, which is the route a library load
-/// takes
-/// ([ADR-0314](../../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
-///
-/// And the fourth was the anchor, which the mock draws as a readout and
-/// [ADR-0218](../../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
-/// made a control. A press on it emits `SetSync` naming the mode the deck is
-/// already in, which re-anchors, and its face goes on being a reading of two
-/// numbers the deck has. The sync chip beside it and the scrub's two arrows
-/// landed with it — the whole of the deck head is [`deck_head`] now, and this
-/// type is the pane's three rows.
-///
-/// Two had no value in this workspace at all until 2026-09-09, which was
-/// ADR-0191's rule — a panel drawing a state the engine never entered is a
-/// drawing of one — and both are drawn now, because a press can attach a
-/// signal (ADR-0319).
-///
-/// - `.param.bound`'s `.pval.src`, a bound parameter showing its source
-///   instead of a number. [`Param::bound`] is the reading, off
-///   `Set::bindings`, and what made it enterable is `Deck::bind` rather than
-///   anything in this crate. The mock's other two sources are still states
-///   this program cannot enter: `midi 21` and `seq 1` are not bindings at
-///   all — no MIDI map reaches a Set's parameter, and a sequencer lane is a
-///   fifth route into the vocabulary rather than a signal on the bus
-///   (ADR-0222) — so a row drawn from either would be ADR-0191's drawing.
-/// - The `.sens` row under a bound parameter — the signal, the curve, the
-///   range and `take back`, which is [`SensChip`]. Two of its four are
-///   controls and two are readouts, and the mock's `step` curve beside `seq 1`
-///   is not one of the four this vocabulary has.
-///
-/// Two are the shape of the mock disagreeing with the shape of a Set, and
-/// they are the two things this pass found:
-///
-/// - A published control that names no node has no row. The manual groups
-///   parameters *"by node, the way a Set is addressed everywhere else"*, and
-///   the mock draws every `.param` inside a `.node-group`. But
-///   `Published::at` is an `Option` and the default interface — the one
-///   every Set in `crates/karakuri` has, since that binary has no `--publish`
-///   — is made entirely of wildcards: *"one control per key, not one per
-///   declaration"*, addressed at every node that declares the key. A wildcard
-///   covering exactly one node is that node's and is drawn there; one covering
-///   several belongs to several groups and is omitted, because the mock
-///   draws no row outside a group and inventing a place for one is a
-///   specification written backwards. It waits on the page saying where such a
-///   row goes.
-/// - The `L4` group's authority chip. See [`Node::authority`].
-///
-/// And one is the pane running out of room, which is what
-/// [`InspectorPane::scroll`] answers: the pane scrolls, and
-/// [`InspectorPane::shown`] is what it says about that.
+/// Implements value-driven layout per [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md), [ADR-0314], and [ADR-0218].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InspectorPane {
     /// `.half-head`, along the top of the pane, with its rule on the bottom.
@@ -97,33 +12,9 @@ pub struct InspectorPane {
     /// What is left under the two heads, where the node groups stack from the top
     /// with a hairline between them.
     pub body: Rect,
-    /// How far this pane's body is scrolled, in force this frame — the stored
-    /// position clamped against what there is to scroll through, and never the
-    /// stored position itself.
-    ///
-    /// # Clamped here and stored nowhere
-    ///
-    /// The clamp is `0 ..= (content - body height)`, and both ends of that range
-    /// move when the pane is dragged — so a clamp written back into [`View`] would
-    /// be a resize rewriting what an operator scrolled to. That is
-    /// [ADR-0250](../../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)'s
-    /// rejected *clamp the stored size during the solve*, one region in, and
-    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md) is
-    /// the rule: a shorter pane draws less of the same position and stores nothing,
-    /// so dragging it back reproduces what was on screen exactly rather than
-    /// nearly.
-    ///
-    /// What [`View::scroll_by`] does clamp is the *content*, which is a reading of
-    /// the deck rather than a viewport — see it for why the two are not the same
-    /// clamp.
+    /// Scroll position in force for this pane, clamped to available content.
     pub scroll: f32,
-    /// How tall everything in this pane is: [`group_h`] over every node with a
-    /// [`size::HAIRLINE`] between two of them, whether or not any of it is on
-    /// screen.
-    ///
-    /// It is the number [`scroll`](Self::scroll) is clamped against and the number
-    /// [`View::scroll_by`] is clamped against, derived in one place so the two
-    /// cannot disagree.
+    /// Total content height of all node groups in this pane.
     pub content: f32,
     /// Number of node groups fully visible in this pane (the `n` in `n of m`).
     ///
@@ -132,21 +23,7 @@ pub struct InspectorPane {
 }
 
 impl InspectorPane {
-    /// Where the `index`th group goes, and how tall it is — in the pane's own
-    /// coordinates, with [`scroll`](Self::scroll) already taken off, so a group
-    /// above the body has a negative-going top and one below it a top past
-    /// `body.max.y`.
-    ///
-    /// Derived rather than stored for [`LibraryBay::row`]'s reason — the groups are
-    /// a walk and a `Vec` of rectangles would be an allocation a frame does not
-    /// need — but a walk rather than a stride, because a group is as tall as what
-    /// is in it.
-    ///
-    /// Every index in `nodes` is an answer, where this used to refuse anything past
-    /// `shown`: a scrolled pane has groups off both edges and
-    /// [`drawn`](Self::drawn) is what says which of them reach the picture, so the
-    /// rectangle has to exist before that question can be asked. Past the end of
-    /// `nodes` is still a caller's error.
+    /// Returns the bounding rectangle for group `index` within the pane.
     pub fn group(&self, nodes: &[Node], index: usize) -> Rect {
         let top = self.body.min.y - self.scroll
             + nodes
@@ -160,19 +37,7 @@ impl InspectorPane {
         )
     }
 
-    /// Which groups reach the picture, as a range into `nodes` — the ones a
-    /// scrolled body has any of on screen, cut edges included.
-    ///
-    /// It is what [`inspector_into`] paints and what [`InspectorPane::grip`] and
-    /// [`InspectorPane::select_renderer`] walk, so a control is hit-tested over
-    /// exactly the groups that were drawn. It is not [`shown`](Self::shown), which
-    /// counts the whole ones and is the readout's number: a fader in a group cut by
-    /// the bottom edge is drawn and is pressable, and the group it is in is not
-    /// counted as shown.
-    ///
-    /// A walk rather than arithmetic, for [`group`](Self::group)'s reason: the
-    /// groups are of unequal height. Empty where the pane's body has no height at
-    /// all, which is a folded pane.
+    /// Range of group indices visible within the pane's viewport.
     pub fn drawn(&self, nodes: &[Node]) -> std::ops::Range<usize> {
         let mut first = nodes.len();
         let mut last = 0;
@@ -191,44 +56,7 @@ impl InspectorPane {
         }
     }
 
-    /// What a press at `p` on a renderer chip asks for, or `None` off every chip
-    /// this pane drew.
-    ///
-    /// # The row is a choice only where the deck composites and holds two
-    ///
-    /// [Every operation](../../../../docs/manual/operations.html) states the
-    /// condition on the row itself — *"Only where the deck composites and holds two
-    /// or more. One-way: no position in the cycle folds them all back in"* — and
-    /// `docs/manual/console.html` states it from the chips' side: *"This Set
-    /// composites, so one renderer is live and the rest are not."* Under overdraw
-    /// every renderer draws, so a selection would name a state the picture is not
-    /// in; with one renderer there is nothing to choose between. Both are drawn and
-    /// neither is claimed, which is [`DeckHead::arrow`]'s arrangement on an inert
-    /// scrub and this crate's own rule stated at [`crate::input`]: *a control
-    /// claims what it acts on and no more*. The chips keep their shape either way,
-    /// because a row that vanished when a deck stopped compositing would move every
-    /// parameter row under it out from under the hand.
-    ///
-    /// Every chip of a live row is claimed, the lit one included. It names a
-    /// destination, which is what an operation on this panel is
-    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
-    /// and pressing the lit one is the selection the deck already has asked for
-    /// again — the anchor's shape two rows up. A chip that stopped being pressable
-    /// the moment it lit would take the claim out from under a hand on the beat the
-    /// swap landed.
-    ///
-    /// # What is asked before what
-    ///
-    /// The body, then the group's row, then the chips — [`LibraryBay::chip`]'s
-    /// order one bay along and for its reason: the chips are laid end to end from
-    /// the row's left padding and [`inspector_into`] clips the paint to the pane,
-    /// so a chip that finishes outside the pane is a target only for the part of it
-    /// that is drawn. The row is the pane's own width, so that clip is this row's
-    /// `contains`.
-    ///
-    /// It costs a galley lookup per chip and only inside a renderer row, which is
-    /// [`LibraryBay::chips`]' price: a chip is as wide as the word in it, and the
-    /// walk stops at the one under the pointer.
+    /// Hit-tests renderer selection chips at `p`, returning [`Operation::SelectRenderer`] per [P-0090].
     pub fn select_renderer(
         &self,
         ctx: &egui::Context,
@@ -262,17 +90,7 @@ impl InspectorPane {
         })
     }
 
-    /// What a press at `p` on a node head's `man / sug / auto` asks for, or `None`
-    /// off every chip this pane drew.
-    ///
-    /// [`InspectorPane::select_renderer`]'s shape one row up, and the same order of
-    /// questions: the body, then the group's head, then the chips. The head is the
-    /// pane's own width, so the clip [`inspector_into`] paints under is this row's
-    /// `contains`.
-    ///
-    /// A head with no chip is not a target, which is `Node::authority` being `None`
-    /// — a head that folds more than one node has no one answer to draw and so no
-    /// destination to press. Everything else about the walk is `select_renderer`'s.
+    /// Hit-tests authority chips at `p`, returning [`Operation::SetAuthority`] or `None`.
     pub fn set_authority(
         &self,
         ctx: &egui::Context,
@@ -313,25 +131,7 @@ impl InspectorPane {
         })
     }
 
-    /// What a press at `p` on a node head's `keep` capsule asks for, or `None` off
-    /// every capsule this pane drew.
-    ///
-    /// [`InspectorPane::set_authority`]'s walk at the other end of the same row,
-    /// and the same order of questions: the body, the group's head, then the
-    /// capsule.
-    ///
-    /// A head with no capsule is not a target, which is [`Node::keep`] being `None`
-    /// — a head over several nodes, and the built-in camera. Both fall out here by
-    /// the derivation answering `None` rather than by a check of their own, which
-    /// is the same shape `set_authority` refuses a folded head in.
-    ///
-    /// `id: None`, and the store names the file. This is the press that types
-    /// nothing, so it takes the stamp —
-    /// [ADR-0128](../../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)'s
-    /// two routes drawn on one capsule, exactly as [`KeepPill`] draws them for the
-    /// deck. The name a head *has* typed is [`View::named_set`]'s, and the host is
-    /// what pairs the two: a keep sent while this pane's head is asking for a name
-    /// files under what was typed.
+    /// Hit-tests node keep capsule at `p`, returning [`Operation::SaveSet`] with timestamp per [ADR-0128].
     pub fn keep_procedure(
         &self,
         ctx: &egui::Context,
@@ -366,18 +166,7 @@ impl InspectorPane {
         })
     }
 
-    /// What a press at `p` on a sensitivity row's chips asks for, or `None` off
-    /// every chip this pane drew and off the two that are readouts.
-    ///
-    /// [`InspectorPane::set_authority`]'s walk one level in: the body, the row,
-    /// then the chips. A row nothing is holding has no sensitivity row at all —
-    /// [`sens_rect`] answers `None` — so there is no case for a press on one, which
-    /// is the mock's own arrangement rather than a check.
-    ///
-    /// The two readouts answer `None` here rather than being left out of
-    /// [`sens_chips`], because they are drawn and a press has to be able to land on
-    /// them and do nothing: leaving them out would put the chips after them in the
-    /// wrong place.
+    /// Hit-tests sensitivity row controls at `p`, or returns `None` for readouts/unbound rows.
     pub fn sensitivity(
         &self,
         ctx: &egui::Context,
@@ -481,13 +270,7 @@ impl InspectorPane {
         })
     }
 
-    /// Where one row's publish mark is — the leftmost cell of the `row`th parameter
-    /// row of the `node`th group, or `None` where the pane is not drawing that
-    /// group or that row.
-    ///
-    /// The same rectangle [`InspectorPane::publishing`] resolves a press against
-    /// and [`param_into`] paints into, which is this bay's rule everywhere: the
-    /// derivation that draws a control is the one that hit-tests it.
+    /// Bounding rectangle for the publish indicator of parameter row `row` in group `node`.
     pub fn publish_mark(&self, pane: &Pane, node: usize, row: usize) -> Option<Rect> {
         if !self.drawn(&pane.nodes).any(|drawn| drawn == node) {
             return None;
@@ -500,17 +283,7 @@ impl InspectorPane {
         ))
     }
 
-    /// Where one node's `index`th `uses` line's control is, or `None` where the
-    /// pane is not drawing that group, that group has no such input, or the line
-    /// falls outside the body.
-    ///
-    /// `open` is whether *this* line's card is down, which is the console's own
-    /// state and not the pane's — [`View::wiring_open`], the arrangement [`Load`]
-    /// is already in with [`View::target_open`].
-    ///
-    /// The capsule is as wide as the name in it, which is why this asks `egui` for
-    /// a galley: a node's name is data and a capsule sized to a constant would clip
-    /// one Set's names and not another's.
+    /// Control bounding rectangle for input `index` on node `group`, or `None`.
     pub fn uses_line(
         &self,
         ctx: &egui::Context,
@@ -541,12 +314,7 @@ impl InspectorPane {
         })
     }
 
-    /// Which `uses` capsule `p` is on, as `(node, input)` — or `None` off every one
-    /// of them.
-    ///
-    /// A press here opens a card and emits nothing, which is [`Load`]'s pulldown
-    /// exactly: what a pick asks for is the operation, and *open the list* is not
-    /// something a map or a model could ever want to say (ADR-0305).
+    /// Returns `(node, input)` if `p` lands on a `uses` capsule per ADR-0305.
     pub fn uses_chip(
         &self,
         ctx: &egui::Context,
@@ -564,24 +332,7 @@ impl InspectorPane {
         })
     }
 
-    /// What a press at `p` on an open card asks for:
-    /// [`Operation::WireInput`](karakuri_operation::Operation::WireInput) naming
-    /// the node the pick landed on — or `None` off every row.
-    ///
-    /// # It names the node, and the refusal is not here
-    ///
-    /// The card lists [`Uses::candidates`], which is a reading of the Set somebody
-    /// else took, and what leaves this crate is the name that was picked. Nothing
-    /// is validated on this side: a name the Set cannot use is refused where the
-    /// Set is *built*, by name and with what the Set does hold — the same wall a
-    /// model's `wire_input` meets, which sends its edge to the same place with no
-    /// check of its own
-    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-    ///
-    /// A pick replaces, and that is the language's shape rather than this
-    /// control's: an input takes one node, `SetError::SlotBoundTwice` refuses two
-    /// edges on one input, and a Set with an unbound input does not build at all
-    /// (ADR-0152). So there is no *unwire*, and nothing here offers one.
+    /// Hit-tests candidate list on an open card at `p`, returning [`Operation::WireInput`] per [P-0090] and ADR-0152.
     pub fn wired(
         &self,
         ctx: &egui::Context,

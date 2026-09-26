@@ -1,9 +1,7 @@
 //! Modal overlay states and Rule 2 mutual exclusion.
 //!
-//! Nine kinds of popup cards, pulldowns, and choosers can appear over the console.
-//! Rule 2 specifies that while any card or chooser is down, a hand is mid-choice:
-//! the open overlay takes precedence, any click outside dismisses it, and background
-//! controls underneath are suppressed.
+//! While an overlay is active, it takes precedence, clicks outside dismiss it,
+//! and background controls are suppressed (Rule 2).
 
 use super::View;
 
