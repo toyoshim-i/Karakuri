@@ -19,6 +19,7 @@ pub enum Spec {
         min: f32,
         max: f32,
         collapsed: bool,
+        collapsed_size: f32,
         edge: bool,
     },
     /// An axis, a divider thickness, and children laid out along it.
@@ -33,6 +34,7 @@ pub enum Spec {
         min: f32,
         max: f32,
         collapsed: bool,
+        collapsed_size: f32,
         edge: bool,
     },
 }
@@ -47,6 +49,7 @@ impl Spec {
             min: 0.0,
             max: f32::INFINITY,
             collapsed: false,
+            collapsed_size: 0.0,
             edge: false,
         }
     }
@@ -63,6 +66,7 @@ impl Spec {
             min: 0.0,
             max: f32::INFINITY,
             collapsed: false,
+            collapsed_size: 0.0,
             edge: false,
         }
     }
@@ -114,9 +118,23 @@ impl Spec {
     }
 
     /// Start collapsed — folded to zero extent, and out of its parent's
-    /// layout unless it also [`keeps_its_edge`](Spec::keeps_its_edge).
+    /// layout unless it also [`keeps_its_edge`](Spec::keeps_its_edge) or retains
+    /// [`collapsed_size`](Spec::collapsed_size).
     pub fn collapsed(self) -> Spec {
         self.with(|_, _, _, c| *c = true)
+    }
+
+    /// Configures the extent this node retains along its parent's split axis when collapsed.
+    ///
+    /// When collapsed, a node with `collapsed_size > 0.0` stays placed in the parent's
+    /// layout with this fixed extent rather than shrinking to zero.
+    pub fn collapsed_size(mut self, size: f32) -> Spec {
+        match &mut self {
+            Spec::View { collapsed_size, .. } | Spec::Split { collapsed_size, .. } => {
+                *collapsed_size = size;
+            }
+        }
+        self
     }
 
     /// Configures the node to retain its divider boundary when collapsed.

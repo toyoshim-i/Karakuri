@@ -7,10 +7,16 @@ use crate::{Axis, Sizing};
 /// along matching axes, or report unbounded when orthogonal.
 pub(crate) fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f32 {
     let content = match a.split_of(i) {
-        None => match a.nodes[i].sizing {
-            Sizing::Fixed(size) => size.max(0.0),
-            Sizing::Flex(_) => f32::INFINITY,
-        },
+        None => {
+            if a.is_retained(i) {
+                a.nodes[i].collapsed_size
+            } else {
+                match a.nodes[i].sizing {
+                    Sizing::Fixed(size) => size.max(0.0),
+                    Sizing::Flex(_) => f32::INFINITY,
+                }
+            }
+        }
         Some((axis, divider)) => {
             let mut sum = 0.0;
             let mut tiled = 0usize;
@@ -18,9 +24,12 @@ pub(crate) fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<
                 let c = a.child(i, k);
                 let child = measure(a, s, c, Some(axis));
                 // Closed children contribute zero extent, but their divider is
-                // counted in tiled gap calculations.
+                // counted in tiled gap calculations. Retained collapsed children
+                // contribute their fixed collapsed size.
                 if !a.out_of_layout(c) {
                     sum += child;
+                } else if a.is_retained(c) {
+                    sum += a.nodes[c].collapsed_size;
                 }
                 if a.placed(c) {
                     tiled += 1;
@@ -74,8 +83,13 @@ pub(crate) fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
 
     for k in 0..n {
         let c = a.child(split, k);
-        s.sizes[k] = 0.0;
-        s.frozen[k] = a.out_of_layout(c);
+        if a.is_retained(c) {
+            s.sizes[k] = a.nodes[c].collapsed_size;
+            s.frozen[k] = true;
+        } else {
+            s.sizes[k] = 0.0;
+            s.frozen[k] = a.out_of_layout(c);
+        }
     }
 
     // Step 4. One pass per child is enough, since every pass but the last

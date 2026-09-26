@@ -92,6 +92,11 @@ impl View {
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
                 let rect = to_egui(placed.rect);
+                if panel.layout().is_collapsed(placed.id) {
+                    let title = head_of(placed.region).map_or("", |head| head.title);
+                    folded_head_into(ui, &pal, rect, title);
+                    continue;
+                }
                 match placed.region.kind {
                     Kind::Bay { .. } => {
                         bay_card(ui, &pal, rect);
@@ -424,8 +429,7 @@ impl View {
                 }
             }
             // Dashed keyboard focus indicator ring, rendered proud of bay heads.
-            if let Some((mark, title)) = folded {
-                folded_head_into(ui, &pal, mark, title);
+            if let Some((mark, _)) = folded {
                 folded_wfocus_into(ui, &pal, mark);
             }
             if let Some(mark) = focused {

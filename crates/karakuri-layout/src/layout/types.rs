@@ -52,6 +52,9 @@ pub(crate) struct Node {
     /// Folded by the operator: what [`Layout::collapse`] writes, what a
     /// [`Spec`] can start a node with, and what a saved arrangement carries.
     pub(crate) collapsed: bool,
+    /// Extent retained along parent split axis when collapsed.
+    #[serde(default)]
+    pub(crate) collapsed_size: f32,
     /// Indicates whether collapsing this node preserves its divider edge rather
     /// than removing it from its parent's layout.
     #[serde(default)]
@@ -133,6 +136,11 @@ impl Arrangement {
         self.nodes[i].collapsed || self.nodes[i].aside
     }
 
+    /// Returns true if node `i` is collapsed with a retained size and no solo is active.
+    pub(crate) fn is_retained(&self, i: usize) -> bool {
+        self.nodes[i].collapsed && self.nodes[i].collapsed_size > 0.0 && self.soloed.is_none()
+    }
+
     /// Returns true if node `i` is collapsed with [`Spec::keeps_its_edge`] and
     /// no solo is active, preserving its divider edge.
     pub(crate) fn is_closed(&self, i: usize) -> bool {
@@ -140,9 +148,10 @@ impl Arrangement {
     }
 
     /// Returns true if node `i` is placed in its parent's layout line (non-collapsed,
-    /// or closed while keeping its edge).
+    /// closed while keeping its edge, or collapsed with retained size).
     pub(crate) fn placed(&self, i: usize) -> bool {
-        !self.nodes[i].aside && (!self.nodes[i].collapsed || self.is_closed(i))
+        !self.nodes[i].aside
+            && (!self.nodes[i].collapsed || self.is_closed(i) || self.is_retained(i))
     }
 
     pub(crate) fn placed_count(&self, i: usize) -> usize {
@@ -224,13 +233,14 @@ pub(crate) struct Solved {
 /// [`Layout::new`] refuses a duplicate with, since after that check there is at
 /// most one node per name.
 pub(crate) fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
-    let (kind, sizing, min, max, collapsed, edge, children) = match spec {
+    let (kind, sizing, min, max, collapsed, collapsed_size, edge, children) = match spec {
         Spec::View {
             name,
             sizing,
             min,
             max,
             collapsed,
+            collapsed_size,
             edge,
         } => (
             Kind::View { name },
@@ -238,6 +248,7 @@ pub(crate) fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -
             min,
             max,
             collapsed,
+            collapsed_size,
             edge,
             Vec::new(),
         ),
@@ -250,6 +261,7 @@ pub(crate) fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -
             min,
             max,
             collapsed,
+            collapsed_size,
             edge,
         } => (
             Kind::Split {
@@ -262,6 +274,7 @@ pub(crate) fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -
             min,
             max,
             collapsed,
+            collapsed_size,
             edge,
             children,
         ),
@@ -273,6 +286,7 @@ pub(crate) fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -
         min,
         max,
         collapsed,
+        collapsed_size,
         edge,
         // Nothing a `Spec` can say sets this: it is not the arrangement's, it
         // is the caller's, and it is stated per frame rather than declared.
