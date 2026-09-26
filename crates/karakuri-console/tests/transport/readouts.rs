@@ -44,10 +44,7 @@ fn the_readouts_are_the_rows_own_geometry() {
     );
     assert!(near(row.bpm.center().y, mid));
 
-    // **And that 30 is the row's 48**, which is the same derivation the
-    // arrangement's transport was written from: 9 + 30 + 9. The centring gives
-    // the padding back exactly here, where the Outputs row's 8 + 18.5 + 8 has
-    // to spend a quarter pixel.
+    // Transport row height derivation: 9 + 30 + 9 = 48.
     assert!(near(strip.h, 48.0), "the transport row is {} tall", strip.h);
     assert!(near(row.bpm.min.y - strip.y, size::TRANSPORT_PAD_Y));
     assert!(near(
@@ -82,8 +79,7 @@ fn the_readouts_are_the_rows_own_geometry() {
         );
     }
 
-    // The beat grid: `.beat-grid i`'s 15x6, and the gaps are **between** the
-    // dots — four dots have three gaps and not four.
+    // Beat grid: 15x6 dots with 3 inter-dot gaps for 4 dots.
     assert_eq!(row.dots, 4);
     assert!(near(row.grid.height(), size::BEAT_H));
     assert!(
@@ -93,10 +89,7 @@ fn the_readouts_are_the_rows_own_geometry() {
         size::BEAT_W * 4.0 + size::BEAT_GAP * 3.0
     );
 
-    // **`.sep { flex: 1 }` puts what follows it against the right padding, and
-    // the last of those is the health capsule** — the mock draws `landed`
-    // after the frame readout, so the capsule takes the padding and the frame
-    // readout is one row gap before it.
+    // `.sep { flex: 1 }` aligns remaining items rightward, terminating at the health capsule.
     let health = row
         .health
         .expect("the mock's row draws its `landed` capsule");
@@ -261,8 +254,7 @@ fn a_console_with_no_engine_draws_nothing_in_the_row() {
         .count();
     assert_eq!(dots, 4, "the beat grid drew {dots} dots");
 
-    // And taking the engine away again empties it: the row keeps nothing from
-    // the frame it was drawn with.
+    // Removing transport values clears the rendered shapes on subsequent frames.
     view.transport = None;
     assert_eq!(
         shapes_inside(&mut view, &mut panel, strip).len(),
@@ -321,10 +313,7 @@ fn a_folded_or_soloed_or_narrow_row_draws_nothing() {
     layout.solve();
     assert!(transport(&ctx, &layout, Some(mock())).is_some());
 
-    // **And a window too narrow to keep the frame readout clear of the bar.**
-    // The mock answers that by wrapping the row onto a second line; this row
-    // is 48 tall and has nowhere to put one, so it draws nothing rather than
-    // two readouts on top of each other.
+    // A window too narrow to fit readouts without overlapping collapses the row.
     let narrow = solved(Rect {
         w: 240.0,
         ..PLAUSIBLE
@@ -499,10 +488,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
             "the health capsule",
         ),
         (
-            // **Past the pill**, which is where the empty middle of this row
-            // now starts: the mock's `learn`, `tap` and the rest are still
-            // not drawn, and the gap between the one control and the frame
-            // readout is what is left of them.
+            // Probe the unoccupied central space between controls and readouts.
             egui::pos2(pill.pill.max.x + 20.0, row.bar.center().y),
             "the empty middle of the row",
         ),
@@ -515,9 +501,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
         );
     }
 
-    // The boundary **below** the row still has its grab, which is what says
-    // the answer above is *not a control* rather than the rule having gone
-    // missing: this row's own bottom edge is inside it.
+    // The pane boundary below the row remains interactive within its grab region.
     let below = Point::new(strip.x + strip.w * 0.5, strip.y + strip.h);
     assert_eq!(
         claim(&mut panel, &ctx, &view, below),

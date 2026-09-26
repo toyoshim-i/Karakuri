@@ -67,9 +67,7 @@ pub fn library(
     pointed: Option<Pointed<'_>>,
     scroll: f32,
 ) -> Option<LibraryBay> {
-    // **Nothing said about any library, so there is nothing to draw.** Not the
-    // same as a scope that holds nothing — see this function's own doc, and
-    // ADR-0177 for the row of zeroes this is still refusing.
+    // Omit library bay if neither scopes nor sets are configured (ADR-0177).
     if scopes.is_empty() && sets.is_empty() {
         return None;
     }
@@ -97,10 +95,7 @@ fn library_box(
         region.max,
     );
     let under_head = region.min.y + size::HEAD_H;
-    // **The scope row is the head's business and not the list's**, which is
-    // why it is taken off the top before the list is measured: the mock draws
-    // it between the bay head's rule and `.lib-list`, and `.lib-list`'s own
-    // padding is inside whatever is left.
+    // Scopes row is positioned directly beneath the bay header.
     let scopes = chips.then(|| {
         Rect::from_min_max(
             Pos2::new(region.min.x, under_head),
@@ -142,10 +137,7 @@ fn library_box(
             foot.min.y - size::LIB_LIST_PAD,
         ),
     );
-    // **Narrower than its own padding is no list**, which is
-    // [`picture_rect`]'s rule stated across the axis. There is no matching
-    // check down it: a bay too short for the foot is already a bay too short
-    // for a row, and `fits` below is what answers that.
+    // List must have positive width after subtracting padding.
     if list.width() <= 0.0 {
         return None;
     }
@@ -153,8 +145,7 @@ fn library_box(
     // The reading block expands between rows under the selected cursor row.
     let block = open
         .filter(|(at, _)| *at < total)
-        // **The block is between the cursor's row and the next**, so what is
-        // above it is the cursor's row and everything before it.
+        // Expanded reading block inserts immediately after the selected item.
         .map(|(at, rows)| (at + 1, rows));
     let content = library_content_h(total, block.map(|(_, rows)| rows));
     // Scroll offset clamped to content bounds without writing back (P-0082).
@@ -173,10 +164,7 @@ fn library_box(
             under,
         }
     });
-    // **Built once with the count unanswered and then answered off itself**,
-    // because how many rows are whole is a question about the rectangles this
-    // bay hands out — [`LibraryBay::row`] and [`LibraryBay::drawn`] — and a
-    // second arithmetic here would be a second answer to where a row is.
+    // Compute whole row count from the initial layout geometry.
     let bay = LibraryBay {
         scopes,
         path,
@@ -191,9 +179,7 @@ fn library_box(
         content,
         bay: region,
     };
-    // **Down the column and not across it**: a row is exactly as wide as the
-    // list and starts where it starts, so the only edge a row can be cut by is
-    // the top one or the bottom one.
+    // Count rows fully contained vertically within the list bounds.
     let whole = bay
         .drawn()
         .filter(|index| {
@@ -224,10 +210,7 @@ pub(super) fn library_into(
 ) {
     rows_into(ui, pal, bay, listed, cursor);
 
-    // **The reading, under the row it is a reading of.** Drawn inside the same
-    // clip as the rows, which is what makes a reading taller than the bay a
-    // clipped box rather than a box drawn over the foot — `.lib-list`'s own
-    // answer to a name too long for the track, one axis round.
+    // Reading block clipped within the list region to prevent overlapping the foot.
     if let (Some(block), Some(open)) = (bay.reading, open) {
         let painter = ui.painter().with_clip_rect(bay.list);
         reading_into(&painter, pal, &block, open.reading);

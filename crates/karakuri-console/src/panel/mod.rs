@@ -65,14 +65,12 @@ impl Panel {
         })
     }
 
-    /// Move the pointer without dragging anything. [`moved`](Panel::moved) is the
-    /// same thing with a boundary in hand.
+    /// Moves the pointer without active drag.
     pub fn set_cursor(&mut self, p: Point) {
         self.cursor = p;
     }
 
-    /// Walk the arrangement and flatten it. Order is the tree's, so a caller that
-    /// colours or indents by position reads top to bottom.
+    /// Flattens the layout hierarchy in depth-first tree order.
     fn rebuild(&mut self) {
         let mut nodes = Vec::new();
         walk(&self.layout, self.layout.root(), 0, &mut nodes);
@@ -280,17 +278,13 @@ impl Panel {
         (extent <= min + STOPPED).then_some(Op::Fold(into))
     }
 
-    /// A move with a fader in hand: the pointer becomes a value, and the value
-    /// becomes an operation. Nothing is written, here or anywhere in this crate —
-    /// see [`Dragged::Fader`].
+    /// Translates pointer motion on a fader track into an engine [`Operation`].
     fn moved_fader(&mut self, p: Point) -> Option<Dragged> {
         let Some(Drag::Fader(fading)) = self.drag.as_mut() else {
             return None;
         };
         let value = fading.grab.value(fading.grab.axis.coord(p));
-        // **Exactly, and not within a threshold.** See `Fading::said`: a
-        // boundary's half a pixel is about what is worth *printing* at sixty
-        // asks a second, and every value that differs here is a different mix.
+        // Exact value comparison without threshold deadband (see `Fading::said`).
         if fading.said == Some(value) {
             return None;
         }
@@ -316,19 +310,13 @@ impl Panel {
                     None => Released::Gone { split, index },
                 })
             }
-            // No solve: a fader drag never touched the layout, so there is
-            // nothing owed and nothing to read back out of it.
+            // Fader drag leaves layout unchanged; solve is omitted.
             Drag::Fader(fading) => Some(Released::Let {
                 knob: fading.grab.knob.clone(),
             }),
-            // No solve either, and for the same reason: a carry moved nothing
-            // here. `onto` was resolved against the layout the *caller* had
-            // already solved to hit-test it, which is the one solve there is.
+            // Carry gestures do not affect layout dimensions; solve is omitted.
             Drag::Carry(carrying) => Some(match onto {
-                // **The whole of what the gesture asks for**, built here for
-                // `Knob::operation`'s reason: the translation from what a hand
-                // did into one operation of the vocabulary is the model's, and
-                // the two operands are the payload and the destination.
+                // Translates gesture into an engine operation with payload and destination.
                 Some(Landing::Deck(deck)) => Released::Dropped(match carrying.procedure {
                     true => Operation::LoadProcedure {
                         deck,
@@ -339,9 +327,7 @@ impl Panel {
                         set: carrying.set,
                     },
                 }),
-                // The chain takes a procedure and appends it. The destination
-                // carries no position: a release over a slot appends exactly as
-                // a release over `+ add` does.
+                // Appends procedure to master chain.
                 Some(Landing::Chain(Ok(operation))) => Released::Dropped(operation),
                 Some(Landing::Chain(Err(why))) => Released::Refused {
                     set: carrying.set,
@@ -358,14 +344,11 @@ impl Panel {
         self.layout.hit(self.cursor, 0.0)
     }
 
-    /// Act.
+    /// Executes a layout operation.
     pub fn op(&mut self, op: Op) -> Outcome {
         self.solve();
         let outcome = match op {
-            // Two directions and no toggle, and the answer is read back out of
-            // the layout rather than assumed: `folded` is what the node is
-            // now, so an operation that found the node already there says the
-            // truth rather than the intent.
+            // Layout state is queried directly rather than assumed from operation intent.
             Op::Fold(id) => {
                 self.layout.collapse(id);
                 self.folded(id)
@@ -375,9 +358,7 @@ impl Panel {
                 if self.layout.is_soloed() && !self.layout.visible(id) {
                     self.layout.unsolo();
                 }
-                // The node and the way to it. `expand` on a node that is not
-                // collapsed changes nothing and marks nothing dirty, so this
-                // is the path that was folded and no more than it.
+                // Expands all ancestor nodes along the path to the target node.
                 let mut node = Some(id);
                 while let Some(step) = node {
                     self.layout.expand(step);
@@ -390,7 +371,7 @@ impl Panel {
                     self.layout.collapse(split);
                     self.folded(split)
                 }
-                // The root is the one node with nothing enclosing it.
+                // Root has no enclosing node.
                 None => Outcome::Nothing,
             },
             Op::UnfoldAll => {
@@ -423,9 +404,7 @@ impl Panel {
                 Outcome::Reset
             }
             Op::Report => {
-                // No solve of its own: the one at the top of this method is
-                // the caller's, and a second here would hide an operation that
-                // left one owed rather than catch it. See the test.
+                // Preserves caller solve state for invariant verification.
                 Outcome::Report(
                     self.nodes
                         .iter()
@@ -461,9 +440,7 @@ impl Panel {
         Outcome::Restored
     }
 
-    /// What a fold or an unfold left behind, read out of the layout. One place,
-    /// because the three operations that fold differ in what they aim at and not at
-    /// all in what they report.
+    /// Constructs the folded outcome for the specified node.
     fn folded(&self, id: NodeId) -> Outcome {
         Outcome::Folded {
             id,

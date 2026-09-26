@@ -117,10 +117,7 @@ impl InspectorPane {
             if !head.contains(at) {
                 return None;
             }
-            // **Inside what the `keep` capsule leaves**, and the trim is
-            // [`auth_chips`]' own rather than applied here — a press on the
-            // capsule is [`InspectorPane::keep_procedure`]'s and reaches no
-            // chip, because the chips are not drawn there.
+            // Hit-test authority chips within the node head bounds.
             auth_chips(ctx, head, node)
                 .find(|(_, chip)| chip.contains(at))
                 .map(|(authority, _)| Operation::SetAuthority {

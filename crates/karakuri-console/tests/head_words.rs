@@ -53,15 +53,11 @@ fn every_heads_words_are_its_own_controls_and_its_class_pill() {
     }
 }
 
-/// The class pill's arming is what it always was: the word says it and the bit
-/// says it, and the two agree. `bay_head` read the word until 2026-09-09 and
-/// reads the bit now, so this is the clause that says the swap changed nothing.
+/// Verifies that the class pill's display word and armed state bit remain consistent.
 #[test]
 fn the_class_pills_word_and_its_bit_are_one_answer() {
     for class in Class::ALL {
-        // **Three of the four sit in a bay head and the fourth does not** —
-        // the Outputs row is headless (ADR-0159) and its pill comes out of
-        // `outputs` instead, which is `mcp_pill`'s own division.
+        // Three of the four classes reside in a bay head; Outputs is headless (ADR-0159).
         let Some(head) = head_of(region(karakuri_console::view::opens(*class)).expect("a region"))
         else {
             continue;

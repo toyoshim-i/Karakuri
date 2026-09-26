@@ -600,10 +600,7 @@ fn the_band_boundaries_are_the_ones_the_console_page_states() {
         }
     }
 
-    // **The rule that turns four boundaries into five bands**, in the page's
-    // own words. `view::band_of` is written as `>=` and falls through to
-    // green because of this sentence, and a page that dropped it would leave
-    // the one half of the table that cannot be read off the numbers.
+    // Verify specification rule for boundary rounding in `view::band_of`.
     assert!(
         page.contains("A value on a boundary rounds to the worse band"),
         "{PAGE} no longer says that a value on a boundary rounds to the worse band, and \
@@ -641,9 +638,7 @@ fn the_band_colours_are_the_rooms_own_five() {
             );
         }
 
-        // **The class the mock draws the dot with**, one per band, each
-        // setting the property above and nothing else. It is what makes
-        // `Band::word` a transcription rather than a name somebody picked.
+        // Each band dot class (.risk.<band>) sets the corresponding CSS custom property.
         for band in Band::ALL {
             let selector = format!(".risk.{}", band.word());
             let found = declared(&sheet, &selector, "background")

@@ -443,9 +443,7 @@ fn the_field_takes_letters_and_gives_them_back() {
     }
     assert_eq!(view.naming_set_in(0), Some("glass"));
 
-    // **Nothing is checked here**, which is the surface owning the affordance
-    // and never the authority: a `/` goes in and the wall is where the file is
-    // written.
+    // Input affordance accepts characters directly; validation occurs at the persistence boundary.
     assert!(view.type_into_name('/'));
     assert_eq!(view.naming_set_in(0), Some("glass/"));
     assert!(view.rub_out_of_name());
@@ -637,8 +635,7 @@ fn the_head_reads_keep_as_while_it_is_asking() {
         "the head is drawing the material and the name being typed at once: {asking:?}"
     );
 
-    // **And the other head is untouched**, which is what one field at a time
-    // looks like on screen.
+    // The other inspector head remains untouched during single-field editing.
     let other = inspector(panel.layout(), 1, &view.inspector[1], 0.0)
         .expect("a pane with room in it")
         .head;

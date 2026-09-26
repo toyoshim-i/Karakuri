@@ -73,9 +73,8 @@ fn the_cycle_skips_a_mode_the_material_cannot_honour() {
         Sync::Tempo
     );
 
-    // Material that accumulates **and** reads the beat: only `free` is left,
-    // so the one mode a cycle can reach is the mode it is in — which
-    // re-anchors, and is the one case where re-anchoring does nothing.
+    // For material that both accumulates and reads the beat, only `free` is valid,
+    // so cycling re-anchors the current mode.
     let both = Pane {
         allows: [true, false, false],
         ..at_sync(Sync::Free)
@@ -136,9 +135,7 @@ fn a_free_deck_has_nothing_to_re_anchor() {
     }
 }
 
-/// An arrow asks for a quarter beat, and which arrow it was is the sign — the
-/// one control on this panel that moves by an amount, because there is no
-/// destination in the vocabulary for it to name.
+/// Arrow buttons request a quarter-beat scrub in their respective direction.
 #[test]
 fn the_arrows_ask_for_a_quarter_beat_each_way() {
     let pane = mock();
@@ -163,8 +160,7 @@ fn the_arrows_ask_for_a_quarter_beat_each_way() {
         "the row this fills is titled *Scrub a deck a quarter beat*"
     );
 
-    // **The amount does not depend on where the offset already is**, which is
-    // what *relative* means and is why the record needs a reading.
+    // The scrub amount is relative and independent of current offset.
     let far = Pane {
         scrub_beats: -12.75,
         ..pane.clone()

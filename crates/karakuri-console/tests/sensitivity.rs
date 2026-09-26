@@ -278,7 +278,7 @@ fn the_curve_chip_attaches_the_same_signal_through_the_next_shape() {
             signal: "energy".to_owned(),
             // `pow2` is second of the four, so the next is `sqrt`.
             curve: Curve::Sqrt,
-            // The **attachment's** range and not the row's `[0.0, 3.0]`.
+            // Preserves existing attachment range rather than default row range.
             range: [0.1, 2.4],
         },
         "the curve chip did not restate the attachment it was drawn from"

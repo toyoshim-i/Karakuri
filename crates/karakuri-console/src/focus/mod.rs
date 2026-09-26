@@ -58,10 +58,7 @@ pub fn press(
             ),
         };
     }
-    // **The fold is answered before the bay's own grammar**, and it is the one
-    // press that acts the same in all nine: `space` at bay level is the fold
-    // wherever focus is, which is what lets one badge name all nine places it
-    // works (ADR-0259, ADR-0343).
+    // Space at bay level toggles folding across all bays (ADR-0259, ADR-0343).
     if key == Press::Space
         && view
             .focus()
@@ -79,9 +76,7 @@ pub fn press(
         .map_or_else(Vec::new, |address| address.at().to_vec());
     let items = drawn(view, built, &[]);
     let Some(here) = addressed(built, &at, |path| drawn(view, built, path)) else {
-        // The address is on something the bay has stopped drawing. Put it back
-        // at the bay rather than acting on whatever has taken that position —
-        // `View::point_at`'s rule about a row past the listing, one level up.
+        // Reset focus to bay level if previously focused target is no longer drawn.
         view.focus_mut().address_mut(bay.name).to_the_bay();
         return Asked::Nothing(
             "the address was on something this bay has stopped drawing, so it is back at the \
@@ -125,9 +120,7 @@ pub fn press(
                 ),
             }
         }
-        // **A digit below a control**, which only the Inspector has: the deck
-        // head and a node group are rungs rather than controls, and a digit is
-        // how the third rung is reached.
+        // Digits descend into sub-controls (Inspector deck head or node group).
         (
             Addressed::Of {
                 item: Some(item),
@@ -150,10 +143,7 @@ pub fn press(
                 ),
             }
         }
-        // **A digit below one of the Master's chain slots**, which is a rung
-        // and not a card: a slot's controls are its parameter rows, its cut
-        // chip and its `−`, and every one of them is counted whenever the slot
-        // is drawn.
+        // Digits navigate into Master chain slot controls.
         (
             Addressed::Of {
                 item: None,
@@ -171,10 +161,7 @@ pub fn press(
             }
             None => Asked::Nothing(SLOT_SHORT),
         },
-        // **A digit below the control a card hangs from**: the Sequencer's
-        // `+ lane` on the head, and the Transport's two pills and the Master's
-        // `+ add` on a headless row. A digit names the nth row of the card
-        // exactly as it names the nth of anything else drawn.
+        // Digits select rows within open modal cards.
         (Addressed::OfHead(through, control), Press::Digit(nth)) => {
             name_row(view, bay.name, built, control, &[HEAD, through], nth)
         }
@@ -206,8 +193,7 @@ pub fn press(
                 }),
             }
         }
-        // **A chain parameter row is a level**, stepped a tenth of the range
-        // its procedure declares.
+        // Steps chain parameter levels by 0.1 of procedure range.
         (
             Addressed::InCard {
                 through,
@@ -229,10 +215,7 @@ pub fn press(
         ) => Asked::Nothing(
             "this control's values are a closed list and a list has no axis — space cycles it",
         ),
-        // **A card's rows are walked from the row it remembers**, which is the
-        // bay-level rule one rung down: the arrows work with no digit pressed
-        // first, and the address follows them into the card. Which card it is,
-        // is the control the address descended through.
+        // Walks card rows using remembered or initial selection.
         (Addressed::OfHead(through, control), Press::Arrow(arrow))
             if card_of(control).is_some() =>
         {
@@ -299,10 +282,7 @@ pub fn press(
             },
             Press::Arrow(arrow),
         ) => under_arrow(view, item, through, nth, control, arrow),
-        // **A head is not a row of things laid out on an axis.** Its controls
-        // are named by digit and acted on by `space`; an arrow here would have
-        // to mean *the next control*, which is a second meaning for the key
-        // that walks a bay's items.
+        // Head controls are addressed by digit rather than arrow navigation.
         (Addressed::Head, Press::Arrow(_)) => Asked::Nothing(
             "a head's controls are named by a digit rather than walked — press 1 for the first \
              of them",
@@ -324,8 +304,7 @@ pub fn press(
         (Addressed::Of { item, nth, control }, Press::Space) => {
             cycled(view, panel, item, nth, control, held)
         }
-        // **A chain slot's two settings**: the cut chip cycles, and a
-        // parameter row goes back to what its procedure declared it at.
+        // Chain slot controls: cycles cut chip or resets parameter to default.
         (
             Addressed::InCard {
                 through,
@@ -342,8 +321,7 @@ pub fn press(
             },
             Press::Space,
         ) => chain_param(view, through, nth, Step::Default),
-        // **A card's rows perform rather than set**, so `space` names the
-        // sentence the row carries rather than a next state.
+        // Card rows perform actions via `enter` rather than cycling state.
         (Addressed::InCard { control, .. }, Press::Space) => match control.answers() {
             Answers::Nothing(why) => Asked::Nothing(why),
             _ => Asked::Nothing(
@@ -359,8 +337,7 @@ pub fn press(
             },
             Press::Space,
         ) => under_space(view, item, through, nth, control),
-        // **An entry of the chooser performs rather than sets**, so there is
-        // no next state for `space` to name.
+        // Chooser entries perform actions rather than holding state.
         (Addressed::UnderHead { .. }, Press::Space) => Asked::Nothing(
             "this control performs rather than sets, so it has no next state — enter runs it",
         ),
@@ -376,15 +353,11 @@ pub fn press(
                  items are things you set rather than things you run",
             ),
         },
-        // **`enter` on the control a card hangs from puts the card down**,
-        // which is what makes the card's rows a rung the address descends
-        // into.
+        // Opens card from its parent control.
         (Addressed::OfHead(_, control), Press::Enter) if card_of(control).is_some() => {
             open_card(view, control)
         }
-        // **And `enter` on one of the rows performs that row and takes the
-        // card away**, which is the pointer's own pair of moves in the
-        // pointer's own order.
+        // Executes addressed card row action and closes the card.
         (
             Addressed::UnderHead {
                 through,
@@ -402,8 +375,7 @@ pub fn press(
             ),
         },
         (Addressed::OfHead(_, control), Press::Enter) => act_of(view, None, control),
-        // **`enter` on a slot's `−` takes that slot out of the chain**, which
-        // is the one act on a rung that is not a card.
+        // Enter on slot remove button removes it from the chain.
         (
             Addressed::InCard {
                 through,

@@ -139,16 +139,11 @@ impl Sequencer {
     }
 }
 
-/// The `+ lane` chooser's card, painted — [`library::row_menu_into`]'s card
-/// term for term, because it is that card: the same panel fill, radius,
-/// hairline and item ink, and the same separator drawn as one rule inside its
-/// band.
+/// Renders the `+ lane` chooser card and choice items.
 pub(crate) fn lane_card_into(ui: &Ui, pal: &Palette, card: &LaneCard, choices: &Choices) {
     let painter = ui.painter();
     popup_card(painter, pal, card.card);
-    // **Zipped against the reading rather than counted to `card.items`**, so a
-    // card laid out from a longer list than the one being painted draws the
-    // items that exist instead of panicking on the geometry.
+    // Bounded by available items up to laid-out card capacity.
     for (index, choice) in choices.items.iter().enumerate().take(card.items) {
         let at = card.item(index);
         let galley = painter.layout_no_wrap(

@@ -13,13 +13,11 @@ use crate::panel::Outcome;
 /// When the panel wants to be on screen again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repaint {
-    /// Nothing on screen is changing. Sleep until something arrives — this is
-    /// ADR-0164's still-panel clause, and it is the answer to most of what happens.
+    /// Idle state with no display changes (ADR-0164 still-panel policy).
     Never,
-    /// What is on screen is not what should be. Draw at the first opportunity.
+    /// Display state out of date; repaint immediately.
     Now,
-    /// `egui` asked to be drawn again after this long, and it is naming a
-    /// *deadline* rather than asking for a frame: draw then, and not before.
+    /// Repaint scheduled after the specified duration.
     After(Duration),
 }
 
@@ -54,13 +52,11 @@ impl Repaint {
 /// Exhaustive enumeration of events that may change the console display and trigger a repaint.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Change<'a> {
-    /// The pointer moved, or a button went down or up, with `claim` saying who got
-    /// the event ([`crate::input`]).
+    /// Pointer movement or button event with associated input [`Claim`].
     Pointer(Claim),
     /// Scroll wheel event with routing `claim` and whether content actually scrolled.
     Wheeled(Claim, bool),
-    /// An operation ran — a fold, a solo, a reset, a report — and this is what it
-    /// did.
+    /// An operation was executed, yielding an [`Outcome`].
     Operated(&'a Outcome),
     /// Text input into arrangement name pill, with `moved` indicating buffer modification.
     Naming(bool),
@@ -87,14 +83,13 @@ pub enum Change<'a> {
 }
 
 impl Change<'_> {
-    /// The repaint decision, and the whole of it.
+    /// Computes the repaint deadline for this change.
     pub fn repaint(&self) -> Repaint {
         match self {
             // Panel-claimed pointer interaction (boundary drag or cursor hover band) repaints immediately (ADR-0210).
             Change::Pointer(Claim::Panel) => Repaint::Now,
 
-            // `egui` has the event, and `EventResponse::repaint` is its
-            // answer; asking again here would be a second one.
+            // Delegated to egui; no secondary repaint requested.
             Change::Pointer(Claim::Egui) | Change::Wheeled(Claim::Egui, _) => Repaint::Never,
 
             // Wheel scroll repaints only if content actually moved.
@@ -109,8 +104,7 @@ impl Change<'_> {
                 | Outcome::Soloed(_)
                 | Outcome::Reset
                 | Outcome::Restored => Repaint::Now,
-                // Both of these are asked speculatively — `u` with no solo,
-                // `z` with nothing folded — and both say which it was.
+                // Speculative unsolo/unfold operations repaint only if state was affected.
                 Outcome::Unsoloed { was } => match was {
                     true => Repaint::Now,
                     false => Repaint::Never,
@@ -129,17 +123,13 @@ impl Change<'_> {
                 false => Repaint::Never,
             },
 
-            // See the variant: `None` is a drag that asked for nothing,
-            // which is a pointer that moved over a value that did not.
+            // Unchanged drag interaction emits no operation and requires no repaint.
             Change::Emitted(operation) => match operation {
                 Some(_) => Repaint::Now,
                 None => Repaint::Never,
             },
 
-            // See the variant. The deadline is the view's and arrives with the
-            // change; `None` is a panel with nothing moving on it, and it is
-            // `Never` rather than a long deadline because a panel that is
-            // still is not a panel that is slow.
+            // Active animation repaints until deadline; idle when no movement.
             Change::Animating(moves_in) => match moves_in {
                 Some(moves_in) => Repaint::After(*moves_in),
                 None => Repaint::Never,
@@ -154,16 +144,13 @@ impl Change<'_> {
 
             Change::Room | Change::Viewport => Repaint::Now,
 
-            // The caret moved, or a letter landed beside it. Nothing at all
-            // where the buffer did not change — the key reached the console
-            // and the console draws exactly what it drew.
+            // Text edit repaints only if the buffer changed.
             Change::Naming(moved) => match moved {
                 true => Repaint::Now,
                 false => Repaint::Never,
             },
 
-            // A pointer moved, or a key asked it to and it was already at the
-            // end of what it can point at. See the variant.
+            // Selection or focus movement repaints only if position changed.
             Change::Pointed(moved) => match moved {
                 true => Repaint::Now,
                 false => Repaint::Never,

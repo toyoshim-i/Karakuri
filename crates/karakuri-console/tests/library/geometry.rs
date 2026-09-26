@@ -231,10 +231,7 @@ fn the_rows_tile_the_list_and_stay_inside_it() {
         bay.list
     );
 
-    // **And where the list is full, one more would not have fitted** — which
-    // is what makes `rows` a count of what fits rather than a count somebody
-    // chose. Asked of a store with more in it than the bay can hold, because
-    // with five names the bay stops at five for the other reason.
+    // Verify row count reflects visible capacity when item count exceeds available height.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
     let full =
         library(panel.layout(), SCOPES, &many, None, None, 0.0).expect("the bay lists its rows");
@@ -355,8 +352,7 @@ fn a_console_with_no_store_lists_nothing() {
         drawn.len()
     );
 
-    // And taking the store away again empties it: the bay keeps nothing from
-    // the frame it was drawn with.
+    // Clearing the library collection resets rendered shapes without residual state.
     view.library = Vec::new();
     assert_eq!(
         shapes_inside(&mut view, &mut panel, region).len(),
@@ -384,8 +380,7 @@ fn nothing_said_about_any_library_is_no_listing() {
         "the scope row went away with the listing under it"
     );
 
-    // And a console handed no scopes draws no scope row, whatever it lists:
-    // the row is the chips it was given and never a band of empty card.
+    // An empty scope slice suppresses scope row rendering entirely.
     assert_eq!(
         library(panel.layout(), &[], &mock(), None, None, 0.0).and_then(|bay| bay.scopes),
         None,
@@ -461,10 +456,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         "a bay with room for exactly one row listed something else"
     );
 
-    // **And a bay narrower than `.lib-list`'s own padding lists nothing**,
-    // which is the same rule across the axis rather than down it. It takes a
-    // window under the arrangement's minimum for the same reason: the left
-    // pane declares 160 and the solve honours it above 990.
+    // A bay narrower than list padding renders zero rows.
     let sliver = solved(Rect {
         w: 30.0,
         ..PLAUSIBLE

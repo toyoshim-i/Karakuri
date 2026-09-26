@@ -14,7 +14,7 @@ pub enum Room {
 }
 
 impl Room {
-    /// The other one. What the room key does.
+    /// Returns the opposite room theme.
     pub fn other(self) -> Room {
         match self {
             Room::Day => Room::Night,
@@ -22,7 +22,7 @@ impl Room {
         }
     }
 
-    /// The word the manual uses for it, which is the word the readout prints.
+    /// Returns the room name string displayed in readouts.
     pub fn word(self) -> &'static str {
         match self {
             Room::Day => "day",
@@ -38,8 +38,7 @@ impl Room {
     }
 }
 
-/// The console's colours in one room: `style.css`'s `--c-*`, field for
-/// property.
+/// Palette color tokens corresponding to CSS variables (`--c-*`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
     /// `--c-ground`: behind everything, and what shows through every divider.
@@ -161,9 +160,7 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
-/// `Color32::from_rgba_unmultiplied` is not `const`, and the four values here
-/// are compile-time constants, so the premultiplication is written out. Every
-/// caller of this passes a colour the CSS states as `rgba(...)`.
+/// Premultiplies RGB by alpha in const evaluation for CSS `rgba(...)` values.
 const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Color32 {
     Color32::from_rgba_premultiplied(
         ((r as u32 * a as u32) / 255) as u8,

@@ -28,9 +28,7 @@ pub(crate) fn sample(variant: &str) -> Operation {
         "RestoreArrangement" => Operation::RestoreArrangement {
             name: String::new(),
         },
-        // The two the transport row's look controls emit. They are one row of
-        // *Mixing and output* each, so unlike the pair above they are **not**
-        // in [`ELSEWHERE`] and both directions below judge them.
+        // Transport row look controls (Mixing and output rows).
         "SetTonemap" => Operation::SetTonemap {
             tonemap: karakuri_operation::Tonemap::Aces,
         },
@@ -205,10 +203,7 @@ pub(crate) fn sample(variant: &str) -> Operation {
             deck: 0,
             param: bind_at(),
         },
-        // **The Outputs row's chips**, which name an output by a word from a
-        // closed list and say whether it is on (ADR-0324). `Projector(0)` is
-        // the one this repository owns; the program view's is the same
-        // operation naming a different destination.
+        // Outputs row chips toggling destination routing (ADR-0324).
         "RouteFrame" => Operation::RouteFrame {
             output: karakuri_operation::Output::Projector(0),
             on: true,

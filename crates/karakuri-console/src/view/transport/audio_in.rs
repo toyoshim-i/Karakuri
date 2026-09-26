@@ -331,8 +331,7 @@ pub(crate) fn audio_in_into(ui: &Ui, pal: &Palette, pill: &AudioInPill, audio: &
     };
     popup_card(painter, pal, card);
 
-    // **A machine with no inputs**, which is a sentence and not a list —
-    // `pill.rows` is zero, so `row` hands out nothing.
+    // Fallback row displayed when host provides no input devices.
     if audio.inputs.is_empty() {
         let foot = Rect::from_min_size(
             Pos2::new(
@@ -348,17 +347,14 @@ pub(crate) fn audio_in_into(ui: &Ui, pal: &Palette, pill: &AudioInPill, audio: &
     for index in 0..pill.rows {
         let row = pill.row(index);
         let input = &audio.inputs[index];
-        // **The one that is open is the one colour the list has**, for the
-        // reason the pill has one: a card of names with nothing marked leaves
-        // an operator to remember which they picked.
+        // Active device row is highlighted in mint.
         let colour = match audio.device.as_deref() == Some(input.as_str()) {
             true => pal.mint,
             false => pal.text,
         };
         card_row_text(painter, row, input, colour);
     }
-    // **`n of m`, in the Library bay's own words**, and only where the list
-    // could not be shown whole.
+    // Foot summary readout (`n of m`) when list is truncated.
     if pill.rows < pill.of {
         let foot = Rect::from_min_max(
             Pos2::new(card.min.x, card.max.y - size::LIB_FOOT_H),

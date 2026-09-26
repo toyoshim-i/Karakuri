@@ -38,17 +38,11 @@ pub(crate) fn pane_box(region: Rect, nodes: &[Node], scroll: f32) -> Option<Insp
         Pos2::new(region.max.x, head.max.y + size::DECK_HEAD_H),
     );
     let body = Rect::from_min_max(Pos2::new(region.min.x, deck_head.max.y), region.max);
-    // **Narrower than a parameter row's own padding is no pane**, which is
-    // [`library::library_box`]'s width check with the mock's own indent in it. There is
-    // no matching check down the pane: a pane too short for a group draws its
-    // two heads and no group, which is what `shown` answers.
+    // Pane must be wider than horizontal parameter padding.
     if body.width() <= size::PARAM_PAD_L + size::PARAM_PAD_R {
         return None;
     }
-    // **And a pane too short for its two heads is no pane**, which is what
-    // this function's caller promises. `positive` is not enough on its own:
-    // the two heads are stated heights, so they stay positive while running
-    // off the bottom of a region shorter than their sum.
+    // Pane must be tall enough to accommodate both headers.
     if !positive(head) || !positive(deck_head) || deck_head.max.y > region.max.y {
         return None;
     }
@@ -57,10 +51,7 @@ pub(crate) fn pane_box(region: Rect, nodes: &[Node], scroll: f32) -> Option<Insp
     let content = content_h(nodes);
     // Clamps scroll offset without modifying stored state per P-0082 and ADR-0250.
     let scroll = scroll.clamp(0.0, (content - body.height()).max(0.0));
-    // **How many are whole**, which is the readout's number and not the walk's
-    // — `InspectorPane::drawn` is the walk. A group is whole when both its
-    // edges are inside the body: the top one after the scroll has been taken
-    // off, and the bottom one before the body's own.
+    // Count parameter groups completely visible within the pane body.
     let mut shown = 0;
     let mut top = -scroll;
     for (index, node) in nodes.iter().enumerate() {

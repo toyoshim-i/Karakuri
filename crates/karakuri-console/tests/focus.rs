@@ -406,8 +406,7 @@ fn the_three_pointers_are_one_mechanism() {
         "and the reading did not come back"
     );
 
-    // **And the deck selection survived the hands going into the library**,
-    // which is the sentence this whole mechanism exists for.
+    // Deck selection is preserved when focus moves to library.
     assert_eq!(view.selection(), 3);
 }
 
@@ -487,7 +486,7 @@ fn the_ladder_descends_with_enter_and_ascends_with_esc() {
     let mut p = panel();
     p.solve();
 
-    // Focus starts on transport or we can tab to mixer
+    // Advance focus by tab until reaching mixer.
     while view.focused(&p).map(|b| b.name) != Some("mixer") {
         view.tab(&p, 1);
     }

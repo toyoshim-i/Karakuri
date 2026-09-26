@@ -295,19 +295,13 @@ pub fn transition(
     let shape = pill(settings.shape_word());
     let quantum = pill(settings.quantum_word());
     let length = pill(settings.length_word());
-    // **`go` from the other end**, which is what `.sep`'s `flex: 1` puts it:
-    // the separator absorbs whatever is left between the length pill and this
-    // one, so the capsule's place is measured off the block's right padding
-    // and never off the words to its left.
+    // Right-align `go` trigger capsule against block right padding.
     let go_w = pill_width(ctx, GO) + size::HAIRLINE * 2.0;
     let go = Rect::from_min_size(
         Pos2::new(right - go_w, top),
         egui::vec2(go_w, size::XPILL_H),
     );
-    // The separator is `flex: 1` and so is never negative: where the three
-    // settings would reach the capsule there is no row, for the reason the
-    // header gives. One `.xrow` gap is the least `.sep` can be and still be a
-    // gap between two pills rather than two capsules touching.
+    // Suppress row if settings pills overlap the `go` capsule.
     if length.max.x + size::XROW_GAP > go.min.x {
         return None;
     }
@@ -326,9 +320,7 @@ const GO: &str = "go";
 
 /// Paints the mixer transition row controls and status indicators.
 pub fn transition_into(ui: &Ui, pal: &Palette, row: &TransitionRow, decks: usize) {
-    // The rule is inside the block rather than above it, which is what keeps
-    // the pills where `transition` put them: `size::XFADE_H` counts the
-    // hairline as the first pixel of the block.
+    // Hairline divider positioned at top edge inside transition block bounds.
     let rule = row.rect.min.y + size::HAIRLINE * 0.5;
     ui.painter().line_segment(
         [

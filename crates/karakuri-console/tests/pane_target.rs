@@ -280,8 +280,7 @@ fn one_card_is_down_and_a_pick_puts_it_away() {
         None,
         "the card is still down after a pick"
     );
-    // **Put away even where the pane did not move** — picking the deck a pane
-    // already shows is still a hand finishing what it started.
+    // Selecting the currently shown deck still dismisses the pulldown card.
     assert!(view.open_pane_target(1));
     assert!(view.point_pane(1, 0), "the pick reported nothing moved");
     assert_eq!(view.pane_target_open(), None);

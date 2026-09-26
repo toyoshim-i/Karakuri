@@ -322,8 +322,7 @@ pub fn mock_transport() -> karakuri_console::view::Transport {
         // The chain's term, which the mock's transport row does not draw: the
         // mock's chain is empty and a chain that costs nothing draws nothing.
         chain_ms: None,
-        // **The `landed` capsule at the end of the row**, which the mock
-        // draws `armed`: the last procedure written is on screen.
+        // The landed health capsule at the end of the row, rendered as armed.
         health: Some(karakuri_console::view::Stage::Landed),
         rec: None,
     }

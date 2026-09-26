@@ -223,23 +223,19 @@ pub fn program_bay(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Opti
                 }
             }
         }),
-        // The row is folded: nothing to arrange around, so the picture has the
-        // body whole — the same `fitted` the two arrangements end in.
+        // Picture expanded with preview row folded away.
         (true, false) => Some(ProgramBay {
             placement: Placement::Below,
             picture: kept(fitted(body, canvas)),
             cells: None,
         }),
-        // **The guard.** The picture is folded, so nothing moves: the row is
-        // below at its own height, in the region the arrangement solved for
-        // it, which is the rectangle it has had since ADR-0174.
+        // Picture folded: preview row positioned below at standard height (ADR-0174).
         (false, true) => Some(ProgramBay {
             placement: Placement::Below,
             picture: None,
             cells: preview_cells(to_egui(layout.rect(row))),
         }),
-        // Both folded. The bay has a head and no body at all, which is what it
-        // had before any of this.
+        // Both picture and preview row folded.
         (false, false) => None,
     }
 }

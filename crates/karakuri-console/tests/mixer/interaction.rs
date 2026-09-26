@@ -41,10 +41,7 @@ fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
         );
     }
 
-    // **Which control it is is still the derivation's**, and it has to be
-    // asked here rather than left to the claim: the strip's rectangle contains
-    // every one of the five, so `Claim::Panel` at a knob no longer says the
-    // knob was hit-tested.
+    // Individual strip controls must be hit-tested directly rather than inferred from strip bounds.
     assert!(
         bay.grab(point(trim.knob.center())).is_some(),
         "the trim's knob is claimed by the strip around it and by nothing of its own"
@@ -85,9 +82,7 @@ fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
         );
     }
 
-    // **The alley between two strips is nobody's**: `.mixer-strips` has a
-    // `gap`, it is a real place to press, and a claim there would be the panel
-    // taking an event for a deck the pointer is not on.
+    // Inter-strip gap belongs to no deck and yields to egui.
     let alley = {
         let a = bay.selected(0).expect("a strip for deck A");
         let b = bay.selected(1).expect("a strip for deck B");
@@ -113,9 +108,7 @@ fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
     // other.
     assert!(!at.blend.contains(at.mask.center()));
 
-    // The boundary **under** the bay still has its grab, which is what says
-    // the answers above are about the controls rather than the rule having
-    // gone missing.
+    // The boundary below the bay retains its grab zone.
     let region = rect_of(panel.layout(), "mixer");
     let below = Point::new(region.x + region.w * 0.5, region.y + region.h);
     assert_eq!(
@@ -146,8 +139,7 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     );
     assert_eq!(first.count(), 3);
     assert_eq!(other.count(), 1);
-    // The bay carries what it was measured from, so whoever measured and
-    // whoever paints are one statement.
+    // The bay retains a reference to its source strips slice.
     assert_eq!(first.strips, one.as_slice());
 
     // Asked again with the first, and it is the first answer: nothing was

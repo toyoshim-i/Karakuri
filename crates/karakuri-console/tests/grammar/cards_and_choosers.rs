@@ -454,8 +454,7 @@ fn tab_takes_a_transport_card_away() {
         !view.audio.as_ref().expect("an audio pill").open(),
         "`tab` left a card standing over a bay the keys have left"
     );
-    // The bay keeps where it was, which is every other thing `Tab` leaves
-    // alone.
+    // The bay retains its cursor position across Tab navigation.
     assert_eq!(at(&view, "transport"), vec![7]);
 }
 

@@ -80,9 +80,7 @@ pub fn learn_pill(
     let text_w = width_of(ctx, LEARN_LABEL);
     let pill_w = size::PILL_PAD_X * 2.0 + text_w;
     let mid = strip.center().y;
-    // **Where the group before this one ended** — the tracker group's last
-    // chip, the audio-in pill, or the bar. The same one answer [`arrangement`]
-    // takes, asked two items further back; the gap is the row's own.
+    // Layout following the tracker group, audio-in pill, or bar.
     let after = match (
         tracker_group(ctx, layout, values, audio, tracker),
         audio_in(ctx, layout, values, audio),

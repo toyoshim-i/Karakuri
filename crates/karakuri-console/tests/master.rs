@@ -449,9 +449,7 @@ fn the_bay_draws_one_row_per_slot_of_the_chain() {
     assert_eq!(ats, vec![0, 1], "a slot's row addressed the wrong position");
     let params: Vec<usize> = it.slots.iter().map(|slot| slot.params.len()).collect();
     assert_eq!(params, vec![1, 1]);
-    // **Under the out row and not over it**, which is the chain's own
-    // direction: the level enters at the top and the slots are downstream of
-    // it (ADR-0224).
+    // Chain slots are placed downstream below the out level fader (ADR-0224).
     assert!(
         it.slots[0].well.min.y >= it.fader.track.max.y,
         "a chain row was drawn over the out fader"

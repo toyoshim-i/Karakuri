@@ -22,10 +22,7 @@ pub fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
             // A headless row's items are its controls, and how many of them
             // are drawn is the bay's own count.
             Items::Controls(of) => match built.bay {
-                // **The out fader, one per slot of the chain, and `+ add`** —
-                // the bay's own reading, because how many slots there are is
-                // what an operator put in the chain. A console with no chain
-                // behind it draws the out row and nothing under it.
+                // Out fader, one per slot of the chain, and `+ add`.
                 MASTER => match view.master_out.is_some() {
                     true => {
                         1 + view
@@ -83,9 +80,7 @@ pub fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
             Some(control) => card_rows(view, control),
             None => 0,
         },
-        // **The Transport's two cards**: the audio-in card draws one row per
-        // input the machine answered with, and the arrangement menu draws
-        // *save*, *start a new one* and one row per name filed.
+        // Transport cards (audio-in and arrangement menu).
         (TRANSPORT, [through]) => match built.item().nth(*through, built.item().first.len()) {
             Some(control) => card_rows(view, control),
             None => 0,
@@ -215,9 +210,7 @@ pub fn name_item(
         }
         _ => {}
     }
-    // **Refused rather than clamped, and the address does not descend on a
-    // refusal** — the guard above is that refusal, and it is the bay's own
-    // count rather than a second rule.
+    // Refusal prevents descending address past available items.
     address_into(view, bay, nth);
     match built.selects {
         true => Asked::Emitted(Operation::SelectDeck {
@@ -242,9 +235,7 @@ pub fn walk(
     }
     let step = arrow.step();
     let moved = match (built.selects, built.bay) {
-        // **The strips are walked and not wrapped**, which is `View::walk`'s
-        // rule one bay over: a walk is not a cycle, and a press held down must
-        // not jump the length of the row.
+        // Strips are clamped without wrapping.
         (true, _) => {
             let from = i64::from(view.selection());
             let to = (from + i64::from(step)).clamp(0, items as i64 - 1) as u8;
@@ -262,10 +253,7 @@ pub fn walk(
             .map_or(0..0, |bay| bay.drawn());
             view.walk(step, showing)
         }
-        // **Every other bay walks the address alone**, because the item it is
-        // on is not a pointer anything downstream reads: the deck selection
-        // and the library cursor are the two that are, and each is a bay's
-        // remembered address seen from outside (ADR-0332).
+        // Other bays advance address locally without side effects (ADR-0332).
         _ => {
             let from = remembered(view, bay, items);
             let to = (from as i64 + i64::from(step)).clamp(1, items as i64) as usize;
@@ -289,8 +277,7 @@ pub fn walk(
         false => view.focus_mut().address_mut(bay).to_item(nth),
     }
     match (built.selects, moved) {
-        // **Emitted whether or not the mark moved**, which is the four deck
-        // keys' rule this replaces: what a press asked for is what is emitted.
+        // Operation emitted regardless of boundary clamping.
         (true, _) => Asked::Emitted(Operation::SelectDeck {
             deck: view.selection(),
         }),
@@ -354,7 +341,7 @@ pub fn under_arrow(
     }
     let up = matches!(arrow, Arrow::Up);
     match control {
-        // **A quarter beat either way**, which is the deck head's own arrows.
+        // Steps scrub by a quarter beat (`SCRUB_BEATS`).
         Control::Anchor => match view.inspector.get(item.wrapping_sub(1)) {
             Some(pane) => Asked::Emitted(Operation::ScrubDeck {
                 deck: pane.deck as u8,
@@ -365,9 +352,7 @@ pub fn under_arrow(
             }),
             None => Asked::Nothing("this pane is not drawn"),
         },
-        // **A tenth of the published range**, which is the trim's tenth read on
-        // a control whose range is declared rather than fixed — and the value
-        // it steps from is the pane's, for `view::ParamGrip`'s reason.
+        // Steps parameter by one tenth of its published range.
         Control::Param => param(view, item, through, nth, up),
         _ => Asked::Nothing(
             "this control's values are a closed list and a list has no axis — space cycles it",
@@ -401,9 +386,7 @@ fn param(view: &View, item: usize, through: usize, nth: usize, up: bool) -> Aske
     })
 }
 
-/// One press of a parameter key, as a fraction of what the control publishes —
-/// the trim's tenth read on a range that is declared rather than fixed.
-/// `Param::valued` clamps it, which is that method's own rule.
+/// Step increment for parameter adjustments as a fraction of published range.
 const PARAM_STEP: f32 = 0.1;
 
 /// A level the host steps, named here and stepped there.
@@ -424,10 +407,7 @@ fn level(view: &View, item: Option<usize>, control: Control, step: Step) -> Aske
             },
             false => Asked::Nothing("this console has no master out behind it to step"),
         },
-        // **The tempo the host steps is the one the grid is running**, read
-        // off the oscillator at the press rather than off the figure a frame
-        // drew — which is the three mix keys' own rule (ADR-0333). What the
-        // step is, is `karakuri/src/bridge/handlers.rs`'s `tempo_key`.
+        // Host steps current engine grid tempo (ADR-0333).
         Control::Tempo => match view.transport.is_some() {
             true => Asked::Stepped {
                 level: Level::Tempo,
@@ -601,10 +581,7 @@ fn lane_state(view: &View, lane: usize) -> Asked {
     }
 }
 
-/// `enter` on a lane: the lane, taken out of the pattern by the position it is
-/// drawn at — which is what the minus at the end of its row asks for. The lanes
-/// after it move up, which is what a lane index means
-/// (`karakuri_pattern::Pattern::remove`).
+/// Removes the specified lane from the active pattern (`Pattern::remove`).
 fn lane_removed(view: &View, lane: usize) -> Asked {
     let Some(seq) = view.sequencer.as_ref() else {
         return Asked::Nothing("this console has no pattern behind it");
@@ -618,9 +595,7 @@ fn lane_removed(view: &View, lane: usize) -> Asked {
     }
 }
 
-/// `space` on a cell: the step, named as the state it arrives at — and the
-/// stored slot rather than the drawn step, which is what keeps the payload
-/// independent of the mode.
+/// Cycles the sequencer step state at `(lane, nth)`.
 fn step_state(view: &View, lane: usize, nth: usize) -> Asked {
     let Some(seq) = view.sequencer.as_ref() else {
         return Asked::Nothing("this console has no pattern behind it");
@@ -751,16 +726,11 @@ pub fn act_of(view: &View, item: Option<usize>, control: Control) -> Asked {
 pub fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
     match act {
         Act::Load => Asked::Load,
-        // **The two chain acts arrive on the rung under a control**, where
-        // this function is reached from an *item*, so neither is asked here.
-        // The arms are `Addressed::Of`'s and `Addressed::InCard`'s in
-        // [`press`], which have the slot's position and the card's entry.
+        // Chain acts are handled under slot controls in `press`.
         Act::Remove | Act::Add => Asked::Nothing(
             "this is not the rung this act is on — press a digit to name a slot of the chain",
         ),
-        // **A lane is an item and taking it out is the item's own act**, so
-        // unlike the two chain acts above this one *is* reached here, with the
-        // lane's own number in hand.
+        // Removing a lane executes directly from the lane item.
         Act::RemoveLane => lane_removed(view, item.unwrap_or(1)),
         Act::Read => match view.rows().set(item.unwrap_or(1) - 1) {
             Some(id) => Asked::Emitted(Operation::ReadSet { id: id.to_owned() }),
@@ -797,32 +767,22 @@ pub fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
             },
             None => Asked::Nothing("this lane is not drawing that many rows"),
         },
-        // **Taking a parameter back is the third rung's**, because it needs
-        // the pane, the node and the row the address walked through — see
-        // [`under_enter`], which is the only caller that has all three.
+        // Parameter revert handled on parameter row via `under_enter`.
         Act::TakeBack => Asked::Nothing(
             "a parameter is taken back on the row that draws it — press a digit to name the \
              pane, the node and the row",
         ),
-        // **A card and its rows are reached on the control the card hangs
-        // from**, because both have the address to move and the card to put
-        // down or take away — see [`open_card`] and [`card_enter`], which
-        // [`press`] reaches before this function.
+        // Card open/point actions handled via `open_card` and `card_enter`.
         Act::Open | Act::Point => Asked::Nothing(
             "the chooser is reached in the Sequencer's head — press 0 and then the digit that \
              names + lane",
         ),
-        // **The Transport's two cards are reached on the row that draws
-        // them**, because each needs the pill the address descended through
-        // and the card to take away — see [`card_enter`], which [`press`]
-        // reaches before this function.
+        // Transport card actions handled via `card_enter`.
         Act::Attach | Act::Save | Act::Restore => Asked::Nothing(
             "this is a row of a card in the Transport — press enter on the pill that puts the \
              card down, then a digit to name the row",
         ),
-        // **The addressed strip is covered and the next one round arrives over
-        // it**, which is `karakuri-cli`'s `c` and the `go` capsule's own
-        // reading of *the next deck*.
+        // Initiates crossfade transition between adjacent decks.
         Act::Go => {
             let decks = view.mixer.len();
             if decks < 2 {

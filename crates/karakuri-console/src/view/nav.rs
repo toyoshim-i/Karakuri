@@ -30,8 +30,7 @@ impl View {
             return false;
         }
         let moved = self.selection() != deck;
-        // **The Mixer bay's remembered item, one-based**, which is the digit
-        // that names the strip: `1` is deck A. See [`crate::focus::Address`].
+        // Store one-based selection index in focus address.
         self.focus
             .address_mut(focus::MIXER)
             .remember(&[], usize::from(deck) + 1);

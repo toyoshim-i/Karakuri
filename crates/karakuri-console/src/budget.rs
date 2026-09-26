@@ -11,12 +11,9 @@ use std::time::Duration;
 /// ADR-0159, ADR-0190, ADR-0206, ADR-0210).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Declared {
-    /// The arrangement's name for the region that is declaring — `"transport"` and
-    /// `"mixer"` today, in that order, which is the order they are drawn down the
-    /// panel.
+    /// Arrangement name for the region (e.g. `"transport"`, `"mixer"`).
     pub region: &'static str,
-    /// What one update of this region costs, on the CPU. Today that is
-    /// [`PANEL_PASS`] for every region, and the constant says why.
+    /// Estimated CPU cost for one update of this region ([`PANEL_PASS`]).
     pub cost: Duration,
     /// Maximum allowed staleness in wall time before the region must be updated (ADR-0212).
     pub staleness: Duration,

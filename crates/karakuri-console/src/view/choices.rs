@@ -35,10 +35,7 @@ impl View {
                         param: param.param.clone(),
                     };
                     items.push(LaneChoice {
-                        // **The address and the published name**, which is the
-                        // mock's own way of naming this lane — *"L2:0 twist on
-                        // deck B"* — with the deck's letter and mark in front
-                        // of it so the item reads as the row it will make.
+                        // Target lane label formatted with deck and parameter name.
                         words: format!("{} {} {}", lane_label(&target), node.addr, param.name),
                         target,
                     });
@@ -52,8 +49,7 @@ impl View {
         }
     }
 
-    /// Whether the `+ lane` chooser's card is down — see [`View::lane_open`] the
-    /// field.
+    /// Returns whether the `+ lane` chooser card is currently open.
     pub fn lane_open(&self) -> bool {
         self.lane_open
     }

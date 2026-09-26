@@ -101,8 +101,7 @@ fn the_path_row_is_between_the_scopes_and_the_fields() {
         near(path.min.x, region.min.x) && near(path.max.x, region.max.x),
         "the row is the full width of the bay in the mock and is {path:?} here"
     );
-    // **The rule is inside the row**, which is what keeps the list's top where
-    // the arithmetic put it — the scope row above it is drawn the same way.
+    // The horizontal rule is drawn inside the path row bounds, aligning filters directly below.
     assert!(
         near(filters.min.y, path.max.y),
         "the filter row starts at {} where the path row ends at {}",

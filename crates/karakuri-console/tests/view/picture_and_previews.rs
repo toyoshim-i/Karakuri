@@ -21,17 +21,14 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
             rect.width(),
             rect.height()
         );
-        // **Whole pixels**, which is what makes the texture a blit rather than
-        // a resample: `physical` rounds, so a fractional rectangle is a
-        // texture of one size drawn into a box of another.
+        // Picture dimensions are rounded to whole pixels for 1:1 blitting.
         assert!(
             near(rect.width(), rect.width().round()) && near(rect.height(), rect.height().round()),
             "at {width} wide the picture is {}x{}, which is not a whole number of pixels",
             rect.width(),
             rect.height()
         );
-        // **Centred in the box the region leaves**, so the ground either side
-        // is equal — the same claim ADR-0170 makes about a cell in its track.
+        // Centered horizontally within the available region bounds (ADR-0170).
         let before = rect.min.x - (region.x + 9.0);
         let after = (region.x + region.w - 9.0) - rect.max.x;
         assert!(
@@ -100,10 +97,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
         dragged.height()
     );
 
-    // **And past a point the width is what answers instead** — a narrow window
-    // dragged tall, where the leftover is above and below rather than either
-    // side. A rule written for wide windows alone gets this one wrong in
-    // silence, because on screen it is still a picture in a bay.
+    // In narrow windows dragged tall, vertical bounds constrain width to maintain aspect ratio.
     let mut layout = solved(karakuri_layout::Rect {
         w: SMALLEST.w,
         h: 1400.0,
@@ -228,9 +222,7 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
             cell.min.y,
             region.y
         );
-        // The **image** ends where the caption band starts, and the caption
-        // ends where `.program-body`'s padding does — so the row fills the
-        // region less that pad, and the image is one term of the row.
+        // The preview image bounds exclude the 17px caption band and bottom padding.
         assert!(
             near(cell.max.y, region.y + region.h - 9.0 - 17.0),
             "cell {deck} ends at {} and the caption band starts at {}",
@@ -346,9 +338,7 @@ fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
         );
     }
 
-    // **1483 is the last window with a row in it and 1484 is the first
-    // without**, which is what makes the four widths above the four that are
-    // in this test's country rather than four that happen to pass (ADR-0239).
+    // Boundary transition: 1483px retains preview row; 1484px moves to column layout (ADR-0239).
     let row_at = |w: f32| {
         let panel = arranged(karakuri_layout::Rect { w, ..SMALLEST }, CANVAS);
         panel

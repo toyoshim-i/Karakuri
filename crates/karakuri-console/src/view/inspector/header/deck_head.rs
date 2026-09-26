@@ -375,13 +375,9 @@ pub(crate) fn deck_head_into(ui: &Ui, pal: &Palette, at: &DeckHead, pane: &Pane)
     }
 
     if let (Some(chips), Some(aimed)) = (at.aim, pane.aimed.as_ref()) {
-        // **Lit says somebody asked for this number**, and unlit says it is
-        // what the material declares for itself — which is what `.mini.sel`
-        // already means on this row for the fold beside it: the chip's two
-        // states answer *who chose this* rather than restating the number.
+        // Capacity chip is lit when explicitly overridden rather than using material default.
         word(chips.size, &aimed.capacity.to_string(), aimed.stated);
-        // **Never lit**, because a capsule that performs has no state to be in
-        // — the `keep` pill's arrangement two rows up.
+        // Re-salt action button is never armed.
         word(chips.salt, RE_SALT_LABEL, false);
     }
 

@@ -194,9 +194,7 @@ pub fn tracker_group(
 
     let mid = strip.center().y;
     let span_h = size::BASE * size::LINE;
-    // **Where the group's head ended.** The pill where the console has been
-    // told about audio, and the bar where it has not — [`arrangement`]'s own
-    // one-answer arrangement, read one item earlier in the same row.
+    // Anchor following the audio-in pill or the transport bar.
     let (after, gap) = match audio_in(ctx, layout, values, audio) {
         Some(pill) => (pill.pill.max.x, size::PILL_GAP),
         None => (row.bar.max.x, size::TRANSPORT_GAP),

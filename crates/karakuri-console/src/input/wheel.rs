@@ -8,14 +8,11 @@ use crate::view::{inspector, library, View};
 /// Routed by region (Library bay or Inspector pane, ADR-0312) rather than by control.
 /// Tests the full bay boundary using the current scrolled layout.
 pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
-    // Rule 1: a gesture in progress is not re-decided, and a wheel is not part
-    // of it. `claim` gives the event to the panel either way; what this says
-    // is that nothing scrolls.
+    // Active drags suppress wheel scrolling.
     if panel.dragging() {
         return None;
     }
-    // Rule 2, the same cards and choosers as [`claim`]: a hand
-    // mid-choice is not a hand on a pane.
+    // Modal overlays suppress underlying region wheel scrolling.
     if view.has_modal_overlay() {
         return None;
     }
@@ -46,8 +43,8 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
 /// Identifies which region a mouse wheel event targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Turned {
-    /// The `index`th Inspector pane — [`crate::view::View::scroll_by`].
+    /// Inspector pane at the given index.
     Pane(usize),
-    /// The Library bay's listing — [`crate::view::View::scroll_library_by`].
+    /// The Library bay listing.
     Library,
 }

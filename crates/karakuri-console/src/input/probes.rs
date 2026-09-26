@@ -124,10 +124,7 @@ pub const PROBES: [Probe; 39] = [
         claims: crate::view::AUTHORITIES.len(),
         ask: on_auth,
     },
-    // **The capsule at the right of the same head**, and the count is **one**
-    // for the renderer row's reason and not the authority chips': how many
-    // heads draw one is a property of the Set in the slot, where the three
-    // levels are a closed list this console owns.
+    // Capsule at right of node group head.
     Probe {
         name: "a node head's keep capsule",
         claims: 1,
@@ -219,8 +216,7 @@ pub const PROBES: [Probe; 39] = [
 pub struct Probe {
     /// Human-readable descriptor of what the derivation answers for, keyed by the host.
     pub name: &'static str,
-    /// How many controls a pointer reaches through this one derivation, and what
-    /// [`CONTROLS`] is a sum of.
+    /// Number of distinct controls handled by this probe.
     pub claims: usize,
     /// Derivation testing whether the point hits this control given panel layout, egui ctx, and view.
     pub ask: fn(&Panel, &egui::Context, &View, Point) -> bool,
@@ -232,7 +228,7 @@ const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 2) + 1 + karakuri
 /// Total number of hit-testable controls across all [`PROBES`].
 pub const CONTROLS: usize = summed(&PROBES);
 
-/// [`PROBES`]' claims added up in a `const`, which `Iterator::sum` is not.
+/// Sums claims across all probes in a const context.
 const fn summed(probes: &[Probe]) -> usize {
     let mut total = 0;
     let mut at = 0;

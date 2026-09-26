@@ -315,9 +315,7 @@ fn a_press_opens_exactly_one_class_and_leaves_the_other_three_shut() {
     }
 }
 
-/// A second press shuts it, and puts the opening back exactly as it was — the
-/// other half of the page's own sentence, *"Click to open the class; click
-/// again to shut it."*
+/// A second press closes the class and restores the previous open state.
 #[test]
 fn a_second_press_shuts_it_and_leaves_the_rest_alone() {
     let (panel, ctx) = console(PLAUSIBLE);

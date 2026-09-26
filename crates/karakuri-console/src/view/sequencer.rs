@@ -153,10 +153,7 @@ pub fn sequencer(
     if track_x >= right {
         return None;
     }
-    // **The minus is at the far end of every lane's row**, where the chain
-    // slot's sits on its head line: one column of glyphs against the bay's own
-    // padding, so the track is what is left between the label and it
-    // (ADR-0352).
+    // Minus button sits at the far end of each row (ADR-0352).
     let minus_w = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             super::master::REMOVE_GLYPH.to_owned(),
@@ -173,9 +170,7 @@ pub fn sequencer(
     let count = mode.count();
     let gaps = size::SEQ_CELL_GAP * (count as f32 - 1.0);
     let cell_w = (track_right - track_x - gaps) / count as f32;
-    // **A cell with no width is no control**, which is `master`'s own refusal
-    // one bay up: a bay narrow enough that the label and the track meet has
-    // nothing to draw sixteen cells in, and half a grid is worse than none.
+    // Positive cell width is required to fit the grid.
     if cell_w <= 0.0 {
         return None;
     }
@@ -208,23 +203,16 @@ pub fn sequencer(
         });
         y += size::SEQ_CELL_H + size::SEQ_BODY_GAP;
     }
-    // **The bay is clipped rather than half drawn.** A bay too short for the
-    // rows it has is `master`'s refusal again: what would be drawn is a lane
-    // over the card's own edge, and a cell a press could not reach.
+    // Bay is clipped if too short for its rows.
     let bottom = match rows.is_empty() {
         true => body_top,
         false => y - size::SEQ_BODY_GAP,
     };
-    // **And the rows clear the foot**, which is the same refusal read against
-    // the pill instead of against the card's edge: the `+ lane` press is a
-    // control and a lane drawn over it is a control a hand cannot reach.
+    // Ensure rows clear the add button at the foot.
     if bottom > add.min.y - size::SEQ_STACK_GAP {
         return None;
     }
-    // **The playhead is one column over every row**, which is `.seq-play`'s
-    // `position: absolute; inset: 0`: it is the body's height and the cell's
-    // width, and it is drawn under nothing — `pointer-events: none`, so it
-    // claims no press.
+    // Playhead spans all rows at current step.
     let playhead = reading
         .step
         .filter(|_| !rows.is_empty())
@@ -276,18 +264,14 @@ fn lane_card(
         .iter()
         .map(|item| width(&item.words))
         .fold(size::ROW_MENU_MIN_W, f32::max);
-    // **The rule is drawn only where it divides two things**, which is what
-    // makes it a separator rather than a line: a list of faders alone and a
-    // list of parameters alone each have one kind in them.
+    // Rule separator is drawn only when dividing both faders and parameters.
     let ruled = choices.faders > 0 && choices.faders < choices.items.len();
     let rule_h = match ruled {
         true => size::ROW_MENU_RULE_H,
         false => 0.0,
     };
     let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * choices.items.len() as f32 + rule_h;
-    // **Held inside the console**, which is the two Library cards' own rule:
-    // `held_inside` clamps the left edge, so a card wider than the room it
-    // stands in comes back into the window rather than off it.
+    // Clamp left edge so the card stays within the console viewport.
     let card = held_inside(
         &viewport,
         add.max.x - (widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0),
@@ -363,15 +347,9 @@ impl Sequencer {
                 return Some(Operation::SetStep {
                     pattern: self.bank as u8,
                     lane: index as u8,
-                    // **The stored slot and not the drawn step**, which is
-                    // what keeps the payload independent of the mode: at an
-                    // eighth this sends `2k`, so a step press and a mode press
-                    // cannot race into an address that means two things.
+                    // Address by stored slot so payload is independent of mode.
                     step: row.slots[cell] as u8,
-                    // **A state and never a flip**, which is the cell's own
-                    // rule: the press asks for that step to be on, or for it
-                    // to be off, and a control that could only flip has no way
-                    // to arrive.
+                    // Explicitly toggle step state on press.
                     on: !row.on[cell],
                 });
             }
@@ -382,9 +360,7 @@ impl Sequencer {
                     muted: !row.muted,
                 });
             }
-            // **The minus takes the lane out**, addressed by the position it is
-            // drawn at: the lanes after it move up, which is what a lane index
-            // means (ADR-0352's own property, one bay along).
+            // Remove lane at index (ADR-0352).
             if row.remove.contains(at) {
                 return Some(Operation::RemoveLane {
                     pattern: self.bank as u8,
@@ -396,9 +372,7 @@ impl Sequencer {
             .contains(at)
             .then_some(Operation::SetPatternGrid {
                 pattern: self.bank as u8,
-                // **The other of the two, named**: the cycle is the surface's
-                // affordance and the operation carries where it arrived
-                // (P-0090).
+                // Toggle between 1/16 and 1/8 step grid modes (P-0090).
                 grid: match self.mode {
                     StepMode::Sixteenth => StepMode::Eighth,
                     StepMode::Eighth => StepMode::Sixteenth,
@@ -428,9 +402,7 @@ impl Sequencer {
 /// Paints the sequencer bay, including mode pill, ruler, playhead, and lane cells.
 pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
     let painter = ui.painter();
-    // **The playhead first**, which is what `.seq-play` sitting before the
-    // rows in the mock's markup means once the rows are opaque: a wash under
-    // the cells rather than over them.
+    // Paint playhead wash underneath cells.
     if let Some(column) = bay.playhead {
         painter.rect_filled(
             column,
@@ -455,9 +427,7 @@ pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
         galley,
         pal.dim,
     );
-    // **The ruler's four numbers**, centred over the cell each group starts.
-    // The groups are the bar's beats, so this is the count of beats and not of
-    // cells — `Transport::grid`'s four, arrived at from the other side.
+    // Ruler beat numbers centered over starting cells for each group.
     let cells = bay.rows.first().map(|row| row.cells.len()).unwrap_or(0);
     if cells > 0 {
         let per_beat = (cells / RULER_GROUPS).max(1);
@@ -502,9 +472,7 @@ pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
             galley,
             ink,
         );
-        // **The minus, in the faint ink the chain slot's is drawn in** — it is
-        // an act rather than a state, so it is never armed and never lit, and a
-        // muted row dims it with everything else on the row.
+        // Minus glyph painted in faint ink.
         let glyph = painter.layout_no_wrap(
             super::master::REMOVE_GLYPH.to_owned(),
             FontId::new(size::BASE, FontFamily::Proportional),
@@ -540,8 +508,7 @@ pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
             }
         }
     }
-    // **The foot's `+ lane`**, an ordinary `.pill`: it is an act and not a
-    // state, so it is never armed — the mock draws it plain beside a `.sep`.
+    // Foot `+ lane` pill.
     pill_into(ui, pal, bay.add, ADD_LANE, false);
 }
 

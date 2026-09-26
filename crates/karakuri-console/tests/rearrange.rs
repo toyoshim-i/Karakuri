@@ -54,7 +54,7 @@ fn set_aside(panel: &Panel) -> bool {
 /// Crossing width boundaries shifts cell layout and transfers row height to the program view.
 #[test]
 fn the_bay_rearranges_at_the_crossover() {
-    // **Below**, and the row is where the arrangement put it.
+    // Below crossover: previews row is positioned below picture.
     let panel = at(BELOW);
     assert_eq!(placement(&panel), Placement::Below);
     assert!(
@@ -75,8 +75,7 @@ fn the_bay_rearranges_at_the_crossover() {
     assert_sane(panel.layout());
     assert_within_bounds(panel.layout());
 
-    // **One pixel of window later, beside** — and the same three things the
-    // other way round.
+    // Above crossover: previews row is placed beside picture.
     let panel = at(BESIDE);
     assert_eq!(placement(&panel), Placement::Beside);
     assert!(
@@ -131,10 +130,7 @@ fn the_bay_rearranges_at_the_crossover() {
     );
     assert!(wide.width() * wide.height() > below.width() * below.height() * 1.5);
 
-    // **The picture is inside the region it is clipped to**, in both. Beside,
-    // that region is the whole bay — the row is not in the layout to divide it
-    // — and a picture drawn from the bay while the region was still 298 tall
-    // would be clipped through the middle by `View::draw`.
+    // Picture rectangle is contained within its clipped region in both placements.
     for panel in [at(BELOW), at(BESIDE)] {
         let rect = picture_rect(panel.layout(), CANVAS).expect("on screen");
         let region = rect_of(panel.layout(), "program-view");
@@ -226,9 +222,7 @@ fn a_folded_picture_keeps_the_row_below_it_at_every_width() {
         );
         assert_eq!(placement(&panel), Placement::Below);
 
-        // **The bay is the row's 89 and not zero**, which is ADR-0174's answer
-        // unchanged: the picture gave its height to the inspector and the row
-        // kept its own.
+        // Program bay retains previews row height (89px) with picture folded (ADR-0174).
         let bay = rect_of(panel.layout(), "program");
         assert!(
             near(bay.h, 89.0),
@@ -337,8 +331,7 @@ fn folding_the_row_works_in_both_arrangements() {
             picture.size()
         );
 
-        // **And `Op::Unfold` brings it back to the arrangement the width asks
-        // for**, which is the same one it left.
+        // Unfold restores original arrangement based on window width.
         assert!(matches!(
             panel.op(Op::Unfold(row)),
             Outcome::Folded { folded: false, .. }

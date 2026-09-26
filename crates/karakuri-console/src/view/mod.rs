@@ -23,9 +23,7 @@ use crate::room::{size, Palette, Room};
 
 mod transport;
 
-// **The one symbol Transport keeps crate-internal rather than exporting**:
-// `next_tonemap` backs [`crate::focus`]'s own cycling of the same control,
-// which needs the derivation and not the row.
+// Internal helper used by `focus` to cycle tone mapping modes.
 pub(crate) use transport::next_tonemap;
 
 /// Transport bay module re-exports (ADR-0121).
@@ -67,9 +65,7 @@ pub use inspector::{
     ParamGrip, Renderer, SensChip, SlotMcpPill, Source, Uses, UsesLine, AUTHORITIES, PANES,
     PANE_DECKS, PANE_NAMES, RE_SALT_LABEL, SCRUB_BEATS, SENS_LABEL, SYNCS, TAKE_BACK,
 };
-// **The symbol Inspector keeps crate-internal rather than exporting**:
-// `next_sync` backs [`crate::focus`]'s own cycling of the deck head's sync
-// chip, which needs the derivation and not a second copy of it.
+// Internal helper used by `focus` to cycle deck head sync state.
 pub(crate) use inspector::next_sync;
 
 mod program;
@@ -171,145 +167,93 @@ impl View {
     pub fn new(room: Room) -> View {
         View {
             room,
-            // **A console with no engine behind it has no projector window**,
-            // which is every test in this crate and every frame before
-            // whoever owns the window has said otherwise.
+            // Projector window initially inactive.
             projector: false,
             plugin: false,
             plugin_available: false,
             plugin_name: None,
             picture: None,
             previews: [None; DECKS],
-            // Nothing is stopped on a console with no engine behind it, which
-            // is every test in this crate.
+            // Overloaded state per deck, initialized to false.
             overloaded: [false; DECKS],
             costs: [None; DECKS],
             transport: None,
-            // The default arrangement, nothing filed and the menu shut, which
-            // is every test in this crate and is a console with no store
-            // behind it.
+            // Default empty arrangement.
             arrangement: Arrangement::NONE,
-            // Nobody has said anything about audio, which is every test in
-            // this crate: no pill at all, rather than one reading `none` on
-            // this crate's own authority. See the field.
+            // Audio input configuration unassigned.
             audio: None,
-            // **Never armed at start-up**, which is the state every mode on
-            // this panel opens in for P-0094's reason: a console that came up
-            // in a mode nobody chose would rebind the first knob touched.
+            // Learn mode disarmed by default (P-0094).
             learn: false,
-            // Nobody has said, which draws no pill — [`View::map`].
+            // MIDI mapping unset.
             map: None,
-            // And nothing said about the beat tracker, which is the same
-            // console from the other side: no offset, no tap and no octave.
+            // Beat tracker unconfigured.
             tracker: None,
-            // No engine behind the console, so there is no look to draw — the
-            // transport's own answer, one group along.
+            // Look exposure and tone mapping unconfigured.
             look: None,
-            // And no level at the other end of the same chain, for the same
-            // reason: the Master bay draws its head and nothing under it.
+            // Master out level unconfigured.
             master_out: None,
             master_chain: None,
             master_chain_building: false,
-            // Nothing to add, which is a console whose library has listed no
-            // `kind L5` procedure — every test in this crate that does not
-            // hand one in.
+            // Available chain effect procedures.
             chain_add: Vec::new(),
-            // As many strips as a deck can ever have, so the frame path never
-            // grows it — the same reason `placed` is built with a capacity.
+            // Pre-allocate mixer strips up to DECKS capacity.
             mixer: Vec::with_capacity(DECKS),
             mixer_dirty: false,
-            // Nothing until somebody lists a store, which is every test in
-            // this crate. No capacity is reserved: how many Sets a store holds
-            // is not a number this crate has, and the list is written once
-            // rather than per frame.
+            // Library listing rows.
             library: Vec::new(),
             kinds: Vec::new(),
-            // **Nothing starred**, which is a console with no store behind it
-            // and is every test in this crate that does not say otherwise —
-            // `View::library`'s rule one field down.
+            // Starred item set initially empty.
             starred: std::collections::BTreeSet::new(),
-            // **And no Set aimed at**, which is a console with no engine behind
-            // it and is also where every real run starts: a slot plays the pair
-            // the command line settled until somebody loads a Set (ADR-0304),
-            // so a walk asked for before that names no Set and lists nothing.
+            // Target Set identifier unset (ADR-0304).
             aimed: None,
-            // And nothing said about what libraries there are, which is the
-            // same console from the other side: no chips, and so no scope
-            // row. Room for the four the mock draws, so a host that says so
-            // at startup does not grow it — `mixer`'s reason, one row up.
+            // Pre-allocate scope chips.
             scopes: Vec::with_capacity(Scope::ALL.len()),
             // Holds filter criteria; unallocated until configured by store metadata.
             holds: Vec::new(),
             // Active folder path or incoming drag payload.
             folder: None,
             incoming: None,
-            // Neither field set, which is the whole library rather than a
-            // narrowed one — where a run begins, and every test in this crate
-            // that does not say otherwise.
+            // Filter criteria unselected.
             holds_at: None,
             showing: LibraryKinds::EVERYTHING,
-            // **No head asking for a name**, which is where a run starts and
-            // is every test in this crate that does not say otherwise: the two
-            // pane heads are readouts until a hand lands on one of them.
+            // Active deck name prompt unset.
             naming: None,
-            // Every pane at the top of what its deck holds, which is where a
-            // run starts and is every test in this crate that does not turn a
-            // wheel.
+            // Pane scroll offsets initialized to top.
             scroll: [0.0; PANES],
-            // **Deck A in the first pane and deck B in the second**, which is
-            // the mock's two heads and is what this console showed before the
-            // pulldown existed: the host filled pane `n` from slot `n`, and
-            // that arrangement is now a *default* rather than a rule.
+            // Default pane deck bindings (pane 0 -> deck A, pane 1 -> deck B).
             pane_deck: PANE_DECKS,
-            // **No pulldown down**, which is where a run starts and is every
-            // test in this crate that does not open one.
+            // Pulldown menu closed.
             pane_open: None,
             // Pre-allocated for max deck slots to avoid frame reallocations.
             staging: Vec::with_capacity(DECKS),
-            // As many panes as the inspector has, so the frame path never
-            // grows it — the same reason `mixer` is built with a capacity.
+            // Pre-allocate inspector panes up to PANES capacity.
             inspector: Vec::with_capacity(PANES),
             canvas: MOCK_CANVAS,
-            // Four classes shut, which is the run ADR-0235 describes and is
-            // also a console nobody has handed an opening to.
+            // Bay opening state defaulted to closed (ADR-0235).
             opening: Open::CLOSED,
             slot_policies: [SlotPolicy::Auto; DECKS],
             phase: Phase::ZERO,
             // Initial focus defaults to the first reachable bay in traversal order.
             focus: Focus::default(),
-            // **Deck A, and it is a third mark rather than a copy of the
-            // first.** Both start on A because that is where the mock draws
-            // both, and nothing keeps them together after that: `select` moves
-            // one and `aim_at` moves the other.
+            // Target deck index initially 0 (deck A).
             target: 0,
-            // **Shut**, which is not a fourth mark: a list is down or it is
-            // not there, and the pulldown draws the same either way.
+            // Target pulldown closed.
             target_open: false,
             wiring_open: None,
-            // **Shut**, for the reason the pulldown's list is: the `+ lane`
-            // pill draws the same whether its card is down or not.
+            // Lane chooser card closed.
             lane_open: false,
             chain_add_open: false,
-            // **No menu**, which is not a mark either, for the reason above
-            // it: a card is down on a row or there is no card.
+            // Row context menu closed.
             menu_row: None,
-            // **The top of the listing**, which is where every bay starts and
-            // the one position a console with no store behind it can be at.
+            // Library scroll offset initialized to top.
             library_scroll: 0.0,
-            // **Nothing open**, which is not a fourth mark: a reading is a
-            // block of rows or it is not there, and the chip that opens one
-            // draws the same either way — `PARAMS_PILL`.
+            // Inspection reading details closed.
             reading: None,
-            // No shape, the next bar and four beats — where a run begins, and
-            // `karakuri-cli`'s own opening state. Not a reading of anything
-            // either, for the three above's reason.
+            // Transition defaults to start settings.
             transition: TransitionSettings::START,
-            // **Nothing said about a sequencer**, which is a console with no
-            // session behind it and draws no ruler, no rows and no head —
-            // `View::mixer`'s empty list one bay along, in the `Option` shape
-            // `View::transport` uses for the same seam.
+            // Sequencer unconfigured.
             sequencer: None,
-            // Every region the console has, so the frame path never grows it.
+            // Pre-allocate region layout cache up to REGIONS capacity.
             placed: Vec::with_capacity(REGIONS.len()),
         }
     }

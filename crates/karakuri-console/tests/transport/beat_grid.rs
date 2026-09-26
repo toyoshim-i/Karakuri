@@ -145,9 +145,7 @@ fn the_light_is_a_pure_function_of_the_position() {
     assert_eq!(beat_at(1.5, 0, 4), 0.0);
     assert_eq!(beat_at(1.5, 3, 4), 0.0);
 
-    // **Round the cycle.** Between the last dot and the first, which is one
-    // pitch and not three: the light leaves the right-hand end and arrives at
-    // the left in the same instant.
+    // Wrap-around between last dot and first.
     assert!(near(beat_at(3.5, 3, 4), 0.5));
     assert!(
         near(beat_at(3.5, 0, 4), 0.5),
@@ -157,9 +155,7 @@ fn the_light_is_a_pure_function_of_the_position() {
     assert_eq!(beat_at(3.5, 1, 4), 0.0);
     assert_eq!(beat_at(3.5, 2, 4), 0.0);
 
-    // **The grid's total light is constant**, walked round a whole bar: the
-    // row does not brighten and dim as the light travels, so a still grid at
-    // half brightness is not a picture this can draw and a stop is visible.
+    // Constant total grid illumination across a full bar walk.
     for step in 0..=64 {
         let at = step as f32 / 64.0 * 4.0;
         let total: f32 = (0..4).map(|index| beat_at(at, index, 4)).sum();
@@ -303,8 +299,7 @@ fn between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it() {
             .collect();
         assert_eq!(dots.len(), 4, "beat {beats} drew {} dots", dots.len());
 
-        // **Two dots between the two colours**, and they are the two the
-        // light is between.
+        // The two active dots interpolate between idle and active colors.
         let between: Vec<egui::Rect> = dots
             .iter()
             .filter(|(_, fill)| *fill != pal.line && *fill != pal.pink)
@@ -320,9 +315,7 @@ fn between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it() {
         assert!(between.contains(&row.dot(pair.0)) && between.contains(&row.dot(pair.1)));
         assert!(near(row.lit(pair.0), 0.5) && near(row.lit(pair.1), 0.5));
 
-        // **Two halos**, one under each, and each of them fainter than the
-        // one a whole beat draws — the light is spread across the two rather
-        // than lit twice over.
+        // Two halos are drawn with reduced intensity spread across both dots.
         let halos: Vec<&egui::epaint::RectShape> = painted
             .iter()
             .filter(|rect| rect.blur_width > 0.0)

@@ -256,9 +256,7 @@ fn a_press_after_scrolling_lands_on_the_row_now_under_it() {
         "a row scrolled up under the heads took a press where it is not drawn"
     );
 
-    // **And the rule that routes a press says the same**, off the same
-    // derivation: `input::claim` asks `InspectorPane::owns`, which is `grip`,
-    // so a press where that knob is drawn nowhere is not the panel's at all.
+    // Input claim routing delegates to grip ownership, rejecting scrolled-out knobs.
     let mut panel = console(SMALLEST);
     let view = view_at(&pane, size::NODE_HEAD_H + size::PARAM_H * 1.5);
     let ctx = drawn_once();

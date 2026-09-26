@@ -12,23 +12,17 @@ pub mod table;
 
 pub use table::*;
 
-/// One control that explains itself on hover: its identity, where its words are
-/// in the mock, and the derivation that says the pointer is on it.
+/// A tipped control: its identifier name, mock citation, and hit-test function.
 pub struct Tipped {
-    /// The control's name, in the words [`crate::input::PROBES`] uses for the row
-    /// it belongs to. It is what a test and a reader address this row by, and it is
-    /// never drawn.
+    /// Control identifier matching [`crate::input::PROBES`].
     pub control: &'static str,
-    /// Where this control's words are in the mock.
+    /// Citation location in mock documentation.
     pub cites: Cite,
-    /// The derivation that draws the control, asked whether the point is on it, and
-    /// nothing is stored — [`crate::input::Probe::ask`]'s signature and its rule,
-    /// one question finer.
+    /// Hit-test function determining if a point lies within the control.
     pub at: fn(&Panel, &egui::Context, &View, Point) -> bool,
 }
 
-/// Every tipped control, flattened out of [`TIPS`] in the order [`resolve`]
-/// asks them.
+/// Iterates over every tipped control in resolution order.
 pub fn flat() -> impl Iterator<Item = &'static Tipped> {
     TIPS.iter().flat_map(|(_, tips)| tips.iter())
 }

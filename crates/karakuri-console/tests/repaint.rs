@@ -107,10 +107,7 @@ fn a_still_panel_asks_for_no_repaint() {
         Repaint::Never
     );
 
-    // A key that asked a console pointer to move and found it already at the
-    // end of what it can point at — the library cursor on the last row it was
-    // listed, or the deck selection on a deck the mixer has no strip for. The
-    // press reached the console and the console draws exactly what it drew.
+    // Navigation inputs hitting boundary limits emit Pointed(false), requiring no repaint.
     assert_eq!(Change::Pointed(false).repaint(), Repaint::Never);
 
     // And `egui` itself, on a pass that wanted nothing.
@@ -167,9 +164,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
         "an unfold that brought a folded split back"
     );
 
-    // **The two directions the Outputs dot asks for**, which is the path that
-    // has no key behind it: a control that changed the arrangement and reached
-    // no repaint is a picture still on screen with the sink dark beside it.
+    // Outputs dot operations toggle picture fold/unfold, triggering immediate repaints.
     assert_eq!(
         Change::Operated(&did(&mut panel, Op::Fold(picture))).repaint(),
         Repaint::Now,
@@ -246,10 +241,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
 
     assert_eq!(Change::Room.repaint(), Repaint::Now, "the room toggled");
 
-    // **A wheel that scrolled an Inspector pane.** Nothing in the arrangement
-    // moved and no operation was emitted — it is the console's own eighth
-    // pointer, exactly as the library cursor is — so nothing else on this list
-    // would have answered for it (ADR-0307).
+    // Inspector pane wheel scrolling triggers repaint (ADR-0307).
     assert_eq!(
         Change::Wheeled(Claim::Panel, true).repaint(),
         Repaint::Now,

@@ -390,10 +390,7 @@ fn a_row_the_body_does_not_reach_is_not_pressable() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
     let (at_pane, boxes) = chips(&panel, &ctx, 0, &pane);
-    // **Cut between the group's head and its renderer row.** The group is
-    // still drawn — its head is inside the body — so `InspectorPane::drawn`
-    // has nothing to say about these points and what refuses them is the body
-    // rectangle itself.
+    // Body clipped between group head and renderer row, verifying body bounds rejection.
     let row = row_of(at_pane.group(&pane.nodes, 0));
     let clipped = InspectorPane {
         body: egui::Rect::from_min_max(at_pane.body.min, egui::pos2(at_pane.body.max.x, row.min.y)),

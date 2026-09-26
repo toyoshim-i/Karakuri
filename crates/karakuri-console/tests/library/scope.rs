@@ -241,8 +241,7 @@ fn the_foot_says_which_deck_a_press_would_land_on() {
             )),
             "the load is aimed at deck {deck} and the foot does not read `{want}`: {drawn:#?}"
         );
-        // **And the word is still beside it**, so a letter drawn alone in an
-        // empty foot cannot pass this.
+        // Target deck letter is displayed alongside the load label in the foot.
         assert!(
             drawn.iter().any(|shape| matches!(
                 shape,
@@ -252,9 +251,7 @@ fn the_foot_says_which_deck_a_press_would_land_on() {
         );
     }
 
-    // **The other mark, moved on its own.** The keys go to deck C and the load
-    // stays aimed at deck A, which is the state the readout this replaced
-    // could not be in: the letter must not follow the ring.
+    // Focus selection and load target deck operate independently.
     assert!(view.aim_at(0), "the load did not come back to deck A");
     assert!(view.select(2), "the selection did not move to deck C");
     let drawn = shapes_inside(&mut view, &mut panel, bay.foot);
@@ -346,8 +343,7 @@ fn a_press_on_load_asks_for_the_deck_the_pulldown_names() {
         "asking for the load moved the deck selection"
     );
 
-    // **A library that lists nothing has no Set to load**, and the button is
-    // still drawn because the foot is what the count is in.
+    // Load button is still rendered in foot when library has no sets.
     let empty =
         library(panel.layout(), SCOPES, &[], None, None, 0.0).expect("the bay draws its foot");
     let load = empty.load(&ctx, at);
@@ -458,8 +454,7 @@ fn the_pulldown_offers_the_decks_the_mixer_is_drawing_and_no_others() {
         "a refused pick put the list away, so the refusal reads as a pick"
     );
 
-    // **A console with no deck behind it**, which is every other test in this
-    // file: there is nothing to offer, so there is no list to put down.
+    // When no decks are configured, no pulldown options are offered.
     let mut bare = View::new(Room::Day);
     bare.library = mock();
     bare.scopes = Scope::ALL.to_vec();

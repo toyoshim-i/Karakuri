@@ -27,8 +27,7 @@ pub struct Tips {
 }
 
 impl Tips {
-    /// Parse the page. At start-up and never on a frame: it walks 340 KB once and
-    /// allocates one `String` per tip (P-0091).
+    /// Parses tips from the embedded manual page (P-0091).
     pub fn read() -> Tips {
         let elements = elements(PAGE);
         let words = crate::hover::flat()
@@ -43,25 +42,22 @@ impl Tips {
         Tips { words }
     }
 
-    /// The words for one control, by its index in [`crate::hover::flat`].
+    /// Returns the decoded tip text for the specified probe index.
     pub fn get(&self, index: usize) -> Option<&str> {
         self.words.get(index)?.as_deref()
     }
 
-    /// How many tips were asked for, which is [`crate::hover::flat`]'s length.
+    /// Returns the total number of registered tips.
     pub fn len(&self) -> usize {
         self.words.len()
     }
 
-    /// Whether nothing was asked for at all, which would mean [`crate::hover::TIPS`] is empty —
-    /// `Tips` is never empty in this crate and `clippy` asks for this beside
-    /// [`Tips::len`].
+    /// Returns true if no tips are registered.
     pub fn is_empty(&self) -> bool {
         self.words.is_empty()
     }
 
-    /// Every control whose [`Cite`] resolved to nothing, by index. Empty on a page
-    /// and a table that agree.
+    /// Returns an iterator of indices whose [`Cite`] failed to resolve.
     pub fn missing(&self) -> impl Iterator<Item = usize> + '_ {
         self.words
             .iter()
@@ -99,8 +95,7 @@ pub fn elements(page: &str) -> Vec<Element<'_>> {
             .map(|end| open + 1 + end)
             .unwrap_or(page.len());
         let name = &page[open + 1..name_end];
-        // The opening tag's own end, found with quotes honoured: an attribute
-        // value may hold a `>` and the page's `style` attributes do.
+        // Opening tag end respecting quoted attribute values.
         let Some(tag_end) = unquoted(page, name_end, '>') else {
             from = at + 1;
             continue;
@@ -169,9 +164,7 @@ fn inner_of<'a>(page: &'a str, name: &str, from: usize) -> &'a str {
     &page[from..]
 }
 
-/// An element's text: its tags removed and its runs of whitespace collapsed to
-/// one space. The page's own entities are left as they are, because a [`Cite`]
-/// quotes the markup.
+/// Strips markup tags and collapses whitespace, preserving HTML entities.
 fn text_of(inner: &str) -> String {
     let mut out = String::new();
     let mut inside = false;
@@ -194,10 +187,7 @@ fn text_of(inner: &str) -> String {
     out
 }
 
-/// The named entities the mock uses, and nothing else: an entity that is not
-/// here comes out of [`decode`] unchanged and `tests/hover.rs` fails naming it,
-/// so the day the page uses a sixteenth this stops reading rather than reading
-/// wrongly.
+/// Named HTML entities supported from the manual markup.
 const NAMED: [(&str, &str); 15] = [
     ("&mdash;", "\u{2014}"),
     ("&ndash;", "\u{2013}"),

@@ -25,10 +25,7 @@ fn boundary(p: &Panel, split: NodeId, index: usize) -> Option<f32> {
     Some(axis.origin(p.layout().boundary(split, index)?))
 }
 
-/// A point in the middle of a boundary's gap — what a hand aims at, and what a
-/// test with no hand presses instead. A test affordance, which is why it is
-/// here: the panel does not need it and neither does a view, since a view has a
-/// pointer and gets the gap to draw from `Layout::boundary`.
+/// Test helper returning the center point within a boundary's gap.
 fn grab_point(p: &Panel, split: NodeId, index: usize) -> Option<Point> {
     let gap = p.layout().boundary(split, index)?;
     Some(Point::new(gap.x + gap.w / 2.0, gap.y + gap.h / 2.0))
@@ -323,10 +320,7 @@ fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
             .count()
     };
 
-    // **The pointer resolves to a target and the operation names it.** The
-    // cursor is set above and `under` is what a surface asks; the assertion is
-    // the same one it always was — `f` folds the region under the pointer —
-    // with the two halves of that sentence now in the two places they belong.
+    // The hover target resolves to the leaf node, which the fold operation targets.
     assert_eq!(p.under(), Hit::View(leaf.0), "the pointer lost its region");
     assert_eq!(
         p.op(Op::Fold(leaf.0)),

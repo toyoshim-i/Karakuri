@@ -48,8 +48,7 @@ pub(crate) fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
     if !fader.knob.contains(p) {
         return None;
     }
-    // Which end is zero is [`filled`]'s rule, read backwards: a row fills from
-    // the left and a column from the **bottom**, because a fader stands up.
+    // A row fills from the left and a column fills from the bottom.
     let (zero, edge, coord) = match fader.axis {
         Axis::Row => (fader.fill.min.x, fader.fill.max.x, p.x),
         Axis::Column => (fader.fill.max.y, fader.fill.min.y, p.y),
@@ -211,8 +210,7 @@ pub(crate) fn gradient(
         return;
     }
     let painter = painter.with_clip_rect(rect);
-    // `90deg` runs left to right and `0deg` runs **up**, so a column's `from`
-    // is at the bottom — which is also where its zero is.
+    // Gradients run left-to-right for rows, and bottom-to-top for columns.
     let colour_at = |p: Pos2| match axis {
         Axis::Row => match p.x <= rect.center().x {
             true => from,

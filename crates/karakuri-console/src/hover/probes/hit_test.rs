@@ -198,10 +198,7 @@ pub(crate) fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
     })
 }
 
-/// The mark and not the card, where `input`'s row answers for both: a tip
-/// explains a control an operator is pointing at, and while the card is down
-/// the hover layer is not what the next press is about — `claim`'s rule 2 has
-/// already taken it.
+/// Hit-tests whether point `p` falls on an inspector pane target mark.
 pub(crate) fn on_pane_target(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
@@ -234,9 +231,7 @@ pub(crate) fn on_size(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
     on_head(panel, ctx, view, |head| head.resized(p).is_some())
 }
 
-/// The `re-salt` capsule. There is no state in which it is drawn and inert, so
-/// this is `hit_salt` and `re_salted` at once; it is the latter for the chip
-/// above's reason and for the press handler's.
+/// Hit-tests the deck head `re-salt` capsule via `DeckHead::re_salted`.
 pub(crate) fn on_salt(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.re_salted(p).is_some())
 }
@@ -377,9 +372,7 @@ pub(crate) fn on_scope_history(panel: &Panel, ctx: &egui::Context, view: &View, 
     on_scope(panel, ctx, view, p, Scope::History)
 }
 
-/// One scope chip, told from the four beside it by the chip the bay says the
-/// pointer is on — `LibraryBay::chip`'s own answer, which carries the scope
-/// beside the operation, rather than a second walk of the row.
+/// Hit-tests whether point `p` falls on the specified scope chip.
 pub(crate) fn on_scope(
     panel: &Panel,
     ctx: &egui::Context,
@@ -420,10 +413,7 @@ pub(crate) fn on_kind_sets(panel: &Panel, ctx: &egui::Context, view: &View, p: P
     on_kind(panel, ctx, view, p, KindChip::Sets)
 }
 
-/// One kind chip, told from the five beside it by the chip the bay says is at
-/// that point — `LibraryBay::kind_chips` is the same walk the paint makes and
-/// the same one a press is resolved against, so a tip and a press cannot land
-/// on two different chips.
+/// Hit-tests whether point `p` falls on the specified kind chip.
 pub(crate) fn on_kind(
     panel: &Panel,
     ctx: &egui::Context,
@@ -440,10 +430,7 @@ pub(crate) fn on_kind(
     })
 }
 
-/// A row's badges, which is the one readout in this bay's list: nothing is
-/// pressed there, and the tip is what says so and what the words mean. Asked of
-/// the rows the bay is drawing, so a badge under the pointer is a badge on
-/// screen.
+/// Hit-tests whether point `p` falls on any item badges in the library listing.
 pub(crate) fn on_badges(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     let at = Pos2::new(p.x, p.y);
     library_bay(panel, view).is_some_and(|bay| {
@@ -456,9 +443,7 @@ pub(crate) fn on_badges(panel: &Panel, ctx: &egui::Context, view: &View, p: Poin
     })
 }
 
-/// One filter field. `LibraryBay::filter` answers with the `ListSets` a press
-/// asks for and not with which box it landed in, so the box is asked for —
-/// `LibraryBay::field` is the same rectangle that method tests, asked by name.
+/// Hit-tests whether point `p` falls within the specified filter text field.
 pub(crate) fn on_field(panel: &Panel, view: &View, p: Point, which: Field) -> bool {
     library_bay(panel, view)
         .and_then(|bay| bay.field(which))
@@ -522,9 +507,7 @@ pub(crate) fn on_mcp_inputs_and_outputs(
     on_mcp(panel, ctx, view, p, Class::InputsAndOutputs)
 }
 
-/// One class pill. The four are in four different bay heads and cannot be one
-/// laid-out box, so the class is the argument that lays one out — which is the
-/// press handler's own arrangement, one derivation asked four times.
+/// Hit-tests whether point `p` falls on the bay head pill for `class`.
 pub(crate) fn on_mcp(
     panel: &Panel,
     ctx: &egui::Context,
@@ -551,9 +534,7 @@ pub(crate) fn on_bank_4(panel: &Panel, ctx: &egui::Context, view: &View, p: Poin
     on_bank(panel, ctx, view, p, 3)
 }
 
-/// One bank pill, told from the three beside it by the pattern the press would
-/// name: `Sequencer::press` answers `SelectPattern` carrying the bank, which is
-/// this bay's own rule that *every arm names the bank*.
+/// Hit-tests whether point `p` falls on the specified sequencer bank pill.
 pub(crate) fn on_bank(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, bank: u8) -> bool {
     on_seq(
         panel,
@@ -603,16 +584,13 @@ pub(crate) fn on_seq(
 
 /// Hit-tests point `p` against the `+ lane` pill in the sequencer bay.
 pub(crate) fn on_add_lane(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    // The one derivation, and the choices it was laid out from asked again:
-    // the card's items are the chooser's own listing, so a bay drawn from one
-    // reading and asked against another would answer for a card it did not
-    // draw — `Sequencer::chose`'s own re-check, from this side.
+    // Re-evaluate against current lane choices to check for Open button hit.
     let choices = view.lane_choices();
     sequencer(ctx, panel.layout(), view.sequencer.as_ref(), &choices)
         .is_some_and(|bay| matches!(bay.chose(p, &choices), Some(crate::view::Chose::Open)))
 }
 
-/// The Sequencer bay, derived the one way [`crate::input::claim`] derives it.
+/// Derives the Sequencer bay layout using current lane choices.
 fn sequencer_bay(
     panel: &Panel,
     ctx: &egui::Context,

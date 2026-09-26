@@ -176,10 +176,7 @@ fn learn_names_the_other_state_and_both_pills_take_the_pointer() {
     assert_eq!(off.pill, on.pill);
     assert!(off.hit(at(off.pill.center())));
 
-    // **Both are reached by the pointer**, and the `map` pill is one of them
-    // even though a press on it asks for nothing: a press that fell through to
-    // whatever is behind a control the panel drew is the defect `claim`'s rule
-    // 4 exists to stop.
+    // Both pills claim pointer hits, preventing click fall-through to background elements.
     let map = map_pill(
         &ctx,
         panel.layout(),

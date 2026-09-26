@@ -23,21 +23,14 @@ use crate::room::size::HAIRLINE;
 use crate::room::Room;
 use crate::view::{to_egui, View};
 
-/// What the hover layer is owed, and what [`crate::repaint::Change::Tip`] turns
-/// into a decision.
+/// Repaint deadline requirement for the hover layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tip {
-    /// Nothing. The pointer is on no tipped control, or the tip it is on is already
-    /// drawn and does not move while it is up. This is the layer declaring nothing
-    /// at rest.
+    /// Tooltip is stationary or no control is hovered.
     Still,
-    /// A dwell is running, and this is what is left of it: the picture is different
-    /// from the one on screen in exactly this long, which is
-    /// [`crate::budget::Declared::moves_in`]'s question asked of a hand holding
-    /// still (ADR-0283).
+    /// Dwell timer is active with remaining duration (ADR-0283).
     Dwelling(Duration),
-    /// A tip is on screen that must not be: the pointer has left the control it
-    /// belongs to. A frame is owed now, to take it down.
+    /// Hovered control changed or pointer left; tooltip must be dismissed.
     Gone,
 }
 
@@ -47,16 +40,11 @@ pub enum Tip {
 pub struct Hover {
     tips: Tips,
     resting: Option<Rest>,
-    /// Whether the tip has been painted. Written by [`Hover::paint`], because what
-    /// is on screen is a fact about the frame that drew it.
+    /// Whether the tip is currently painted.
     up: bool,
-    /// The words laid out, kept while the pointer stays on the control they belong
-    /// to and its assignment has not moved. A learn changes the last line of the
-    /// tip that is on screen, and a cache keyed on the control alone would go on
-    /// drawing the old one.
+    /// Cached text layout galley invalidated on control, text, or room changes.
     galley: Option<CachedTipGalley>,
-    /// Which knob the control under the pointer is on, as the host derived it from
-    /// the live map — see [`Hover::assign`].
+    /// Current MIDI control assignment text (see [`Hover::assign`]).
     assigned: Option<String>,
     tip_box: Option<egui::Rect>,
     key_badge_rect: Option<egui::Rect>,
@@ -252,8 +240,7 @@ impl Hover {
         }
     }
 
-    /// The pointer left the window, which is not a move to anywhere: any tip goes
-    /// and no dwell is running.
+    /// The pointer left the window; dismisses active tip and dwell state.
     pub fn left(&mut self) -> Tip {
         if self.learning_key.is_some() {
             return Tip::Still;
@@ -285,8 +272,7 @@ impl Hover {
         }
     }
 
-    /// The words on screen, or `None` where no tip is up. What a test reads, and
-    /// the only way anything outside this module can tell.
+    /// Returns the text of the currently displayed tip, or `None`.
     pub fn showing(&self) -> Option<&str> {
         match self.up {
             true => self.tips.get(self.resting?.on),
@@ -306,8 +292,7 @@ impl Hover {
         Some(annotate(words, hotkey, self.assigned.as_deref()))
     }
 
-    /// Which control the pointer is resting on, whether or not its dwell has run
-    /// out.
+    /// Returns the control the pointer is resting on, if any.
     pub fn resting_on(&self) -> Option<&'static Tipped> {
         flat().nth(self.resting?.on)
     }

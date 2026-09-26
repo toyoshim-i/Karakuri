@@ -5,9 +5,7 @@ use crate::input::PROBES;
 
 /// Tooltip entries for each control registered in [`crate::input::PROBES`].
 pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
-    // **The Outputs row's chips.** Two of the four answer: a plugin chip
-    // switches nothing and `Outputs::chip_at` says so, which is the same
-    // `false` `claim` gets.
+    // Outputs row sink chips: plugin chip switches nothing.
     (
         "the Outputs row's sinks",
         &[
@@ -43,9 +41,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_audio,
         }],
     ),
-    // **The tracker group's three**, in the row's own order. The octave is one
-    // entry and the mock draws two faces of it: at any tempo at most one of
-    // them is live, and `TrackerGroup::octave` answers for whichever it is.
+    // Tracker group: tempo tap, octave display, and tempo readout.
     (
         "the tracker group's three",
         &[
@@ -90,10 +86,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_learn_pill,
         }],
     ),
-    // **The mock's name for this map is a device and this console's is a
-    // file**, which is the page being a drawing and this being a run: the cite
-    // is the element, and the words the pill *draws* are `map · <whatever is
-    // loaded>`.
+    // Map pill: cites mock nanoKONTROL2 device element.
     (
         "the transport row's map pill",
         &[Tipped {
@@ -165,9 +158,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_tempo,
         }],
     ),
-    // **A strip's five, the four inside the column first and the column
-    // last**, which is `claim`'s order and `main.rs`'s: a rest on a knob is
-    // the knob's, and what is left over is the strip's.
+    // Mixer strip controls in probe resolution order.
     (
         "a mixer strip's five",
         &[
@@ -282,9 +273,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             },
         ],
     ),
-    // **The name in a pane head has no tip in the mock**, which is the reading
-    // rule: the page draws the head's count and its `keep` capsule with tips
-    // and says nothing about the name beside them.
+    // Pane head name has no tooltip in mock.
     ("the Inspector pane heads' name", &[]),
     (
         "the Inspector pane heads' keep",
@@ -299,10 +288,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
         }],
     ),
     ("the Inspector pane heads' slot mcp policy", &[]),
-    // **The mark between the run and the count**, whose words the mock has
-    // carried since the chooser was drawn: it cites the *first* pane's `▾`,
-    // and the second pane's own tip says the same thing about the head next
-    // door — one entry, because one probe answers for both heads.
+    // Inspector pane deck pulldown glyph (`▾`).
     (
         "the Inspector pane heads' deck pulldown",
         &[Tipped {
@@ -400,10 +386,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_param,
         }],
     ),
-    // **The mark that publishes a row**, which is the row's leftmost cell —
-    // the mock tips it in both of its states, and the two rows below are those
-    // two: a number on a control the interface carries, and the dot on one it
-    // does not (`docs/adr/0329-…`).
+    // Parameter row publish indicator (published vs unpublished, ADR-0329).
     (
         "a parameter row's publish mark",
         &[
@@ -420,9 +403,6 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
                 control: "an unpublished control's mark",
                 cites: Cite {
                     class: "ord",
-                    // The mock writes the dot as an entity, as it writes every
-                    // other piece of punctuation on the page — so the text this
-                    // cites is the entity and not the character it decodes to.
                     text: "&middot;",
                     nth: 0,
                 },
@@ -430,17 +410,13 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             },
         ],
     ),
-    // **A node's declared input and the card that rewires it.** One tip, on
-    // the line: the capsule and its card are one control to a hand and the
-    // mock tips the line rather than the capsule inside it.
+    // Node input rewiring pill.
     (
         "a node group's `uses` capsule and its card",
         &[Tipped {
             control: "a node's declared input",
             cites: Cite {
-                // **The capsule and not the line**, because the capsule is the
-                // control: the words belong where a hand goes, and the line
-                // around it is the slot's own name and a separator.
+                // Targets the inner pill element.
                 class: "pill",
                 text: "sphere_shell &#9662;",
                 nth: 0,
@@ -473,10 +449,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_node_keep,
         }],
     ),
-    // **The row's two controls and not its four chips.** `SensChip::ALL` is
-    // four and the mock tips all four; the signal and the range are readouts
-    // that `SensChip::operation` answers `None` for, so a press reaches two of
-    // them and this table is what a press reaches.
+    // Sensor row active interactive controls.
     (
         "a sensitivity row's curve and take back",
         &[
@@ -512,8 +485,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_solo,
         }],
     ),
-    // **A bay head's grip has no tip in the mock.** The page draws it as
-    // `.grip` and explains folding in its prose rather than on the control.
+    // Bay head fold grip has no tooltip in mock.
     ("the grip in a bay head", &[]),
     // Four preview cells in `DECK_LETTERS` order, citing mock deck descriptions (ADR-0330).
     (
@@ -737,9 +709,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_star,
         }],
     ),
-    // **A row of the listing has no tip in the mock.** The page tips the rows
-    // of a *reading* — `declares 6 knobs` and its kin — and the menu items a
-    // secondary press puts down, and neither is the row this probe claims.
+    // Library listing row has no tooltip in mock.
     ("the Library bay's list", &[]),
     // One entry per class in `Class::ALL` order, using `Cite::nth` ordinals to differentiate
     // identical `.pill` markups and their class-specific refused operations.
@@ -843,9 +813,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
                 },
                 at: on_lane_label,
             },
-            // **The third `.minus` on the page**, the two before it being the
-            // chain's slots: the Master bay's glyph drawn on a lane's row, and
-            // the page tips lane A's the way it tips lane A's cells.
+            // Lane remove button (third `.minus` occurrence on page).
             Tipped {
                 control: "a lane's minus",
                 cites: Cite {
@@ -875,8 +843,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             },
         ],
     ),
-    // **The `back` capsule has no tip of its own in the mock**: the page tips
-    // the candidate row it sits in, which is the entry below.
+    // Staging lane back capsule has no standalone tooltip in mock.
     ("the Staging lane's back capsules", &[]),
     (
         "the Staging lane's rows",

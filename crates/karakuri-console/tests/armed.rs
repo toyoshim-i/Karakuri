@@ -306,10 +306,7 @@ fn both_faders_reach_off_the_one_phase() {
              and the phase says {rolled}"
         );
     }
-    // **And the frame paints both of them off the one number**, which is the
-    // half the arithmetic above cannot see: a strip with a fade on each fader
-    // draws two bands, and they are the two this file computed at the same
-    // displacement.
+    // A strip with a fade on each fader renders two bands using the same value calculation.
     let phase = Phase::since(Duration::from_millis(200));
     let both = Strip {
         gain_to: Some(0.9),

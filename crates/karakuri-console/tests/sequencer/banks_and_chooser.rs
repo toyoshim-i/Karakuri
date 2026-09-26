@@ -79,8 +79,7 @@ fn a_bank_press_names_the_bank_it_landed_on() {
             other => panic!("a press on a bank pill asked for {other:?}"),
         }
     }
-    // **Including the armed one**, which is what makes it a state rather than
-    // a move: asking for the bank you are on is allowed and does nothing.
+    // Selecting the currently armed bank is a valid no-op that re-selects pattern 0.
     let armed = bay.banks[0].center();
     assert!(matches!(
         bay.press(Point {
@@ -160,8 +159,7 @@ fn param(name: &str, at: usize) -> karakuri_console::view::Param {
             }),
             key: name.to_owned(),
         },
-        // **Nothing bound**, which is what this file is about: a lane is a
-        // fifth route and not a binding (ADR-0222).
+        // Lane is routed independently without parameter bindings (ADR-0222).
         bound: None,
     }
 }
@@ -204,13 +202,11 @@ fn the_chooser_lists_the_drawn_decks_faders_and_the_target_decks_keys() {
             other => panic!("a parameter item points at {other:?}"),
         }
     }
-    // **A deck the mixer draws no strip for is not offered**, which is
-    // `View::select`'s refusal read again rather than a second rule.
+    // Decks without mixer strips are excluded from chooser options.
     let mut three = choosing();
     three.mixer.truncate(3);
     assert_eq!(three.lane_choices().faders, 3);
-    // **And a target deck the console holds no pane for offers no
-    // parameters** — the reading's own limit, said rather than papered over.
+    // Targeted decks without an inspector pane offer no published parameters.
     let mut elsewhere = choosing();
     assert!(elsewhere.aim_at(2));
     let choices = elsewhere.lane_choices();
@@ -396,19 +392,13 @@ fn the_reserved_minimum_holds_one_lane_and_the_foot() {
         bay.rows[0].cells[0].max.y <= bay.add.min.y,
         "and the one lane clears it"
     );
-    // **And the four bank pills are still in the head there**, which is the
-    // other half of what this bay needs room for: `bank_capsules` hands back
-    // none rather than some when the head cannot hold all four, so a narrow
-    // arrangement that lost them would lose every bank press at once.
+    // All four bank pills fit in the bay head at smallest window size.
     assert_eq!(
         bay.banks.len(),
         BANKS,
         "the bay head holds its four bank pills at the smallest window"
     );
-    // **The height one lane and the foot actually want**, measured off the
-    // drawing rather than transcribed — the rows from the top of the region,
-    // the gap over the foot, the pill and the bay's bottom padding. `lib.rs`'s
-    // `min` for this region has to be at least this, and it is.
+    // Minimum region height accommodates one lane, spacing, and the foot pill.
     let needed = bay.rows[0].cells[0].max.y - region.y
         + size::SEQ_STACK_GAP
         + size::PILL_H
