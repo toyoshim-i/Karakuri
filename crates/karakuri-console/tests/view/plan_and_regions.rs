@@ -124,6 +124,8 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
             // be told which by the table. Its title is `view::SEQUENCER_TITLE`
             // and the rest of that bay is asserted in `tests/sequencer.rs`.
             Kind::Sequencer => assert_eq!(*name, "sequencer"),
+            // And Prompt is the sixth: embedded agent terminal and CLI selection.
+            Kind::Prompt => assert_eq!(*name, "prompt"),
             other => panic!("{name} is a bay in the mock and a {other:?} here"),
         }
     }
@@ -186,11 +188,12 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
                         | Kind::Master
                         | Kind::Staging
                         | Kind::Sequencer
+                        | Kind::Prompt
                 )
             })
             .count(),
         BAYS.len(),
-        "the bay head has seven call sites, which is the whole of why it is a component"
+        "the bay head has eight call sites, which is the whole of why it is a component"
     );
     // And five of the seven are the bays with something in their bodies.
     assert_eq!(

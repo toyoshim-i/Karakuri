@@ -173,6 +173,19 @@ impl Readout {
             return Some(self.aimed(ask));
         }
 
+        // Prompt bay CLI selection dropdown menu and header pill
+        if let Some(id) = self.panel.layout().find("prompt") {
+            let bay_rect = view::to_egui(self.panel.layout().rect(id));
+            let viewport = view::to_egui(self.panel.layout().viewport());
+            let asked = view::prompt_ask(ctx, bay_rect, viewport, &self.view.prompt, at);
+            if self.view.prompt.menu_open {
+                return Some(self.prompted(asked.unwrap_or(view::PromptAsk::Shut)));
+            }
+            if let Some(ask) = asked {
+                return Some(self.prompted(ask));
+            }
+        }
+
         None
     }
 

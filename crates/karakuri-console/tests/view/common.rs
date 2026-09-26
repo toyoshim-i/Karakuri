@@ -13,6 +13,7 @@ pub(crate) use karakuri_layout::{NodeId, Point};
 pub(crate) const BAYS: &[&str] = &[
     "library",
     "staging",
+    "prompt",
     "program",
     "inspector",
     "mixer",

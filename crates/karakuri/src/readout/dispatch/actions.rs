@@ -77,6 +77,30 @@ impl Readout {
         }
     }
 
+    /// Dispatches Prompt bay interactions, toggling the preset dropdown or selecting an agent CLI.
+    pub(crate) fn prompted(&mut self, ask: view::PromptAsk) -> Acted {
+        match ask {
+            view::PromptAsk::ToggleMenu => {
+                self.view.prompt.toggle_menu();
+                Acted::Nothing
+            }
+            view::PromptAsk::SelectPreset(preset) => {
+                println!("prompt: session set to `{}`", preset.display_name());
+                self.view.prompt.select_preset(preset);
+                Acted::Nothing
+            }
+            view::PromptAsk::SelectCustom => {
+                println!("prompt: custom session selected");
+                self.view.prompt.select_custom(String::new());
+                Acted::Nothing
+            }
+            view::PromptAsk::Shut => {
+                self.view.prompt.shut_menu();
+                Acted::Nothing
+            }
+        }
+    }
+
     /// Dispatches input wiring card interactions, toggling the dropdown card or emitting wire operations (ADR-0329).
     pub(crate) fn wired(&mut self, ask: Wiring) -> Acted {
         match ask {

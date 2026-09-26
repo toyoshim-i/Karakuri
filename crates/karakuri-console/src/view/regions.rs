@@ -31,6 +31,8 @@ pub enum Kind {
     Staging,
     /// Sequencer bay: timeline ruler, lane rows, and playhead.
     Sequencer,
+    /// Prompt bay: embedded agent terminal and CLI selection.
+    Prompt,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -67,6 +69,10 @@ pub const REGIONS: &[Region] = &[
         name: "staging",
         // Renders candidate rows; header pills remain strictly interactive controls.
         kind: Kind::Staging,
+    },
+    Region {
+        name: "prompt",
+        kind: Kind::Prompt,
     },
     Region {
         name: "program",

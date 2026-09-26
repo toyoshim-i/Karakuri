@@ -238,6 +238,13 @@ impl View {
                             staging::staging_into(ui, &pal, &bay, waiting);
                         }
                     }
+                    // Prompt bay terminal and agent CLI selection.
+                    Kind::Prompt => {
+                        bay_card(ui, &pal, rect);
+                        head_into(ui, &pal, rect, placed.region, opening);
+                        prompt::prompt_head_into(ui, &pal, rect, &self.prompt);
+                        prompt::prompt_into(ui, &pal, rect, &self.prompt);
+                    }
                     // A pane draws nothing of its own. It has no card — it is
                     // inside the bay's — and no head, and its body is as empty
                     // as every other body in this pass.
@@ -427,6 +434,10 @@ impl View {
                         sequencer::lane_card_into(ui, &pal, &card, &choices);
                     }
                 }
+            }
+            // Prompt bay CLI selection dropdown menu rendered above bays (Rule 2).
+            if self.prompt.menu_open {
+                prompt::prompt_menu_into(ui, &pal, panel.layout(), &self.prompt);
             }
             // Dashed keyboard focus indicator ring, rendered proud of bay heads.
             if let Some((mark, _)) = folded {
