@@ -1,8 +1,4 @@
-//! Builtin function library emitted as WGSL source.
-//!
-//! Emits helper implementations for IR builtins not natively supported by WGSL (noise, SDF,
-//! rotations, color conversions, and float modulo). Helper functions are emitted on demand
-//! based on [`Requirements`]. Seeded builtins read `u.seed_salt` from the uniform buffer.
+//! Builtin WGSL helper library emitted on demand (noise, SDF, rotations, and color conversions).
 
 use std::collections::HashSet;
 

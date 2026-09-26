@@ -1,13 +1,4 @@
-//! WGSL code generation for checked `.kir` procedure ASTs.
-//!
-//! Generates WGSL shaders and binding metadata from [`karakuri_ir::typed::Checked`]:
-//! - [`l1::generate_l1`]: Compute pipelines for element spawn and update.
-//! - [`l2::generate_l2`]: Deformation passes applied over element streams.
-//! - [`l3::generate_l3`]: Compute pass writing camera uniform matrices.
-//! - [`l4::generate_l4`]: Render pipelines for element rendering.
-//! - [`l5::generate_l5`]: Post-processing / master chain effects.
-//! - [`field::generate_field`]: Spliced WGSL functions for distance fields.
-//! - [`layout`]: Buffer layout, uniform alignment, and binding slot definitions.
+//! WGSL code generation and pipeline binding metadata for checked `.kir` procedure ASTs.
 
 pub mod field;
 
