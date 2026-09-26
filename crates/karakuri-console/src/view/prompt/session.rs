@@ -389,10 +389,11 @@ impl SessionManager {
                 (id, preset.command().to_owned(), Vec::new())
             }
             CliSelection::Custom(cmd) => {
-                let trimmed = cmd.trim();
-                if trimmed.is_empty() {
-                    return None;
-                }
+                let trimmed = if cmd.trim().is_empty() {
+                    super::cli::default_custom_command()
+                } else {
+                    cmd.trim()
+                };
                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
                 let (first, rest) = parts.split_first()?;
                 let id = format!("custom:{trimmed}");
@@ -418,10 +419,11 @@ impl SessionManager {
             CliSelection::Unselected => return None,
             CliSelection::Preset(preset) => preset.command().to_owned(),
             CliSelection::Custom(cmd) => {
-                let trimmed = cmd.trim();
-                if trimmed.is_empty() {
-                    return None;
-                }
+                let trimmed = if cmd.trim().is_empty() {
+                    super::cli::default_custom_command()
+                } else {
+                    cmd.trim()
+                };
                 format!("custom:{trimmed}")
             }
         };
@@ -435,10 +437,11 @@ impl SessionManager {
             CliSelection::Unselected => return,
             CliSelection::Preset(preset) => preset.command().to_owned(),
             CliSelection::Custom(cmd) => {
-                let trimmed = cmd.trim();
-                if trimmed.is_empty() {
-                    return;
-                }
+                let trimmed = if cmd.trim().is_empty() {
+                    super::cli::default_custom_command()
+                } else {
+                    cmd.trim()
+                };
                 format!("custom:{trimmed}")
             }
         };

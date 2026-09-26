@@ -90,8 +90,9 @@ impl Readout {
                 Acted::Nothing
             }
             view::PromptAsk::SelectCustom => {
-                println!("prompt: custom session selected");
-                self.view.prompt.select_custom(String::new());
+                let cmd = karakuri_console::view::prompt::default_custom_command();
+                println!("prompt: session set to `{cmd}`");
+                self.view.prompt.select_custom(cmd.to_string());
                 Acted::Nothing
             }
             view::PromptAsk::Shut => {

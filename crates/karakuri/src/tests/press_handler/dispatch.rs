@@ -658,7 +658,9 @@ fn the_press_handler_dispatches_prompt_bay_controls() {
     assert!(!readout.view.prompt.menu_open);
     assert_eq!(
         readout.view.prompt.selection,
-        view::CliSelection::Custom(String::new())
+        view::CliSelection::Custom(
+            karakuri_console::view::prompt::default_custom_command().to_string()
+        )
     );
 
     // 3. Open menu again and click outside to dismiss (Rule 2)
