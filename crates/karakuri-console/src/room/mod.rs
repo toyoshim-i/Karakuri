@@ -213,6 +213,11 @@ const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Color32 {
     )
 }
 
+/// Font configuration and system CJK fallback discovery.
+pub mod font;
+
+pub use font::{configure_fonts, default_font_definitions};
+
 /// Type sizes and box dimensions in logical pixels, derived matching arrangement rules
 /// (`padding + font_size * line_height`).
 pub mod size;
