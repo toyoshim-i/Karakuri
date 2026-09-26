@@ -1,12 +1,4 @@
-//! Output presentation pass and final color conversion.
-//!
-//! Owns the linear HDR target that `VideoSource` instances render into, performs
-//! tone mapping (Clamp, Reinhard, ACES, or AgX), and applies the single sRGB
-//! conversion at final output.
-//!
-//! Tone mapping operator and parameters are updated via uniform buffer writes
-//! rather than shader pipeline variants, allowing real-time parameter changes
-//! without pipeline recreation.
+//! Output presentation pass, tone mapping (Clamp, Reinhard, ACES, AgX), and sRGB conversion.
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;

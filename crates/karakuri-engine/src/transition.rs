@@ -1,8 +1,4 @@
-//! Scheduled transitions for mix parameters across musical time.
-//!
-//! Provides types for scheduling moves of scalar controls ([`Control`]) such as
-//! gain, opacity, or mask position over a duration measured in musical beats.
-//! Also provides [`Selection`] for scheduling active renderer choices on musical boundaries.
+//! Scheduled transitions for mix parameters across musical time ([`Control`], [`Selection`]).
 
 use crate::binding::Curve;
 

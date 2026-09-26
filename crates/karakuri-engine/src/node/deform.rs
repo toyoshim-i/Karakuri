@@ -11,11 +11,7 @@ use crate::set::{ElementStorage, SetError};
 use crate::storage::DeformStorage;
 use crate::uniforms::UniformScratch;
 
-/// An L2 compute node that transforms input geometry to output geometry.
-///
-/// An L2 node is stateless and rebuilt each frame from its input, allowing a single
-/// output element buffer to serve both parities. Compute is evaluated once per frame,
-/// and output is shared across all downstream readers.
+/// An L2 compute node that transforms input geometry to output geometry (stateless per frame).
 pub(crate) struct Deform {
     pipeline: wgpu::ComputePipeline,
     uniforms: wgpu::Buffer,
@@ -42,11 +38,7 @@ pub(crate) struct Deform {
     param_keys: Vec<String>,
 }
 
-/// Resources owned by an amplifying L2 node.
-///
-/// Amplification expands the element buffer by `factor`, requiring dedicated
-/// alive and counts buffers. Alive flags are repeated `factor` times from
-/// upstream. These buffers are single-buffered because output is rebuilt every frame.
+/// Resources owned by an amplifying L2 node (expanded capacity and dedicated alive/counts buffers).
 struct Amplified {
     factor: u32,
     alive: wgpu::Buffer,
@@ -58,10 +50,6 @@ struct Amplified {
 
 impl Deform {
     /// Generates, compiles, and binds an L2 compute node for input geometry.
-    ///
-    /// `upstream` contains the attribute list for `input`'s layout. It is passed
-    /// separately from `input` because `ElementLayout` slots do not all correspond
-    /// to an [`Attr`].
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn build(
         device: &wgpu::Device,
@@ -375,11 +363,7 @@ impl Deform {
         self.amplified.as_ref().map(|a| &a.counts)
     }
 
-    /// Returns the geometry edge offered downstream.
-    ///
-    /// A single element buffer serves both parities since output is rewritten
-    /// each frame. If amplified, returns this node's own alive and counts buffers;
-    /// otherwise passes through the caller's.
+    /// Returns the geometry edge offered downstream (passes through or swaps amplified buffers).
     pub(crate) fn geometry<'a>(
         &'a self,
         alive: [&'a wgpu::Buffer; 2],

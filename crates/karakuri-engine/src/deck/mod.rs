@@ -1,22 +1,5 @@
 //! Multi-slot Set compositing, frame synchronization, and residency management.
-//!
-//! A [`Deck`] manages up to [`MAX_SLOTS`] resident [`HotSwap`] instances, rendering
-//! live slots into dedicated `Rgba16Float` HDR targets and compositing them into a single
-//! linear HDR target using per-slot gain, opacity, blend modes ([`Blend`]), and masks ([`Mask`]).
-//!
-//! # Architecture
-//!
-//! - **Slot Isolation**: Each slot renders into an isolated texture target. The composite pass
-//!   folds active targets in fixed slot index order.
-//! - **Frame Guard**: [`Deck::begin_frame`] acquires exclusive access to the deck and returns
-//!   a [`Frame`] holding the `wgpu::CommandEncoder`. This guarantees single-encoder recording
-//!   and supports two-phase atomic commit on submit or discard.
-//! - **Residency**: Slots operate under [`Residency::Live`] (simulated, drawn, composited),
-//!   [`Residency::Priming`] (simulated, drawn for preview, not composited), or
-//!   [`Residency::Allocated`] (drawn for preview, not composited). The [`Governor`] computes
-//!   effective residencies from operator requests and frame budgets.
-//! - **Signals**: The deck owns the session [`Signals`] oscillator, advancing it once per
-//!   frame so that bound parameters and transport mappings stay synchronized across slots.
+//! A [`Deck`] manages resident [`HotSwap`] instances, mixing HDR targets using gain, blend, and masks.
 
 use crate::binding::Signals;
 use crate::governor::{Estimated, Governor, Report, SlotState};
@@ -59,10 +42,7 @@ pub struct Deck {
 }
 
 impl Deck {
-    /// Creates a new Deck over `swaps`.
-    ///
-    /// Initializes all slots as [`Live`] at unity gain and full opacity with master out at 1.0.
-    /// Allocates per-slot HDR targets, pipeline, and bind groups.
+    /// Creates a new Deck over `swaps`, initializing all slots as [`Live`] with unity gain.
     ///
     /// [`Live`]: Residency::Live
     pub fn new(device: &wgpu::Device, swaps: Vec<HotSwap>, width: u32, height: u32) -> Deck {
@@ -182,47 +162,7 @@ impl Deck {
     }
 
     /// Begins recording a frame, returning an exclusive frame guard owning the command encoder.
-    ///
-    /// Installs completed candidate builds, marks frame boundaries for all slots, and collects
-    /// pending meter samples without blocking.
-    ///
-    /// # Exclusivity
-    ///
-    /// The returned [`Frame`] retains exclusive borrow of the deck for the duration of the frame,
-    /// preventing concurrent frame recordings:
-    ///
-    /// ```no_run
-    /// # use karakuri_engine::deck::Deck;
-    /// fn one_frame(
-    ///     deck: &mut Deck,
-    ///     device: &wgpu::Device,
-    ///     queue: &wgpu::Queue,
-    ///     hdr: &wgpu::TextureView,
-    ///     size: (u32, u32),
-    /// ) {
-    ///     let mut frame = deck.begin_frame(device, queue);
-    ///     frame.render(hdr, size, 1);
-    ///     frame.finish();
-    /// }
-    /// ```
-    ///
-    /// Attempting to call `begin_frame` again while a frame is alive fails compilation:
-    ///
-    /// ```compile_fail
-    /// # use karakuri_engine::deck::Deck;
-    /// fn two_frames(
-    ///     deck: &mut Deck,
-    ///     device: &wgpu::Device,
-    ///     queue: &wgpu::Queue,
-    ///     hdr: &wgpu::TextureView,
-    ///     size: (u32, u32),
-    /// ) {
-    ///     let mut first = deck.begin_frame(device, queue);
-    ///     let mut second = deck.begin_frame(device, queue); // E0499
-    ///     first.render(hdr, size, 1);
-    ///     second.render(hdr, size, 1);
-    /// }
-    /// ```
+    /// Installs completed candidate builds, marks frame boundaries for all slots, and collects pending meters.
     pub fn begin_frame<'a>(
         &'a mut self,
         device: &wgpu::Device,

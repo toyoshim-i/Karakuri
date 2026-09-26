@@ -13,11 +13,7 @@ use crate::set::{ElementStorage, MAX_STEPS};
 use crate::storage::SimulationStorage;
 use crate::uniforms::UniformScratch;
 
-/// Parameter name used to quantize element spawning.
-///
-/// Spawning reads this value through [`Tick::param`] so that dynamic bindings
-/// (such as noise sources) are applied consistently across both the uniform buffer
-/// and the host-side spawn accumulator. Parameter values are scoped to this node.
+/// Parameter name used to quantize element spawning (`spawn_rate`).
 const SPAWN_RATE: &str = "spawn_rate";
 
 /// One direction's pair of storage buffers (element or alive).
@@ -51,20 +47,13 @@ impl Pair {
     }
 }
 
-/// L1 simulation node producing geometry: `() -> Geometry`.
-///
-/// Owns all per-element state for a Set, including ping-pong element and alive
-/// buffers, spawn accumulation, and compaction state. Timings are supplied
-/// per substep via [`Tick`].
+/// L1 simulation node producing geometry (`() -> Geometry`).
+/// Owns ping-pong element/alive buffers, spawn accumulation, and compaction state.
 pub(crate) struct Simulation {
     capacity: u32,
     seed_salt: u32,
     has_spawn: bool,
-    /// Indicates whether buffer allocation exceeded device limits.
-    ///
-    /// If true, GPU buffers are error objects and [`Simulation::initialize`] skips
-    /// allocating host-side initial state arrays to prevent host OOM before the
-    /// validation error scope is reported.
+    /// Indicates whether buffer allocation exceeded device limits (skips host initialisation).
     refused_by_device: bool,
     /// Monotonically increasing seed ordinal assigned to newly spawned elements.
     ///
@@ -519,12 +508,7 @@ impl Simulation {
     ///
     /// Must be preceded by [`Simulation::prepare`] in the same frame.
     pub(crate) fn record(&mut self, encoder: &mut wgpu::CommandEncoder, steps: u8) {
-        // Dispatches up to four passes per substep:
-        //   1. Scan: prefix sum over `prev_alive` yielding compaction destinations.
-        //   2. Element: updates elements; surviving elements compact into `next`.
-        //   3. Spawn: appends newly spawned elements.
-        //   4. Advance: updates live range and indirect draw arguments.
-        // For static procedures without dynamic lifecycles, only the element pass runs.
+        // Dispatches scan, element update, spawn, and range advance passes per substep.
         let mut parity = self.staged_parity.unwrap_or(self.parity);
         for step in 0..usize::from(steps.min(MAX_STEPS)) {
             if let Some(compaction) = &self.compaction {

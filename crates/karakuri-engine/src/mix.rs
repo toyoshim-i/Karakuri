@@ -1,10 +1,4 @@
-//! Compositing for L5 mix and merge passes.
-//!
-//! Combines multiple texture inputs into a single output texture according to
-//! per-edge properties (gain, opacity, blend mode, and mask).
-//!
-//! Inputs that do not contribute (for example, silenced inputs or masked-out regions)
-//! are skipped to avoid propagating NaNs or infinities from HDR targets.
+//! Compositing for L5 mix and merge passes across multiple texture inputs.
 
 use crate::deck::{Blend, Mask, MAX_SLOTS};
 use crate::present::Present;

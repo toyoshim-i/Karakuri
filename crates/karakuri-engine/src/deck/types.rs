@@ -169,12 +169,7 @@ fn clamp_unit(x: f32) -> f32 {
     }
 }
 
-/// Blend mode used to fold a slot layer into the composite accumulation target.
-///
-/// Evaluated in linear HDR space before tone mapping:
-/// - [`Blend::Add`]: Additive emission accumulation.
-/// - [`Blend::Over`]: Premultiplied alpha over blending using slot coverage.
-/// - [`Blend::Max`]: Component-wise maximum value.
+/// Blend mode used to fold a slot layer into the composite accumulation target (Add, Over, Max).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Blend {
     /// Additive sum of colour values.

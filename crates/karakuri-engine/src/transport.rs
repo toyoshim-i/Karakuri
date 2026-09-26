@@ -1,8 +1,4 @@
-//! Clock synchronization and transport mapping for deck slots.
-//!
-//! Maps session time and musical grids to a slot's simulation clock (`t`). Supports
-//! free-running clocks ([`Sync::Free`]), tempo-rate scaling ([`Sync::Tempo`]), and
-//! absolute beat-position locking ([`Sync::Beat`]).
+//! Clock synchronization and transport mapping for deck slots (Free, Tempo, Beat).
 
 use karakuri_signal::Oscillator;
 

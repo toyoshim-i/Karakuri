@@ -1,8 +1,4 @@
-//! Execution cost estimation from small-scale probe draws.
-//!
-//! Models execution cost as `a + b * area`, separating target-invariant compute
-//! and vertex work `a` from area-dependent fragment work `b * area` using two
-//! probe draws at reduced resolutions.
+//! Execution cost estimation from small-scale probe draws (separating compute/vertex from area cost).
 
 use karakuri_ir::rate::{Bound, RateBound};
 use karakuri_ir::Topology;

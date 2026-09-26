@@ -524,12 +524,7 @@ impl<'a> RenderGraph<'a> {
         }
     }
 
-    /// Compile the graph:
-    /// 1. Validates resource references.
-    /// 2. Performs dead pass culling via backward reachability.
-    /// 3. Builds DAG and executes topological sort with cycle detection.
-    /// 4. Analyzes transient resource lifetimes `[first_pass, last_pass]`.
-    /// 5. Solves transient memory aliasing into minimal physical texture slots.
+    /// Compiles the graph (validation, dead pass culling, topological sort, and memory aliasing).
     pub fn compile(&self) -> Result<CompiledGraph, GraphError> {
         // 1. Validate resource references
         for pass in &self.passes {

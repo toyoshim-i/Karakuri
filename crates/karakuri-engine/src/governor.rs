@@ -1,8 +1,4 @@
 //! Compute budget governor and admission controller for deck slot priming.
-//!
-//! Evaluates requested residency states against available GPU compute headroom,
-//! admitting candidates to `Residency::Priming` or parking them as `Residency::Allocated`.
-//! Live slots are never demoted; budgets are evaluated against estimates or probe measurements.
 
 use crate::deck::Residency;
 use crate::estimate::{Estimate, Floor, Floored, Unfit};

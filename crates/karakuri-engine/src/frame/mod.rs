@@ -1,8 +1,4 @@
-//! Single-frame composition and presentation coordination.
-//!
-//! Orchestrates the frame lifecycle across sinks: acquires render targets,
-//! evaluates committed simulation steps and look settings, executes deck
-//! rendering, and presents to active sinks.
+//! Single-frame composition and presentation coordination across sinks.
 
 use crate::deck::Deck;
 #[cfg(test)]
@@ -66,11 +62,7 @@ pub struct Outcome {
     pub missed: usize,
 }
 
-/// Composes one frame across the provided sinks.
-///
-/// Acquires render targets from all sinks, invokes the commit closure, renders
-/// the deck, draws to acquired sinks, executes optional final commands, and
-/// presents results.
+/// Composes one frame across the provided sinks (acquires targets, renders deck, and presents).
 pub fn compose(
     gpu: &Gpu,
     deck: &mut Deck,

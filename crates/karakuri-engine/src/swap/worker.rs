@@ -32,10 +32,6 @@ pub fn measure(
 }
 
 /// Main execution loop for the background build and compilation worker.
-///
-/// Polls `source`, compiles requested Sets, performs probe measurements and an
-/// `estimate` at the output's size, and deallocates retired Sets received from
-/// the render thread.
 pub(crate) fn run_worker(
     device: wgpu::Device,
     queue: wgpu::Queue,

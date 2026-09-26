@@ -1,12 +1,4 @@
-//! A Set groups nodes that form one video source, representing the unit of compilation and lifecycle.
-//!
-//! GPU state is owned by individual nodes in [`crate::node`]:
-//! - L1 simulation nodes own element and alive buffers, counts, compaction scan, and spawn accumulators.
-//! - L4 renderer nodes own render pipelines, uniform buffers, accumulation targets, and bind groups.
-//!
-//! The Set manages shared parameter values, bindings, viewport state, simulation clock, and execution order.
-//! Parameter values are written via uniform buffers, while node compilation and pipeline generation
-//! remain decoupled within their respective modules.
+//! Set groups nodes that form one video source, managing parameters, clocks, and lifecycles.
 
 pub mod layers;
 pub mod schedule;

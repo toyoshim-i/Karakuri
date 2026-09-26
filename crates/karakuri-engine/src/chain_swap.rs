@@ -1,15 +1,4 @@
-//! Master chain compilation on a worker thread, installed at a frame boundary.
-//!
-//! # Architecture
-//!
-//! - **Background Compilation**: Pipeline creation, intermediate targets, retention
-//!   history, and bind groups are constructed on a dedicated worker thread.
-//! - **Frame Boundary Installation**: Completed chains are installed at frame start
-//!   via [`ChainSwap::begin_frame`] without blocking the render loop.
-//! - **Newest Wins**: Superceded pending builds are retired unbuilt.
-//! - **Asynchronous Deallocation**: Retired chains are handed back to the worker
-//!   graveyard for non-blocking disposal.
-//! - **Size Invariance**: Build targets are sized to the `Present` state at request time.
+//! Master chain compilation on a worker thread, installed atomically at frame boundaries.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
