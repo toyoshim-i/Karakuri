@@ -1,0 +1,33 @@
+// Thin wire segments: each element is a stroke from `position` to
+// `position - velocity`, in the element's own `tint`. For geometry that puts the
+// offset to a segment's far end in `velocity`.
+// Ported from tmalib ext/mv/frame/nicofarre3d/shaders.html (v_draw, f_draw).
+//
+//     cargo run -p karakuri-cli -- --set examples/cube_drift.kir,examples/room_eye.kir,examples/room_strokes.kir
+
+proc room_strokes {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, tint
+
+  // Stroke width as a fraction of the frame's height.
+  param width    : float [0.0007, 0.02] = 0.0021
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.0
+
+  // How sharply the stroke fades from its centre line to its edge.
+  param falloff  : float [0.5, 8.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position - velocity, 1.0);
+    point_rate = width;
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    color      = vec4(tint * exposure, pow(max(0.0, 1.0 - across), falloff));
+  }
+}

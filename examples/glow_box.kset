@@ -1,0 +1,11 @@
+{"t":"set","id":"glow_box","v":1}
+{"t":"part","layer":"L1","path":"face_streaks.kir"}
+{"t":"part","layer":"L2","path":"cube_wrap.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"capacity","layer":"L1","value":448}
+{"t":"param","layer":"L2","key":"half","value":2.0}
+{"t":"param","layer":"L4","key":"streak","value":1.2}
+{"t":"param","layer":"L4","key":"taper","value":1.0}
+{"t":"param","layer":"L4","key":"width","value":0.0022}
+{"t":"param","layer":"L4","key":"exposure","value":1.6}
+{"t":"bind","layer":"L2","key":"spin","signal":"energy","curve":"smooth","range":[0.03,0.2]}

@@ -1,0 +1,6 @@
+{"t":"set","id":"roll_lines","v":1}
+{"t":"part","layer":"L1","path":"roll_bars.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.0028}
+{"t":"bind","layer":"L1","key":"reach","signal":"energy","curve":"smooth","range":[1.5,6.0]}

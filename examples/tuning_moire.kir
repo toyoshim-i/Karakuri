@@ -1,0 +1,25 @@
+// Overlays the picture with a blocky copy of itself and blocky interference
+// stripes, like a television searching for a channel.
+// Ported from tmalib ext/mv/effect/tuning.
+
+proc tuning_moire {
+  kind L5
+
+  // Frequency of the interference stripes; 0 turns them off.
+  param detune : float [0.0, 1.0] = 0.02
+  // Brightness of the interference stripes.
+  param stripes : float [0.0, 1.0] = 0.8
+  // Weight of the blocky copy added on top; 0 with detune 0 is pass-through.
+  param mosaic : float [0.0, 1.0] = 0.3
+  // Block size in frame coordinates.
+  param block : float [0.001, 0.05] = 0.005
+
+  frame {
+    let s = texel(src);
+    let q = point_coord - point_coord % vec2(block);
+    let m = tap(src, q) * mosaic;
+    let a = sin((q.y * 4096.0 - q.x * 57.3) * detune)
+          * sin((q.y * 5963.0 + q.x * 3.3) * detune) * stripes;
+    color = vec4(s.xyz + m.xyz + vec3(a), clamp(s.w + m.w, 0.0, 1.0));
+  }
+}

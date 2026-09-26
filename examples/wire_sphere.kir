@@ -1,0 +1,113 @@
+// The edges of an octahedron subdivided `depth` times and pushed onto a
+// sphere, one segment per triangle edge, lit by one directional light and an
+// ambient term, tumbling about a tilted axis.
+// Ported from tmalib example/core/model_sphere.html and the even sphere of
+// src/TmaModelPrimitives.js.
+//
+//     cargo run -p karakuri-cli -- --set examples/wire_sphere.kir,examples/tint_strokes.kir
+
+proc wire_sphere {
+  kind     L1
+  topology lines
+
+  // Three segments per triangle and 8 * 4^depth triangles: 6144 holds depth 4.
+  capacity [24, 24576] = 6144
+
+  // Subdivision depth, 0 to 5; the whole part is used.
+  param depth   : float [0.0, 5.0]  = 3.0
+
+  // Sphere radius in world units.
+  param radius  : float [0.2, 4.0]  = 2.4
+
+  // Turns per second about the tumble axis.
+  param spin    : float [-1.0, 1.0] = 0.05
+
+  // Direction towards the light, its colour, and the ambient colour.
+  param light   : vec3 [-1.0, 1.0]  = vec3(0.25, 0.25, 1.0)
+  param diffuse : vec3 [0.0, 4.0]   = vec3(0.8, 0.8, 0.8)
+  param ambient : vec3 [0.0, 4.0]   = vec3(0.2, 0.2, 0.2)
+
+  emit position, velocity, tint
+
+  element {
+    let d    = uint(clamp(depth, 0.0, 5.0));
+    var per  = 1u;
+    for i in 0..5 {
+      if uint(i) < d {
+        per = per * 4u;
+      }
+    }
+
+    let edge = seed % 3u;
+    let tri  = seed / 3u;
+    let face = tri / per;
+    let sub  = tri % per;
+
+    let q    = float(face / 2u) * 1.5707963;
+    let pole = 1.0 - 2.0 * float(face % 2u);
+    var a = vec3(cos(q), sin(q), 0.0);
+    var b = vec3(cos(q + 1.5707963), sin(q + 1.5707963), 0.0);
+    var c = vec3(0.0, 0.0, pole);
+
+    // Base-4 digits of `sub`, most significant first, pick one of the four
+    // children at each level.
+    var place = per / 4u;
+    for i in 0..5 {
+      if uint(i) < d {
+        let digit = (sub / place) % 4u;
+        let ab = normalize(a + b);
+        let bc = normalize(b + c);
+        let ca = normalize(c + a);
+        if digit == 0u {
+          b = ab;
+          c = ca;
+        }
+        if digit == 1u {
+          a = ab;
+          c = bc;
+        }
+        if digit == 2u {
+          a = bc;
+          b = c;
+          c = ca;
+        }
+        if digit == 3u {
+          a = ab;
+          b = bc;
+          c = ca;
+        }
+        place = place / 4u;
+      }
+    }
+
+    var p0 = a;
+    var p1 = b;
+    if edge == 1u {
+      p0 = b;
+      p1 = c;
+    }
+    if edge == 2u {
+      p0 = c;
+      p1 = a;
+    }
+
+    let ax  = normalize(vec3(1.0, 0.5, 1.0));
+    let ang = t * spin * 6.2831853;
+    let w0  = rot_axis(p0, ax, ang);
+    let w1  = rot_axis(p1, ax, ang);
+
+    let n   = normalize(w0 + w1);
+    let lam = max(dot(n, normalize(light + vec3(0.0, 0.0, 0.0001))), 0.0);
+
+    let used = face < 8u;
+    if used {
+      position = w0 * radius;
+      velocity = (w0 - w1) * radius;
+      tint     = ambient + diffuse * lam;
+    } else {
+      position = vec3(0.0);
+      velocity = vec3(0.0);
+      tint     = vec3(0.0);
+    }
+  }
+}

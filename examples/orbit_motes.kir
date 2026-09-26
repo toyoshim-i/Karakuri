@@ -1,0 +1,50 @@
+// Motes circling a vertical axis, each bobbing up and down at its own rate;
+// a mote's orbit radius follows the level of the band that matches its
+// current height, low bands at the bottom and high at the top.
+// Ported from tmalib ext/mv/frame/specticle.
+//
+//     cargo run -p karakuri-cli -- --set examples/orbit_motes.kir,examples/halo_points.kir
+
+proc orbit_motes {
+  kind     L1
+  topology points
+  capacity [16, 65536] = 512
+
+  // Levels at the bottom, the middle and the top of the column; meant to be
+  // bound to audio bands. 0.5 leaves an orbit at its base radius.
+  param low    : float [0.0, 1.0]  = 0.5
+  param mid    : float [0.0, 1.0]  = 0.5
+  param high   : float [0.0, 1.0]  = 0.5
+
+  // Half-height of the column and the largest base orbit radius, in world
+  // units.
+  param height : float [0.1, 4.0]  = 2.2
+  param reach  : float [0.1, 4.0]  = 2.4
+
+  // Radians per second of the slowest orbit and of the slowest bob; the
+  // fastest of each is twice that.
+  param orbit  : float [0.0, 8.0]  = 2.0
+  param bob    : float [0.0, 8.0]  = 1.0
+
+  // Colour of every mote, in sRGB.
+  param color  : vec3 [0.0, 4.0]   = vec3(0.7, 0.2, 0.5)
+
+  emit position, tint
+
+  element {
+    let r = hash3(seed);
+    let s = hash2(seed + 1u);
+
+    let y = sin(t * bob * (1.0 + s.x) + r.y * 6.2831853);
+
+    // The level at this height: low at -1, mid at 0, high at +1.
+    let lv = mix(mix(low, mid, clamp(y + 1.0, 0.0, 1.0)), high, clamp(y, 0.0, 1.0));
+
+    let base = reach * (0.25 + 0.75 * r.z);
+    let rad  = base * lv * 2.0;
+    let a    = t * orbit * (1.0 + s.y) + r.x * 6.2831853;
+
+    position = vec3(cos(a) * rad, y * height, sin(a) * rad);
+    tint     = srgb_to_linear(color);
+  }
+}

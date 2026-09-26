@@ -1,0 +1,10 @@
+{"t":"set","id":"arc_rain","v":1}
+{"t":"part","layer":"L1","path":"fall_field.kir"}
+{"t":"part","layer":"L4","path":"plain_points.kir"}
+{"t":"param","layer":"L1","key":"arc","value":0.7}
+{"t":"param","layer":"L1","key":"rainbow","value":1.0}
+{"t":"param","layer":"L1","key":"cycle","value":0.28}
+{"t":"param","layer":"L1","key":"sway","value":0.03}
+{"t":"param","layer":"L4","key":"point_scale","value":0.004}
+{"t":"param","layer":"L4","key":"exposure","value":1.6}
+{"t":"bind","layer":"L1","key":"cycle","signal":"energy","curve":"smooth","range":[0.2,0.8]}

@@ -1,0 +1,46 @@
+// The frame cut into a grid of flat panels that each pulse between black and
+// `shade` on a sine; the phases step from panel to panel so the flash chases
+// across the grid, and `scatter` gives each panel its own random rate instead.
+// Draws the whole frame and reads no geometry.
+// Ported from tmalib ext/mv/frame/flushpanel/main.js.
+//
+//     cargo run -p karakuri -- examples/step_grid.kir examples/flush_panels.kir
+
+proc flush_panels {
+  kind  L4
+  blend additive
+
+  // Panels across and down, floored.
+  param cols    : float [1.0, 32.0] = 4.0
+  param rows    : float [1.0, 32.0] = 1.0
+
+  // Pulse rate of a panel in radians per second.
+  param rate    : float [0.0, 40.0] = 10.0
+
+  // Turns of phase across the whole grid, in panel order; negative runs the
+  // chase the other way.
+  param chase   : float [-2.0, 2.0] = -1.0
+
+  // 0 gives every panel `rate`; 1 gives each a random rate between 0 and
+  // ten times `rate`.
+  param scatter : float [0.0, 1.0] = 0.0
+
+  // Colour of a panel at the top of its pulse.
+  param shade   : vec3 [0.0, 4.0] = vec3(0.3, 0.3, 0.3)
+
+  fragment {
+    let nx = floor(cols);
+    let ny = floor(rows);
+    let ix = min(floor(point_coord.x * nx), nx - 1.0);
+    let iy = min(floor((1.0 - point_coord.y) * ny), ny - 1.0);
+    let i  = iy * nx + ix;
+    let n  = nx * ny;
+
+    let own  = hash1(uint(i) * 7919u + 13u) * 10.0;
+    let w    = mix(1.0, own, scatter);
+    let ph   = t * rate * w + chase * 6.2831853 * i / n;
+    let l    = (sin(ph) + 1.0) * 0.5;
+
+    color = vec4(shade * l, 1.0);
+  }
+}

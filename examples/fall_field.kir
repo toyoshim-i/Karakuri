@@ -1,0 +1,75 @@
+// Elements falling through a box from its top to its floor and starting again
+// at the top: snow, rain, or a dome-shaped front of colour-cycling drops,
+// depending on the params. Each element's start speed eases to a common
+// terminal speed.
+// Ported from tmalib example/core/snow.html, rain.html, rainbow.html and
+// ext/mv/frame/snow.
+//
+//     cargo run -p karakuri-cli -- --set examples/fall_field.kir,examples/plain_points.kir
+
+proc fall_field {
+  kind     L1
+  topology points
+  capacity [1024, 1048576] = 32768
+
+  // Half-width of the box on x and z, and its top and floor heights.
+  param width   : float [0.5, 8.0]   = 4.0
+  param top     : float [0.0, 6.0]   = 3.0
+  param floor   : float [-6.0, 0.0]  = -3.0
+
+  // Terminal speed in world units per second, the spread of start speeds
+  // around it as a fraction of it, and how fast a start speed eases to it.
+  param fall    : float [0.1, 20.0]  = 0.9
+  param launch  : float [0.0, 1.0]   = 0.5
+  param ease    : float [0.1, 10.0]  = 0.6
+
+  // Horizontal sway amplitude in world units, and its frequency in hertz.
+  param sway    : float [0.0, 1.0]   = 0.12
+  param wobble  : float [0.0, 4.0]   = 0.3
+
+  // Depth of the dome the start line is bent into: 0 starts every element at
+  // `top`, 1 lowers the start line at the box's edge to the floor.
+  param arc     : float [0.0, 1.0]   = 0.0
+
+  // Colour of an element; `rainbow` mixes towards a hue that cycles with the
+  // element's fall time at `cycle` turns per second.
+  param color   : vec3  [0.0, 4.0]   = vec3(1.0, 1.0, 1.0)
+  param rainbow : float [0.0, 1.0]   = 0.0
+  param cycle   : float [0.0, 2.0]   = 0.4
+
+  emit position, velocity, tint
+
+  element {
+    let span = max(top - floor, 0.01);
+    let v0   = fall * (1.0 + launch * (hash1(seed + 11u) * 2.0 - 1.0));
+    let lag  = (v0 - fall) / ease;
+
+    // Seconds from the top to the floor at this element's start speed.
+    let period = max((span - lag) / fall, 0.05);
+
+    let run = t / period + hash1(seed);
+    let n   = floor(run);
+    let tau = fract(run) * period;
+    let key = seed * 7919u + uint(n) * 104729u;
+
+    let x = (hash1(key + 1u) * 2.0 - 1.0) * width;
+    let z = (hash1(key + 2u) * 2.0 - 1.0) * width;
+
+    let r   = clamp(length(vec2(x, z)) / (width * 1.4142136), 0.0, 1.0);
+    let y0  = top - arc * span * (1.0 - sqrt(max(1.0 - r * r, 0.0)));
+    let dy  = fall * tau + lag * (1.0 - exp(0.0 - ease * tau));
+    let vy  = fall + (v0 - fall) * exp(0.0 - ease * tau);
+
+    let ph = hash1(key + 3u) * 6.2831853 + t * wobble * 6.2831853;
+    let sx = sin(ph) * sway;
+    let sz = cos(ph * 0.77) * sway;
+
+    position = vec3(x + sx, y0 - dy, z + sz);
+    velocity = vec3(cos(ph) * sway * wobble * 6.2831853, 0.0 - vy, 0.0);
+
+    let h  = fract(tau * cycle + hash1(seed + 5u) * 0.1);
+    let sv = hash2(key + 4u);
+    let rb = hsv_to_rgb(vec3(h, 0.5 + 0.5 * sv.x, 1.0)) * (0.2 + 0.8 * sv.y);
+    tint = mix(color, rb, vec3(rainbow));
+  }
+}

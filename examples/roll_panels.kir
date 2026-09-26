@@ -1,0 +1,52 @@
+// Cuts the picture into vertical strips and rolls each strip about the
+// horizontal axis in perspective, the outer strips lagging the centre ones;
+// where no strip covers the frame it is transparent.
+// Ported from tmalib ext/mv/effect/rollpanel.
+
+proc roll_panels {
+  kind L5
+
+  // Number of vertical strips, up to 8.
+  param panels : float [1.0, 8.0] = 3.0
+  // Rotation rate in turns per beat; negative rolls the other way.
+  param rate : float [-1.0, 1.0] = 0.125
+  // Delay of each strip per step away from the centre, in turns.
+  param lag : float [0.0, 0.5] = 0.25
+  // Camera distance in strip half-heights; smaller exaggerates the perspective.
+  param depth : float [1.5, 8.0] = 3.0
+
+  frame {
+    let n      = clamp(floor(panels), 1.0, 8.0);
+    let middle = (n - 1.0) * 0.5;
+    // Screen position in [-1, 1] with y up; at rest a strip spans its share of it.
+    let sx     = point_coord.x * 2.0 - 1.0;
+    let sy     = 1.0 - point_coord.y * 2.0;
+
+    var nearest = 1.0e9;
+    var hit     = vec2(0.0);
+    var found   = 0.0;
+    for i in 0..8 {
+      let fi = float(i);
+      if fi < n {
+        let ang = 6.2831853 * (beats * rate - abs(fi - middle) * lag);
+        let c   = cos(ang);
+        let s   = sin(ang);
+        let den = depth * c + sy * s;
+        if abs(den) > 0.00001 {
+          // Inverse perspective: the point on the rotated strip that projects here.
+          let py   = sy * depth / den;
+          let dist = depth - py * s;
+          let px   = sx * dist / depth;
+          let left = -1.0 + 2.0 * fi / n;
+          if abs(py) <= 1.0 && px >= left && px <= left + 2.0 / n && dist < nearest {
+            nearest = dist;
+            hit     = vec2(px, py);
+            found   = 1.0;
+          }
+        }
+      }
+    }
+
+    color = tap(src, vec2(hit.x * 0.5 + 0.5, 0.5 - hit.y * 0.5)) * found;
+  }
+}

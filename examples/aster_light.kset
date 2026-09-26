@@ -1,0 +1,4 @@
+{"t":"set","id":"aster_light","v":1}
+{"t":"part","layer":"L1","path":"aster_field.kir"}
+{"t":"part","layer":"L4","path":"aster_sprites.kir"}
+{"t":"bind","layer":"L1","key":"lift","signal":"energy","curve":"sqrt","range":[0.2,2.0]}

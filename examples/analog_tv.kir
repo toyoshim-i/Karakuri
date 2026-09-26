@@ -1,0 +1,51 @@
+// Degrades the picture like a worn analogue television: scanlines, slow colour
+// drift per line, horizontal jitter bands, moving grain and a bright tube centre.
+// Ported from tmalib ext/mv/effect/noise.
+
+proc analog_tv {
+  kind L5
+
+  // Depth of the scanline darkening; 0 removes the lines.
+  param scanline : float [0.0, 1.0] = 0.5
+  // Strength of the per-line colour drift; 0 keeps colours even.
+  param drift : float [0.0, 1.0] = 1.0
+  // Strength of the horizontal jitter bands; 0 keeps lines aligned.
+  param jitter : float [0.0, 1.0] = 0.5
+  // Level of the grain added to every texel; 0 is clean.
+  param grain : float [0.0, 1.0] = 0.25
+  // Brightening toward the tube centre and darkening toward its edges; 0 is flat.
+  param tube : float [0.0, 1.0] = 1.0
+
+  frame {
+    let fy = 1.0 - point_coord.y;
+
+    // Scanlines: 180 per frame height.
+    let wave = (sin(fy * 1130.97) + 1.0) * 0.5;
+    let line = 1.0 - scanline + wave * scanline;
+
+    // Colour drift: one slow noise per channel along the frame height.
+    let tc     = t * 0.1;
+    let tint_n = vec3(perlin(vec3(fy * 8.0, tc, 0.5)),
+                      perlin(vec3(fy * 8.0, tc, 0.7)),
+                      perlin(vec3(fy * 8.0, tc, 0.3)));
+    let lane = line * mix(vec3(1.0), (vec3(1.0) + tint_n) * 0.5, vec3(drift));
+
+    // Jitter: bands where a coarse noise passes 0.4 shift left by up to 0.11 of the width.
+    let tr   = t * 5.0;
+    let n1   = perlin(vec3(fy * 256.0, tr, 2.27));
+    let n2   = perlin(vec3(fy * 32.0, tr, 6.23));
+    let band = step(0.4, n2) * (1.0 + n1) * 0.055 * jitter;
+
+    let s = tap(src, vec2(point_coord.x - band, point_coord.y));
+
+    // Grain: a fresh value per texel at roughly 720 rows, redrawn 60 times a second.
+    let px    = floor(point_coord / frame_step(0.0014));
+    let noise = (value_noise(vec3(px, floor(t * 60.0))) + 1.0) * 0.5 * grain;
+
+    let g     = point_coord * (vec2(1.0) - point_coord);
+    let shade = mix(1.0, 0.1 + g.x * g.y * 48.0, tube);
+
+    let rgb = s.xyz * lane + lane * (band * 2.0) + vec3(noise);
+    color = vec4(rgb * shade, s.w);
+  }
+}

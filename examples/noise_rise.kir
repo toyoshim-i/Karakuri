@@ -1,0 +1,38 @@
+// Motes of random colour rising through a box from its floor to its ceiling and
+// wrapping back to the floor, pushed sideways by slowly changing noise on the
+// way up.
+// Ported from tmalib example/mv_api3d/mv_3g05.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/noise_rise.kir,examples/flat_eye.kir,examples/plain_points.kir
+
+proc noise_rise {
+  kind     L1
+  topology points
+  capacity [256, 262144] = 2048
+
+  // Half the width and depth of the box, and half its height, in world units.
+  param wide  : float [0.2, 8.0] = 3.5
+  param tall  : float [0.2, 8.0] = 4.0
+
+  // Rising speed in world units per second.
+  param rise  : float [0.0, 4.0] = 0.24
+
+  // Largest sideways push of the noise, and the rate the noise changes.
+  param sway  : float [0.0, 4.0] = 1.2
+  param churn : float [0.0, 1.0] = 0.06
+
+  emit position, tint
+
+  element {
+    let b  = hash3(seed) * 2.0 - vec3(1.0);
+    let y  = mod(t * rise * (0.8 + 0.4 * hash1(seed + 17u)) + hash1(seed + 5u) * 2.0 * tall, 2.0 * tall) - tall;
+    let q  = vec3(b.x * wide, y, b.z * wide);
+    let n  = t * churn;
+
+    let dx = perlin(vec3(q.y / 1.024, q.z / 4.096, n));
+    let dz = perlin(vec3(q.x / 4.096, q.y / 1.024, n + 7.0));
+
+    position = q + vec3(dx, 0.0, dz) * sway;
+    tint     = hash3(seed + 911u);
+  }
+}

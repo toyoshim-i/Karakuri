@@ -1,0 +1,22 @@
+// Cuts every segment into sixteen equal pieces, so a long line that passes
+// behind the eye loses only the pieces behind it. For geometry that puts the
+// offset to a segment's far end in `velocity`.
+//
+//     cargo run -p karakuri-cli -- --set examples/line_bounce.kir,examples/line_split.kir,examples/room_eye.kir,examples/room_strokes.kir
+
+proc line_split {
+  kind    L2
+  amplify 16
+
+  // Fraction of each piece left empty, which turns a line into dashes.
+  param gap : float [0.0, 0.9] = 0.0
+
+  consumes position, velocity
+
+  deform {
+    let piece = velocity / 16.0;
+
+    position = position - piece * float(copy);
+    velocity = piece * (1.0 - gap);
+  }
+}

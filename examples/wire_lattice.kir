@@ -1,0 +1,66 @@
+// A cubic lattice of straight lines, `lines` per side along each of the three
+// axes, turning about a tilted axis. Every line is cut into twenty segments so a
+// camera can stand inside the lattice. Seed / 8000 is the axis, then twenty-by-
+// twenty lines of twenty segments each; lines past `lines` and seeds past 23999
+// draw nothing.
+// Ported from tmalib ext/mv/frame/wired/main.js and ext/mv/frame/grid/main.js.
+//
+//     cargo run -p karakuri -- examples/wire_lattice.kir examples/tint_strokes.kir
+
+proc wire_lattice {
+  kind     L1
+  topology lines
+  capacity [24000, 1048576] = 24000
+
+  // Lines per side along each axis, floored.
+  param lines  : float [2.0, 20.0] = 19.0
+
+  // Half the side of the cube the lattice fills, in world units.
+  param extent : float [0.5, 20.0] = 9.0
+
+  // Turn rate about the tilted axis, in radians per second.
+  param spin   : float [-2.0, 2.0] = 0.5
+
+  // Colour of the lines, as hue, saturation and brightness.
+  param hue    : float [0.0, 1.0] = 0.66
+  param sat    : float [0.0, 1.0] = 1.0
+  param bright : float [0.0, 4.0] = 0.35
+
+  emit position, velocity, tint
+
+  element {
+    let ax = seed / 8000u;
+    let r  = seed % 8000u;
+    let i  = float(r / 400u);
+    let j  = float((r / 20u) % 20u);
+    let k  = float(r % 20u);
+    let n  = floor(lines);
+
+    let u  = (i / (n - 1.0) * 2.0 - 1.0) * extent;
+    let v  = (j / (n - 1.0) * 2.0 - 1.0) * extent;
+    let s0 = (k / 20.0 * 2.0 - 1.0) * extent;
+    let s1 = ((k + 1.0) / 20.0 * 2.0 - 1.0) * extent;
+
+    var a = vec3(s0, u, v);
+    var b = vec3(s1, u, v);
+    if ax == 1u {
+      a = vec3(u, s0, v);
+      b = vec3(u, s1, v);
+    }
+    if ax == 2u {
+      a = vec3(u, v, s0);
+      b = vec3(u, v, s1);
+    }
+
+    let axis = normalize(vec3(0.1, 0.2, 0.0));
+    let pa   = rot_axis(a, axis, t * spin);
+    var pb   = rot_axis(b, axis, t * spin);
+    if ax > 2u || i >= n || j >= n {
+      pb = pa;
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = hsv_to_rgb(vec3(hue, sat, 1.0)) * bright;
+  }
+}

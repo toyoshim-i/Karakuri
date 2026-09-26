@@ -1,0 +1,6 @@
+{"t":"set","id":"glyph_burst","v":1}
+{"t":"part","layer":"L1","path":"dot_glyph.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"ball_sprites.kir"}
+{"t":"param","layer":"L3","key":"frame","value":7.25}
+{"t":"bind","layer":"L1","key":"burst","signal":"energy","curve":"pow2","range":[3.0,14.0]}

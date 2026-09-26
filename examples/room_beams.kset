@@ -1,0 +1,5 @@
+{"t":"set","id":"room_beams","v":1}
+{"t":"part","layer":"L1","path":"room_beams.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"room_glow.kir"}
+{"t":"bind","layer":"L4","key":"exposure","signal":"energy","curve":"smooth","range":[0.9,2.4]}

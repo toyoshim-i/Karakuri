@@ -1,0 +1,6 @@
+{"t":"set","id":"wire_room","v":1}
+{"t":"part","layer":"L1","path":"wire_lattice.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L1","key":"bright","value":0.25}
+{"t":"param","layer":"L4","key":"width","value":0.0012}
+{"t":"bind","layer":"L1","key":"spin","signal":"energy","curve":"smooth","range":[0.25,1.0]}

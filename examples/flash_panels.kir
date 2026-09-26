@@ -1,0 +1,32 @@
+// Adds a ring of light that sweeps outward across a grid of panels, one ring
+// per period; each panel is lit by its distance from the ring's front.
+// Ported from tmalib ext/mv/effect/flashpanel.
+
+proc flash_panels {
+  kind L5
+
+  // Number of panel columns across the frame.
+  param columns : float [1.0, 32.0] = 10.0
+  // Number of panel rows down the frame.
+  param rows : float [1.0, 32.0] = 5.0
+  // Centre of the ring, in [-1, 1] frame coordinates with y up.
+  param origin : vec2 [-1.0, 1.0] = vec2(0.0, 0.0)
+  // Beats between the start of one ring and the next.
+  param period : float [0.25, 16.0] = 1.0
+  // Hue of the light.
+  param hue : float [0.0, 1.0] = 0.66
+  // Brightness of the light added to the picture; 0 leaves the picture untouched.
+  param amount : float [0.0, 4.0] = 0.5
+
+  frame {
+    let n     = max(floor(vec2(columns, rows)), vec2(1.0));
+    let panel = (floor(point_coord * n) + vec2(0.5)) / n;
+    let o     = vec2(0.5 + origin.x * 0.5, 0.5 - origin.y * 0.5);
+    let front = fract(beats / period) * 1.5;
+    let d     = abs(distance(panel, o) - front);
+    let c     = 1.0 / (0.1 + d * 5.0);
+    let light = hsv_to_rgb(vec3(hue, 0.5, 1.0)) * (c * amount);
+    let s     = texel(src);
+    color = vec4(s.xyz + light, s.w);
+  }
+}

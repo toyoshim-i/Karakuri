@@ -1,0 +1,61 @@
+// A pen at the right edge moving up and down on a sine whose phase is itself
+// modulated by a faster sine, its trace scrolling left as a polyline; each
+// segment takes its colour from the pen's height when drawn and turns its hue
+// as it ages.
+// Ported from tmalib example/core/sin.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/sine_trace.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc sine_trace {
+  kind     L1
+  topology lines
+
+  // One segment per element, evenly spaced along the trace.
+  capacity [64, 65536] = 1024
+
+  // Width of the trace and its vertical amplitude, in world units.
+  param span   : float [0.2, 8.0]  = 3.8
+  param amp    : float [0.0, 2.0]  = 0.66
+
+  // Seconds a point of the trace takes to cross from right to left.
+  param cross  : float [0.5, 30.0] = 5.0
+
+  // Radians per second of the slow sine, and of the sine that bends its phase.
+  param slow   : float [0.0, 8.0]  = 1.0
+  param fast   : float [0.0, 20.0] = 5.0
+
+  // Turns of hue per second of a segment's age.
+  param cycle  : float [0.0, 2.0]  = 0.278
+
+  emit position, velocity, tint
+
+  element {
+    let n    = float(capacity);
+    let step = cross / n;
+    let old  = (float(seed) + 0.5) * step;
+
+    let ta = max(t - old, 0.0);
+    let tb = max(t - old - step, 0.0);
+    let oa = sin(ta * fast);
+    let ob = sin(tb * fast);
+    let ya = sin(oa + ta * slow) * amp;
+    let yb = sin(ob + tb * slow) * amp;
+
+    let xa = span * 0.5 - old / cross * span;
+    let xb = xa - step / cross * span;
+
+    position = vec3(xa, ya, 0.0);
+    velocity = vec3(xa - xb, ya - yb, 0.0);
+
+    // The pen's colour: red from the fast sine, full green, blue from height.
+    let pen = vec3(max(oa, 0.0) * 0.5, 1.0, clamp(0.5 - ya / (amp * 2.0 + 0.0001), 0.0, 1.0) * 0.78);
+    let hsv = rgb_to_hsv(pen);
+
+    let drawn = t - old >= 0.0;
+    if drawn {
+      tint = hsv_to_rgb(vec3(fract(hsv.x + old * cycle), hsv.y, hsv.z));
+    } else {
+      tint = vec3(0.0);
+    }
+  }
+}

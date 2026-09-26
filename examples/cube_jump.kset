@@ -1,0 +1,7 @@
+{"t":"set","id":"cube_jump","v":1}
+{"t":"part","layer":"L1","path":"cube_lattice.kir"}
+{"t":"part","layer":"L3","path":"beat_jump.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L3","key":"radius","value":2.5}
+{"t":"param","layer":"L3","key":"lift","value":1.0}
+{"t":"bind","layer":"L1","key":"jitter","signal":"energy","curve":"pow2","range":[0.02,0.4]}

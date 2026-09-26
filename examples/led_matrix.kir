@@ -1,0 +1,46 @@
+// Shows the picture on a grid of round LEDs, one colour per LED, optionally
+// on a band that twists about the horizontal axis.
+// Ported from tmalib ext/mv/effect/led.
+
+proc led_matrix {
+  kind L5
+
+  // Height of one LED as a fraction of the frame height.
+  param cell : float [0.004, 0.05] = 0.011
+  // Brightness gain of the LEDs.
+  param gain : float [0.0, 8.0] = 2.0
+  // Half-turns the band twists across the frame width; 0 keeps it flat.
+  param twist : float [0.0, 4.0] = 0.0
+  // Rotation rate of the twist in radians per second.
+  param speed : float [-8.0, 8.0] = 1.0
+  // Blend from the untouched picture (0) to the LED picture (1).
+  param amount : float [0.0, 1.0] = 1.0
+
+  frame {
+    // Vertical position in [-1, 1] with y up, divided by the band's projected height.
+    let y  = 1.0 - point_coord.y * 2.0;
+    var cy = y;
+    var on = 1.0;
+    if twist > 0.0 {
+      let h = sin((point_coord.x * 2.0 - 1.0) * 3.14159265 * twist + t * speed);
+      if abs(y) < abs(h) {
+        cy = y / h;
+      } else {
+        on = 0.0;
+      }
+    }
+
+    let d   = frame_step(cell);
+    let u   = vec2(point_coord.x, 0.5 - cy * 0.5) / d;
+    let c   = tap(src, (floor(u) + vec2(0.5)) * d);
+
+    // LED brightness: sin^4 across and down each cell of the fixed screen grid.
+    let w   = sin(fract(point_coord / d) * 3.14159265);
+    let w2  = w * w;
+    let l   = w2 * w2;
+    let led = c.xyz * (l.x * l.y * gain * on);
+
+    let s = texel(src);
+    color = vec4(mix(s.xyz, led, vec3(amount)), s.w);
+  }
+}

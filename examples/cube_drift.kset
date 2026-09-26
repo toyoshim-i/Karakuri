@@ -1,0 +1,7 @@
+{"t":"set","id":"cube_drift","v":1}
+{"t":"part","layer":"L1","path":"cube_drift.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"room_strokes.kir"}
+{"t":"param","layer":"L3","key":"turn","value":0.03}
+{"t":"param","layer":"L4","key":"exposure","value":1.6}
+{"t":"bind","layer":"L4","key":"width","signal":"energy","curve":"smooth","range":[0.0018,0.0045]}

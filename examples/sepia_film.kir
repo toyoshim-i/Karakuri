@@ -1,0 +1,49 @@
+// Ages the picture like projected film: red and blue split sideways, colour
+// drains toward a tint, dark vertical scratches wander across the frame and
+// the brightness flickers.
+// Ported from tmalib ext/mv/effect/noise.
+
+proc sepia_film {
+  kind L5
+
+  // Sideways offset of red and blue against green, as a fraction of the frame height.
+  param split : float [0.0, 0.02] = 0.009
+  // Saturation kept from the source; 0 is monochrome, 1 is unchanged.
+  param saturation : float [0.0, 1.5] = 0.1
+  // Per-channel weight applied after the saturation change.
+  param shade : vec3 [0.0, 2.0] = vec3(1.0, 0.7, 0.4)
+  // Number of vertical scratches, up to 5; a fraction fades the last one.
+  param scratches : float [0.0, 5.0] = 3.0
+  // Depth of the brightness flicker; 0 is steady.
+  param flicker : float [0.0, 1.0] = 0.4
+  // Brightening toward the frame centre and darkening toward its edges; 0 is flat.
+  param tube : float [0.0, 1.0] = 1.0
+
+  frame {
+    let d = frame_step(split);
+    let r = tap(src, point_coord - vec2(d.x, 0.0)).x;
+    let c = texel(src);
+    let b = tap(src, point_coord + vec2(d.x, 0.0)).z;
+
+    let rgb  = vec3(r, c.y, b);
+    let luma = dot(rgb, vec3(0.299, 0.587, 0.114));
+    let aged = (vec3(luma) + (rgb - vec3(luma)) * saturation) * shade;
+
+    // Scratches: 1-texel-wide lines that darken by 30%, each wandering on its own noise.
+    let w    = frame_step(0.0014).x;
+    var dark = 1.0;
+    for i in 0..5 {
+      let fi = float(i);
+      let x  = 0.5 + perlin(vec3(t, fi * 3.33, fi * 7.77))
+                   + perlin(vec3(t * 100.0, fi * 4.0, fi * 8.0)) * 0.01;
+      let on = clamp(scratches - fi, 0.0, 1.0);
+      dark = dark * (1.0 - 0.3 * on * (1.0 - smoothstep(0.0, w, abs(point_coord.x - x))));
+    }
+
+    let g     = point_coord * (vec2(1.0) - point_coord);
+    let lamp  = mix(1.0, 0.1 + g.x * g.y * 48.0, tube);
+    let flash = 1.0 + perlin(vec3(0.1, 0.1, t * 100.0)) * flicker;
+
+    color = vec4(aged * (dark * lamp * flash), c.w);
+  }
+}

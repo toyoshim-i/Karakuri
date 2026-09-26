@@ -1,0 +1,39 @@
+// One shaded ball per element: a disc `size` world units in radius, sized in
+// perspective, coloured `tint` and lit white from the upper left front.
+// Ported from tmalib ext/mv/frame/at/shaders.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/dot_glyph.kir,examples/flat_eye.kir,examples/ball_sprites.kir
+
+proc ball_sprites {
+  kind  L4
+  blend weighted
+
+  consumes position, tint, size
+
+  // Multiplier on the world radius each element carries in `size`.
+  param scale    : float [0.0, 4.0] = 1.0
+
+  // Strength of the white light added on the lit side.
+  param shine    : float [0.0, 2.0] = 0.4
+
+  // Brightness multiplier on the lit colour.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  vertex {
+    let c  = camera * vec4(position, 1.0);
+    let cu = camera * vec4(position + vec3(0.0, size * scale, 0.0), 1.0);
+
+    clip       = c;
+    point_rate = abs(cu.y / cu.w - c.y / c.w);
+  }
+
+  fragment {
+    let q  = point_coord * 2.0 - 1.0;
+    let r2 = dot(q, q);
+    let n  = vec3(q.x, -q.y, sqrt(max(1.0 - r2, 0.0)));
+    let w  = max(dot(n, normalize(vec3(-0.4, 0.4, 0.7))), 0.0);
+    let a  = 1.0 - smoothstep(0.85, 1.0, sqrt(r2));
+
+    color = vec4((tint + vec3(shine * w)) * exposure, a);
+  }
+}

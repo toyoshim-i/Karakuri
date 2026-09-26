@@ -1,0 +1,70 @@
+// Streaks of saturated primary and secondary colour crossing the square
+// [-1, 1] of the xy plane, each along x or along y, easing from its launch
+// speed to a common cruising speed.
+// Ported from tmalib example/core/glow_cube.html, glow_cube2.html and
+// glow_cube3.html (the texture drawn on the cube).
+//
+//     cargo run -p karakuri-cli -- --set examples/face_streaks.kir,examples/cube_wrap.kir,examples/tint_strokes.kir
+
+proc face_streaks {
+  kind     L1
+  topology points
+  capacity [256, 262144] = 2048
+
+  // Cruising speed in square widths per second, the spread of launch speeds
+  // around it as a fraction of it, and how fast a launch speed eases to it.
+  param speed  : float [0.02, 2.0] = 0.25
+  param launch : float [0.0, 1.0]  = 0.8
+  param ease   : float [0.1, 10.0] = 0.5
+
+  // Seconds of travel a renderer drawing `velocity` as a trail should show;
+  // `velocity` is shortened near the launch edge so such a trail stays on the
+  // square.
+  param trail  : float [0.05, 4.0] = 1.2
+
+  // Brightness of a lit channel, and the lowest brightness it may take.
+  param bright : float [0.0, 4.0]  = 1.0
+  param low    : float [0.0, 1.0]  = 0.63
+
+  emit position, velocity, tint
+
+  element {
+    let v0  = speed * (1.0 + launch * (hash1(seed + 11u) * 2.0 - 1.0));
+    let lag = (v0 - speed) / ease;
+
+    let period = max((2.0 - lag) / speed, 0.05);
+
+    let run = t / period + hash1(seed);
+    let n   = floor(run);
+    let tau = fract(run) * period;
+    let key = seed * 7919u + uint(n) * 104729u;
+
+    let s    = tau * speed + lag * (1.0 - exp(0.0 - ease * tau));
+    let vv   = min(speed + (v0 - speed) * exp(0.0 - ease * tau), s / trail);
+    let along = min(s, 2.0) - 1.0;
+    let lane  = hash1(key + 1u) * 2.0 - 1.0;
+    let dir   = step(0.5, hash1(key + 2u)) * 2.0 - 1.0;
+
+    let horiz = hash1(key + 3u) < 0.5;
+    if horiz {
+      position = vec3(along * dir, lane, 0.0);
+      velocity = vec3(vv * dir, 0.0, 0.0);
+    } else {
+      position = vec3(lane, along * dir, 0.0);
+      velocity = vec3(0.0, vv * dir, 0.0);
+    }
+
+    // Each channel is off, or on at a level between `low` and 1; black is
+    // turned into white.
+    let ch = hash3(key + 4u);
+    let lv = hash3(key + 5u);
+    let on = step(vec3(0.5), ch);
+    let lit = on * (vec3(low) + lv * (1.0 - low));
+    let blank = dot(on, vec3(1.0)) < 0.5;
+    if blank {
+      tint = vec3(bright);
+    } else {
+      tint = srgb_to_linear(lit) * bright;
+    }
+  }
+}

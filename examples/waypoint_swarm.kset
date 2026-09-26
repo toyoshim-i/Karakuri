@@ -1,0 +1,8 @@
+{"t":"set","id":"waypoint_swarm","v":1}
+{"t":"part","layer":"L1","path":"waypoint_swarm.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"room_glow.kir"}
+{"t":"param","layer":"L4","key":"bulk","value":0.04}
+{"t":"param","layer":"L4","key":"widest","value":0.02}
+{"t":"param","layer":"L4","key":"trail","value":0.08}
+{"t":"bind","layer":"L4","key":"exposure","signal":"energy","curve":"smooth","range":[0.4,1.2]}

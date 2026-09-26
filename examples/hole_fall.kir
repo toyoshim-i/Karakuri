@@ -1,0 +1,59 @@
+// Particles appearing at rest anywhere in the square [-1, 1] of the xy plane
+// and falling straight into its centre under a spring pull, vanishing at the
+// event horizon; each one's hue turns as it falls.
+// Ported from tmalib example/core/blackhole.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/hole_fall.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc hole_fall {
+  kind     L1
+  topology points
+  capacity [1024, 1048576] = 8192
+
+  // Angular frequency of the pull in radians per second; a particle released
+  // at rest reaches the centre after a quarter period.
+  param pull    : float [0.1, 4.0]  = 0.9
+
+  // Radius at which a particle vanishes.
+  param horizon : float [0.01, 0.8] = 0.2
+
+  // Seconds between a particle's release and its next release elsewhere.
+  param period  : float [0.5, 10.0] = 2.2
+
+  // Turns of hue per second of fall.
+  param cycle   : float [0.0, 2.0]  = 0.14
+
+  // Scale of the whole square, in world units.
+  param extent  : float [0.1, 4.0]  = 1.0
+
+  emit position, velocity, tint
+
+  element {
+    let run = t / period + hash1(seed);
+    let n   = floor(run);
+    let tau = fract(run) * period;
+    let key = seed * 7919u + uint(n) * 104729u;
+
+    let p0 = (hash2(key) * 2.0 - vec2(1.0)) * extent;
+    let r0 = length(p0);
+    let wt = pull * tau;
+    let r  = r0 * cos(min(wt, 1.5707963));
+
+    let dir = p0 / max(r0, 0.0001);
+    let v   = r0 * pull * sin(min(wt, 1.5707963));
+
+    let hsv = hash3(key + 1u);
+    let c   = hsv_to_rgb(vec3(fract(hsv.x + tau * cycle), 0.5 + 0.5 * hsv.y, 1.0)) * (0.3 + 0.7 * hsv.z);
+
+    let inside = r < horizon * extent;
+    if inside {
+      position = vec3(0.0);
+      velocity = vec3(0.0);
+      tint     = vec3(0.0);
+    } else {
+      position = vec3(dir * r, 0.0);
+      velocity = vec3(dir * (0.0 - v), 0.0);
+      tint     = c;
+    }
+  }
+}

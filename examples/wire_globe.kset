@@ -1,0 +1,13 @@
+{"t":"set","id":"wire_globe","v":1}
+{"t":"part","layer":"L1","path":"morph_mesh.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L1","key":"wobble","value":0.0}
+{"t":"param","layer":"L1","key":"radius","value":3.6}
+{"t":"param","layer":"L1","key":"base.x","value":0.4}
+{"t":"param","layer":"L1","key":"base.y","value":0.4}
+{"t":"param","layer":"L1","key":"base.z","value":1.0}
+{"t":"param","layer":"L1","key":"lit.x","value":0.0}
+{"t":"param","layer":"L1","key":"lit.y","value":0.0}
+{"t":"param","layer":"L1","key":"lit.z","value":0.0}
+{"t":"param","layer":"L4","key":"width","value":0.0018}
+{"t":"bind","layer":"L1","key":"wobble","signal":"energy","curve":"pow2","range":[0.0,0.3]}

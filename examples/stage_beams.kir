@@ -1,0 +1,101 @@
+// Laser rig seen from the front of a stage: five green beams run away from the eye
+// along the ceiling and five magenta along the floor, two blue uprights rock
+// back and forth in depth, and a crackling fifteen-link chain is strung between
+// them. The eye is expected on the +z axis looking down -z (`flat_eye`).
+// Seeds 0-4 are the ceiling, 5-9 the floor, 10-11 the uprights, 12-26 the
+// chain, and higher seeds draw nothing.
+// Ported from tmalib example/mv_laser/06_screens.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/stage_beams.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc stage_beams {
+  kind     L1
+  topology lines
+  capacity [32, 4096] = 32
+
+  // Height of the ceiling and floor beams above and below the axis.
+  param rise    : float [0.5, 6.0] = 3.0
+
+  // Distance from the origin to the near end of every beam, and each beam's
+  // length, in world units along -z.
+  param near    : float [0.0, 10.0] = 3.0
+  param run     : float [1.0, 30.0] = 10.0
+
+  // Half the distance between the two uprights.
+  param span    : float [0.5, 4.0] = 2.5
+
+  // How far the uprights and the chain rock in depth, and the rocking rate in
+  // radians per second.
+  param rock    : float [0.0, 4.0] = 1.6
+  param rate    : float [0.0, 4.0] = 1.0
+
+  // Largest sideways and depth swing of a chain link, and its fastest rate in
+  // radians per second.
+  param swing   : float [0.0, 2.0] = 1.0
+  param crackle : float [0.0, 120.0] = 30.0
+
+  emit position, velocity, tint, size
+
+  element {
+    let zz = -near + rock * sin(t * rate);
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    var c  = vec3(0.0);
+    var w  = 1.8;
+
+    if seed < 10u {
+      let k  = seed % 5u;
+      let x  = (float(k) - 2.0) * 2.0;
+      var y  = rise;
+      c = vec3(0.0, 1.0, 0.0);
+      if seed >= 5u {
+        y = -rise;
+        c = vec3(1.0, 0.0, 1.0);
+      }
+      pa = vec3(x, y, -near);
+      pb = vec3(x, y, -near - run);
+    } else {
+      if seed < 12u {
+        var x = -span;
+        if seed == 11u {
+          x = span;
+        }
+        pa = vec3(x, -1.2, zz);
+        pb = vec3(x, 1.2, zz);
+        c  = vec3(0.0, 0.0, 1.0);
+      } else {
+        if seed < 27u {
+          let i0 = seed - 12u;
+          let i1 = i0 + 1u;
+          let f0 = float(i0) / 15.0;
+          let f1 = float(i1) / 15.0;
+
+          var a0 = 1.0;
+          var a1 = 1.0;
+          if i0 == 0u { a0 = 0.0; }
+          if i1 == 15u { a1 = 0.0; }
+
+          let r0 = hash3(i0 * 97u + 3u);
+          let r1 = hash3(i1 * 97u + 3u);
+          let s0 = hash3(i0 * 97u + 41u) * crackle;
+          let s1 = hash3(i1 * 97u + 41u) * crackle;
+
+          pa = vec3(mix(-span, span, f0) + 0.1 * r0.x * a0 * sin(s0.x * t),
+                    swing * r0.y * a0 * sin(s0.y * t),
+                    zz + swing * r0.z * a0 * sin(s0.z * t));
+          pb = vec3(mix(-span, span, f1) + 0.1 * r1.x * a1 * sin(s1.x * t),
+                    swing * r1.y * a1 * sin(s1.y * t),
+                    zz + swing * r1.z * a1 * sin(s1.z * t));
+          c  = vec3(0.0, 0.0, 1.0);
+          w  = 1.0;
+        }
+      }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = c;
+    size     = w;
+  }
+}

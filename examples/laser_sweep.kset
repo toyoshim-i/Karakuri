@@ -1,0 +1,5 @@
+{"t":"set","id":"laser_sweep","v":1}
+{"t":"part","layer":"L1","path":"laser_rays.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"laser_beams.kir"}
+{"t":"bind","layer":"L1","key":"tilt","signal":"energy","curve":"smooth","range":[0.0,1.0]}

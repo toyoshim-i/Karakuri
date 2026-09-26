@@ -1,0 +1,73 @@
+// A lissajous figure in the xy plane drawn as a chain of 256 beams, its phase
+// drifting so the figure turns over, with dim vertical lines filling between its
+// upper and lower halves. Seeds 0-255 are the chain, 256-383 the fill lines, and
+// any seed above that draws nothing.
+// Ported from tmalib example/mv_laser/03_lissajous.html.
+//
+//     cargo run -p karakuri-cli -- --set examples/lissajous_trace.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc lissajous_trace {
+  kind     L1
+  topology lines
+  capacity [384, 8192] = 384
+
+  // Half the figure's width and height in world units.
+  param wide   : float [0.1, 4.0] = 1.8
+  param tall   : float [0.1, 4.0] = 0.95
+
+  // Turns of x and of y per trip round the chain.
+  param fx     : float [1.0, 8.0] = 1.0
+  param fy     : float [1.0, 8.0] = 2.0
+
+  // Phase drift of y in radians per second.
+  param drift  : float [-4.0, 4.0] = 0.6
+
+  // Random displacement of every vertex, redrawn each sixtieth of a second.
+  param jitter : float [0.0, 0.1] = 0.004
+
+  // Hue of the beam.
+  param hue    : float [0.0, 1.0] = 0.97
+
+  // Brightness of the fill lines relative to the chain.
+  param fill   : float [0.0, 1.0] = 0.12
+
+  emit position, velocity, tint, size
+
+  element {
+    let step = 6.2831853 / 256.0;
+    let b    = t * drift;
+    let tick = uint(floor(max(t, 0.0) * 60.0)) * 7919u;
+    let col  = hsv_to_rgb(vec3(hue, 1.0, 1.0));
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    var c  = vec3(0.0);
+    var w  = 1.0;
+
+    if seed < 256u {
+      let s0 = float(seed) * step;
+      let s1 = s0 + step;
+      let j0 = (hash2(seed * 31u + tick) - vec2(0.5)) * jitter;
+      let j1 = (hash2((seed + 1u) % 256u * 31u + tick) - vec2(0.5)) * jitter;
+      pa = vec3(cos(s0 * fx) * wide + j0.x, sin(b + s0 * fy) * tall + j0.y, 0.0);
+      pb = vec3(cos(s1 * fx) * wide + j1.x, sin(b + s1 * fy) * tall + j1.y, 0.0);
+      c  = col;
+    } else {
+      if seed < 384u {
+        let i  = float(seed - 256u);
+        let s0 = i * step;
+        let s1 = (256.0 - i) * step;
+        let x  = cos(s0 * fx) * wide;
+        pa = vec3(x, sin(b + s0 * fy) * tall, 0.0);
+        pb = vec3(x, sin(b + s1 * fy) * tall, 0.0);
+        c  = col * fill;
+        w  = 0.15;
+      }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = c;
+    size     = w;
+  }
+}

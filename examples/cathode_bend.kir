@@ -1,0 +1,23 @@
+// Bends the picture like the face of a cathode-ray tube and darkens it toward
+// the edges.
+// Ported from tmalib ext/mv/effect/cathode.
+
+proc cathode_bend {
+  kind L5
+
+  // Strength of the barrel distortion; 0 leaves the geometry flat.
+  param bend : float [0.0, 0.5] = 0.1
+  // Depth of the edge darkening; 0 leaves brightness even, 1 brightens the centre by 1.25.
+  param vignette : float [0.0, 1.0] = 1.0
+  // Overall brightness gain.
+  param gain : float [0.0, 4.0] = 1.0
+
+  frame {
+    let at    = point_coord;
+    let g     = at * (vec2(1.0) - at);
+    let c     = vec2(cos(3.14159265 * at.x), cos(3.14159265 * at.y));
+    let s     = tap(src, at + c * g * bend);
+    let shade = mix(1.0, g.x * g.y * 20.0, vignette);
+    color = vec4(s.xyz * (gain * shade), s.w);
+  }
+}

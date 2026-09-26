@@ -1,0 +1,5 @@
+{"t":"set","id":"laser_lissajous","v":1}
+{"t":"part","layer":"L1","path":"lissajous_trace.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"laser_beams.kir"}
+{"t":"bind","layer":"L1","key":"jitter","signal":"energy","curve":"pow2","range":[0.002,0.05]}
