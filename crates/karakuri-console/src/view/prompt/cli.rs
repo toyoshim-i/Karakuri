@@ -11,10 +11,22 @@ pub enum CliPreset {
     Claude,
     /// OpenAI Codex CLI (`codex`).
     Codex,
+    /// GitHub Copilot CLI (`copilot`).
+    Copilot,
     /// DeepSeek CLI (`deepseek`).
     DeepSeek,
+    /// xAI Grok CLI (`grok`).
+    Grok,
+    /// Moonshot Kimi CLI (`kimi`).
+    Kimi,
+    /// Xiaomi MiMo CLI (`mimo`).
+    Mimo,
     /// MiniMax CLI (`minimax`).
     MiniMax,
+    /// Mistral AI CLI (`mistral`).
+    Mistral,
+    /// Muse CLI (`muse`).
+    Muse,
     /// Ollama local LLM runner (`ollama`).
     Ollama,
     /// Pi CLI (`pi`).
@@ -30,8 +42,14 @@ impl CliPreset {
         CliPreset::Aider,
         CliPreset::Claude,
         CliPreset::Codex,
+        CliPreset::Copilot,
         CliPreset::DeepSeek,
+        CliPreset::Grok,
+        CliPreset::Kimi,
+        CliPreset::Mimo,
         CliPreset::MiniMax,
+        CliPreset::Mistral,
+        CliPreset::Muse,
         CliPreset::Ollama,
         CliPreset::Pi,
         CliPreset::Qwen,
@@ -44,8 +62,14 @@ impl CliPreset {
             Self::Aider => "aider",
             Self::Claude => "claude",
             Self::Codex => "codex",
+            Self::Copilot => "copilot",
             Self::DeepSeek => "deepseek",
+            Self::Grok => "grok",
+            Self::Kimi => "kimi",
+            Self::Mimo => "mimo",
             Self::MiniMax => "minimax",
+            Self::Mistral => "mistral",
+            Self::Muse => "muse",
             Self::Ollama => "ollama",
             Self::Pi => "pi",
             Self::Qwen => "qwen",
