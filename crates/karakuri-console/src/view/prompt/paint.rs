@@ -23,6 +23,16 @@ pub fn prompt_head_into(ui: &Ui, pal: &Palette, bay_rect: Rect, state: &PromptSt
     let label = state.selection.pill_label();
     let armed = state.menu_open || !state.selection.is_unselected();
     pill_into(ui, pal, pill, &label, armed);
+    if state.is_captured() {
+        let tag_pos = Pos2::new(pill.max.x + 8.0, pill.center().y);
+        ui.painter().text(
+            tag_pos,
+            egui::Align2::LEFT_CENTER,
+            "captured (Tab to exit)",
+            FontId::new(size::BASE - 1.0, FontFamily::Monospace),
+            pal.pink,
+        );
+    }
 }
 
 /// Paints the floating CLI preset dropdown menu (Rule 2 modal overlay).
@@ -213,13 +223,14 @@ pub fn prompt_into(
 
                                 let response = ui.add(edit);
 
-                                if is_focused && !response.has_focus() {
+                                if state.is_captured() && !response.has_focus() {
                                     response.request_focus();
                                 }
 
                                 // Enter submission: send buffer content (or empty CR to accept/advance)
                                 let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
                                 if enter_pressed
+                                    && state.is_captured()
                                     && (response.has_focus() || response.lost_focus() || is_focused)
                                 {
                                     let text = std::mem::take(&mut **buf);
@@ -231,8 +242,8 @@ pub fn prompt_into(
                                     response.request_focus();
                                 }
 
-                                // Interactive terminal shortcuts while focused
-                                if response.has_focus() || is_focused {
+                                // Interactive terminal shortcuts while in capture mode
+                                if state.is_captured() && (response.has_focus() || is_focused) {
                                     let ctrl = ui.input(|i| i.modifiers.ctrl);
                                     if ctrl && ui.input(|i| i.key_pressed(egui::Key::C)) {
                                         let _ = session.send_bytes(b"\x03");
@@ -247,15 +258,17 @@ pub fn prompt_into(
                                     } else if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
                                         let _ = session.send_bytes(b"\x1b[C");
                                     } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                        state.set_captured(false);
                                         response.surrender_focus();
                                     }
                                 }
 
-                                // Auto-focus on click in prompt bay
+                                // Activate capture mode and focus on click in prompt bay
                                 let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
                                 if pointer_clicked {
                                     if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
                                         if bay_rect.contains(pos) {
+                                            state.set_captured(true);
                                             response.request_focus();
                                         }
                                     }

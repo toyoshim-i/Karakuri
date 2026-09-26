@@ -1,5 +1,6 @@
 //! State container for the Prompt bay.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::cli::{CliPreset, CliSelection};
@@ -20,6 +21,8 @@ pub struct PromptState {
     pub input_buffer: Arc<Mutex<String>>,
     /// Session manager managing running background processes.
     pub sessions: SessionManager,
+    /// Whether Prompt bay is currently in input capture mode for the terminal.
+    pub captured: Arc<AtomicBool>,
 }
 
 impl PartialEq for PromptState {
@@ -39,6 +42,7 @@ impl PartialEq for PromptState {
             && self.custom_input == other.custom_input
             && self.custom_active == other.custom_active
             && self.sessions == other.sessions
+            && self.is_captured() == other.is_captured()
             && b1 == b2
     }
 }
@@ -46,6 +50,15 @@ impl PartialEq for PromptState {
 impl Eq for PromptState {}
 
 impl PromptState {
+    /// Returns whether the Prompt bay is currently capturing keyboard input.
+    pub fn is_captured(&self) -> bool {
+        self.captured.load(Ordering::Relaxed)
+    }
+
+    /// Sets whether the Prompt bay is capturing keyboard input.
+    pub fn set_captured(&self, val: bool) {
+        self.captured.store(val, Ordering::Relaxed);
+    }
     /// Creates a default, unselected Prompt bay state.
     pub fn new() -> Self {
         Self::default()

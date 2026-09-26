@@ -66,6 +66,7 @@ impl View {
         let moved = self.focus.tab(panel.layout(), step);
         if moved {
             focus::shut_cards(self);
+            self.prompt.set_captured(false);
         }
         moved
     }
@@ -75,6 +76,9 @@ impl View {
         let moved = self.focus.put(panel.layout(), bay);
         if moved {
             focus::shut_cards(self);
+            if bay != "prompt" {
+                self.prompt.set_captured(false);
+            }
         }
         moved
     }
