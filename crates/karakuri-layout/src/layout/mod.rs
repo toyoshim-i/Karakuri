@@ -318,48 +318,208 @@ impl Layout {
             return axis.far(self.solved.rects[a]);
         }
 
-        let start = axis.origin(self.solved.rects[a]);
-        let span = axis.extent(self.solved.rects[a]) + axis.extent(self.solved.rects[b]);
+        let curr_pos = axis.far(self.solved.rects[a]);
+        let delta = position - curr_pos;
+        if delta.abs() <= f32::EPSILON {
+            return curr_pos;
+        }
 
-        // The pair's own bounds, and the pair's share of the split, are the
-        // whole of what constrains this. Nothing beyond `b` is consulted,
-        // because nothing beyond `b` moves.
-        let lo = self.node(a).min.max(span - self.node(b).max).max(0.0);
-        let hi = self.node(a).max.min(span - self.node(b).min).max(lo);
-        let size_a = (position - start).clamp(lo, hi);
-        let size_b = span - size_a;
+        let placed: Vec<usize> = (0..self.arrangement.child_count(split.0))
+            .map(|k| self.arrangement.child(split.0, k))
+            .filter(|c| self.arrangement.placed(*c))
+            .collect();
 
-        self.resize_pair(split.0, a, b, size_a, size_b, span);
+        let current_sizes: Vec<f32> = placed
+            .iter()
+            .map(|&c| axis.extent(self.solved.rects[c]))
+            .collect();
+
+        // Calculate allowed movement based on capacity of both sides.
+        let actual_delta = if delta < 0.0 {
+            let req = -delta;
+            let mut total_shrink_before = 0.0;
+            for k in (0..=index).rev() {
+                let c = placed[k];
+                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let min_c = if self.node(c).collapsed {
+                    current_sizes[k]
+                } else {
+                    self.node(c).min.max(0.0)
+                };
+                total_shrink_before += (current_sizes[k] - min_c).max(0.0);
+            }
+            let mut total_grow_after = 0.0;
+            for k in (index + 1)..placed.len() {
+                let c = placed[k];
+                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let max_c = if self.node(c).collapsed {
+                    current_sizes[k]
+                } else {
+                    self.node(c).max.max(self.node(c).min.max(0.0))
+                };
+                total_grow_after += (max_c - current_sizes[k]).max(0.0);
+            }
+            let allowed = req.min(total_shrink_before).min(total_grow_after);
+            -allowed
+        } else {
+            let req = delta;
+            let mut total_grow_before = 0.0;
+            for k in (0..=index).rev() {
+                let c = placed[k];
+                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let max_c = if self.node(c).collapsed {
+                    current_sizes[k]
+                } else {
+                    self.node(c).max.max(self.node(c).min.max(0.0))
+                };
+                total_grow_before += (max_c - current_sizes[k]).max(0.0);
+            }
+            let mut total_shrink_after = 0.0;
+            for k in (index + 1)..placed.len() {
+                let c = placed[k];
+                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let min_c = if self.node(c).collapsed {
+                    current_sizes[k]
+                } else {
+                    self.node(c).min.max(0.0)
+                };
+                total_shrink_after += (current_sizes[k] - min_c).max(0.0);
+            }
+            req.min(total_grow_before).min(total_shrink_after)
+        };
+
+        if actual_delta.abs() <= f32::EPSILON {
+            return curr_pos;
+        }
+
+        let mut new_sizes = current_sizes.clone();
+        if actual_delta < 0.0 {
+            let mut to_shrink = -actual_delta;
+            for k in (0..=index).rev() {
+                let c = placed[k];
+                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let min_c = if self.node(c).collapsed {
+                    new_sizes[k]
+                } else {
+                    self.node(c).min.max(0.0)
+                };
+                let can = (new_sizes[k] - min_c).max(0.0);
+                let take = can.min(to_shrink);
+                new_sizes[k] -= take;
+                to_shrink -= take;
+                if to_shrink <= f32::EPSILON {
+                    break;
+                }
+            }
+            let mut to_grow = -actual_delta;
+            for k in (index + 1)..placed.len() {
+                let c = placed[k];
+                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let max_c = if self.node(c).collapsed {
+                    new_sizes[k]
+                } else {
+                    self.node(c).max.max(self.node(c).min.max(0.0))
+                };
+                let can = (max_c - new_sizes[k]).max(0.0);
+                let take = can.min(to_grow);
+                new_sizes[k] += take;
+                to_grow -= take;
+                if to_grow <= f32::EPSILON {
+                    break;
+                }
+            }
+        } else {
+            let mut to_grow = actual_delta;
+            for k in (0..=index).rev() {
+                let c = placed[k];
+                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let max_c = if self.node(c).collapsed {
+                    new_sizes[k]
+                } else {
+                    self.node(c).max.max(self.node(c).min.max(0.0))
+                };
+                let can = (max_c - new_sizes[k]).max(0.0);
+                let take = can.min(to_grow);
+                new_sizes[k] += take;
+                to_grow -= take;
+                if to_grow <= f32::EPSILON {
+                    break;
+                }
+            }
+            let mut to_shrink = actual_delta;
+            for k in (index + 1)..placed.len() {
+                let c = placed[k];
+                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
+                    continue;
+                }
+                let min_c = if self.node(c).collapsed {
+                    new_sizes[k]
+                } else {
+                    self.node(c).min.max(0.0)
+                };
+                let can = (new_sizes[k] - min_c).max(0.0);
+                let take = can.min(to_shrink);
+                new_sizes[k] -= take;
+                to_shrink -= take;
+                if to_shrink <= f32::EPSILON {
+                    break;
+                }
+            }
+        }
+
+        self.apply_resized_children(split.0, &placed, &new_sizes);
         self.dirty = true;
         self.solve();
         axis.far(self.solved.rects[a])
     }
 
     /// Writes resized sizes into child nodes following a divider drag.
-    ///
-    /// Fixed children store the size directly; flexible children adjust weights
-    /// to preserve proportion on subsequent solves.
-    fn resize_pair(&mut self, split: usize, a: usize, b: usize, sa: f32, sb: f32, span: f32) {
-        match (self.node(a).sizing, self.node(b).sizing) {
-            (Sizing::Fixed(_), Sizing::Fixed(_)) => {
-                self.node_mut(a).sizing = Sizing::Fixed(sa);
-                self.node_mut(b).sizing = Sizing::Fixed(sb);
+    fn apply_resized_children(&mut self, split: usize, placed: &[usize], new_sizes: &[f32]) {
+        for (&c, &size) in placed.iter().zip(new_sizes.iter()) {
+            if matches!(self.node(c).sizing, Sizing::Fixed(_)) {
+                self.node_mut(c).sizing = Sizing::Fixed(size);
             }
-            // Distribute total flexible weight between the two neighbours proportionally.
-            (Sizing::Flex(wa), Sizing::Flex(wb)) => {
-                let total = wa.max(0.0) + wb.max(0.0);
-                if span > f32::EPSILON && total > 0.0 {
-                    self.node_mut(a).sizing = Sizing::Flex(total * sa / span);
-                    self.node_mut(b).sizing = Sizing::Flex(total * sb / span);
+        }
+
+        let flex_indices: Vec<usize> = placed
+            .iter()
+            .enumerate()
+            .filter(|(_, &c)| matches!(self.node(c).sizing, Sizing::Flex(_)))
+            .map(|(idx, _)| idx)
+            .collect();
+
+        if flex_indices.len() == 1 {
+            let idx = flex_indices[0];
+            self.reweight(split, placed[idx], new_sizes[idx]);
+        } else if flex_indices.len() > 1 {
+            let total_weight: f32 = flex_indices
+                .iter()
+                .map(|&idx| match self.node(placed[idx]).sizing {
+                    Sizing::Flex(w) => w.max(0.0),
+                    _ => 0.0,
+                })
+                .sum();
+            let flex_size_sum: f32 = flex_indices.iter().map(|&idx| new_sizes[idx]).sum();
+            if flex_size_sum > f32::EPSILON && total_weight > 0.0 {
+                for &idx in &flex_indices {
+                    let c = placed[idx];
+                    self.node_mut(c).sizing =
+                        Sizing::Flex(total_weight * new_sizes[idx] / flex_size_sum);
                 }
-            }
-            (Sizing::Flex(_), Sizing::Fixed(_)) => {
-                self.node_mut(b).sizing = Sizing::Fixed(sb);
-                self.reweight(split, a, sa);
-            }
-            (Sizing::Fixed(_), Sizing::Flex(_)) => {
-                self.node_mut(a).sizing = Sizing::Fixed(sa);
-                self.reweight(split, b, sb);
             }
         }
     }
