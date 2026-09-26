@@ -23,16 +23,6 @@ pub fn prompt_head_into(ui: &Ui, pal: &Palette, bay_rect: Rect, state: &PromptSt
     let label = state.selection.pill_label();
     let armed = state.menu_open || !state.selection.is_unselected();
     pill_into(ui, pal, pill, &label, armed);
-    if state.is_captured() {
-        let tag_pos = Pos2::new(pill.max.x + 8.0, pill.center().y);
-        ui.painter().text(
-            tag_pos,
-            egui::Align2::LEFT_CENTER,
-            "captured (Tab to exit)",
-            FontId::new(size::BASE - 1.0, FontFamily::Monospace),
-            pal.pink,
-        );
-    }
 }
 
 /// Paints the floating CLI preset dropdown menu (Rule 2 modal overlay).
