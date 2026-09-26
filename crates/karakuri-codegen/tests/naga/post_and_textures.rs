@@ -32,10 +32,32 @@ fn shipped_l5(name: &str) -> karakuri_codegen::L5Shader {
     karakuri_codegen::generate_l5(&checked)
 }
 
-/// Validates shipped L5 post-processing procedures against Naga WGSL frontend.
+/// Validates every `kind L5` in `examples/` against Naga WGSL frontend.
 #[test]
-fn the_three_shipped_l5_procedures_compile_and_validate() {
+fn every_shipped_l5_procedure_compiles_and_validates() {
+    let mut names: Vec<String> = std::fs::read_dir("../../examples")
+        .expect("read examples/")
+        .map(|e| e.expect("entry").path())
+        .filter(|p| p.extension().is_some_and(|e| e == "kir"))
+        .filter(|p| {
+            let src = std::fs::read_to_string(p).expect("read an example");
+            karakuri_ir::parse::parse(&src).is_ok_and(|proc| proc.kind == Kind::L5)
+        })
+        .map(|p| {
+            p.file_stem()
+                .expect("a stem")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    names.sort();
     for name in ["feedback", "bloom", "rgb_shift"] {
+        assert!(
+            names.iter().any(|n| n == name),
+            "{name}.kir is not found as a `kind L5` in examples/"
+        );
+    }
+    for name in &names {
         let shader = shipped_l5(name);
         validate(&shader.source);
     }
