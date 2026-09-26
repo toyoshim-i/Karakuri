@@ -649,8 +649,9 @@ fn the_press_handler_dispatches_prompt_bay_controls() {
 
     // 2. Click on custom option inside menu
     let menu = view::prompt_menu_rect(pill, viewport);
-    let custom_y = menu.min.y + 6.0 + view::MENU_ITEM_H * (view::CliPreset::ALL.len() as f32) + 2.0;
-    let custom_pt = Point::new(menu.center().x, custom_y);
+    let custom_rect =
+        view::prompt_item_rect(menu, view::CliPreset::ALL.len()).expect("custom item rect");
+    let custom_pt = Point::new(custom_rect.center().x, custom_rect.center().y);
 
     readout.pointer(&ctx, Pointer::Moved(custom_pt));
     readout.pointer(&ctx, Pointer::Down);

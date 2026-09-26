@@ -1,15 +1,19 @@
 //! Rendering for the Prompt bay terminal body, header pill, and dropdown menu.
 
 use egui::epaint::text::FontId;
-use egui::{FontFamily, Pos2, Rect, Stroke, Ui};
+use egui::{CornerRadius, FontFamily, Pos2, Rect, Stroke, Ui};
 use karakuri_layout::Layout;
 
 use super::cli::{CliPreset, CliSelection};
-use super::head::{prompt_menu_rect, prompt_pill, MENU_ITEM_H, MENU_PAD_X, MENU_PAD_Y};
+use super::head::{
+    prompt_item_rect, prompt_menu_rect, prompt_pill, MENU_COL_GAP, MENU_COL_W, MENU_PAD_X,
+    MENU_PAD_Y,
+};
 use super::state::PromptState;
 use crate::room::{size, Palette};
 use crate::view::to_egui;
 use crate::view::widgets::card::popup_card;
+use crate::view::widgets::fader::tint;
 use crate::view::widgets::head::head_box;
 use crate::view::widgets::pills::pill_into;
 
@@ -35,16 +39,39 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
     let painter = ui.painter().with_clip_rect(menu);
     let font_id = FontId::new(size::BASE, FontFamily::Monospace);
 
-    let mut item_top = menu.min.y + MENU_PAD_Y;
+    // Subtle vertical separator rule between column 0 and column 1
+    let sep_x = menu.min.x + MENU_PAD_X + MENU_COL_W + MENU_COL_GAP * 0.5;
+    painter.line_segment(
+        [
+            Pos2::new(sep_x, menu.min.y + MENU_PAD_Y),
+            Pos2::new(sep_x, menu.max.y - MENU_PAD_Y),
+        ],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+
+    // Track pointer hover position for interactive item highlighting
+    let hover_pos = ui.input(|i| i.pointer.hover_pos());
 
     // 1. Presets
-    for preset in CliPreset::ALL {
+    for (index, preset) in CliPreset::ALL.iter().enumerate() {
+        let Some(item_rect) = prompt_item_rect(menu, index) else {
+            continue;
+        };
+
         let is_selected = matches!(&state.selection, CliSelection::Preset(p) if p == preset);
         let available = preset.is_available();
-        let mid_y = item_top + MENU_ITEM_H * 0.5;
+        let is_hovered = hover_pos.is_some_and(|pos| item_rect.contains(pos));
+        let mid_y = item_rect.center().y;
+
+        // Hover highlight wash behind item
+        if is_hovered && available {
+            painter.rect_filled(item_rect, CornerRadius::same(3), tint(pal.pink, 22));
+        } else if is_hovered && !available {
+            painter.rect_filled(item_rect, CornerRadius::same(3), tint(pal.faint, 12));
+        }
 
         let text_color = if available {
-            if is_selected {
+            if is_selected || is_hovered {
                 pal.pink
             } else {
                 pal.text
@@ -54,7 +81,7 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
         };
 
         let label = preset.display_name();
-        let text_pos = Pos2::new(menu.min.x + MENU_PAD_X, mid_y - size::BASE * 0.5);
+        let text_pos = Pos2::new(item_rect.min.x + 6.0, mid_y - size::BASE * 0.5);
         let galley = painter.layout_no_wrap(label.to_owned(), font_id.clone(), text_color);
         let text_w = galley.size().x;
         painter.galley(text_pos, galley, text_color);
@@ -69,29 +96,36 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
 
         // Active indicator dot for currently selected CLI
         if is_selected {
-            let dot_x = menu.max.x - MENU_PAD_X - 4.0;
+            let dot_x = item_rect.max.x - 8.0;
             painter.circle_filled(Pos2::new(dot_x, mid_y), 3.0, pal.pink);
         }
-
-        item_top += MENU_ITEM_H;
     }
 
     // 2. Custom command option
-    let is_custom_selected = matches!(&state.selection, CliSelection::Custom(_));
-    let mid_y = item_top + MENU_ITEM_H * 0.5;
-    let custom_color = if is_custom_selected {
-        pal.pink
-    } else {
-        pal.text
-    };
+    let custom_index = CliPreset::ALL.len();
+    if let Some(custom_rect) = prompt_item_rect(menu, custom_index) {
+        let is_custom_selected = matches!(&state.selection, CliSelection::Custom(_));
+        let is_custom_hovered = hover_pos.is_some_and(|pos| custom_rect.contains(pos));
+        let mid_y = custom_rect.center().y;
 
-    let text_pos = Pos2::new(menu.min.x + MENU_PAD_X, mid_y - size::BASE * 0.5);
-    let galley = painter.layout_no_wrap("custom...".to_owned(), font_id.clone(), custom_color);
-    painter.galley(text_pos, galley, custom_color);
+        if is_custom_hovered {
+            painter.rect_filled(custom_rect, CornerRadius::same(3), tint(pal.pink, 22));
+        }
 
-    if is_custom_selected {
-        let dot_x = menu.max.x - MENU_PAD_X - 4.0;
-        painter.circle_filled(Pos2::new(dot_x, mid_y), 3.0, pal.pink);
+        let custom_color = if is_custom_selected || is_custom_hovered {
+            pal.pink
+        } else {
+            pal.text
+        };
+
+        let text_pos = Pos2::new(custom_rect.min.x + 6.0, mid_y - size::BASE * 0.5);
+        let galley = painter.layout_no_wrap("custom...".to_owned(), font_id.clone(), custom_color);
+        painter.galley(text_pos, galley, custom_color);
+
+        if is_custom_selected {
+            let dot_x = custom_rect.max.x - 8.0;
+            painter.circle_filled(Pos2::new(dot_x, mid_y), 3.0, pal.pink);
+        }
     }
 }
 
