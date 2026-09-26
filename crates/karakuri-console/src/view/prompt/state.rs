@@ -103,6 +103,25 @@ impl PromptState {
         self.selection = CliSelection::Unselected;
     }
 
+    /// Checks if the active session has exited, and if so, cleans up and resets to unselected.
+    pub fn cleanup_if_exited(&mut self) -> bool {
+        if self.selection.is_unselected() {
+            return false;
+        }
+        if let Some(session) = self.sessions.active_session(&self.selection) {
+            if !session.is_running() {
+                self.sessions.remove(&self.selection);
+                self.reset_selection();
+                self.set_captured(false);
+                if let Ok(mut buf) = self.input_buffer.lock() {
+                    buf.clear();
+                }
+                return true;
+            }
+        }
+        false
+    }
+
     /// Returns the active terminal session if a CLI is selected.
     pub fn active_session(&self) -> Option<Arc<TerminalSession>> {
         self.sessions.get_or_spawn(&self.selection)

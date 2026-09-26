@@ -9,7 +9,6 @@ use super::head::{
     prompt_item_rect, prompt_menu_rect, prompt_pill, MENU_COL_GAP, MENU_COL_W, MENU_PAD_X,
     MENU_PAD_Y,
 };
-use super::session::SessionStatus;
 use super::state::PromptState;
 use crate::room::{size, Palette};
 use crate::view::to_egui;
@@ -184,178 +183,123 @@ pub fn prompt_into(
                 }
                 CliSelection::Preset(_) | CliSelection::Custom(_) => {
                     if let Some(session) = state.active_session() {
-                        if session.is_running() {
-                            let lines = session.lines();
-                            let cursor = session.cursor();
-                            let active_row = cursor.0.min(lines.len().saturating_sub(1));
+                        let lines = session.lines();
+                        let cursor = session.cursor();
+                        let active_row = cursor.0.min(lines.len().saturating_sub(1));
 
-                            // 1. Output lines before the active cursor row
-                            for (idx, line) in lines.iter().enumerate() {
-                                if idx < active_row {
-                                    ui.label(
-                                        egui::RichText::new(line)
-                                            .font(font_id.clone())
-                                            .color(pal.text),
-                                    );
-                                }
-                            }
-
-                            // 2. Active line with embedded cursor-anchored input
-                            let active_line = lines.get(active_row).cloned().unwrap_or_default();
-                            let prefix: String = active_line.chars().take(cursor.1).collect();
-
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 0.0;
-                                if !prefix.is_empty() {
-                                    ui.label(
-                                        egui::RichText::new(&prefix)
-                                            .font(font_id.clone())
-                                            .color(pal.text),
-                                    );
-                                }
-
-                                let mut buf_guard = state.input_buffer.lock().ok();
-                                if let Some(ref mut buf) = buf_guard {
-                                    let edit = egui::TextEdit::singleline(&mut **buf)
+                        // 1. Output lines before the active cursor row
+                        for (idx, line) in lines.iter().enumerate() {
+                            if idx < active_row {
+                                ui.label(
+                                    egui::RichText::new(line)
                                         .font(font_id.clone())
-                                        .text_color(pal.text)
-                                        .frame(egui::Frame::NONE)
-                                        .desired_width(f32::INFINITY)
-                                        .lock_focus(true)
-                                        .return_key(None);
-
-                                    let response = ui.add(edit);
-
-                                    if state.is_captured() && !response.has_focus() {
-                                        response.request_focus();
-                                    }
-
-                                    // Enter submission: send buffer content (or empty CR to accept/advance)
-                                    let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                                    if enter_pressed
-                                        && state.is_captured()
-                                        && (response.has_focus() || response.lost_focus() || is_focused)
-                                    {
-                                        let text = std::mem::take(&mut **buf);
-                                        if text.is_empty() {
-                                            let _ = session.send_bytes(b"\r");
-                                        } else {
-                                            let _ = session.send_line(&text);
-                                        }
-                                        response.request_focus();
-                                    }
-
-                                    // Interactive terminal shortcuts while in capture mode
-                                    if state.is_captured() {
-                                        let ctrl = ui.input(|i| i.modifiers.ctrl);
-                                        if ctrl && ui.input(|i| i.key_pressed(egui::Key::C)) {
-                                            let _ = session.send_bytes(b"\x03");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::D)) {
-                                            let _ = session.send_bytes(b"\x04");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::Z)) {
-                                            let _ = session.send_bytes(b"\x1a");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::L)) {
-                                            let _ = session.send_bytes(b"\x0c");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::U)) {
-                                            let _ = session.send_bytes(b"\x15");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::W)) {
-                                            let _ = session.send_bytes(b"\x17");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::A)) {
-                                            let _ = session.send_bytes(b"\x01");
-                                        } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::E)) {
-                                            let _ = session.send_bytes(b"\x05");
-                                        } else if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                                            let _ = session.send_bytes(b"\x1b[A");
-                                        } else if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-                                            let _ = session.send_bytes(b"\x1b[B");
-                                        } else if ui.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
-                                            let _ = session.send_bytes(b"\x1b[D");
-                                        } else if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
-                                            let _ = session.send_bytes(b"\x1b[C");
-                                        } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                                            let _ = session.send_bytes(b"\x1b");
-                                        } else if ui.input(|i| i.key_pressed(egui::Key::Backspace))
-                                            && buf.is_empty()
-                                        {
-                                            let _ = session.send_bytes(b"\x7f");
-                                        }
-                                    }
-
-                                    // Activate capture mode and focus on click inside console body
-                                    let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
-                                    if pointer_clicked {
-                                        if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                            if body_rect.contains(pos) {
-                                                state.set_captured(true);
-                                                response.request_focus();
-                                            }
-                                        }
-                                    }
-                                }
-                            });
-
-                            // 3. Any lines after the active cursor row
-                            for idx in (active_row + 1)..lines.len() {
-                                if let Some(line) = lines.get(idx) {
-                                    ui.label(
-                                        egui::RichText::new(line)
-                                            .font(font_id.clone())
-                                            .color(pal.text),
-                                    );
-                                }
+                                        .color(pal.text),
+                                );
                             }
-                        } else {
-                            // Process is not running (exited or failed)
-                            let lines = session.lines();
-                            for line in &lines {
-                                if !line.is_empty() {
-                                    ui.label(
-                                        egui::RichText::new(line)
-                                            .font(font_id.clone())
-                                            .color(pal.text),
-                                    );
-                                }
+                        }
+
+                        // 2. Active line with embedded cursor-anchored input
+                        let active_line = lines.get(active_row).cloned().unwrap_or_default();
+                        let prefix: String = active_line.chars().take(cursor.1).collect();
+
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            if !prefix.is_empty() {
+                                ui.label(
+                                    egui::RichText::new(&prefix)
+                                        .font(font_id.clone())
+                                        .color(pal.text),
+                                );
                             }
 
-                            let status_text = match session.status() {
-                                SessionStatus::Exited(Some(code)) => {
-                                    format!("[Process completed (exit code {code}) - press Enter to restart]")
-                                }
-                                SessionStatus::Exited(None) => {
-                                    "[Process completed - press Enter to restart]".to_string()
-                                }
-                                SessionStatus::Failed(err) => {
-                                    format!("[Process failed: {err} - press Enter to restart]")
-                                }
-                                SessionStatus::Running => unreachable!(),
-                            };
-
-                            ui.label(
-                                egui::RichText::new(status_text)
+                            let mut buf_guard = state.input_buffer.lock().ok();
+                            if let Some(ref mut buf) = buf_guard {
+                                let edit = egui::TextEdit::singleline(&mut **buf)
                                     .font(font_id.clone())
-                                    .color(pal.faint),
-                            );
+                                    .text_color(pal.text)
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(f32::INFINITY)
+                                    .lock_focus(true)
+                                    .return_key(None);
 
-                            // Clear any stale input buffer so no characters sit at top-left
-                            if let Ok(mut buf) = state.input_buffer.lock() {
-                                buf.clear();
-                            }
+                                let response = ui.add(edit);
 
-                            // Click inside console body captures focus
-                            let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
-                            if pointer_clicked {
-                                if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                    if body_rect.contains(pos) {
-                                        state.set_captured(true);
+                                if state.is_captured() && !response.has_focus() {
+                                    response.request_focus();
+                                }
+
+                                // Enter submission: send buffer content (or empty CR to accept/advance)
+                                let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                                if enter_pressed
+                                    && state.is_captured()
+                                    && (response.has_focus() || response.lost_focus() || is_focused)
+                                {
+                                    let text = std::mem::take(&mut **buf);
+                                    if text.is_empty() {
+                                        let _ = session.send_bytes(b"\r");
+                                    } else {
+                                        let _ = session.send_line(&text);
+                                    }
+                                    response.request_focus();
+                                }
+
+                                // Interactive terminal shortcuts while in capture mode
+                                if state.is_captured() {
+                                    let ctrl = ui.input(|i| i.modifiers.ctrl);
+                                    if ctrl && ui.input(|i| i.key_pressed(egui::Key::C)) {
+                                        let _ = session.send_bytes(b"\x03");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::D)) {
+                                        let _ = session.send_bytes(b"\x04");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::Z)) {
+                                        let _ = session.send_bytes(b"\x1a");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::L)) {
+                                        let _ = session.send_bytes(b"\x0c");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::U)) {
+                                        let _ = session.send_bytes(b"\x15");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::W)) {
+                                        let _ = session.send_bytes(b"\x17");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::A)) {
+                                        let _ = session.send_bytes(b"\x01");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::E)) {
+                                        let _ = session.send_bytes(b"\x05");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                                        let _ = session.send_bytes(b"\x1b[A");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                                        let _ = session.send_bytes(b"\x1b[B");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+                                        let _ = session.send_bytes(b"\x1b[D");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+                                        let _ = session.send_bytes(b"\x1b[C");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                        let _ = session.send_bytes(b"\x1b");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::Backspace))
+                                        && buf.is_empty()
+                                    {
+                                        let _ = session.send_bytes(b"\x7f");
+                                    }
+                                }
+
+                                // Activate capture mode and focus on click inside console body
+                                let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
+                                if pointer_clicked {
+                                    if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
+                                        if body_rect.contains(pos) {
+                                            state.set_captured(true);
+                                            response.request_focus();
+                                        }
                                     }
                                 }
                             }
+                        });
 
-                            // Enter restarts the session
-                            let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                            if enter_pressed && (state.is_captured() || is_focused) {
-                                state.sessions.restart(&state.selection);
-                                state.set_captured(true);
+                        // 3. Any lines after the active cursor row
+                        for idx in (active_row + 1)..lines.len() {
+                            if let Some(line) = lines.get(idx) {
+                                ui.label(
+                                    egui::RichText::new(line)
+                                        .font(font_id.clone())
+                                        .color(pal.text),
+                                );
                             }
                         }
                     }
