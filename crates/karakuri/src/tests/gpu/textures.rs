@@ -3,22 +3,8 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// A wider window remakes no texture at all, and a drag on the program's height
-    /// remakes one and frees the registration it replaces.
-    ///
-    /// The first half is new and is the saving this change is for. The picture's
-    /// rectangle used to follow the window's width, so every frame of a horizontal
-    /// drag was a texture destroyed and rebuilt and a registration freed and
-    /// re-registered — on the render thread. It is the canvas's shape now and the
-    /// arrangement pins its height, so a widening moves nothing and there is
-    /// nothing to remake. That is asserted rather than described, because a rule
-    /// that quietly went back to remaking costs exactly what it used to and says
-    /// nothing.
-    ///
-    /// The second half is the claim the first one must not be allowed to weaken: a
-    /// `register_native_texture` with no `free_texture` beside it leaks a bind
-    /// group and a sampler per remade frame, and the height is still something an
-    /// operator drags. So the free is asserted on the resize that still happens.
+    /// Verifies horizontal window resizing retains texture allocation, while vertical resizing
+    /// adjusts texture size and frees previous GPU native texture registrations.
     #[test]
     fn a_wider_window_remakes_nothing_and_a_taller_picture_frees_the_old_texture() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -134,30 +120,8 @@ mod gpu {
         assert!(renderer.texture(&engine.picture.id).is_some());
     }
 
-    /// Every cell with a deck slot behind it is aimed, whatever that slot's
-    /// residency — and a cell with no slot behind it is off.
-    ///
-    /// This is
-    /// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
-    /// on this surface. The operator decides whether to raise a fader by watching
-    /// the cell, so the cell has to be running *before* the fader goes up; a cell
-    /// gated on `Residency::Live` answers the question only after it has stopped
-    /// being asked, and that gate was here.
-    ///
-    /// All four residency arrangements, and the one that fails a constant. A cell
-    /// aimed because a constant said four would pass this while being the older
-    /// defect in the other direction — so the deck is put through every level,
-    /// including all four Allocated, where a live-gated `aim` reports nothing at
-    /// all and a correct one reports four.
-    ///
-    /// The empty case is the fourth cell of a deck that does not have one.
-    /// `Engine::new` says a slot cannot hold nothing — `HotSwap::new` takes a live
-    /// `Set` — so *empty* is not a slot with no material, it is a cell with no
-    /// slot: `Deck::slot_view` is `None` past `slot_count`, the bind group is
-    /// `None`, no pass is recorded, the view's entry stays `None` and
-    /// `karakuri_console::view` draws `D · no slot` in `pal.faint`. This deck is
-    /// full, so that is asserted where it can be — the view past the last slot —
-    /// rather than by building a short deck this program cannot have.
+    /// Verifies every valid slot aims its preview cell regardless of residency, while unpopulated
+    /// slots remain blank (ADR-0258).
     #[test]
     fn every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -196,13 +160,7 @@ mod gpu {
          the last slot would sample somebody else's texture"
         );
 
-        // **Every slot is warmed first**, because a Set that has never stepped
-        // draws its zeroed element state and that is black — the honest face
-        // of a cold candidate, and indistinguishable at a cell's size from a
-        // cell nothing drew into. What is asserted below is that a slot with
-        // material in it reaches its cell whatever its residency, so the
-        // material has to be there first. Live is how a slot gets it here;
-        // priming is how an operator gets it without the room seeing.
+        // Warms slot state to ensure active render passes produce non-empty texels.
         for slot in 0..DECKS {
             engine
                 .deck
@@ -275,13 +233,7 @@ mod gpu {
                 "four running cells did not keep the loop awake at {residencies:?}"
             );
 
-            // **And the pass is recorded, through the frame the window
-            // makes.** Aimed and not drawn is the other half of the defect —
-            // a texture from an earlier frame held under a live letter — so
-            // the cells are cleared, one frame is composed with `monitor` in
-            // the same encoder, and every cell has to come back with texels
-            // in it. `compose` with no sinks still renders the deck, which is
-            // `frame.rs`'s *every output off is a frame*.
+            // Records and submits composed frames to ensure all aimed preview cells receive rendered texels.
             for pres in &mut engine.previews {
                 clear(&gpu, &pres.target);
             }
@@ -330,47 +282,8 @@ mod gpu {
         }
     }
 
-    /// Deck A's texture is the size of its cell, a resize frees the
-    /// registration it replaces, and the tally counts both textures.
-    ///
-    /// The picture's own test above, one cell down, and it fails the same
-    /// silent ways. A preview sized from anything but its cell — the row, the
-    /// region, the picture, the window — looks perfectly correct on screen,
-    /// because the cell is drawn at whatever size it is and the texture fills
-    /// it; it is simply four to twenty times more texels than the audition
-    /// needs, per frame, for as long as the deck runs. And a
-    /// `register_native_texture` with no `free_texture` beside it leaks a bind
-    /// group and a sampler per remade frame.
-    ///
-    /// # What this test is for now, and the sentence it used to carry
-    ///
-    /// It used to say: *"the size a cell is remade at is the scale rather than
-    /// the window ... `deck-previews` is pinned at 72 tall, so a cell is 16:9
-    /// inside a fixed height and stays exactly as big at any wider window"* —
-    /// and it widened the window by 400 to prove it. That is false since the
-    /// bay started arranging itself, and it was false at exactly the two
-    /// widths this test already used: 1440 is below the crossover and 1840 is
-    /// past it, so the 400 the test widens by is the one resize that makes a
-    /// cell eleven times the texels it was.
-    ///
-    /// So the widths stay and the claim is the other one, which is the claim
-    /// worth having: a cell's texture is the size of a cell in whichever
-    /// arrangement the bay is in, and a resize that changes that frees the
-    /// registration it replaces. Three sizes, and each is a different way of
-    /// getting it wrong:
-    ///
-    /// - 112 x 63 in the row, which is the cell and not the row, the
-    ///   region, the picture or the window.
-    /// - 252 x 142 beside the picture, which is the same rule read off a
-    ///   column instead of a track — 35,784 texels against 7,056, which is
-    ///   5.1x, remade once at the crossover and not once per frame of
-    ///   the drag that crossed it.
-    /// - and the scale, which is the display it is dragged onto rather
-    ///   than the window it is in: `ScaleFactorChanged`, and
-    ///   `physical(cell, scale)`.
-    ///
-    /// Between them they hold the cell's size against every one of the four
-    /// things that can change it, and the freed tally counts every remake.
+    /// Verifies preview cell texture sizing accurately tracks bay layout arrangements and scale changes,
+    /// releasing replaced registrations upon resize.
     #[test]
     fn deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -439,15 +352,7 @@ mod gpu {
         );
         assert!(renderer.texture(&engine.previews[0].id).is_some());
 
-        // **A wider window goes beside**, preserving (112, 63) at default row height.
-        // **Dragging the preview row's boundary 172 up from the bay's bottom**
-        // leaves the row 168 tall — the 4 of `PROGRAM_DIVIDER` is above the
-        // boundary — and that is 159 of cell once `.program-body`'s 9 comes
-        // off. A cell is its image and the caption band under it now, so the
-        // image is 159 - 17 = **142**, and 142 at 16:9 is **252** (ADR-0239 for
-        // the preserved size, and `room::size::PREVIEW_CAPTION_H` for the band
-        // that was not there when this read 283 x 159). The registration it
-        // replaces is freed.
+        // Boundary drag adjusts preview row height and recalculates 16:9 cell image dimensions (ADR-0239).
         panel.set_viewport(W as f32 + 400.0, H as f32);
         panel.solve();
         let program_id = panel.layout().find("program").expect("program");

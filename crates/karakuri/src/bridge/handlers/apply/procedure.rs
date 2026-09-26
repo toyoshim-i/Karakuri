@@ -1,31 +1,8 @@
 use super::*;
 
-/// Which salt a slot's material is seeded from — the one it was built at, and
-/// the one a load restates when the Set file recorded none.
+/// Returns the PRNG seed salt for a given slot index (ADR-0269).
 ///
-/// Deck A's is [`SEED_SALT`] and every slot after it is one further along, so
-/// this deck's four slots are four different simulations of the one procedure
-/// [`Sources`] names. That generalises the reason the second salt was written
-/// for and then retires the constant. `WARM_SEED_SALT` existed so that *the
-/// slot the budget parks is a different simulation rather than a second copy of
-/// the same one* — an argument about the parked slot, made when the parked slot
-/// was the only other slot there was. What it was really saying is that a deck
-/// of one picture repeated is not a mixer, and that is true of every slot
-/// rather than of deck B, so it is said once here and no constant states a
-/// reason that has gone ([`docs/contributing.md`
-/// §4](../../../docs/contributing.md)).
-///
-/// `+ slot` rather than a table, because a table of four numbers is four values
-/// with nothing to say about each other, and what is wanted is exactly
-/// *distinct, and deck A's is the one the CLI's tests use*. Distinctness is
-/// then arithmetic rather than four typed numbers nobody re-reads — which
-/// `every_slot_is_its_own_simulation` asserts salt by salt, off the Sets the
-/// deck actually built rather than off this function.
-///
-/// The salts the run was built with, and no others: a Set loaded into a slot is
-/// new *material* and not a new simulation, so a rebuild that derived its own
-/// seed would repaint every element in the slot for a reason nobody asked for —
-/// which is `Watch::salts`' own argument, met from the loading side.
+/// Ensures each slot runs a distinct simulation of its procedures.
 pub(crate) fn slot_salt(slot: usize) -> u32 {
     SEED_SALT + slot as u32
 }
@@ -100,12 +77,7 @@ pub(crate) fn overlaying(
         .next()
         .ok_or_else(|| String::from("this deck is running no files at all"))?;
     let rest: Vec<karakuri_environment::compile::Named> = files.collect();
-    // **Every other field restated**, which is `Aiming::changed`'s single
-    // derivation: the layering, the fold, the capacity, the seed and the salts,
-    // the camera, the overrides, the wiring, the grants and the Set this slot is
-    // filed under all come back as the slot's own rather than as a default
-    // (ADR-0314). `Aim::set` is among them, which is why the history goes on
-    // filing under the base.
+    // Restate all other fields so the slot preserves its configuration (ADR-0314).
     aim.changed(|at| {
         at.head = head;
         at.rest = rest;
@@ -129,13 +101,9 @@ pub(crate) fn overlaying(
     ))
 }
 
-/// A procedure's bytes, out of whichever tier holds it, with the word for the
-/// tier so the sentence a press prints says where the file came from.
+/// Loads a procedure's source bytes, checking user store then shipped presets (P-0096).
 ///
-/// The operator's own first and what ships after it, which is the order the
-/// listing draws them under `all` and `presets`: a name kept in this store is
-/// this store's answer, and nothing this program does writes where the presets
-/// are (P-0096).
+/// Returns the bytes and a tier label ("kept" or "shipped").
 pub(crate) fn kept_source(
     root: &std::path::Path,
     presets: Option<&std::path::Path>,
@@ -159,13 +127,7 @@ pub(crate) fn kept_source(
     ))
 }
 
-/// What a [`karakuri_operation::Revision`] asked for, as a refusal names it — a
-/// version by the name it was filed under, or a node by its address.
-///
-/// One function because the two refusals about the *deck* are the same sentence
-/// whichever arm arrived: a slot the deck has not got and a deck playing no Set
-/// are answered before anything is read, and what they have to name is only
-/// what was asked for.
+/// Formats a revision target as a human-readable name or node address for diagnostics.
 pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
     match revision {
         karakuri_operation::Revision::Picked(name) => format!("`{name}`"),

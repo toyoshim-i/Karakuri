@@ -1,27 +1,10 @@
-//! `Tab` moves focus, `esc` goes up a level, and this loop leaves the event
-//! loop from the window's close and from nowhere else.
-//!
-//!
-//! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-//! retires quitting to the platform's own accelerator — *"a quit ladder is a
-//! sequence that ends in something irreversible, in front of an audience,
-//! reached by repeating one key"*
-//! ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md))
-//! — and
-//! [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)
-//! is where that lands. What the ring does is
-//! `karakuri-console/tests/focus.rs`'s; what this file says is that the two
-//! keys reach it and that one of them stopped doing something else.
+//! Tests keyboard focus routing and window exit behaviour (ADR-0259, ADR-0332, P-0094).
+//! Ensures Tab and Esc navigate focus, and exit only occurs on window close.
 
 use super::*;
 use crate::keymap::{key_escape, key_tab, KeyAction, KeyCtx, KEY_BINDINGS};
 
-/// The run ends at the window's close and nowhere else.
-///
-/// A CPU test, tested via structured dispatch rather than text scanning.
-/// Asserts that `WindowEvent::CloseRequested` on the main window is the one
-/// event that exits, secondary window close does not exit, and none of the key
-/// bindings (specifically `esc`) trigger an application exit.
+/// Asserts that only `WindowEvent::CloseRequested` on the main window exits the loop.
 #[test]
 fn the_only_way_out_of_the_run_is_the_windows_own_close() {
     // Main window close request exits the event loop

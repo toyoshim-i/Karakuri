@@ -207,13 +207,9 @@ impl Keymap {
         Self::default_keymap()
     }
 
-    /// Parses a keymap configuration text.
+    /// Parses keymap text lines formatted as `[<bay>:] <key> [global] -> <action>`.
     ///
-    /// Syntax per line:
-    /// `[<bay>:] <key> [global] -> <action>`
-    /// Lines starting with `#` or empty lines are ignored.
-    ///
-    /// Note: Fixed navigation grammar (`tab`, `esc`) cannot be remapped.
+    /// Fixed navigation keys (`tab`, `esc`) cannot be remapped.
     pub(crate) fn parse(text: &str) -> (Self, Vec<String>) {
         let mut keymap = Self::default_keymap();
         let mut notes = Vec::new();
@@ -331,13 +327,7 @@ impl Keymap {
         warnings
     }
 
-    /// Resolves the binding for a pressed key under current focus.
-    ///
-    /// Resolution precedence:
-    /// 1. Focused bay-specific binding
-    /// 2. Any-bay binding (`Some(ANY)`)
-    /// 3. Explicitly promoted global binding (`globalize: true`)
-    /// 4. Fixed global navigation binding (`bay: None`)
+    /// Resolves the key binding matching focus in order: bay-specific, any-bay, globalized, and global.
     pub(crate) fn find_binding<'a>(
         &'a self,
         key: &Key<&str>,

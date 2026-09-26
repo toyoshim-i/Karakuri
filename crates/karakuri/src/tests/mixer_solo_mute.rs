@@ -1,9 +1,5 @@
-//! Verification of the two-layer SOLO/MUTE state architecture:
-//! - Lower layer: Slot-level `online / offline` flag and mix arbitration in `Deck`.
-//! - High layer (Mixer controller): SOLO / MUTE operations dispatched to slots.
-//! - Unidirectional data flow: User interactions (keys, MCP, MIDI) emit operations,
-//!   engine mutates state, increments revision, and marks `"mixer"` bay dirty for next frame redraw.
-//! - Bay-local dirty redraw: Revision change triggers `mark_mixer_dirty()` declaring `Duration::ZERO`.
+//! Verifies two-layer Solo/Mute architecture: slot arbitration in `Deck`, controller operations,
+//! unidirectional dispatch, and bay-local dirty redraws on revision changes.
 
 use std::time::Duration;
 

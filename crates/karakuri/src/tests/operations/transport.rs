@@ -1,25 +1,6 @@
 use super::*;
 
-/// A control's operation becomes the record every other surface's control ends
-/// in, and this is the half of that which needs no device.
-///
-/// This test is older than the conversion it now checks, and that is the point
-/// of it. It was written against the hand-written `record` this file used to
-/// carry, asserting term for term what `karakuri-cli`'s `mix::gain_record` and
-/// `mix::opacity_record` already wrote. That function is deleted and
-/// [`written`] answers instead (ADR-0185's promise, kept where ADR-0194 put the
-/// home) — every expectation below is unchanged, so if the crate's conversion
-/// disagreed with the one that was deleted, this is what says so.
-///
-/// `mix::gain_record` is deleted too, by the same record and for the stronger
-/// reason: the conversion *is* the derivation now, and two of them is the drift
-/// `mix.rs` exists to end. The comments below name it where it stood, because
-/// what this test compares against is the record that function wrote rather
-/// than the function.
-///
-/// And the other direction: an operation this program has no control for writes
-/// no record here either, and the answer says *which* kind of nothing rather
-/// than a bare `None` — which is the whole of what the three answers buy.
+/// Verifies transport controls convert to expected session records or return explicit unwritten/silent outcomes (ADR-0185, ADR-0194).
 #[test]
 fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
     assert_eq!(
@@ -72,12 +53,7 @@ fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
         );
     }
 
-    // **Every residency of the cycle**, for the same reason as the blend:
-    // one chip emitting three operations has three records to write. The
-    // spelling is the wire's — `mix::residency_wire_name`'s three words,
-    // which are deliberately not the status line's `LIVE`/`prim`/`park`
-    // and not the chip's `live`/`prim`/`alloc` either, so a record written
-    // in the chip's vocabulary would decode as nothing at all.
+    // Wire protocol residency names match across all cycle states (`mix::residency_wire_name`).
     for (deck, (residency, level)) in [
         (karakuri_operation::Residency::Live, "live"),
         (karakuri_operation::Residency::Priming, "priming"),
@@ -105,11 +81,7 @@ fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
         );
     }
 
-    // The vocabulary is larger than what this program reaches: five controls
-    // writing five records. A record invented for the other 45 would be
-    // somebody deciding what they mean — and the answer is now *which*
-    // nothing rather than `None`, because a surface's own state and a
-    // record nobody can write yet are not the same silence.
+    // Verifies unmapped operations return typed non-record indications rather than ambiguous defaults.
     assert_eq!(
         written(&Operation::Solo { region: None }, &Current::default()),
         Written::Silent(Silent::Surface)
@@ -123,11 +95,7 @@ fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
 /// Verifies that scrub operations (relative) and sync mode selections (absolute) convert into records correctly.
 #[test]
 fn the_deck_heads_two_operations_go_different_distances() {
-    // **The scrub is relative, so the record is where the slot is plus
-    // what was asked for.** The reading is handed in by hand here for
-    // `reading`'s reason at the mask: there is no deck in this test
-    // binary, and what is being checked is the arithmetic rather than the
-    // read.
+    // Scrub operations write relative offsets combining current position with requested offset.
     let current = Current {
         transport: Some(karakuri_operation_record::Transport {
             sync: karakuri_operation::Sync::Beat,
@@ -176,13 +144,7 @@ fn the_deck_heads_two_operations_go_different_distances() {
         );
     }
 
-    // **A sync mode anchors at the session tempo and starts on the
-    // grid.** The reading handed in is the same one the scrub used —
-    // anchored at 128 and scrubbed to -1.5 — and none of it may survive:
-    // `Transport::engaged` clears the scrub because *"a slot brought back
-    // to the grid should be on the grid, not on wherever it was scrubbed
-    // to a song ago"*, and the anchor is the room's tempo rather than the
-    // one the slot was last locked to.
+    // Sync mode engagement clears prior scrub offsets and anchors to current session tempo.
     let set = Operation::SetSync {
         deck: 1,
         sync: karakuri_operation::Sync::Beat,
@@ -225,13 +187,7 @@ fn the_deck_heads_two_operations_go_different_distances() {
     );
 }
 
-/// The two crates walk the sync modes in one order, which is what makes
-/// `view::Pane::allows` line up with the field it fills.
-///
-/// [`inspector`] builds that array by mapping `EngineSync::ALL` and the console
-/// reads it by indexing [`SYNCS`], so the two orders are one order or the panel
-/// skips the wrong mode — silently, and only on material that refuses
-/// something. Two arrays cannot be made one by a comment.
+/// Verifies sync mode ordering remains consistent across console inspector layouts and engine arrays.
 #[test]
 fn the_two_crates_walk_the_sync_modes_in_one_order() {
     assert_eq!(EngineSync::ALL.len(), SYNCS.len());
@@ -247,25 +203,7 @@ fn the_two_crates_walk_the_sync_modes_in_one_order() {
     }
 }
 
-/// Anything that makes texels this frame keeps the loop awake, and the list is
-/// closed.
-///
-/// [`live`] decides whether the loop asks for another frame, and it is the one
-/// decision in this file that has already been got wrong twice in the same
-/// direction. The first time it was set once and never cleared, so folding the
-/// picture away left the window drawing at full rate — found by an operator on
-/// another machine following this file's own instructions, which said the
-/// window goes quiet, and getting 270 frames. The second time it was the
-/// picture alone, which is the same failure with a preview under it: fold the
-/// picture and deck A goes on auditioning while the loop stops asking for
-/// frames, so the panel keeps changing and nothing draws it.
-///
-/// So the assertion is over every sink, not over the one this program fills: a
-/// cell nobody has wired up yet is asserted live all the same, because the
-/// failure is a sink left out of the list rather than a sink that is off.
-///
-/// It needs no device: an `egui::TextureId` is a number, and what is being
-/// asserted is a rule about `Option`s.
+/// Verifies the animation event loop requests new frames whenever any preview or picture sink remains active.
 #[test]
 fn anything_that_makes_texels_keeps_the_loop_awake() {
     let some = Picture {

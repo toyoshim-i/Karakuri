@@ -12,17 +12,7 @@ fn shipped_presets() -> karakuri_environment::places::Presets {
     }
 }
 
-/// The `presets` scope lists the Set files and not the parts beside them, which
-/// is `console.html`'s *"a directory of `.kir` files is a directory of parts,
-/// and a library lists what you can put on a deck"*.
-///
-/// It is asserted against `examples/`, which is the directory this program
-/// actually opens on: thirty-five parts and twenty-three Set files in one place
-/// is exactly the mixture the rule is about, and a listing that took the parts
-/// would draw fifty-eight rows of which thirty-five name nothing this
-/// vocabulary can load.
-///
-/// A CPU test: a preset library is a directory.
+/// Verifies the `presets` scope lists runnable Set files while omitting raw `.kir` shader parts.
 #[test]
 fn the_presets_scope_lists_the_kset_files_and_not_the_parts_beside_them() {
     let presets = shipped_presets();
@@ -131,16 +121,7 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
         }
     );
 
-    // **The bundle form, which a `presets` root never offers**, and it is
-    // what a *send* writes: `setfile::bundle` is `--package`'s own reading
-    // — the Set with every source it names inlined — where the `.kbset`
-    // sitting in `<store>/sets/` is a projection whose material is the
-    // artifacts beside it and is **not** self-contained. So this is the
-    // loop the send half closes, driven with the half that exists: a
-    // package written into a directory the bay can be pointed at, and
-    // taken in from a row of it. It is where a send's dialog opens
-    // (ADR-0311), so the pair is the ordinary one rather than a contrived
-    // one.
+    // Verifies bundles with inlined sources are accepted through the library import path (ADR-0311).
     let second = scratch_dir("folder-take-in-bundle");
     Store::open(&second).expect("a second store");
     let sent = scratch_dir("folder-take-in-sent");
@@ -198,20 +179,7 @@ fn a_folder_row_two_files_wear_is_refused_with_both_names() {
     std::fs::remove_dir_all(&dir).expect("clean up");
 }
 
-/// Loading a preset takes it into the store, so `all` gains a row nobody made —
-/// `console.html`'s *"which is why opening a preset leaves one of your own
-/// behind"*. It gains no row under `my sets`, which is ADR-0299's answer to the
-/// roadmap's symptom: a preset packaged on load is a Set of the operator's and
-/// is not one they chose to keep.
-///
-/// The whole of the press is asserted here except the aim, which is
-/// [`loading`]'s and has its own test below: what a preset row adds is the
-/// packaging in front of it, and the claim is that after it the id is one the
-/// store holds and one `my sets` lists — which is what makes the load after it
-/// the same route a `my sets` row takes rather than a second one.
-///
-/// A CPU test: a store is a directory, and resolving a `.kset` is a read, a
-/// hash and a store put.
+/// Verifies loading a preset records it in the store and lists it under `all` without polluting `my sets` (ADR-0299).
 #[test]
 fn loading_a_preset_takes_it_in_and_leaves_it_under_my_sets() {
     let root = scratch_dir("preset-take-in");
@@ -281,22 +249,7 @@ fn a_take_in_names_the_file_it_read_because_that_is_what_the_operation_carries()
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A press on a `presets` row is *Send a Set to somebody, and take one in*
-/// performed at the second of its two moments, and then the load — so it emits
-/// both, in that order.
-///
-/// `docs/manual/operations.html`: *"Taking one in is not a second row — opening
-/// a preset is this row"*, and `console.html`: *"That is one press rather than
-/// two because taking it in is what gives it the name the load needs."* Two
-/// rows of the page and one press, and what this defends is that the press
-/// names both of them: emitting only the load would be a press that performs
-/// two rows and names one, and the row it dropped is the one nothing else in
-/// this workspace constructs.
-///
-/// The titles are asked of [`Operation::title`] rather than written out here,
-/// so a heading that moves on the page moves in one place.
-///
-/// A CPU test: it builds two values.
+/// Verifies activating a preset row emits import and load operations in sequence using resolved operation titles.
 #[test]
 fn a_press_on_a_preset_row_names_the_take_in_and_then_the_load() {
     let root = scratch_dir("preset-press");
@@ -338,18 +291,7 @@ fn a_press_on_a_preset_row_names_the_take_in_and_then_the_load() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// The take-in the press names writes no record, and that is settled — which is
-/// why emitting it is a naming rather than a second route into anything.
-///
-/// `karakuri-operation-record` answers `Silent(NoRecord)` for a transfer:
-/// nothing in the session vocabulary carries a Set arriving from somewhere
-/// else. So [`App::performed`] performs nothing for it, exactly as it performs
-/// nothing for the scope step `space` emits, and [`unwritten`] is what an
-/// operator reads. If that ever became `Owed`, the press would be emitting a
-/// gap rather than a settled silence and this file would be the place to say
-/// so.
-///
-/// A CPU test: it is a `match` on an operation.
+/// Verifies preset import operations return `Silent(NoRecord)` and perform without recording history records.
 #[test]
 fn the_take_in_the_press_names_writes_no_record_and_that_is_settled() {
     let take = Operation::TransferSet {
@@ -370,16 +312,7 @@ fn the_take_in_the_press_names_writes_no_record_and_that_is_settled() {
     );
 }
 
-/// A preset this store already holds unchanged is loaded rather than refused,
-/// and a row the library does not hold is still refused by name.
-///
-/// Before ADR-0347 a second press was a refusal, so nothing was taken in and
-/// nothing loaded. Asserted here: the press succeeds *and* wrote nothing —
-/// "it loaded" alone would pass on a press that filed a dated copy each time.
-/// The sentence is `setfile::unbundle`'s; what is checked is that the press
-/// goes through it.
-///
-/// A CPU test, for the test above's reason.
+/// Verifies re-loading an existing identical preset succeeds without duplicate disk writes (ADR-0347).
 #[test]
 fn a_preset_this_store_already_holds_is_loaded_rather_than_refused() {
     let root = scratch_dir("preset-current");
@@ -417,15 +350,7 @@ fn a_preset_this_store_already_holds_is_loaded_rather_than_refused() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A preset library that has moved on since the press that took it in replaces
-/// its own row, and the copy that was there is kept.
-///
-/// The library is a copy of `examples/` this test edits, rather than a Set
-/// hand-built to differ: a `.kset` names its parts by relative path and the
-/// stored file names them by content, so editing a `.kir` beside the `.kset` is
-/// how the two come apart in practice.
-///
-/// A CPU test, for the test above's reason.
+/// Verifies modified library presets replace active listings while retaining previous copies.
 #[test]
 fn a_preset_the_library_has_moved_on_from_is_replaced_and_the_old_one_kept() {
     let root = scratch_dir("preset-moved-on");
@@ -486,23 +411,7 @@ fn a_preset_the_library_has_moved_on_from_is_replaced_and_the_old_one_kept() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A scope is a listing on this side, and stepping to one answers it — two of
-/// the four with rows here,ng to one answers it — two of
-/// the four with rows here, and two with nothing and a sentence saying which
-/// kind of nothing it is.
-///
-/// The two that answer nothing are the whole point of the test: they are empty
-/// for two *different* reasons — nothing in this store is starred, and this
-/// console has not been pointed at a folder — and a program that said the same
-/// thing about both would be hiding one of them.
-///
-/// `folder` is here because of the console and not because of the scope: it
-/// answers with rows the moment one is dropped on the window, which is
-/// `a_folder_dropped_on_the_window_points_the_bay_at_it`, and the sentence it
-/// answers with here is the third of the three — a scope nobody has pointed
-/// anywhere.
-///
-/// A CPU test: a `View` takes no device.
+/// Verifies preset scope switching updates listings and supplies informative empty-state messages for unconfigured scopes.
 #[test]
 fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
     let root = scratch_dir("scope-listing");
@@ -576,11 +485,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
     );
     assert!(said.contains("presets"), "{said}");
 
-    // The two that answer nothing here, and the sentences they answer
-    // with are not one sentence. **`folder` is in this list because this
-    // console has been pointed nowhere**, and not because the scope cannot
-    // be answered: point it at a directory and it lists what is in it,
-    // which is `a_folder_dropped_on_the_window_points_the_bay_at_it`.
+    // Unpointed folder scope returns an informative empty-state message rather than generic empty listings.
     for scope in [Scope::MySets, Scope::Folder] {
         assert!(view.select_scope(scope));
         let said = listing(&mut view, &root, Some(&presets), None, None);
@@ -616,11 +521,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
         "a store nobody has saved into and a store nobody has starred in are given one \
          sentence"
     );
-    // **It says how a directory is chosen, and it used to say `operation`.**
-    // This asserted that word until ADR-0275, on the reading that the chip
-    // waited on one — which `ListSets`' own shape refutes: both its fields
-    // narrow what a store already holds, and which store is asked at all
-    // never was the operation's. What the sentence owes now is the way in.
+    // Reports directory selection instructions for empty folder scopes (ADR-0275).
     assert!(
         why_nothing(Scope::Folder, false, false).contains("drag")
             && why_nothing(Scope::Folder, false, false).contains("dropped"),

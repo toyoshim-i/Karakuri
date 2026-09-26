@@ -1,16 +1,6 @@
 use super::*;
 
-/// Two paths or none, and anything else is a refusal rather than a guess.
-///
-/// [`sources_from`] is the whole of this program's command line and this is
-/// what stops it growing a second one. The mistake it will actually be given is
-/// *one* path — a Set is two files and reads like one thing — and that is
-/// refused by name rather than paired with a default renderer, because a
-/// program that silently supplied half the material would draw something nobody
-/// asked for and say nothing about it.
-///
-/// A CPU test: nothing here opens a file, and a path that does not exist is
-/// still a path. What is behind one is [`checked`]'s to complain about.
+/// Verifies command-line argument parsing requires either zero or two paths, rejecting single-path inputs.
 #[test]
 fn a_set_is_two_paths_or_none_and_anything_else_is_refused() {
     let of = |args: &[&str]| sources_from(args.iter().map(|a| (*a).to_string()));
@@ -58,25 +48,7 @@ fn a_set_is_two_paths_or_none_and_anything_else_is_refused() {
     );
 }
 
-/// The two flags say where this program's data is, and either may sit on either
-/// side of the pair.
-///
-/// The order half is the one an operator meets: they type the flags in whatever
-/// order they think of them, and `karakuri-cli` accepts `--store` before or
-/// after its own command for exactly this reason
-/// (`list_sets_prints_and_is_never_a_run`). A parser that matched on the
-/// argument slice — which is what this one was — can only ever accept one of
-/// the two spellings.
-///
-/// And the pair still wins, which is the claim [`Sources`]'s doc makes about
-/// these flags not being a second material vocabulary: `--presets` moves what a
-/// run with *no* paths opens on and reaches nothing else, so a line with both a
-/// library and a pair plays the pair.
-///
-/// Not quite a CPU test, and this is what changed: resolving a presets root is
-/// existence checks on real directories. The library it names is this
-/// workspace's own `examples/`, which is on the disk whenever these tests run
-/// at all.
+/// Verifies `--store` and `--presets` flags can appear in any argument order, with explicit pairs taking precedence.
 #[test]
 fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() {
     let of = |args: &[&str]| sources_from(args.iter().map(|a| (*a).to_string()));
@@ -188,33 +160,12 @@ fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() 
     );
 }
 
-/// The capacity is the L1's own declaration, read off the `Checked`.
-///
-/// It was `const CAPACITY: u32 = 262144` here — `drift_shell.kir`'s declared
-/// default, transcribed — for as long as this file could only ever load that
-/// one file. It takes a path now, so a transcription would be right about one
-/// `.kir` and silently wrong about every other: a procedure written for 131072
-/// elements would run at 262144 and nothing would say so.
-///
-/// It is not `karakuri_ir::DEFAULT_CAPACITY` either, which is the language
-/// default for a file that declared nothing and is what `check_header` makes
-/// unreachable for an L1 that passed checking. The number below is asserted
-/// rather than derived on purpose, and it is the reference workload's rather
-/// than this program's: `docs/contributing.md` §1 names
-/// `examples/drift_cloud.kset` at 1280x720, and 262144 is what that Set's L1
-/// declares. It used to be asserted of whatever a bare `cargo run -p karakuri`
-/// opened on, which coupled the workload to the demo and is ADR-0270. What is
-/// still asserted of the shipped pair is that its capacity is read from its own
-/// file, which is a different property and the one this test is named for.
+/// Verifies slot capacity is derived directly from procedure header declarations rather than global defaults (ADR-0270).
 #[test]
 fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
     let sources = shipped();
 
-    // **The reference workload, pinned by name.** `drift_cloud.kset` is the
-    // Set `docs/contributing.md` §1 names, and this is its L1. That the
-    // `.kset` names these two parts is checked where every shipped Set is
-    // composed, in `karakuri-cli`'s `examples` suite, so it is not
-    // transcribed twice here.
+    // Pins reference workload L1 procedure name (`examples/drift_cloud.kset`).
     let reference = checked(&sources.l1.with_file_name("drift_shell.kir"));
     let pinned = reference
         .capacity
@@ -248,18 +199,7 @@ fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
          two declarations would be two answers to how many elements there are"
     );
 
-    // **A second L1, and it is the one that tells the two mistakes apart.**
-    // The pin above is `drift_shell.kir` at 262144, which is also
-    // `karakuri_ir::DEFAULT_CAPACITY` — so that assertion passes just as
-    // well against a [`capacity_of`] that ignored the file and returned the
-    // language default. `strand_shell.kir` declares 131072 and says why in
-    // the file (512 strands x 256 samples), and it is what that defect
-    // fails on. It is kept although the shipped pair no longer declares the
-    // language default either (ADR-0271 moved it to `coil_vortex.kir` at
-    // 10240): which pair is the default is a demo decision, and a test that
-    // can only tell a per-file read from a constant while the demo happens
-    // to be off the constant is a test that goes quiet the next time the
-    // demo moves.
+    // Validates against procedures with non-default capacity declarations (`strand_shell.kir` at 131072) (ADR-0271).
     let other = checked(&sources.l1.with_file_name("strand_shell.kir"));
     assert_eq!(
         capacity_of(&other),
@@ -275,15 +215,7 @@ fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
     );
 }
 
-/// **A surface is made by the instance its adapter came from, and this
-/// program has one.** `routed` opened the projector's surface on a fresh
-/// `Gpu::instance()` and then asked it about `gfx.gpu.adapter`, which belongs
-/// to the instance `resumed` made — a resource the fresh instance does not
-/// hold, so `wgpu-core` aborted inside the `winit` mouse callback with no
-/// sentence anywhere the moment the projector chip was pressed. Nothing can
-/// open that window in a test (ADR-0324), so the wiring is pinned by reading
-/// the source: exactly one `Gpu::instance()` in this crate, in `resumed`, and
-/// every `create_surface` after it on the instance the `Gpu` keeps.
+/// Verifies projector surface creation reuses the single `Gpu::instance()` initialized in `resumed` (ADR-0324).
 #[test]
 fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -322,7 +254,7 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
     }
     assert_eq!(
         fresh,
-        vec!["app/handler/mod.rs:80".to_string()],
+        vec!["app/handler/mod.rs:49".to_string()],
         "a second wgpu::Instance would hold none of the first one's adapters: {fresh:?}"
     );
     assert!(!surfaces.is_empty(), "no surface is made anywhere");
@@ -339,15 +271,7 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
     }
 }
 
-/// **The picture format is a value read off a surface, and never a constant.**
-/// It was `const PICTURE_FORMAT: TextureFormat = Rgba8UnormSrgb`, and no Metal
-/// surface offers that format — so `routed` refused to open the projector on
-/// every macOS run, naming a format the machine was never going to have. The
-/// format is now read off the console's own surface in `resumed` and threaded
-/// from there (ADR-0361). Nothing can open that window in a test (ADR-0324),
-/// so both halves are pinned by reading the source: no 8-bit sRGB format is
-/// named anywhere outside `tests/`, and the projector's check is against the
-/// value the surface gave.
+/// Verifies presentation picture formats are queried dynamically from the console surface rather than hardcoding constants (ADR-0324, ADR-0361).
 #[test]
 fn a_picture_format_is_a_value_read_off_a_surface() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

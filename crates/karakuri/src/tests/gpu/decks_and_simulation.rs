@@ -3,20 +3,8 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// The whole loop, closed on a real deck: a hand moves a knob and the strip
-    /// follows because the *deck* changed.
-    ///
-    /// `tests/fader.rs` asserts everything up to the operation and one thing past
-    /// it — that the console keeps no value of its own — and it does all of that
-    /// with no deck anywhere, which is the point of that file. This is the other
-    /// end, and it needs a device because a `Deck` does: the operation becomes a
-    /// `Record`, the record moves the deck, and the strips are read back off the
-    /// deck by [`mixer`] exactly as the frame reads them.
-    ///
-    /// The middle step is the one worth the device. Between the drag and the record
-    /// the strip must *not* have moved — if it had, the console would be showing a
-    /// number it kept rather than one the deck holds, and every assertion after it
-    /// would pass over a second copy of the deck's state.
+    /// Verifies knob interaction round-trip: UI edits generate records that update live
+    /// deck state, and strips reflect values read back from the deck.
     #[test]
     fn a_drag_moves_the_deck_and_the_strip_follows_the_deck() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -104,56 +92,8 @@ mod gpu {
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(after[0].gain, 0.5);
     }
-    /// A mix key moves the deck the operator selected, and leaves the other three
-    /// exactly where they were — the three key routes closed on a real deck, which
-    /// is why this is here rather than beside the helpers' own tests.
-    ///
-    /// `tests::stepping_the_trim_…` and the one beside it assert [`gain_key`] and
-    /// [`opacity_key`] with no deck anywhere, which is the point of those two, and
-    /// `karakuri-console/tests/grammar.rs` asserts which control a press lands on
-    /// with no deck either. This is the other end of the same chain, and it needs a
-    /// device because a `Deck` does: four slots exist, the selection is one of
-    /// them, the level the press steps from is read off that slot, the operation
-    /// becomes a `Record` and the record moves one slot.
-    ///
-    /// What separates it from a plausible wrong answer is which deck it lands on.
-    /// Deck C is selected — not the default and not the last, so a selection
-    /// ignored in either direction lands somewhere this test can see — and no two
-    /// slots are seeded alike, which is `tests/blend.rs`'s rule at the far end of
-    /// the same chain. Both halves are asserted: the one slot that moved and the
-    /// three that did not, because only the second catches a route that acted on a
-    /// deck of its own.
-    ///
-    /// And the level comes off the deck rather than off `view::Strip`, which the
-    /// arms' own comment claims and nothing measured. A strip is that same reading
-    /// copied once a frame, so the two disagree the moment anything moves the deck
-    /// without the frame having run again — a scheduled fade landing between the
-    /// two is one way and the only one the comment names, but it is the *staleness*
-    /// that matters and not how it arose, so it is made here the cheap way. What is
-    /// asserted is that the two sources give different answers and that the deck's
-    /// is the one that lands right.
-    ///
-    /// # What this cannot reach, and what does
-    ///
-    /// This doc named three arms inline in `App::window_event` until 2026-09-10,
-    /// when ADR-0333 moved the trim and the fader's half of that chain into two
-    /// free functions, [`held`] and [`answered`], reached from the grammar rather
-    /// than from three letters. `answered` is not inline in `window_event` any
-    /// more, but it is still out of this test's reach for a narrower reason: it
-    /// takes `&mut Gfx`, which bundles a live `winit::window::Window` and a
-    /// `wgpu::Surface`, and nothing in this workspace builds one off-screen for a
-    /// test the way [`Engine`] is built here for a bare `Deck`. So this presses
-    /// [`held`], [`gain_key`] and [`opacity_key`] by hand, in the order
-    /// `answered`'s `Trim`/`Fader` arm calls them, rather than calling `answered`
-    /// itself.
-    /// `holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it`,
-    /// below, presses [`holding`] — `answered`'s neighbour and the other function
-    /// ADR-0333 named — directly, because [`holding`] takes only `&Deck` and needs
-    /// no window at all. Between the two, every function the grammar's mix answers
-    /// call on a deck is pressed by something; only `answered`'s own dispatch —
-    /// that it calls them in this order, on the deck the address named — is still
-    /// asserted by hand here rather than by entering the function that actually
-    /// does it.
+    /// Verifies mix key adjustments affect only the targeted deck and derive levels
+    /// directly from live deck state rather than potentially stale strip copies (ADR-0333).
     #[test]
     fn a_mix_key_moves_the_deck_the_operator_selected_and_leaves_the_others_alone() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -334,12 +274,7 @@ mod gpu {
 
         // -- the guard ------------------------------------------------------
 
-        // **[`held`] is what stands between an event handler and an abort**,
-        // and this is the device half of that sentence: `Deck::gain` indexes
-        // its slots, so the thing the guard refuses is a real panic and not a
-        // supposed one. A panic here would take the process with it rather
-        // than unwinding into a message — see the module documentation — which
-        // is why the arms ask before they read.
+        // [`held`] guards deck slot indexing to avoid panics on out-of-range addresses.
         let past = engine.deck.slot_count();
         for slot in 0..past {
             assert_eq!(
@@ -418,31 +353,8 @@ mod gpu {
         );
     }
 
-    /// `holding` reads the addressed deck's own state, and never a strip that
-    /// predates it — the two functions'
-    /// `the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
-    /// used to hold as a claim about this file's text, read as a claim about what
-    /// runs.
-    ///
-    /// [`holding`] hands the console the three states a mixer strip cycles —
-    /// [`tally`], [`blend_mode`] and [`masked`] applied to
-    /// `Deck::requested_residency`, `Deck::blend` and `Deck::mask` — plus the angle
-    /// carried through unchanged. A text scan can only say those calls are *spelled
-    /// somewhere above the tests*; this presses [`holding`] itself and checks the
-    /// *values* it hands back, against a slot moved after a strip had already
-    /// copied its old ones — the same staleness
-    /// `a_mix_key_moves_the_deck_operator_selected_and_leaves_the_others_alone`
-    /// presses [`gain_key`] against, above.
-    ///
-    /// Nothing here reaches for a strip because nothing here has one to reach for.
-    /// [`holding`]'s only parameters are `&Deck` and a slot number, and
-    /// `karakuri-engine` does not depend on `karakuri-console` (ADR-0156): there is
-    /// no `view::Strip` in scope for a function with this signature to name, by
-    /// accident or otherwise. That half of the old claim is a fact about the crate
-    /// graph, settled the day this file stopped being allowed to import the
-    /// engine's own compositor into the console — not something either the old scan
-    /// or this test has to hold at runtime. What is worth pressing is the other
-    /// half: that the values [`holding`] reports are the ones on the deck now.
+    /// Verifies `holding` reads live deck mixer states (tally, blend, mask, angle)
+    /// directly rather than stale previous strip copies (ADR-0156).
     #[test]
     fn holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -593,28 +505,8 @@ mod gpu {
         );
     }
 
-    /// A parked deck is reachable by running this window, and both of its
-    /// residencies reach the strips.
-    ///
-    ///
-    /// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
-    /// drew a chip that rolls while a request is outstanding and `tests/parked.rs`
-    /// asserts every pixel of it — from strips written by hand. This is the other
-    /// question, and it was the one answered `no`: whether the engine can put this
-    /// panel in that state at all. A `Deck` grants every residency it is asked for
-    /// until something governs, so before [`Engine::ask_to_prime`] the two halves
-    /// of the pair could not disagree here however long anybody ran the program,
-    /// and the animation that is fully tested was unreachable in the one place a
-    /// person would look at it.
-    ///
-    /// Every step is the product's: two Sets are built, `Deck::measure_slots`
-    /// measures them with a real probe, the budget is set from what it measured,
-    /// [`Deck::govern`] refuses, and [`mixer`] reads the two residencies back off
-    /// the deck the way the frame does. The reason is asserted and not only the
-    /// park, because three of the four reasons that satisfy `Deck::is_parked` mean
-    /// this program forgot to do something — `Unmeasured` and `CommittedUnknown`
-    /// are a probe that never ran, and `NoPrimingNeeded` is a closed-form Set that
-    /// never needed warming. Only `NoHeadroom` is the budget refusing.
+    /// Verifies compute budget governance can park a deck into `NoHeadroom` when live workload
+    /// exceeds capacity, propagating parking residencies to UI strips (ADR-0190).
     #[test]
     fn the_budget_parks_a_deck_and_the_strip_carries_both_residencies() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -626,11 +518,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        // **The reference workload's pair rather than the shipped one**, and
-        // that is the whole of what keeps this test about the budget: see
-        // [`reference`]. `examples/star_vortex.kset`'s pair is closed-form, so
-        // this deck built from it parks deck B for `NoPrimingNeeded` and the
-        // assertion below would be reading a different refusal.
+        // Uses reference workload pairs to test compute budget exhaustion rather than closed-form Sets.
         let reference = reference();
         let slots: Vec<Sources> = std::iter::repeat_n(reference.clone(), SLOTS).collect();
         let mut engine = Engine::new(
@@ -646,19 +534,10 @@ mod gpu {
         );
         let material = vec![reference.material(); engine.deck.slot_count()];
 
-        // **Before the pass, and this is the deck this program opens with.**
-        // `Deck::new` brings every slot up Live and [`Engine::new`] rests all
-        // but deck A at Allocated, so the two residencies agree on every slot
-        // and nothing is pending: a park is something the governor does below,
-        // and nothing has asked for anything yet.
+        // Initial open state: deck A is Live and other decks are Allocated with agreeing residencies.
         let mut before = Vec::new();
         mixer(&engine.deck, &material, &mut before);
-        // **`DECKS` rather than `SLOTS`**, which is the claim rather than the
-        // definition: a strip is a slot, the bay draws four tracks whatever
-        // the deck has (ADR-0178), and what is being asserted is that every
-        // track this console lays out has a channel in it. Held against
-        // `SLOTS` it would be `Deck::new`'s argument compared with
-        // `Deck::slot_count`, which is the engine agreeing with itself.
+        // Asserts channel presence across all console tracks corresponding to decks (ADR-0178).
         assert_eq!(
             before.len(),
             DECKS,
@@ -716,12 +595,7 @@ mod gpu {
             "the governor took the picture off air"
         );
 
-        // **The slots nobody asked anything of come back `OffAir`**, which is
-        // the governor saying it was not asked about them — and it is a
-        // different word from `NoHeadroom` on purpose: a park stands and is
-        // reconsidered every pass, and a slot at rest carries no request to
-        // stand. These are the ones the legend counts off this report rather
-        // than naming.
+        // Unrequested resting slots report `OffAir` rather than `NoHeadroom`.
         let resting: Vec<usize> = governed
             .decisions
             .iter()
@@ -737,26 +611,12 @@ mod gpu {
          alone — {governed}"
         );
 
-        // **And the deck's committed cost is deck A's alone.** That is what
-        // keeps the arithmetic in `ask_to_prime` the arithmetic it was with
-        // two slots — `committed_ms` sums the **Live** slots, and three more
-        // allocated ones add nothing to it — and it is also the answer to
-        // whether four slots of the reference workload fit the frame budget:
-        // they are not being asked to.
+        // Committed cost sums only Live slots; allocated slots add zero compute overhead.
         assert!(
             !governed.over_budget,
             "one live slot is already over the budget this program set — {governed}"
         );
-        // **Against what deck A is *budgeted* on rather than what it was
-        // measured at**, which since
-        // [ADR-0296](../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)
-        // are two different numbers: the governor spends the estimate where a
-        // Set has one and the measurement where it does not, and this test is
-        // about *which slots* are in the sum rather than about which reading
-        // each of them contributed. Taking it off the decision is also what
-        // stops this assertion passing by arithmetic coincidence the day the
-        // estimate stops arriving — the number it compares against moves with
-        // the same rule the sum is built from.
+        // Evaluates against budgeted compute allowance rather than raw measurements (ADR-0296).
         let budgeted = governed
             .decisions
             .iter()
@@ -769,16 +629,7 @@ mod gpu {
          budgeted as if it were on air — {governed}"
         );
 
-        // **What four of these would cost if they were all Live, printed
-        // rather than asserted.** It is this machine's number and a threshold
-        // on it would be a test that passes here and fails on the next machine
-        // — ADR-0191 measured this same Set at 3.9 ms and at 9.8 ms in two
-        // runs of one program, and `DEFAULT_COMPUTE_BUDGET_MS` is 16.7. So the
-        // measurement is taken where it can be taken and reported;
-        // `cargo test -p karakuri -- --nocapture` is where to read it.
-        // P-0095: it carries how it was taken — `Deck::measure_slots`, one
-        // `Probe` for the deck, at the probe's own resolution rather than at
-        // `CANVAS`.
+        // Logs hypothetical four-slot live compute costs under probe resolution for diagnostics (ADR-0191, P-0095).
         let costs: Vec<f32> = (0..SLOTS)
             .filter_map(|slot| engine.deck.slot(EngineSlot(slot as u8)).measured_cost())
             .map(|cost| cost.ms)
@@ -811,11 +662,7 @@ mod gpu {
             "the strip's two residencies agree, so the chip has nothing to roll toward"
         );
 
-        // And the panel is live for as long as they disagree **and the bay
-        // the chip is in is laid out**, which is the declaration
-        // `tests/parked.rs` asserts against strips and folds of its own. The
-        // panel here is this program's own, unfolded, which is the arrangement
-        // this window opens on.
+        // Panel remains active while residencies diverge and the containing bay is laid out.
         let mut readout = Readout::new(1440.0, 900.0);
         readout.view.mixer = strips;
         assert_eq!(

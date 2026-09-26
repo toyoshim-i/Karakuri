@@ -36,13 +36,7 @@ mod gpu {
             "a deck of one slot cannot wipe and this test needs one that can"
         );
 
-        // **The grid is run on before anything is scheduled**, and it is the
-        // one piece of setup here that is not the product's own path.
-        // `quantise` answers `ceil(beats / quantum) * quantum`, so at beat
-        // zero every quantum agrees on zero and a record built with the wrong
-        // one is indistinguishable from a record built with the row's. Four
-        // seconds of grid is past the first bar at the default tempo, and the
-        // guard below is what says this line is still doing its job.
+        // Advances transport timeline past the first beat to prevent quantum quantization collisions.
         let mut signals = karakuri_engine::binding::Signals::default();
         signals.advance(u8::MAX, 1.0 / 60.0);
         engine.deck.set_signals(signals);
@@ -203,20 +197,7 @@ mod gpu {
             "the wipe wrote its records and nothing is moving on the deck it arrives on"
         );
 
-        // **And the gap that was here until 2026-09-10, closed off the same
-        // deck.** [`reading`] answered for a shape and for a wipe's arriving
-        // deck and not for a position, so `written` came back
-        // `Owed(NotRead(Mask))` and nothing moved — ADR-0334 recorded it and
-        // ADR-0341 fixed it with one arm. This is the other side of that
-        // assertion: the position is written whole, out of the number the
-        // operation carries and the shape, the angle and the soft edge the
-        // *deck* is wearing.
-        //
-        // **Read off this deck rather than spelled**, which is what makes it
-        // the half `an_operation_whose_record_is_owed_is_said_rather_than_swallowed`
-        // cannot make: a conversion that took a default here would pass
-        // against a hand-written `Current` and put a shape nobody chose on a
-        // deck mid-wipe.
+        // Verifies mask wipe position records are populated using live deck shape, angle, and softness (ADR-0334, ADR-0341).
         let wearing = engine.deck.mask(over_slot);
         let (kind, angle, softness) = (wearing.kind(), wearing.angle(), wearing.softness());
         let front = Operation::SetMaskPosition {
@@ -248,29 +229,7 @@ mod gpu {
         );
     }
 
-    /// The whole loop, closed on a parked deck: a press on the tally chip withdraws
-    /// the prime request the governor could not grant, and the strip stops rolling
-    /// because the *deck* changed.
-    ///
-    /// `tests/tally.rs` asserts everything up to the operation with no deck
-    /// anywhere, which is the point of that file. This is the other end, and it
-    /// needs a device because a `Deck` does — and because the state under test is
-    /// one only a governor pass can produce
-    /// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)):
-    /// the request is asked for through the product's own path, refused by a budget
-    /// computed from what the probe measured, and read back off the deck by
-    /// [`mixer`] exactly as the frame reads it.
-    ///
-    /// What separates this from a plausible wrong answer is which residency the
-    /// press names. The parked strip *shows* `alloc` and was *asked for* `prim`. A
-    /// chip cycling from what it shows would ask for `live` and put deck B on air;
-    /// cycling from the request asks for `allocated`, which is the withdrawal — and
-    /// both are asserted here, on the operation and again on the deck, because the
-    /// two are the same mistake at two removes (ADR-0195).
-    ///
-    /// The middle step is the one worth the device, as in the fader's test: between
-    /// the press and the record the deck must not have moved, or the console would
-    /// be applying what it is only supposed to ask for.
+    /// Verifies clicking a parked tally chip withdraws outstanding prime requests and returns the deck to allocated state (ADR-0191, ADR-0195).
     #[test]
     fn a_press_on_a_parked_tally_withdraws_the_request_and_the_strip_follows_the_deck() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -415,13 +374,7 @@ mod gpu {
             "the second press did not carry on round the cycle from the deck's own request"
         );
 
-        // **And the governor pass in `apply` is what makes a request a
-        // request.** Asked to prime again — the record the chip writes when
-        // the cycle comes round to it — the budget is still the budget, so the
-        // slot is parked again rather than granted. Without the pass
-        // `Deck::set_residency` would grant it on the spot and this panel
-        // would draw a primed deck the governor never admitted, which is
-        // ADR-0191 read forwards.
+        // Re-requesting prime under an unchanged budget re-triggers governor parking rather than granting live status (ADR-0191).
         let again = Record::Residency {
             slot: DeckSlot(ASKED_TO_PRIME as u8),
             level: "priming".to_owned(),
@@ -447,26 +400,7 @@ mod gpu {
         );
     }
 
-    /// The whole loop, closed on a masked deck: a press on the mask mini chooses
-    /// the next shape and leaves the front, the soft edge and — the one this test
-    /// exists for — the *angle* exactly where they were.
-    ///
-    /// `tests/mask.rs` asserts everything up to the operation with no deck
-    /// anywhere, which is the point of that file. This is the other end, and it
-    /// needs a device because a `Deck` does.
-    ///
-    /// What separates this from the plausible wrong answer is the angle. The chip
-    /// names a *shape*; `Operation::SetMaskShape` carries a shape and an angle
-    /// (ADR-0201), so a press must carry an angle it does not control. Carrying the
-    /// one the slot already wears is the whole of
-    /// [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md);
-    /// carrying `0.0` would look like a chip minding its own business and would
-    /// straighten a diagonal wipe on every press, with nothing on the panel saying
-    /// so — the mark is the same mark at any angle.
-    ///
-    /// The middle step is the one worth the device, as in the fader's test and the
-    /// tally's: between the press and the record the deck must not have moved, or
-    /// the console would be applying what it is only supposed to ask for.
+    /// Verifies mask shape selection cycles shape type while preserving current angle, softness, and direction (ADR-0201, ADR-0203).
     #[test]
     fn a_press_on_the_mask_mini_chooses_a_shape_and_keeps_the_angle() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;

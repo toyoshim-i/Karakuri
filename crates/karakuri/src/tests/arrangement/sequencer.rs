@@ -107,14 +107,7 @@ fn a_sequencer_press_moves_the_pattern_it_names() {
     assert_eq!(banks.armed(), 3, "and a refused press moves nothing");
 }
 
-/// A lane arrives with its two levels filled in from the range the console was
-/// published, and it arrives muted.
-///
-/// This is the half of `+ lane` no test in `karakuri-console` can see: that bay
-/// hands back `Operation::PointLane { pattern, target }` and appends nothing,
-/// and the payload carries no levels — a fader's are 1.0 and 0.0 and a
-/// parameter's are the range `View::inspector` holds, which is the same reading
-/// the chooser drew its items from (ADR-0320, ADR-0327).
+/// Verifies added sequencer lanes default to muted with levels initialized from inspector ranges (ADR-0320, ADR-0327).
 #[test]
 fn a_pointed_lane_takes_its_levels_from_the_published_range() {
     let mut banks = karakuri_pattern::Banks::default();
@@ -224,13 +217,7 @@ fn a_pointed_lane_takes_its_levels_from_the_published_range() {
     );
 }
 
-/// A lane is taken out by its position, the lanes after it move up, and an index
-/// this pattern has not got is refused in `no_such_slot`'s own sentence.
-///
-/// The other half of the minus at the end of a lane's row: the bay hands back
-/// `Operation::RemoveLane { pattern, lane }` and takes nothing out itself, so
-/// this is where the pattern actually loses the row (ADR-0352's property read on
-/// a lane).
+/// Verifies lane removal shifts subsequent lanes, and invalid indices are rejected (ADR-0352).
 #[test]
 fn a_removed_lane_takes_its_steps_with_it_and_the_rest_move_up() {
     let mut banks = karakuri_pattern::Banks::default();

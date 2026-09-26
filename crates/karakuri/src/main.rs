@@ -1,16 +1,6 @@
-//! Desktop instrument application hosting the Karakuri console UI and engine.
+//! Desktop instrument hosting the Karakuri console UI and engine.
 //!
-//! # Usage
-//! ```sh
-//! cargo run -p karakuri                                # default shipped preset pair
-//! cargo run -p karakuri -- geometry.kir renderer.kir   # custom L1 and L4 pair
-//! ```
-//!
-//! # Architecture
-//! - Combines `karakuri-console` UI rendering via `wgpu`/`egui` with `karakuri-engine`'s GPU render pipelines.
-//! - Runs event loop via `winit`, repainting when UI changes or new frames are required (ADR-0164).
-//! - Integrates audio input, MIDI control surface, MCP bridge, and session recording through `karakuri-environment`.
-//! - Tracks memory allocation overhead via global counting allocator for latency budget profiling (ADR-0164, ADR-0217).
+//! Runs `winit`/`egui`/`wgpu` pipelines with audio, MIDI, MCP, and session recording (ADR-0164, ADR-0217).
 
 use std::time::Duration;
 

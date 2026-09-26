@@ -33,11 +33,7 @@ fn an_output_that_is_off_does_not_raise_the_frame() {
     assert_eq!(render_size(&[Some((640, 360)), None]), Some((640, 360)));
 }
 
-/// Every output off says nothing rather than picking a size, which is what lets
-/// the caller leave the frame where it is: turning the last sink off stops the
-/// publishing and not the instrument (ADR-0171), and reallocating every target
-/// to change a picture nobody is looking at is the cost this answer exists to
-/// refuse.
+/// Turning off all outputs stops publishing without reallocating frame targets (ADR-0171).
 #[test]
 fn every_output_off_says_nothing() {
     assert_eq!(render_size(&[None, None]), None);

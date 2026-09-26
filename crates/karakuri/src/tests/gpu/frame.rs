@@ -3,26 +3,8 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// ADR-0155's other half, as an assertion: the engine's texels reach the panel.
-    ///
-    /// The first half — `egui` and `karakuri-engine` resolving one `wgpu` and
-    /// sharing one `Device` — is what `egui_paints_the_console_onto_a_device` below
-    /// settles. This is the question that was left: a Set is built, a deck frame is
-    /// rendered, the present pass letterboxes the canvas into the picture's
-    /// rectangle, and the panel's own pass samples that texture — all into one
-    /// command encoder and one submission, engine first — and what lands in the
-    /// window is read back.
-    ///
-    /// # Why the assertion is "lit" and not "not the bay's colour"
-    ///
-    /// A picture that never had anything drawn into it is black, and black is
-    /// already not `--c-panel`. So "the picture is not the card" passes for a
-    /// texture that was registered, sampled and never rendered — which is exactly
-    /// what the ordering defect produces: record the panel's pass before the
-    /// engine's and the frame samples an empty texture, with no complaint from
-    /// anywhere. The particles are the evidence, so the count of lit texels inside
-    /// the picture is what is asserted, and the two controls beside it — the bay's
-    /// own body, and the deck preview row — say the picture stayed in its region.
+    /// ADR-0155: Verifies rendered engine texels reach the presentation panel in correct order,
+    /// asserting lit texel counts within the picture bounds.
     #[test]
     fn the_engines_frame_reaches_the_picture_in_the_program_bay() {
         // Gamma space, and 1408 rather than 1440 because
@@ -79,13 +61,7 @@ mod gpu {
             "the deck was not built at the capacity its L1 declares"
         );
 
-        // **Aimed by the call the window makes, and the view is what that
-        // answered** rather than three lines this test writes by hand: an id
-        // or a rectangle assembled here is a test agreeing with itself about
-        // the one thing `Engine::aim` exists to decide. All four cells are
-        // aimed — every slot has a Set and every slot is drawn — and this test
-        // drives one of them, because what it is about is the ordering of the
-        // engine's pass against the panel's rather than the row.
+        // Aims view cells via `Engine::aim` to test render pass sequencing against the panel.
         let mut view = View::new(ROOM);
         (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(
@@ -126,12 +102,7 @@ mod gpu {
             mapped_at_creation: false,
         });
 
-        // **The frame, through the call the window loop makes** — not a
-        // hand-rolled copy of it beside it, which is what this used to be and
-        // is the drift `karakuri_engine::frame` exists to end. `compose` asks
-        // both sinks, advances the deck, presents the canvas into each of
-        // them, and hands the frame's own encoder to the closure: the panel,
-        // over the top of all of it, in one submission.
+        // Composes frame through engine sinks and hands encoder to panel closure in a single submission.
         let mut user_empty = false;
         let mut refusals: Vec<(usize, Skip)> = Vec::new();
         let outcome = {
@@ -271,23 +242,7 @@ mod gpu {
          would pass over a black rectangle"
         );
 
-        // **Deck A's cell, and the same two counts.** It is the second present
-        // pass arriving, and it fails the same two ways: a cell the pass never
-        // wrote is an unrendered texture, which is transparent rather than
-        // black, so the well shows through every texel of it and *nothing* is
-        // dark. The lit count is the control on that — a cell that is opaque
-        // and empty would satisfy the first and show an operator a black
-        // thumbnail.
-        //
-        // The cell is a fifth the picture's width, so this is also the claim
-        // that one `Present` fits its canvas into two targets of different
-        // sizes rather than drawing the picture's rectangle twice.
-        //
-        // **The same two thresholds as the picture**, on the same helper, and
-        // they are not tuned to this rectangle: measured here the cell comes
-        // out 76% dark and 16% lit, against the 50% and 1% asked for. A cell
-        // that reads anything like a lit picture passes; one the pass missed
-        // reads zero dark, which is a factor away rather than a margin.
+        // Asserts deck preview cell presentation matches expected dark/lit threshold distributions across different target dimensions.
         let (dark, bright, inside) = counted(cells[0]);
         assert!(
             dark * 2 > inside,
@@ -328,27 +283,7 @@ mod gpu {
         );
     }
 
-    /// The picture's texture is the size of the picture, the picture is the
-    /// canvas's shape, and the texture therefore carries no bars.
-    ///
-    /// Three claims and every one of them fails without a mark on the screen. A
-    /// texture sized from the window looks perfectly correct — the picture fills
-    /// whatever rectangle it is given — and is wrong by however much the panel is
-    /// not the picture, which here is most of it. A texture sized from the whole
-    /// region looks perfectly correct too, and that is the one this change is
-    /// about: it is the shape of the region rather than of the canvas, so
-    /// `Present::draw` fills the middle of it and clears the rest, and the bars are
-    /// allocated, cleared and sampled sixty times a second for nobody. At this
-    /// window that is 225 texels down each side of a 916-wide texture.
-    ///
-    /// The bars are asked of the engine's own `letterbox` rather than re-derived
-    /// here, because that is the function that draws them: it answers where the
-    /// canvas sits inside the texture, so a bar is what it leaves over. What is
-    /// asserted is that the bar is under one texel — not zero, and the difference
-    /// is the whole of why `Present::draw` stays. `picture_rect` rounds to whole
-    /// pixels, so the picture is the mock's 466 x 262 rather than exactly 16:9, and
-    /// the fit still has a quarter of a pixel to absorb. Sub-texel is what this
-    /// change makes it; redundant is what it does not.
+    /// Verifies picture texture dimensions match canvas aspect ratio without redundant padding or oversized margins.
     #[test]
     fn the_picture_is_the_canvass_shape_and_carries_no_bars() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -432,24 +367,7 @@ mod gpu {
         );
     }
 
-    /// The frame is composited at the picture's rectangle, and a projector raises
-    /// it — ADR-0325, on a real device rather than on `render_size`'s arithmetic.
-    ///
-    /// # Why this is not `render_size`'s test said twice
-    ///
-    /// `render_size` is a maximum over sizes and is tested on the CPU. What this
-    /// asserts is the *wiring*: that the picture's size is what reaches that
-    /// maximum, that both the deck and the present pass followed the answer, and
-    /// that they followed it together — which is the one thing a caller can get
-    /// wrong here and be told about a frame later, by `Frame::render`'s size check
-    /// panicking at the call site. Injecting a resize of one and not the other
-    /// passes every CPU test in this file.
-    ///
-    /// The projector's size is handed in rather than a window opened, because no
-    /// test in this workspace can open one: `ActiveEventLoop::create_window` needs
-    /// a live event loop and `mod gpu` has none. That is the seam `Engine::aim`'s
-    /// `projector` argument is on, and it is exactly why the argument is a size
-    /// rather than a `&Projector`.
+    /// Verifies composited frame size coordinates across picture bounds and projector target sizes (ADR-0325).
     #[test]
     fn the_frame_is_composited_at_the_largest_enabled_output() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;

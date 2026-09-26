@@ -11,15 +11,8 @@ mod gpu {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
-    /// The first line of the legend, and the shortest prefix of it that is not a
-    /// number: `print_legend` opens with `"the console, in a {w} x {h} viewport."`
-    /// and the two figures depend on the window this machine opened. Everything
-    /// before them is fixed.
-    ///
-    /// It is deliberately a line from *after* the device rather than one of the
-    /// three `main` prints before it — `scratch:`, `presets:` and `mcp:` are all
-    /// reached without an adapter, so waiting on one of those would pass on a run
-    /// that then died making a surface.
+    /// Target prefix in the startup legend confirming the window/device initialized
+    /// (lines before it occur prior to GPU adapter acquisition).
     const LEGEND: &str = "the console, in a ";
 
     /// The ceiling on a failure. A pass leaves the moment the line lands.
@@ -52,14 +45,8 @@ mod gpu {
         dir
     }
 
-    /// Read a child's stream to its end on a thread of its own, into a string the
-    /// test can look at whenever it likes.
-    ///
-    /// A thread rather than a read in the poll loop, for two reasons. A `read` on a
-    /// pipe blocks, so reading inline would stop the poll from ever noticing that
-    /// the process had died; and the legend is several kilobytes, so a child whose
-    /// pipe nobody drains can block *writing* it and hang exactly where this test
-    /// is watching for it.
+    /// Drains a child process stream onto a dedicated thread into shared memory to avoid
+    /// blocking both the child process write buffer and the test poll loop.
     fn drained<R: Read + Send + 'static>(stream: R) -> Arc<Mutex<String>> {
         let held = Arc::new(Mutex::new(String::new()));
         let into = Arc::clone(&held);
@@ -87,14 +74,8 @@ mod gpu {
     }
 
     impl Panel {
-        /// Launch the program an operator launches, with a store and a preset library
-        /// that belong to this test.
-        ///
-        /// `--presets` is given rather than left to resolve. Without it the library is
-        /// looked for beside the binary and then in the workspace the binary was
-        /// compiled in, and which of those answers depends on where the run happened —
-        /// a test that passes in a checkout and fails from an installed prefix is
-        /// testing the machine. Named, it is `examples/`, on every machine.
+        /// Spawns the binary with isolated store and explicit `--presets examples/`
+        /// path so preset resolution does not depend on binary location.
         fn launch(name: &str, extra: &[&str]) -> Panel {
             let dir = scratch(name);
             let store = dir.join("store");
@@ -180,12 +161,7 @@ mod gpu {
             }
         }
 
-        /// Still up, and nothing on stderr that reads as a panic.
-        ///
-        /// Both, because either alone is weak. A process can print the legend and abort
-        /// on the very next frame; and a `winit` callback that aborts on macOS may
-        /// leave nothing but the abort itself, so a clean stderr on a dead process
-        /// proves nothing either.
+        /// Asserts the child remains running and stderr contains no panics.
         fn is_still_running(&mut self) {
             let exited = self.child.try_wait().expect("try_wait on the panel");
             assert!(
@@ -198,11 +174,7 @@ mod gpu {
             self.no_panic();
         }
 
-        /// Keep polling while asserting the child stays alive and does not panic.
-        ///
-        /// A process that prints the legend can still crash on the first frame or
-        /// initial window/input event dispatch. Keeping it alive and checking it
-        /// over a window ensures startup and event loop entry succeed.
+        /// Polls across a window to ensure startup and event loop entry remain stable.
         fn stays_up_for(&mut self, duration: Duration) {
             let deadline = Instant::now() + duration;
             while Instant::now() < deadline {
@@ -241,12 +213,7 @@ mod gpu {
         }
     }
 
-    /// The exit of a killed process is the signal's, and not a panic's.
-    ///
-    /// A Rust panic that unwinds out of `main` exits 101; an abort is a signal of
-    /// its own. Neither is what `kill` produces, and the assertion is that what
-    /// came back is the killing rather than something the program decided on its
-    /// own in the moment before it.
+    /// Asserts termination via external signal (`SIGKILL`) rather than internal exit or panic.
     fn ended_on_the_signal(status: ExitStatus, transcript: &str) {
         assert_ne!(
             status.code(),
@@ -283,16 +250,8 @@ mod gpu {
         panel.no_panic();
     }
 
-    /// `--mcp 0` binds before the window and says which port it got, and the run
-    /// goes on to the legend anyway.
-    ///
-    /// The flag is here because it is the one startup step that reaches outside
-    /// this process before the device does, and `0` is the argument with no way to
-    /// collide: an ephemeral port is one the machine says is free, where a fixed
-    /// number in a test is a number some other program on the machine may be
-    /// holding. The printed port is asked of the server rather than echoed from the
-    /// flag, so `0` in and `0` out would be the bug — hence the parse rather than a
-    /// `contains`.
+    /// Verifies `--mcp 0` binds an ephemeral port before window initialization
+    /// and prints the resolved non-zero port before continuing to the legend.
     #[test]
     fn the_mcp_port_is_bound_and_printed_and_the_panel_still_starts() {
         let mut panel = Panel::launch("mcp", &["--mcp", "0"]);

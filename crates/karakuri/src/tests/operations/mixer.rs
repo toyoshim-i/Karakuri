@@ -1,23 +1,6 @@
 use super::*;
 
-/// A refused wipe says which refusal it was and where the next attempt is made,
-/// rather than *refused*.
-///
-/// `karakuri_console::view::Go` answers which of the two it is because the
-/// console is what can see it; the sentence is this window's, and
-/// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
-/// is what it owes: the constraint and the numbers, never a bare no. A press on
-/// `go` that printed nothing would read exactly like a press on the card beside
-/// it, which is the failure the whole `Go` type exists to prevent.
-///
-/// The two are asserted to be different sentences, for
-/// [`an_operation_whose_record_is_owed_is_said_rather_than_swallowed`]'s reason
-/// one test up: a window that printed one line for both would tell an operator
-/// with four decks and no shape that they need a second deck.
-///
-/// Not word for word. What has to hold is that each names what would have to
-/// change — the shape pill for one, a second deck for the other — and that the
-/// count is in the one whose count is the constraint.
+/// Verifies refused wipe diagnostics explain why the operation was blocked and what must change (P-0083).
 #[test]
 fn a_refused_wipe_says_which_refusal_it_was_and_where_to_go_next() {
     let no_shape = refusal(&Go::NoShape, 4);
@@ -80,17 +63,7 @@ fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
          question it is waiting on"
     );
 
-    // **And the other answer, which is a reading nobody took rather than a
-    // record nobody has decided.** A mask position converts, and what it
-    // needs is the rest of the mask — the shape, the angle and the soft
-    // edge `Record::Mask` is written whole out of. Handed a reading with
-    // no mask in it, the conversion says *which reading* was not handed
-    // over rather than sending a front back to wherever a default put it,
-    // and the sentence has to be a different one from the tap's above or
-    // the two answers read alike. **This window took no mask for a
-    // position until 2026-09-10** and that was the gap this half named;
-    // it takes one now (ADR-0341), so what is left here is the third
-    // answer itself, asserted against a `Current` built by hand.
+    // Verifies mask position conversions report missing mask context when passed incomplete readings (ADR-0341).
     let front = Operation::SetMaskPosition {
         deck: 1,
         position: 0.5,
@@ -177,24 +150,7 @@ fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
     );
 }
 
-/// A scheduled move on a fader a lane of the armed pattern holds is refused,
-/// says so in the one sentence, and that sentence is not the gap's
-/// (ADR-0323).
-///
-/// Three halves, and the third is the one that could go quietly stale. The
-/// first is the answer: a fade over a held fader comes back `Refused` and
-/// carries no record, which is the clause a replay depends on — a record
-/// written live would be replayed by a run with no sequencer in it (ADR-0322,
-/// P-0092). The second is this window's line for it, which has to be a
-/// different sentence from an `Owed`: a gap nobody has closed and a decision
-/// taken read alike otherwise.
-///
-/// The third is the reading. [`reading`] cannot be called here — it takes a
-/// `Deck` and this binary has no device — so the source is scanned for the
-/// banks arriving and for the field being filled from them. Without that, this
-/// whole test passes against a `Current` built by hand while the window
-/// schedules moves over lanes in silence, which is the failure
-/// `docs/contributing.md` §3 is about.
+/// Verifies scheduling fades over sequencer-controlled faders is rejected with explanatory diagnostics (ADR-0322, ADR-0323, P-0092).
 #[test]
 fn a_move_on_a_fader_a_lane_holds_is_refused_and_said_as_a_decision() {
     let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
@@ -239,11 +195,7 @@ fn a_move_on_a_fader_a_lane_holds_is_refused_and_said_as_a_decision() {
          same sentence"
     );
 
-    // **And the reading this window hands over.** `reading` takes the banks
-    // and fills the field from the armed pattern; either half missing is a
-    // refusal that silently never happens.
-    // Read with the whitespace taken out, so that a reformat of the file is
-    // not a failing test and a line wrapped by `cargo fmt` is not a silence.
+    // Scans source to ensure reading extracts fader bank assignments from the armed pattern.
     const APPLY: &str = include_str!("../../bridge/handlers/apply/reading.rs");
     let apply: String = APPLY.split_whitespace().collect();
     for wanted in [

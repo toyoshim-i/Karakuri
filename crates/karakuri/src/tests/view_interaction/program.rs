@@ -1,16 +1,6 @@
 use super::*;
 
-/// A press on the outputs dot, through the window loop's own routing.
-///
-/// The other half of the test above: that one is a boundary the panel claims
-/// and `egui` never sees, and this is the console's one control, which the
-/// panel claims for a different reason — `egui` owns no widget anywhere here,
-/// so a press routed to it would reach nothing at all.
-///
-/// What is asserted is the round trip an operator makes: the picture is on
-/// screen, a click on the dot folds it away by name, and a click on the same
-/// dot brings it back. The dot is where it is drawn and the press is the
-/// panel's at every step.
+/// Clicking the outputs indicator dot folds and unfolds the program picture display.
 #[test]
 fn a_press_on_the_outputs_dot_folds_the_picture_and_unfolds_it() {
     let ctx = drawn_once();
@@ -70,17 +60,7 @@ fn a_press_on_the_outputs_dot_folds_the_picture_and_unfolds_it() {
     );
 }
 
-/// The filter row narrows what the bay lists, through the summary.
-///
-/// The other half of the same press: `a_press_on_a_filter_field_…` says the
-/// operation reaches `View::narrow`, and this says the listing that comes back
-/// afterwards is a narrower one — which is the whole point, and was impossible
-/// while this side asked `Store::list_sets` for names.
-///
-/// A procedure is a row of `all` and of `presets`, with its kind on it — and of
-/// neither `my sets` nor `folder` (ADR-0338, decision 1).
-///
-/// A CPU test: two tiers on a disk, a `View`, and no window.
+/// Filter field criteria narrow displayed procedures across `all` and `presets` scopes (ADR-0338).
 #[test]
 fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     use karakuri_operation::LibraryKinds;
@@ -336,23 +316,7 @@ fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A press on the Program bay's `solo` pill, through the window loop's own
-/// routing.
-///
-/// `karakuri-console`'s `tests/solo_pill.rs` and `tests/vocabulary.rs` assert
-/// everything up to the operation with no window anywhere; this is the half
-/// ADR-0213 makes the badge mean — *"the row is claimed the day a person who
-/// launched the instrument can perform that operation from the panel in front
-/// of them"* — and a control demonstrated in that crate and never wired here
-/// would pass there and be a lie the page tells.
-///
-/// Both directions, because the pill is both. A solo takes every other control
-/// off the screen, so the pill is the only thing left to press and the undo has
-/// to come from it. What is asserted is the round trip an operator makes: the
-/// picture is one region among many, a click on the pill leaves it holding the
-/// window, and a click on the same pill — found again where it is now drawn,
-/// because the solo moved every rectangle on the console — puts everything
-/// back.
+/// Clicking the program bay solo pill isolates the picture display to the full window and clicking again restores layout (ADR-0213).
 #[test]
 fn a_press_on_the_solo_pill_solos_the_picture_and_undoes_it() {
     let ctx = drawn_once();

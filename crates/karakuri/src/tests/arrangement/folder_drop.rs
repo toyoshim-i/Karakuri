@@ -1,18 +1,7 @@
 use super::*;
 
-/// A folder let go on this window points the bay at it, marks the chip and
-/// lists what is in it — all three on the pass the drop arrives on.
-///
-/// The three are one act by ADR-0275's third policy: `dropped_files` is visible
-/// for one pass and then gone, so a bay that had set the directory and waited
-/// for the chip to be pressed would be holding a path nothing will hand it
-/// again. It is asserted as three outcomes of one call for that reason.
-///
-/// And what the listing holds is Sets and not parts, which is the `presets`
-/// scope's rule one chip along: both spellings of a Set file are rows, a `.kir`
-/// is not, and a subdirectory named like a Set file belongs to whoever made it.
-///
-/// A CPU test: a directory and a `View`.
+/// Verifies dropping a folder atomically points the bay at it, selects the chip,
+/// and lists its contained Sets in a single pass (ADR-0275).
 #[test]
 fn a_folder_dropped_on_the_window_points_the_bay_at_it() {
     let root = scratch_dir("folder-drop");
@@ -89,23 +78,8 @@ fn a_folder_dropped_on_the_window_points_the_bay_at_it() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// The two refusals ADR-0275 writes, and what they leave behind.
-///
-/// - One path, and it has to be a directory. A file is refused naming
-///   what was dropped rather than read as the folder it sits in, which
-///   would point this bay at a directory nobody pointed at; a `.kbset` is
-///   refused with the press that *does* take a Set in, because a file
-///   landing on this window has no row under it.
-/// - More than one path is refused, and all of them are, counting what
-///   arrived: a multi-item drag is one pass with several entries, so there
-///   is no first to act on and nothing says which was aimed at.
-///
-/// Every one of them says where the library is still pointed, which is
-/// the half that makes a refusal readable at a glance (P-0083): a bay that
-/// went on listing what it listed and a bay that quietly moved are the
-/// same drawing.
-///
-/// A CPU test: a directory and a `View`.
+/// Verifies refusal of invalid drops (non-directories, multi-item drops) and
+/// ensures library targeting remains unchanged (ADR-0275, P-0083).
 #[test]
 fn a_drop_that_is_not_one_folder_is_refused_and_the_bay_keeps_what_it_had() {
     let root = scratch_dir("folder-refusal");
@@ -189,14 +163,7 @@ fn a_drop_that_is_not_one_folder_is_refused_and_the_bay_keeps_what_it_had() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A folder over the window reads in the `.path` row, and two read as none.
-///
-/// The hover is the one thing about this bay that a frame does — `egui` clones
-/// the hovered files onto every pass while a drag lasts — so this is the whole
-/// of what a pass owes it: the path where there is one to draw, nothing where a
-/// release would set nothing, and no allocation where neither has changed.
-///
-/// A CPU test: a `View` and a list of paths.
+/// Verifies hovered file path display: single folders show path; multiple or empty hovers show none.
 #[test]
 fn a_folder_over_the_window_reads_in_the_path_row_and_two_read_as_none() {
     let one = karakuri_console::egui::HoveredFile {

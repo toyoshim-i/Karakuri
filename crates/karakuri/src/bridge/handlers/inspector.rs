@@ -1,22 +1,11 @@
 use super::*;
 
-/// A node's address as the mock's `.addr` spells it — `L1:0`, `L2:0`, `L4:0`.
-///
-/// [`layer_word`] is the layer half and this is the whole of it, written once
-/// because two bays draw it: the Inspector's node heads and, since 2026-09-09,
-/// the Staging lane's rows.
+/// Formats a node's display address (e.g. `L1:0`), shared by Inspector and Staging bays.
 pub(crate) fn node_addr(layer: Layer, index: u32) -> String {
     format!("{}:{index}", layer_word(layer))
 }
 
-/// The layer half of a node's address, as the mock's `.addr` spells it —
-/// `L1:0`, `L2:0`, `L4`.
-///
-/// `karakuri_ir::Kind` carries no name of its own, and `karakuri-cli`'s
-/// `--publish name=L4:0:key` parser is in a package with no library target, so
-/// there is nothing to call. The five words are `docs/ir-spec.md`'s and this is
-/// a match for [`blend_mode`]'s reason: a sixth kind stops the build here
-/// rather than drawing an address nothing can be typed back in.
+/// Returns the address prefix string for a layer according to `docs/ir-spec.md`.
 pub(crate) fn layer_word(layer: Layer) -> &'static str {
     match layer {
         Layer::L1 => "L1",
@@ -100,25 +89,14 @@ pub(crate) fn inspector(
         let set = deck.slot(addr).set();
         let transport = deck.transport(addr);
         let composite = set.layering() == Layering::Composite;
-        // **The deck head's two build chips**, and all three readings are of
-        // what **landed** rather than of what was asked: the number the slot is
-        // running at, the declaration it is measured against, and the salt the
-        // next one is derived from. That is the fold's own division one field
-        // over — a build may still be rolled back, and the Staging lane is what
-        // says so — and it is what lets this be read off a `Set` with no aim in
-        // sight (ADR-0328).
+        // Deck head build chips, reflecting landed running capacity, declaration, and salt (ADR-0328).
         let declared = set.declared_capacities();
         let running = set.source_capacities();
         let salts = set.source_salts();
         let aimed = match (running.first(), declared.first(), salts.first()) {
             (Some(&capacity), Some(&[_, _, default]), Some(&salt)) => Some(view::Aimed {
                 capacity,
-                // **Lit says the deck is not on what its material declares**,
-                // which is the fact a chip can state from what landed. *An aim
-                // carries a number* is the other candidate and is a reading of
-                // what was asked: a hand that steps round to the declared
-                // default would leave the chip lit over a slot running exactly
-                // what its files say.
+                // Lit indicates running capacity differs from the material's declared default.
                 stated: capacity != default,
                 capacities: capacity_ladder(declared),
                 salt: karakuri_engine::set::derived_salt(salt, 1),
@@ -200,20 +178,7 @@ pub(crate) fn inspector(
             ));
         }
 
-        // **Which L3 node is the built-in camera**, which is the one node on a
-        // pane with no procedure behind it and so nothing to keep.
-        //
-        // **The last camera node, always** — `Set::cameras`: *"Never empty,
-        // and the last one is always the built-in orbit."* A Set whose files
-        // declare no `kind L3` holds it at `L3:0`, and one that declares two
-        // holds it at `L3:2`; either way it is the highest index on that
-        // layer, so this is a `max` rather than a check for an empty layer.
-        //
-        // **Asked here rather than of the store**, because what a `keep` needs
-        // is *is there a source at all*, and the Set is what knows. The bytes
-        // themselves are the host's to find at the press — `Keeping::playing`
-        // — and a pane that named a node the store cannot answer for would be
-        // a capsule refusing after it was drawn.
+        // Built-in orbit camera is always the highest-indexed L3 node and has no source to keep.
         let builtin_camera = set
             .node_names()
             .iter()
@@ -267,12 +232,7 @@ pub(crate) fn inspector(
                     // chip is dropped rather than showing the first of them.
                     _ => None,
                 };
-                // **And no capsule either, for that sentence** — one `keep` on
-                // a head standing over three renderers would keep one of the
-                // three and say nothing about which (ADR-0338, decision 4).
-                // Open the fold and each renderer has its own; a Set with one
-                // renderer has one node under that head and carries the
-                // capsule like any other.
+                // Folded renderer head only displays keep capsule if exactly one renderer exists (ADR-0338).
                 renderer_keep = match renderer_nodes {
                     1 => Some(karakuri_operation::NodeAddress {
                         layer: asked_layer(layer),
@@ -315,11 +275,7 @@ pub(crate) fn inspector(
                         .map(|(_, param)| param.clone()),
                 );
             }
-            // **Published first and in interface order, then the ones off the
-            // list.** `Option`'s ordering puts `None` last, which is the order
-            // the rows are drawn in within a group and is the reason the sort
-            // is on the whole field rather than on a position: a number a
-            // reader is counting down should not step over a gap.
+            // Sort published params first in interface order, followed by unlisted params.
             params.sort_by_key(|param| param.ord);
             nodes.push(view::Node {
                 addr: layer_word(Layer::L4).to_owned(),
@@ -327,13 +283,7 @@ pub(crate) fn inspector(
                 authority: renderer_authority,
                 keep: renderer_keep,
                 renderers,
-                // **The folded renderer head takes none**, and it is the same
-                // reason its authority chip is dropped where it stands over
-                // more than one node: a `uses` line names *one* node's
-                // declaration, and this head is not a node. A renderer that
-                // declares an input is reachable from the file and from a
-                // model, and the panel says so rather than drawing one of
-                // several answers as the answer (ADR-0216's shape).
+                // Folded renderer head represents multiple nodes and takes no direct `uses` lines (ADR-0216).
                 uses: Vec::new(),
                 params,
             });
@@ -341,11 +291,7 @@ pub(crate) fn inspector(
 
         let placed: usize = nodes.iter().map(|node| node.params.len()).sum();
         if placed < published.len() + unplaced {
-            // **Said rather than swallowed**, for the reason every other
-            // omission in this file is said: a pane short of a row looks
-            // exactly like a Set that published fewer. See `node_of` — a
-            // wildcard over two or more nodes belongs to two or more groups,
-            // and the mock draws no row outside one.
+            // Warn on unplaced controls whose target node is ambiguous across multiple groups.
             println!(
                 "inspector: deck {} publishes {} controls and {} of them name no one node, so \
                  they have no group to sit in and are not drawn",
@@ -359,20 +305,8 @@ pub(crate) fn inspector(
             deck: slot,
             material: material.to_owned(),
             sync: mix::sync(transport.sync()),
-            // **What the sync chip's cycle skips over, asked of the engine
-            // three times.** `Deck::sync_allowed` is *"what a surface greys a
-            // control out on, and it answers before anything is pressed"* —
-            // whether the Set in this slot is closed form and whether it reads
-            // `beats`, put through `Transport::allows`. The console is handed
-            // the three answers rather than the two properties, because what
-            // may be asked for is not a surface's to work out (P-0090) and a
-            // third copy of that rule in a crate with no material in it is a
-            // rule that can start disagreeing.
-            //
-            // **`EngineSync::ALL` is in `SYNCS`' order**, which is what makes
-            // this array line up with the field it fills;
-            // `the_two_crates_walk_the_sync_modes_in_one_order` is what says
-            // so rather than this comment.
+            // Query engine whether each sync mode is allowed for this slot (P-0090).
+            // Matches `EngineSync::ALL` ordering.
             allows: EngineSync::ALL.map(|mode| deck.sync_allowed(addr, mode).is_ok()),
             anchor_bpm: transport.anchor_bpm(),
             scrub_beats: transport.scrub_beats(),
@@ -383,38 +317,9 @@ pub(crate) fn inspector(
     }
 }
 
-/// The `uses` lines one node draws: every input its procedure declares, with
-/// the node filling each.
+/// Returns the declared input `uses` lines and candidate wiring targets for a node (ADR-0152, P-0090).
 ///
-/// # The edges *are* the declarations, and that is forced rather than chosen
-///
-/// Nothing on a built `Set` says which inputs a node declares — the `uses`
-/// declaration is read at `Set::validate` and dropped — and nothing has to,
-/// because an unbound declared input is refused where the Set is built
-/// (ADR-0152: *"`If there is exactly one, use it` is the implicit rule the
-/// whole item exists to remove, and the refusal names the slot"*). So a slot
-/// that is *running* has an edge for every input it declares, and the run's
-/// edge list filtered to the nodes this Set holds is that list exactly. A
-/// reader on the engine would be a second answer to a question the refusal
-/// already settles.
-///
-/// # The candidates are the nodes on the layer the input already reaches
-///
-/// A `uses` slot has a type — `Geometry`, `Field`, `Camera`, `Source` — and the
-/// build refused anything else, so the node currently wired is of the right
-/// kind by construction and its layer is the kind. The candidates are the other
-/// nodes on that layer, in node order, which is a list every entry of which the
-/// build accepts.
-///
-/// It is inference and it is honest about being it. What this cannot do is
-/// offer a kind the input takes and the deck currently reaches by no edge — a
-/// `Field` input on a deck holding one field has an empty list, and the card
-/// does not open. That is a control offering less than the language allows
-/// rather than more, which is the side of P-0090 to be wrong on: a name this
-/// misses is still reachable from a model and from `--edge`.
-///
-/// The declaring node is not in its own list. A node wired to itself is a cycle
-/// the build refuses, and offering it would be offering a refusal.
+/// Candidates include other nodes on the same layer, excluding self-loops.
 pub(crate) fn uses_of(
     set: &karakuri_engine::set::Set,
     edges: &[karakuri_engine::set::Edge],
@@ -441,30 +346,9 @@ pub(crate) fn uses_of(
         .collect()
 }
 
-/// What a slot's capacity chip steps through: the powers of two every one of
-/// this deck's geometries would accept, ascending.
+/// Returns ascending power-of-two capacities valid across all geometries in a deck (ADR-0328, P-0090).
 ///
-/// # The intersection, because a re-aim sends one number
-///
-/// `watch::Aim::capacity` is one `Option<u32>` for the whole slot —
-/// `--capacity`'s own field, which *"overrides every source"* — so a Set
-/// holding two geometries builds both at whatever this asks for, and a number
-/// only one of them declares is a build the other refuses. The fold is
-/// `lo.max(min)`, `hi.min(max)`, which is `declared`'s arithmetic one bay over
-/// where two nodes publish one key: the range is the part every declarer
-/// accepts and never any one of them on its own.
-///
-/// An empty intersection is an empty list, and that is a real state rather than
-/// an unreachable one: two geometries whose declared ranges do not overlap have
-/// no capacity a single re-aim could send. The chip is then drawn and claims
-/// nothing, which is what `view::Aimed::capacities` says at the field.
-///
-/// Powers of two, and nothing here says why they are the right rungs — that is
-/// the console's affordance and its record (`docs/adr/0328-…`); what this owes
-/// is that every rung it offers is one the engine will build, which is
-/// `Set::declared_capacities` being the same declaration
-/// `karakuri_engine::set::capacity_in_range` refuses against
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// Folds ranges into their mutual intersection, returning empty if ranges do not overlap.
 pub(crate) fn capacity_ladder(declared: &[[u32; 3]]) -> Vec<u32> {
     let Some(lo) = declared.iter().map(|at| at[0]).max() else {
         return Vec::new();
@@ -485,44 +369,9 @@ pub(crate) fn capacity_ladder(declared: &[[u32; 3]]) -> Vec<u32> {
 /// head over all of them, which the mock writes as `L4 renderers`.
 pub(crate) const RENDERERS_NODE: &str = "renderers";
 
-/// A deck's renderers folded or overdrawn, performed — the Inspector deck
-/// head's fold pressed, and `None` for every operation that is not one.
+/// Handles a compositing mode toggle for a deck slot (ADR-0046, ADR-0314, P-0091).
 ///
-/// # It is [`played`]'s shape with one field instead of every field
-///
-/// A library load re-points a slot at a different Set's files; this re-points a
-/// slot at *the files it is already on*, with the layering changed. Both are
-/// one `Aiming::changed`, both are judged by the same watchdog, and neither
-/// touches the deck — see [`Aiming::changed`], where the argument is, and
-/// `docs/adr/0314-…`, which is the record.
-///
-/// `written` answers `Silent(NoRecord)`, exactly as it does for
-/// `Operation::LoadSet`, so the surface that names it is the surface that
-/// performs it and there is nothing for [`apply`] to do. What a session stream
-/// has for a layering is `Record::Merge`, which is a Set file's statement about
-/// a Set and carries no slot; nothing in the vocabulary says *the Set in slot 3
-/// composites*, and inventing a record here would be inventing the record
-/// stream (ADR-0046's rule, met from the panel).
-///
-/// # A press that asks for the state the slot is in is refused rather than sent
-///
-/// Not because asking twice is wrong — [`DeckHead::compositing`] names a
-/// destination, and naming the one you are on is how the anchor beside it
-/// re-anchors — but because *here* it would buy a recompile of the whole slot
-/// and change nothing about the picture, which is a cost paid for nothing
-/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
-/// The chip cannot produce one, since it reads the state the frame drew; MIDI,
-/// a key or a model can, the day any of them names this operation.
-///
-/// Every failure is a sentence and none of them moves anything: a slot the deck
-/// has not got, or a build worker that has gone.
-///
-/// A free function over the aims and not over [`Gfx`], which is [`rewired`]'s
-/// arrangement and its reason: the whole of what this decides is the field, the
-/// refusal and the sentence, and none of the three needs a window, a device or
-/// a `Deck` to check. [`played`] beside it takes the program because a load
-/// reads a store and writes the strip's name; this one touches nothing but the
-/// aim.
+/// Updates the slot's aim layering; refuses no-op requests that match current state to avoid recompilation.
 pub(crate) fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
     let Operation::SetCompositing { deck, compositing } = operation else {
         return None;
@@ -565,43 +414,9 @@ pub(crate) fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<S
     }
 }
 
-/// A deck's element count moved, performed — the Inspector deck head's capacity
-/// chip pressed, and `None` for every operation that is not one.
+/// Handles a capacity chip change for a deck slot (ADR-0228, ADR-0314, ADR-0328, P-0090).
 ///
-/// # It is [`composited`]'s shape with a different field of the aim
-///
-/// A capacity is one field of the description a slot's watcher is pointed at,
-/// so this restates the other thirteen and sends it and the worker recompiles
-/// the slot off the render thread — the route ADR-0228 opened and ADR-0314
-/// walked, and the reason a *setter* on `Set` was never what this waited on.
-/// `written` answers `Silent(NoRecord)` for `SetProperty` exactly as it does
-/// for `SetCompositing` and `LoadSet`, so there is nothing for [`apply`] to do:
-/// `Record::Capacity` is a Set file's statement about a Set and carries no
-/// slot. A session replayed therefore does not come back at a capacity a hand
-/// stepped to — the load's cost, unchanged in size; a deck kept does, since a
-/// keep writes one `capacity` record per geometry off what the Set is running
-/// at (`docs/adr/0328-…`).
-///
-/// # It is the whole slot, and that is the aim's shape rather than a shortcut
-///
-/// `watch::Aim::capacity` is one `Option<u32>` and is `--capacity`'s own field:
-/// *"`--capacity` overrides every source"*. So a Set holding two geometries
-/// runs both at this number. That is ADR-0228's recorded limit met from the
-/// asking side rather than worked around, and it is why
-/// `karakuri_operation::Property::Capacity` names no node.
-///
-/// A press asking for the capacity the slot is already aimed at is refused with
-/// a sentence and nothing is sent, on the fold's terms: it would buy a
-/// recompile of the whole slot and land on the same picture. The chip cannot
-/// produce one — its step is strictly above what the slot is running — and a
-/// model can, since `set_property` names the number outright and arrives here
-/// as an `Acted::Emitted` like any press. That is why the guard is here and not
-/// in the console: what may be asked for is not a surface's to decide, so every
-/// way in meets the same wall in the same sentence
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-///
-/// A free function over the aims, for [`composited`]'s reason: the field, the
-/// refusal and the sentence are the whole of what it decides.
+/// Sets slot-wide capacity override and triggers background recompilation. Refuses redundant requests.
 pub(crate) fn resized(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
     let Operation::SetProperty {
         deck,
@@ -641,31 +456,9 @@ pub(crate) fn resized(aims: &mut [Aiming], operation: &Operation) -> Option<Stri
     }
 }
 
-/// An input rewired, performed — a pick out of a `uses` line's card, and `None`
-/// for every operation that is not one.
+/// Performs input rewiring for a deck slot via [`rewired`] (ADR-0329, P-0085, P-0090).
 ///
-/// # It is the route a model's `wire_input` already takes, reached from a press
-///
-/// [`rewired`] is the whole of what a rewiring decides — the run's wiring, the
-/// re-aim and the sentence — and it was written for the MCP surface, one
-/// request per frame, with a slot number it does not trust. A press is one
-/// request of exactly that shape, so this hands it one and prints what comes
-/// back: the panel and a model rewire through one function, and a defect in
-/// either is a defect in both rather than in whichever was tried
-/// ([P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)).
-///
-/// Nothing is validated here. The card offers nodes the pane could see and a
-/// name the Set cannot use is refused where the Set is *built*, by name and
-/// with what the Set does hold — which is the wall every way in meets, in one
-/// sentence
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-///
-/// `written` answers `Silent(NoRecord)` for `WireInput` and still does:
-/// `Record::Edge` is a Set file's statement about a Set and carries no slot, so
-/// a session replayed does not come back rewired where a hand asked for it —
-/// and a keep does, since a keep writes the run's edges into the file it saves.
-/// That is `SetProperty`'s division and `LoadSet`'s hole, not a new one
-/// (`docs/adr/0329-…`).
+/// Re-aims the watcher to update wiring edges and triggers recompilation.
 pub(crate) fn wired_input(
     edges: &mut Vec<karakuri_engine::set::Edge>,
     aims: &mut [Aiming],

@@ -1,42 +1,7 @@
 use super::*;
 
-/// What a model asking over `--mcp` is told about an operation this window
-/// refused, owed or performed — and *performed* is one of the three answers
-/// rather than all of them (ADR-0131, P-0083, ADR-0315).
-///
-/// The defect this pins was one sentence and no branch: the drain answered
-/// ``was performed on the frame it arrived on`` for every operation it took,
-/// so a model that asked for a fade on a fader an unmuted lane of the armed
-/// pattern holds was told the move was running. Nothing was scheduled, nothing
-/// moved, the lane still held the fader, and the one place that said so was
-/// this run's terminal — which a model does not have (ADR-0315). It then asked
-/// for the next thing.
-///
-/// Four answers, and the first two are the repair:
-///
-/// - A refusal is the refusal's own sentence, in the wording
-///   `karakuri-cli` answers a refusal in. The `assert_eq!` is against
-///   [`not_performed`] rather than a spelling written out here, which is
-///   `no_such_slot`'s lesson (ADR-0131): four spellings of one refusal lived
-///   side by side because every test asked only whether the range appeared in
-///   it. Pinning both programs to the one function is what makes them one
-///   sentence — there is no second string to drift from.
-/// - A gap is the gap's sentence and not the refusal's, which is
-///   [`unwritten`]'s distinction carried onto the socket.
-/// - A record is *performed*, unchanged.
-/// - **And so is a `Silent`**, which is where this program's answer differs
-///   from `karakuri-cli`'s and is deliberate: that program performs an
-///   operation by writing records, so a `Silent` is one it has no control for;
-///   this one has the control. `SelectDeck` moves the ring, and answering
-///   *nothing on this run changed* for it would be this fix writing the defect
-///   it repairs the other way round.
-///
-/// The fifth half is the wiring, because none of the four enters the drain.
-/// `App::operated` takes a `Gfx` and an `ActiveEventLoop` and this binary has
-/// neither, so the source is scanned for the conversion being carried out of
-/// `App::performed` and for the drain consulting it — without that, every
-/// assertion above passes against a function nothing calls, which is
-/// `docs/contributing.md` §3's whole subject.
+/// Verifies MCP operation responses correctly differentiate between performed records,
+/// explicit refusals, unwritten gaps, and silent local UI changes (ADR-0131, ADR-0315, P-0083).
 #[test]
 fn a_model_is_answered_the_refusal_rather_than_told_its_move_was_performed() {
     let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
@@ -133,12 +98,7 @@ fn a_model_is_answered_the_refusal_rather_than_told_its_move_was_performed() {
          written the other way round"
     );
 
-    // **And the drain, read out of its own source**, because nothing above
-    // enters it: the conversion has to be carried out of `App::performed` and
-    // consulted before the `Ok` is built, and either half missing is four
-    // green assertions over a function with no caller.
-    // Read with the whitespace taken out, so that a reformat of the file is
-    // not a failing test and a line wrapped by `cargo fmt` is not a silence.
+    // Verifies event drain checks operation execution results before returning successful replies.
     const APP: &str = include_str!("../../app/mod.rs");
     let app: String = APP.split_whitespace().collect();
     for wanted in [
@@ -159,16 +119,7 @@ fn a_model_is_answered_the_refusal_rather_than_told_its_move_was_performed() {
     }
 }
 
-/// `--mcp` takes a port, and it is refused in the three ways a flag with a
-/// value is refused.
-///
-/// The first two are [`value_for`]'s and are the two the other flags already
-/// meet — a flag at the end of the line does not fall back to a default, and a
-/// flag whose value is the next flag does not eat it. The third is
-/// [`number_for`]'s and is new here, because this is the first flag on this
-/// command line that takes a number: a port that is not a port is a mistake on
-/// the command line, and a run that started serving on some other number would
-/// be the wrong kind of helpful.
+/// Verifies `--mcp` port parsing enforces valid numeric values and rejects missing or malformed inputs.
 #[test]
 fn the_mcp_flag_takes_a_port_and_is_refused_the_three_ways_a_valued_flag_is() {
     let read = |args: &[&str]| sources_from(args.iter().map(|a| a.to_string()).collect::<Vec<_>>());
@@ -216,21 +167,7 @@ fn the_mcp_flag_takes_a_port_and_is_refused_the_three_ways_a_valued_flag_is() {
     );
 }
 
-/// A wire request reaches the slot's watcher, and the rest of that watcher's
-/// aim is restated with it.
-///
-/// The three points `mcp::WireRequest` owes, checked without a window: the edge
-/// is replaced rather than appended and keyed on the input, the slot is
-/// re-aimed with the run's whole wiring, and a slot this deck has not got is
-/// refused in the one sentence every surface refuses one in.
-///
-/// The other fields are the point of the second assertion. An `Aim` is every
-/// field of a slot's identity, and a rewiring that restated only the edges
-/// would come back with the outgoing slot's camera, fold and salts — a defect
-/// that shows on the *next* build rather than on the rewiring, which is why it
-/// is asserted here rather than left to be seen. The Set the slot is running is
-/// among them, and it is the one whose symptom is not a picture at all:
-/// versions filed under the wrong Set, or under none.
+/// Verifies MCP wire requests update watcher routing while preserving existing slot camera, fold, and Set identities.
 #[test]
 fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() {
     let edge = |node: &str, slot: &str, to: &str| karakuri_engine::set::Edge {

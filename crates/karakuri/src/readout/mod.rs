@@ -41,60 +41,29 @@ pub(crate) use hud::*;
 pub(crate) struct Readout {
     pub(crate) panel: Panel,
     pub(crate) view: View,
-    /// What the operator has opened to a model, and the one piece of state in this
-    /// struct that is neither the panel's nor a reading of the engine.
+    /// Model opening handle shared with `karakuri_mcp::serve`.
     ///
-    /// It is a handle rather than a value because the whole point of it is that a
-    /// *second* reader has it: `karakuri_mcp::serve` takes a clone and reads it on
-    /// every call, so an opening is live rather than a snapshot taken at startup.
-    /// `View::opening` is this handle read once a frame; this is the model of
-    /// record.
-    ///
-    /// This process serves MCP when `--mcp` names a port, and the server is handed
-    /// this same handle rather than a copy, so the four pills and the audit read
-    /// one value. Without the flag the pills still write it and only this program
-    /// and its tests read it back.
+    /// Live handle read per frame by `View::opening` and shared directly with the MCP
+    /// server so UI pills and audits observe consistent opening state.
     pub(crate) opening: Opening,
     /// What MCP access policy is configured per slot, shared with `karakuri_mcp::serve`.
     pub(crate) slot_policies: SlotPolicies,
     /// Store root for saving arrangements and persistent state, if opened.
     pub(crate) store_root: Option<std::path::PathBuf>,
-    /// What the last write did, which the transport row's health capsule draws —
-    /// `view::Transport::health`, kept here because that value is rebuilt whole
-    /// every frame by `transport` and a verdict arrives on one frame in a thousand.
+    /// Cached build verdict for the transport row's health capsule.
     ///
-    /// The one reading in this struct that is a stream rather than a state.
-    /// Everything else the row draws is asked of the deck on the frame it is drawn
-    /// on; a `swap::Event` exists once, in the drain `staging` makes, and is gone.
-    /// So the last one is remembered here for the same reason `view.staging`'s rows
-    /// are remembered in the view: it is the drain that forces it, not a
-    /// preference.
-    ///
-    /// `None` until a build produces a verdict, which is most of most runs.
+    /// Stores the last ephemeral `swap::Event` drained from staging, persisting
+    /// it across frames until a new build verdict arrives.
     pub(crate) health: Option<view::Stage>,
-    /// The session's four sequencer banks, and the one piece of state in this
-    /// struct that is neither the panel's nor a reading of the engine —
-    /// `Readout::opening`'s category, over a pattern instead of over what a model
-    /// may reach.
+    /// Session sequencer banks polled and edited by the console window.
     ///
-    /// A pattern is authored state and the engine holds none of it (ADR-0222: a
-    /// lane is a fifth *route*, so what a lane does reaches the deck as
-    /// `Operation::SetOpacity` like everything else). It is kept here because this
-    /// window is what polls it and what the press arms edit; the console draws a
-    /// copy handed to `View::sequencer` per frame and applies nothing to it
-    /// (ADR-0156).
-    ///
-    /// Nothing saves or loads one yet. ADR-0227 settles where a pattern is kept and
-    /// ADR-0320 leaves the file form to the record that has something to serialise,
-    /// which is the row that saves one — so these four banks live for the run and
-    /// no longer.
+    /// Authored pattern state held outside the engine (ADR-0156, ADR-0222, ADR-0227, ADR-0320).
+    /// Passed to `View::sequencer` each frame; ephemeral for the duration of the run.
     pub(crate) sequencer: karakuri_pattern::Banks,
-    /// Where the poll left the playhead, so a lane emits at a step boundary and
-    /// never twice for one step.
+    /// Playhead position tracking step boundaries for pattern polling.
     ///
-    /// It is not in the pattern, and that is the shape rather than an accident: a
-    /// pattern is a thing that gets saved and where the playhead has got to is not
-    /// (`karakuri_pattern::Playhead`).
+    /// Kept separate from pattern data so runtime playback state is not serialized
+    /// with authored pattern content.
     pub(crate) playhead: karakuri_pattern::Playhead,
 }
 
@@ -184,12 +153,8 @@ impl Readout {
                 println!("{}", self.say_drag(boundary));
                 None
             }
-            // **A pane closed by pulling its boundary out through its own
-            // edge, or brought back by pulling that edge in**
-            // (`docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md`).
-            // `Panel` performed it, because the arrangement is its own, so
-            // this says what happened and asks for nothing: a fold writes no
-            // session record.
+            // Pane fold/unfold via boundary drag (ADR-0300). Panel updates its own
+            // arrangement; no session record is written.
             Dragged::Pane(op) => {
                 let (what, id) = match op {
                     Op::Fold(id) => ("folded — drag its edge back in", id),
@@ -203,16 +168,10 @@ impl Readout {
         }
     }
 
-    /// The pointer went up, and what the gesture it ended asked for.
+    /// Handles pointer release gesture, returning any resulting action (`Acted`).
     ///
-    /// `onto` is where the pointer is — the caller's answer, because a strip's
-    /// geometry is `karakuri-console`'s view and not its model
-    /// (`Panel::released`). Two of the three drags do not read it.
-    ///
-    /// It answers an `Acted` where it used to answer nothing, and the drop is why:
-    /// a boundary coming to rest and a fader being let go both ask for nothing —
-    /// everything either of them wanted was asked for while it was moving — and a
-    /// carry asks for its whole operation here or nowhere.
+    /// Boundary rests and fader releases complete passively, while set drops
+    /// emit their corresponding load operations onto the landed strip/bay.
     pub(crate) fn released(&mut self, onto: Option<Landing>) -> Acted {
         match self.panel.released(onto) {
             Some(Released::Rests { split, index, at }) => {
@@ -223,9 +182,7 @@ impl Readout {
                 println!("release: {} is gone", self.pair(split, index));
                 Acted::Nothing
             }
-            // **No value in the line, because there is none to print.** Where
-            // a fader came to rest is the deck's, and the last thing the drag
-            // asked for was printed when it was asked for.
+            // Fader rest position belongs to the deck; last drag operation was already logged.
             Some(Released::Let { knob }) => {
                 println!(
                     "release: {} lets go of the {}",
@@ -234,12 +191,7 @@ impl Readout {
                 );
                 Acted::Nothing
             }
-            // **A Set was let go over a strip**, and the load leaves by the
-            // door every other control's operation leaves by — `played` is
-            // what performs it and says what the deck did about it, exactly as
-            // it does for a load from the keyboard. The line here is the
-            // *gesture* ending: two ways
-            // in, one name, and the same sentences after the naming.
+            // Set dropped over a strip; delegates load dispatch to `played`.
             Some(Released::Dropped(operation)) => {
                 if let Operation::LoadSet { deck, set } = &operation {
                     println!(
@@ -249,11 +201,7 @@ impl Readout {
                 }
                 Acted::Emitted(Some(operation))
             }
-            // **A carry let go over nothing asks for nothing**, and it says so
-            // rather than saying nothing: a row picked up, carried and then
-            // silently forgotten reads as a panel that missed the press. The
-            // cursor is left on the row that was taken, which is where
-            // `enter` in the library would load from next.
+            // Drag dropped over empty space; logs explanation and leaves selection intact.
             Some(Released::Nowhere { set }) => {
                 println!(
                     "release: `{set}` was let go over nothing, so nothing was loaded — a drop \
@@ -281,12 +229,7 @@ impl Readout {
     /// move nothing.
     pub(crate) fn op(&mut self, op: Op) -> Outcome {
         let outcome = self.panel.op(op);
-        // **A reset puts the default arrangement on screen and the default has
-        // no name**, so the pill stops naming the file it was showing. Here
-        // rather than at either control, because `r` and the menu's *start a
-        // new one* are one operation and this is the one place both arrive —
-        // and it keys off the outcome rather than off the `Op`, so an op that
-        // asked for a reset and did not get one leaves the name alone.
+        // Reset puts default arrangement on screen, clearing the file name.
         if matches!(outcome, Outcome::Reset) {
             self.view.arrangement.name = None;
         }
@@ -300,59 +243,9 @@ impl Readout {
     }
 }
 
-/// Every key this window binds, and the sentence the legend prints for it.
+/// Key bindings and their corresponding legend descriptions.
 ///
-/// The list an operator reads and the list the tests check are one list.
-/// `key_column::the_keys_this_file_lists_are_the_keys_the_window_loop_binds`
-/// reads the `match` in `window_event` out of this file's own text and asserts
-/// it is exactly these keys, so a key bound and not printed — or a key printed
-/// and not bound — fails there rather than being found by an operator pressing
-/// it and getting nothing.
-///
-/// That test was already here and the legend was a second copy of its list,
-/// which is the copy that drifted: the printed list stayed at nine keys while
-/// ten more were bound, and the operator who read it was told this program
-/// folds, solos, resets and quits.
-///
-/// The rows of `docs/manual/operations.html` each key reaches are
-/// `key_column::ROWS`, which is keyed off this table and stays in the test
-/// module: a page heading is what a check reads, and it is not something this
-/// program says to anybody.
-///
-/// The order is the order they print in, and it is the grammar's shape since
-/// 2026-09-10: the two keys that move the address, then the four that act
-/// inside a bay and the rub-out beside them, then the letters that survive
-/// globally.
-///
-/// `digit` is one entry and not ten, because a digit is one key of the grammar:
-/// `1` is the mixer's first strip and the library's first row, so ten entries
-/// would print ten sentences saying the same thing and the page would still
-/// have to name the bay. It is also the one key
-/// [`key_column::bound`](key_column) cannot read out of this file's text — the
-/// arm is a guard rather than ten literals — so it is contributed by
-/// `karakuri_console::focus::BUILT`, which is the dispatch table the grammar is
-/// written in (ADR-0333).
-///
-/// `p` is the latency offset here and was the report until 2026-08-31. The page
-/// specifies the offset as `o` and `p`; a badge naming two keys with one of
-/// them bound would be a badge that lies, and a panel diagnostic with no useful
-/// shortcut to point at loses the letter rather than keeping it. The operation
-/// it named is still `karakuri_console::panel::Op::Report` and nothing in this
-/// program asks for it.
-///
-/// Twelve letters left on 2026-09-10 and five more with the other seven bays,
-/// and none of them was retired before the grammar reached its row. `0`–`3` are
-/// the Mixer's `1`–`4`, `[ ] \` and `; '` are the arrows and `space` on the
-/// addressed trim and fader, `m` is `space` on the blend chip, `e` is `space`
-/// on the Library's head and `l` is `enter` on one of its rows (ADR-0259,
-/// ADR-0333). Then `f` and `s` went with `Readout::target` — `space` on a bay
-/// is the fold and `space` on the Program head's `solo` is the solo — `u` with
-/// `s`, because one control is both states, and `o` and `p` became the arrows
-/// on the Transport's offset (ADR-0343).
-///
-/// What is left is the seven globals the operand rule keeps, plus `g`, which is
-/// addressed to the focused bay because the grammar reaches no pane, and `k`,
-/// which the Library bay draws no control for.
+/// Verified against window event dispatch in `key_column` tests (ADR-0259, ADR-0333, ADR-0343).
 pub(crate) const KEYS: &[(&str, &str)] = &[
     // **The two that move the address**, and they are the same in every bay
     // because they are not addressed to one.
@@ -399,12 +292,7 @@ pub(crate) const KEYS: &[(&str, &str)] = &[
          deck. it takes the name the arrangement pill is asking for, while it asks",
     ),
     ("backspace", "rub out a letter of that name"),
-    // **The one letter addressed to the focus**, which is the third category
-    // ADR-0259 creates and ADR-0343 names: its operand is the focused bay, so
-    // it is not global under the operand rule and it is not one of the six
-    // keys either. It is here because the grammar reaches no pane — `Tab`
-    // stops at a bay — and *Fold a pane away* has to be reachable from the
-    // keyboard alone.
+    // Focused-bay pane folding binding (ADR-0259, ADR-0343).
     (
         "g",
         "fold the split enclosing the focused bay — the pane it sits in. space folds the bay \

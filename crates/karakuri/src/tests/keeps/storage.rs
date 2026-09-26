@@ -34,12 +34,7 @@ fn keep_run(root: &std::path::Path, asked: Asked, name: &str, source: &str) -> K
     .run()
 }
 
-/// The writer puts a node's source under the name it was given, and the outcome
-/// says where it went — ADR-0338 decision 4, and it is the act that makes the
-/// operator's tier of the library exist at all (P-0096).
-///
-/// A CPU test: the bytes are the run's and the store is a directory, so nothing
-/// here takes a device.
+/// Verifies node procedures are stored by name and return target paths (ADR-0338, P-0096).
 #[test]
 fn a_keep_writes_the_nodes_source_into_the_operators_library() {
     let root = keep_root("library");
@@ -63,11 +58,7 @@ fn a_keep_writes_the_nodes_source_into_the_operators_library() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// A name already kept is refused, and nothing claims otherwise.
-///
-/// The second keep leaves the first file exactly as it was — a keep is not an
-/// instruction to replace, which is where it differs from a Set id and an
-/// arrangement's name (`StoreError::ProcedureTaken`).
+/// Verifies duplicate procedure names are rejected without overwriting existing files (`StoreError::ProcedureTaken`).
 #[test]
 fn a_keep_under_a_name_already_there_is_refused() {
     let root = keep_root("taken");
@@ -153,31 +144,10 @@ fn a_rebuilt_nodes_keep_reads_its_source_back_out_of_the_store() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// The two answers that are not a record. `Silent` is named only here, because
-/// nothing in the running window reaches that arm; `Owed` is reachable only by
-/// a reading this window failed to take, which is the mask's accident and the
-/// sync chip's missing tempo and is asserted below. Neither is a gap in the
-/// vocabulary any more — the sync chip's was `Owed::NotSettled` until the
-/// conversion took a session tempo, and [`unwritten`] carries what that was.
+/// Verifies operation conversion non-record variants (`Silent`, `Owed`).
 use karakuri_operation_record::{Owed, Silent};
 
-/// The two spellings of feedback's ceiling are one number, and this is the
-/// package that can see both.
-///
-/// `karakuri_operation::Feedback::MAX` is the reach a fader draws;
-/// `karakuri_engine::master::Chain::FEEDBACK_MAX` is the wall the engine clamps
-/// at, where the record is applied. Two crates state it because neither may
-/// depend on the other, and both say at their own definition that it is a
-/// convention held here — which is `Current::tempo`'s arrangement one control
-/// along, and the shape `docs/contributing.md` §4 asks for when a guarantee
-/// cannot be structural.
-///
-/// Both directions of the cut list too, for the same reason and by the same
-/// route: `mix::cut` takes the engine's word to the vocabulary's and
-/// `Cut::parse` takes the record's word back, so a cut that survived one leg
-/// and not the other would be a picture a replay draws differently. The
-/// crossing lives in `karakuri-environment` beside `mix::tonemap` and
-/// `mix::sync`, because this window and `karakuri-cli` both make it.
+/// Verifies feedback clamping constants and cut parsing conventions match across engine and operation definitions.
 #[test]
 fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
     assert_eq!(
@@ -185,16 +155,7 @@ fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
         karakuri_engine::Chain::FEEDBACK_MAX,
         "the reach the console draws and the wall the engine clamps at have drifted"
     );
-    // **The wall itself moved into the file**, which is the one thing that
-    // changed here when the chain became a list: what a slot's `amount` is
-    // clamped to is the range `examples/feedback.kir` declares, and this
-    // constant is now the *vocabulary's* number rather than the engine's
-    // own — kept in the engine because this is the pair of spellings that
-    // has to be checked against each other and there has to be somewhere to
-    // check it. **The file declares a wider range than the fader draws**,
-    // `[0, 1]` against 0.95, and that is a gap named rather than closed:
-    // closing it is a `.kir` edit, which changes the procedure's content
-    // address and therefore every stream that names it.
+    // Verifies feedback fader bounds align with declared procedure parameter ranges.
     for cut in Cut::ALL {
         assert_eq!(
             Cut::parse(mix::cut(cut).name()),

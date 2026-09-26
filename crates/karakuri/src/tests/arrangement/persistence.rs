@@ -23,16 +23,8 @@ fn arranged(width: f32, height: f32) -> Panel {
     panel
 }
 
-/// The bytes are at the path `karakuri-store`'s own header claims, read off
-/// that path and not through the store that wrote them.
-///
-/// This is the assertion ADR-0221 §4 says the store's suite had to spell out
-/// rather than leave to a round trip: *"a format test is not a location test"*,
-/// because a defect that files the arrangement in the wrong directory entirely
-/// is invisible to a test that writes and reads through the same wrong path.
-/// The same hole is open one layer up — this file chooses the name it hands
-/// over — so the same assertion is made here, about
-/// `arrangements/<name>.arrangement.json` under the store's root.
+/// Verifies arrangement files are saved at `arrangements/<name>.arrangement.json`
+/// under the store root by checking disk paths directly (ADR-0221 §4).
 #[test]
 fn an_arrangement_is_kept_at_the_path_the_stores_header_names() {
     let root = arrangement_root("kept");
@@ -79,14 +71,8 @@ fn an_arrangement_is_kept_at_the_path_the_stores_header_names() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// What comes back is the arrangement that was kept, in the window it arrives
-/// in — which is `Op::Reset` carrying the viewport across, with the arrangement
-/// handed in rather than built.
-///
-/// The two viewports differ in both axes on purpose: an arrangement carries the
-/// viewport it was saved at, so a restore that took the file's would open a
-/// console arranged on a desktop inside a smaller window with every rectangle
-/// past the edge.
+/// Verifies restored arrangements adapt to current window viewport dimensions rather
+/// than overriding them with saved viewport geometry.
 #[test]
 fn an_arrangement_put_back_arrives_in_the_window_this_one_already_has() {
     let root = arrangement_root("back");
@@ -132,13 +118,8 @@ fn an_arrangement_put_back_arrives_in_the_window_this_one_already_has() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A name nothing is filed under is said back, and the console does not move.
-///
-/// The refusal that matters most in this family: `read_arrangement` never falls
-/// back to the built-in, so an operator who mistyped a name is told the name
-/// rather than watching their console reset (ADR-0221 §2). Asked three ways,
-/// because the three failures send an operator to three different places — no
-/// store at all, no such name, and a file that will not read back.
+/// Verifies `read_arrangement` fails without altering console state when
+/// targeting non-existent names, missing stores, or corrupt files (ADR-0221 §2).
 #[test]
 fn a_name_nothing_is_filed_under_is_said_back_and_nothing_resets() {
     let root = arrangement_root("refused");
@@ -232,13 +213,8 @@ fn a_name_nothing_is_filed_under_is_said_back_and_nothing_resets() {
 
 // -- the arrangement pill's half of the family ----------------------
 
-/// A name that is not one path component is refused here, which is the
-/// authority the pill deliberately does not hold (P-0090).
-///
-/// The negative control is the point: a check that refused everything would
-/// pass an assertion that only ever looked for a refusal, so the names that
-/// must be *accepted* are asserted beside the ones that must not
-/// (`docs/contributing.md` §3).
+/// Verifies validation rejects non-single-path-component names (P-0090) while
+/// accepting valid identifiers.
 #[test]
 fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
     for good in ["night", "four_deck", "set-2", "A9"] {
@@ -266,12 +242,7 @@ fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
     }
 }
 
-/// The name in use follows the file and never the press.
-///
-/// A save that landed and a restore that landed each make that arrangement the
-/// one in use, so the pill names it; a save that was refused leaves the pill
-/// saying what it said, because nothing under that name is on the disk. And the
-/// menu's listing gains the new name only where a file appeared.
+/// Verifies active arrangement naming tracks successful file operations, ignoring refused saves.
 #[test]
 fn the_pill_names_the_arrangement_only_once_the_file_is_there() {
     let root = arrangement_root("in-use");
@@ -339,12 +310,7 @@ fn the_pill_names_the_arrangement_only_once_the_file_is_there() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A reset takes the name off the pill, whichever surface asked.
-///
-/// `r` and the menu's *start a new one* are one operation and `Readout::op` is
-/// where both arrive, so this is asserted through the method rather than
-/// through either control: the default arrangement is what is on screen and the
-/// default has no name.
+/// Verifies reset operations clear the arrangement name and restore default state.
 #[test]
 fn a_reset_leaves_the_pill_naming_no_file() {
     let mut readout = Readout::new(1280.0, 720.0);
@@ -363,18 +329,7 @@ fn a_reset_leaves_the_pill_naming_no_file() {
     );
 }
 
-/// What the load control's five asks do to this program, and that a pick moves
-/// this bay's mark and nothing else (ADR-0305).
-///
-/// [`every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu`]'s shape one bay
-/// along, and it is here rather than in `karakuri-console` for the reason that
-/// test is: `Readout::aimed` is the host's half of the seam, and the console's
-/// own tests cannot reach it.
-///
-/// The claim a reader will doubt is the third one. *Surely picking a deck
-/// selects it* — and it must not: `Operation::SelectDeck` moves the keys, and
-/// this mark is the one that is allowed to name another deck. So the selection
-/// is read before and after.
+/// Verifies arrangement load actions; deck picking updates bay targeting without moving selection (ADR-0305).
 #[test]
 fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() {
     let mut readout = Readout::new(1440.0, 900.0);

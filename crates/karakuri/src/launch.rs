@@ -28,17 +28,9 @@ impl Sources {
     }
 }
 
-/// Materialises per-slot working copies in scratch storage before starting the application.
+/// Materialises per-slot working copies in scratch storage to isolate runtime edits (P-0096).
 ///
-/// This isolates runtime edits to scratch storage and prevents modifications to original preset files (P-0096).
-///
-/// # Arguments
-/// * `store` - Root directory of the artifact store.
-/// * `sources` - Initial geometry (L1) and renderer (L4) sources.
-/// * `slots` - Number of deck slots to initialize.
-///
-/// # Errors
-/// Returns an error message if copying fails or files cannot be created.
+/// Returns the scratch directory path and per-slot source copies, or an error if copying fails.
 pub(crate) fn working_copies(
     store: &std::path::Path,
     sources: &Sources,

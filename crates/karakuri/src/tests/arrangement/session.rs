@@ -149,11 +149,7 @@ fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() 
         aim.authorities.is_empty(),
         "a Set file carries no grant, so a load must hand none over"
     );
-    // **The id the versions after this load are filed under.** The slot was
-    // running material no Set names, and it is running `night01` now; an
-    // aim that left this at `None` would go on writing this Set's edits
-    // into the history under no Set at all, which is a chain that answers
-    // *what versions has `night01` had* with nothing (ADR-0276).
+    // Associates subsequent edits with the loaded Set ID in history tracking (ADR-0276).
     assert_eq!(
         aim.set.as_deref(),
         Some("night01"),
@@ -194,33 +190,8 @@ fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() 
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A load moves what the MCP server resolves an address against, and it moves
-/// nothing else's.
-///
-/// This program built the `mcp::Slots` it handed the server out of the launch
-/// working copies and never wrote it again. A library load writes new scratch
-/// files and re-points that slot's watcher at them (ADR-0228), so from the
-/// first load onwards every address the server resolved was the layout the deck
-/// had stopped running: `read_procedure` answered about the wrong material,
-/// `write_procedure` wrote a file no watcher was polling and reported that it
-/// was being built, and a node the loaded Set does hold was refused for not
-/// existing. None of the three fails — they are plausible wrong answers on the
-/// surface whose reader is a program in a loop (`docs/principles/0094-…`).
-/// ADR-0308 recorded it and worked around it for the landing alone.
-///
-/// The assertion is `Slots::file`, which is the walk the server writes through:
-/// `write_procedure` and `read_procedure` resolve an address with
-/// `Slots::path`, and `file` is that same private walk with the layer taken as
-/// a word. So the path asserted here is the path the server would write to.
-///
-/// Three things. The loaded slot resolves to the new scratch file and not to
-/// the launch copy; a renderer the launch pair had and the loaded Set has not
-/// is refused naming what the slot holds now (P-0083); and the slot nobody
-/// loaded onto has not moved, because a publication per slot that overwrote the
-/// deck would be a worse defect than the one being fixed.
-///
-/// A CPU test: a store and a scratch are directories, and nothing here takes a
-/// device.
+/// Verifies loading a library Set updates MCP address resolution to new scratch paths (ADR-0228, ADR-0308, P-0083).
+/// Unloaded slots remain intact and requests for absent renderers are rejected.
 #[test]
 fn a_load_moves_what_the_mcp_server_resolves_against() {
     use karakuri_environment::setfile;
@@ -372,39 +343,7 @@ fn a_load_moves_what_the_mcp_server_resolves_against() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// The requirement this program was failing: the same preset loaded into every
-/// slot, and each deck watching its own separate copy in its own place.
-///
-/// Every slot used to be handed [`Sources`] itself — the two paths the operator
-/// typed — so four watchers polled two files. One save rebuilt four slots, and
-/// since a parked slot's trial never reaches a verdict, three of the four rows
-/// it put in the Staging lane stayed there for the rest of the run. That
-/// symptom is this defect's, not the lane's.
-///
-/// Four things, and the third is the one the requirement is about. The copies
-/// are under the scratch and not where the operator pointed; the four decks
-/// hold eight distinct files rather than two shared ones; an edit made through
-/// deck B's L1 moves deck B and no other deck; and the file the operator named
-/// is not written to at all.
-///
-/// The version every deck starts on is in the history before the window opens,
-/// and it is filed under no Set.
-///
-/// Two claims, and the second is the one that is a decision. That there is a
-/// seed at all is ADR-0089's — a first edit whose predecessor was never written
-/// down cannot be walked back — and this program had no history at all until it
-/// was given one, so a run's whole night of edits was kept nowhere. That every
-/// row reads `None` is ADR-0276's: the material is a pair somebody typed, and
-/// filing it under `Sources::material` would put rows under a Set no listing
-/// can ever match.
-///
-/// Every node of every slot, and the count is derived from the copies rather
-/// than written here — a slot is an L1 and a renderer, and each deck runs from
-/// its own pair, so a seed that filed one deck or one node would leave the
-/// others' first edits with nothing behind them.
-///
-/// A CPU test: a store and a scratch are directories, and nothing here takes a
-/// device.
+/// Verifies each deck maintains isolated scratch copies and seeds initial history versions under no Set (ADR-0089, ADR-0276).
 #[test]
 fn the_launch_versions_are_filed_before_a_window() {
     let root = scratch_dir("seeded");

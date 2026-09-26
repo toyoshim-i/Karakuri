@@ -38,14 +38,7 @@ fn the_keys_this_file_lists_are_the_keys_the_window_loop_binds() {
     );
 }
 
-/// [`super::KEY_BINDINGS`] checked directly against the page, which is what a
-/// table buys that a text scan never could: a key that names a row can be held
-/// against that row, rather than merely counted. [`ROWS`] checks the same page
-/// for the same ten keys already, by hand, in
-/// [`every_key_the_instrument_binds_reaches_a_route_marked_built`] below — this
-/// is the table checking itself, off `KeyBinding::title` rather than off a
-/// second, hand-written list, and it is what makes `title` a fact this file
-/// relies on rather than a field nothing reads.
+/// Asserts that every key binding with a title matches a built operation row on the manual page.
 #[test]
 fn every_binding_the_table_names_a_title_for_reaches_a_route_marked_built() {
     let badges = key_badges();
@@ -116,58 +109,7 @@ fn every_bound_hotkey_aligns_with_control_descriptors() {
     }
 }
 
-// **The grammar's mix answers act on the deck the address is on, and read
-// the value they step from off that deck** — no longer checked here.
-//
-// Until 2026-09-11 this was a `#[test]`,
-// `the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`,
-// that read this file as text and looked for the statements below as
-// literal substrings. It caught the same three claims a run of this
-// program actually makes, at the cost every scan in this module pays:
-// adding a comment that happened to contain one of these strings, or
-// reformatting `holding` so a blank line no longer flattened the way the
-// cut expected, failed the test for a reason that had nothing to do with
-// any of the three claims.
-//
-// - **The deck is the one the address named**, and **the reading is the
-//   deck's, not a strip's** — both of [`holding`]'s claims — are now
-//   `gpu::holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it`,
-//   which presses [`holding`] itself against a deck moved after a frame
-//   had already copied its old state, and checks the *values* it hands
-//   back rather than the syntax it is spelled with.
-//   `gpu::a_mix_key_moves_the_deck_operator_selected_and_leaves_the_others_alone`
-//   presses the same two claims for [`gain_key`] and [`opacity_key`], the
-//   pair [`answered`] steps for the trim and the fader, the same way.
-// - **Nothing here reaches for a strip because nothing here has one to
-//   reach for**, which used to be the scan's fourth assertion and is now
-//   a fact about the crate graph rather than about this file's text:
-//   [`holding`]'s only parameters are `&Deck` and a slot, and
-//   `karakuri-engine` does not depend on `karakuri-console` (ADR-0156),
-//   so there is no `view::Strip` a function with that signature could
-//   name even by mistake. A scan cannot make that claim stronger than the
-//   crate graph already does, and does not need to try.
-// - **[`held`] guards every read**, and **`answered` builds
-//   `Operation::SetGain`/`SetOpacity` naming the addressed deck**, are
-//   the two claims this file cannot re-derive behaviourally: [`answered`]
-//   takes `&mut Gfx`, which bundles a live `winit::window::Window` and a
-//   `wgpu::Surface`, and nothing in this workspace builds one off-screen
-//   for a test the way [`Engine`] is built for [`Deck`]-only checks.
-//   `gpu::a_mix_key_moves_the_deck_operator_selected_and_leaves_the_others_alone`
-//   presses [`held`], [`gain_key`] and [`opacity_key`] by hand, in the
-//   same order [`answered`]'s `Trim`/`Fader` arm calls them, and is the
-//   nearest a test in this crate gets to entering [`answered`] itself —
-//   its own doc says so. The master out, the exposure and the latency
-//   offset arms, and the two arms that are not operations at all
-//   (`focus::Asked::Panel` and `Routed`, which leave through
-//   `Readout::op` and `Readout::sink`), are checked only by their own
-//   pure functions' tests (`the_master_out_steps_…`,
-//   `the_exposure_steps_…`, `the_offset_steps_…`) and by
-//   `karakuri-console`'s own tests of what `Readout::op` and
-//   `Readout::sink` do once called — not by anything that presses
-//   [`answered`] and watches those five arms run. That gap predates this
-//   change: the retired scan read the same five arms' text and could only
-//   ever say they were *spelled*, never that they ran, so nothing here
-//   is weaker for their sake than it was.
+// Mixer grammar deck-routing and value-stepping assertions are verified behaviorally in GPU tests (ADR-0156).
 
 /// And every key the legend prints has its rows written down, both ways round,
 /// which is what keeps [`ROWS`] from being a second list of keys rather than a
@@ -177,12 +119,7 @@ fn every_key_the_legend_prints_has_its_rows_written_down() {
     let printed: BTreeSet<&str> = KEYS
         .iter()
         .map(|(k, _)| *k)
-        // **The four arrow keys are one route**, which is the one place
-        // the legend and the routes count differently and it is the
-        // grammar's own shape: `up`, `down`, `left` and `right` are four
-        // keys an operator presses and *the arrows* is one rule about
-        // kinds of thing. The legend prints four sentences; [`ROWS`] holds
-        // one entry per bay.
+        // Collapse arrow keys into a single grammar category.
         .map(|key| match SPELLED.iter().find(|(page, _)| *page == key) {
             Some((_, name)) => *name,
             None => key,
@@ -213,17 +150,7 @@ fn the_keys_that_reach_no_row_are_the_ones_written_down() {
     );
 }
 
-/// A route reaching past the page.
-///
-/// A route this program binds whose row is not marked built in the key column —
-/// ADR-0213's failure mode from the side where the code moved first, which is
-/// how this whole column came to be wrong: the panel binary was given six
-/// arrangement keys and six rows went on reading `gap`.
-///
-/// The badge is parsed rather than word-matched since 2026-09-10, which is the
-/// rewrite ADR-0259 scheduled: a key alone no longer determines a row, so the
-/// badge has to be read as *these keys, in that bay* and resolved against the
-/// pair.
+/// Asserts that every bound route reaches a manual row marked as `has` (ADR-0213, ADR-0259).
 #[test]
 fn every_key_the_instrument_binds_reaches_a_route_marked_built() {
     let badges = key_badges();
@@ -266,11 +193,7 @@ fn every_key_the_instrument_binds_reaches_a_route_marked_built() {
                 found.2,
                 said(named)
             );
-            // **A row is reached by one route on this page**, which is
-            // what one badge per row comes to: a row reached both by a
-            // letter and by the grammar would need two badges, and the
-            // column has one. That is why `f`, `s` and `u` are unbound —
-            // see [`crate::KEYS`], where each is named.
+            // Each manual row is reached by a single route badge.
             assert!(
                 keys.iter().any(|k| k == key),
                 "`{key}`{} performs `{row}` and {PAGE} marks that row built in the key column \
@@ -283,13 +206,7 @@ fn every_key_the_instrument_binds_reaches_a_route_marked_built() {
     }
 }
 
-/// The page claiming a route nothing binds.
-///
-/// It fails apart from the test above because it is the other failure: that one
-/// says the program reached past the specification, this one says the
-/// specification tells a player to press a key the instrument does not read. It
-/// is the likelier of the two here, because twenty rows carried a built badge
-/// for `karakuri-cli`'s keyboard before the column said whose it was.
+/// Asserts that every route marked `has` in the manual is actively bound by the instrument.
 #[test]
 fn every_key_route_the_page_marks_built_is_bound_by_the_instrument() {
     let badges = key_badges();
@@ -318,11 +235,7 @@ fn every_key_route_the_page_marks_built_is_bound_by_the_instrument() {
             )
         });
         for key in keys {
-            // **`in any bay` is read as all nine**, which is the stronger
-            // claim and the honest one: a badge that says a press works
-            // wherever focus is has to be true wherever focus is. The
-            // route is written down once, under `ANY`, and this is what
-            // holds the page's *any* to the console's.
+            // "in any bay" requires all bays to declare the action.
             if bay == Some(ANY) {
                 assert!(
                     karakuri_console::focus::BUILT.len() == BAYS.len(),
@@ -372,12 +285,7 @@ fn the_grammar_the_page_names_is_the_grammar_the_console_declares() {
         .collect();
     let written: BTreeSet<(&str, &str)> = ROWS
         .iter()
-        // **The four keys of the grammar and not every route with a bay in
-        // it.** `g` is addressed to the focused bay too — its operand is
-        // the bay that has focus — but it is a letter this file binds and
-        // not one of the four the console dispatches, so the console
-        // declares nothing about it and holding it against that table
-        // would be asking the wrong half.
+        // Filter to the four console-dispatched grammar keys (excluding letter keys).
         .filter(|(_, key, _)| [DIGIT, "arrows", "space", "enter"].contains(key))
         .filter_map(|(bay, key, _)| bay.map(|bay| (bay, *key)))
         .collect();
