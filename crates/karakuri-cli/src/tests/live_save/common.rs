@@ -37,13 +37,7 @@ pub(crate) fn slot(paths: &[PathBuf]) -> (Material, Vec<Placed>) {
     sort_slot(0, &Named::bare(paths[0].clone()), &rest)
 }
 
-/// A Set built from that material, at the capacities, salts and camera given —
-/// which is what a run hands `build`, and what a save has to read back off the
-/// Set rather than off these arguments.
-///
-/// `camera` is an `Option` because `build`'s is: `None` is a slot no `camera`
-/// record reached, which leaves the Set at the built-in orbit's defaults. See
-/// `recorded_camera`.
+/// Builds a `Set` from the given material, capacities, salts, overrides, and camera.
 pub(crate) fn set_of(
     gpu: &Gpu,
     material: &Material,
@@ -77,16 +71,7 @@ pub(crate) fn set_of(
     )
 }
 
-/// What a run does to one slot before its first frame: the slot recorded as
-/// running the material that was compiled for it.
-///
-/// Through [`Running::at_launch`] rather than around it, for the reason
-/// [`save_and_load`] goes through [`Save::run`]: assembling the seeding by hand
-/// here would be a second copy of it, and the whole of what these tests are
-/// about is that there is only one.
-///
-/// No store root, because there is no store. A windowed run touches one when a
-/// save happens and not before — see [`Running::at_launch`].
+/// Returns a `Running` state for a slot initialized with compiled material at launch.
 pub(crate) fn launched(placed: &[Placed]) -> Running {
     Running::at_launch(&[placed.to_vec()], 1)
 }
@@ -103,13 +88,7 @@ pub(crate) fn stored(
 
 pub(crate) type Landed = (&'static str, u32, karakuri_store::hash::Hash);
 
-/// Gather, write, and read back — the whole of what pressing `k` does, minus
-/// the thread and the channel.
-///
-/// Through [`Save::run`] rather than around it, so that what a test exercises
-/// is the function the spawned thread calls. Assembling the same three steps by
-/// hand here would be a second copy of the save, and a test of a copy is a test
-/// of nothing.
+/// Gathers, saves, and reloads a Set file via `Save::run` and `setfile::load`.
 pub(crate) fn save_and_load(
     store_root: &Path,
     id: &str,
@@ -130,12 +109,7 @@ pub(crate) fn save_and_load(
     setfile::load(&store, id).expect("and reads back")
 }
 
-/// A geometry with a negative default, which is the declaration the fold exists
-/// for and the one no example in the tree carries.
-///
-/// `drift_shell` with one param added and read, so the procedure still
-/// compiles, still draws, and now declares a default that is `Unary { Neg, Lit
-/// }` rather than a literal.
+/// Constructs a geometry source string declaring a param with a negative default.
 pub(crate) fn signed_l1() -> String {
     let src = example("drift_shell.kir");
     let with_param = src.replace(

@@ -1,22 +1,9 @@
 use super::*;
 
-/// How [`BINDINGS`] spells the arms whose pattern is a name rather than a
-/// character. Nothing in `Key::Named(NamedKey::Escape)` says `esc`, so this one
-/// mapping cannot be derived and is stated — but it is stated as a *table*, and
-/// a `NamedKey` arm missing from it fails
-/// [`every_key_the_live_path_acts_on_is_documented`] by name rather than being
-/// passed over. That is the whole difference from the list of characters that
-/// used to be here: a named key added tomorrow is a test failure that says
-/// which key, not a silence.
+/// Mapping table for named key spellings in `BINDINGS` (e.g. Escape -> "esc").
 const NAMED_KEY_SPELLINGS: &[(&str, &str)] = &[("Escape", "esc"), ("Space", "space")];
 
-/// The end of the character literal starting at `at`, or `None` if what is
-/// there is not one.
-///
-/// A lifetime has to be told from a literal — `'a` is one, `'a'` and `'\n'` are
-/// the other — because getting it wrong lets a `'"'` open a string that
-/// swallows the rest of the file. `'\''` is why an escape cannot simply look
-/// for the next quote: the escaped quote *is* the next quote.
+/// Returns the byte offset immediately following a character literal starting at `at`.
 fn char_literal_end(src: &str, at: usize) -> Option<usize> {
     let b = src.as_bytes();
     if b.get(at) != Some(&b'\'') {
@@ -39,11 +26,7 @@ fn char_literal_end(src: &str, at: usize) -> Option<usize> {
     (b.get(close) == Some(&b'\'')).then_some(close + 1)
 }
 
-/// The character a literal's inside spells, the way rustc reads it.
-///
-/// Panics rather than returning nothing on a spelling it does not know: a key
-/// quietly dropped here is a key quietly undocumented, which is the exact
-/// failure this file is closing.
+/// Unescapes a character literal payload string into its represented char.
 fn unescape(lit: &str) -> char {
     let mut cs = lit.chars();
     let first = cs.next().expect("a character literal is not empty");
@@ -60,16 +43,7 @@ fn unescape(lit: &str) -> char {
     }
 }
 
-/// Comments and string literals blanked to spaces, keeping length and line
-/// structure. Character literals are left exactly as written — they are the
-/// payload.
-///
-/// Load-bearing in both directions. Comments are prose and prose is full of
-/// apostrophes; string literals hold `"{BINDINGS}"` and every message the arms
-/// print. Cut down from the same function in
-/// `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`; this file has no
-/// block comments and no raw strings, and if one arrives the floors below are
-/// what refuses the mis-scan.
+/// Replaces comments and string literals with spaces while preserving line structure and character literals.
 fn blank_comments_and_strings(src: &str) -> String {
     let b = src.as_bytes();
     let mut out = b.to_vec();
@@ -161,15 +135,7 @@ enum Arm {
     Named(String),
 }
 
-/// Every arm of [`Live::key`], read off the pattern side of each `=>` in its
-/// body.
-///
-/// The pattern side and not the line, because everything after the first `=>`
-/// is the arm's *body* — where `unwrap_or('\0')` lives, and `\0` is not a
-/// binding. Line by line, because a pattern and its `=>` share a line; an arm
-/// body that grew an `=>` of its own would be read as a pattern, which can only
-/// ever demand documentation for a key nobody binds, and that fails loudly
-/// rather than passing quietly.
+/// Extracts pattern match arms from the `Live::key` function body string.
 fn live_key_arms(body: &str) -> Vec<Arm> {
     let mut arms = Vec::new();
     for line in body.lines() {
@@ -213,15 +179,7 @@ fn live_key_arms(body: &str) -> Vec<Arm> {
     arms
 }
 
-/// The key column of [`BINDINGS`]: two spaces, the keys, then the gap before
-/// the description. Keys are documented in pairs where they come in pairs — `[
-/// ]`, `u i`, `h ?` — so it is the column that is read and not the first
-/// character of a line.
-///
-/// A column and never a substring of the whole constant, which is the trap this
-/// text is laid out to defuse: `?` occurs in the prose of the `, .` line, so
-/// `BINDINGS.contains("?")` is true whether or not `?` is bound to anything.
-/// See [`a_key_named_only_in_prose_is_not_documented`].
+/// Parses the key bindings column from the `BINDINGS` help text.
 fn documented_keys(bindings: &str) -> Vec<&str> {
     bindings
         .lines()
@@ -232,22 +190,7 @@ fn documented_keys(bindings: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Every key `Live::key` acts on is in [`BINDINGS`], which is the only thing
-/// standing between a control and being undiscoverable: there is no on-screen
-/// UI, and this text is both what `--help` prints and what `h` does.
-///
-/// The keys are *read out of the match arms* — see [`live_key_body`] — and not
-/// restated here. The version of this test that restated them iterated a
-/// hard-coded array of 32 characters, so what it enforced was "these 32 keys
-/// are documented"; `'h' | '?'` had been a live arm with no entry in the column
-/// the whole time and this test passed on every run. A check weaker than its
-/// own name is worse than no check, because the name is what stops anyone
-/// looking again — nobody re-reads a green
-/// `every_key_the_live_path_acts_on_is_documented`.
-///
-/// Which is also why the counts are asserted. A scanner whose pattern stops
-/// matching finds nothing and then passes everything, and that is the same
-/// failure a second time.
+/// Verifies that every key handled in `Live::key` is documented in `BINDINGS`.
 #[test]
 fn every_key_the_live_path_acts_on_is_documented() {
     let documented = documented_keys(BINDINGS);
@@ -299,19 +242,7 @@ fn every_key_the_live_path_acts_on_is_documented() {
     }
 
     // Floors, not counts. They are what `Live::key` actually holds today —
-    // 32 characters, one range, two named keys — rather than a round number
-    // under them, because a control surface is small enough that losing one
-    // key is news and the scan going quiet is the thing being guarded
-    // against. Three of them because they fail apart: a signature change
-    // gives no arms at all, a broken literal reader gives named arms and no
-    // characters, and a `NamedKey` renamed away gives characters and no
-    // named ones. Raise them when a key is added; lowering one is a claim
-    // that a control was deliberately removed.
-    //
-    // **It was 33 and is 32**, and that is the claim being made: ADR-0240
-    // retired *Choose what the output shows*, so `v` is not a key any
-    // more. The floor came down with the control rather than the control
-    // being kept alive to hold a number up.
+    // Assert key count floors to detect incomplete match arm scanning (ADR-0240: 32 chars).
     assert!(
         chars >= 32,
         "only {chars} character keys read out of `Live::key` — the scan is not \
@@ -328,13 +259,7 @@ fn every_key_the_live_path_acts_on_is_documented() {
     );
 }
 
-/// A character that occurs only in a binding's prose is not documented.
-///
-/// The reason [`documented_keys`] parses a column instead of asking
-/// `BINDINGS.contains(key)`, and it is not hypothetical: `?` appears inside the
-/// `, .` entry's description, so the substring form of this check would have
-/// called `?` documented while it was bound to nothing. That version would have
-/// looked stronger than the hard-coded array it replaced and enforced less.
+/// Verifies that keys mentioned only within description prose are not treated as documented bindings.
 #[test]
 fn a_key_named_only_in_prose_is_not_documented() {
     // `?` twice in prose and never in the column: once in the description
@@ -358,17 +283,7 @@ fn a_key_named_only_in_prose_is_not_documented() {
     assert!(documented_keys(BINDINGS).contains(&"?"));
 }
 
-/// Every method of [`Live`] that writes a record without going through
-/// [`Live::operate`], with the reason its operation cannot convert.
-///
-/// This is the key handler's form of the single arm [`Live::run_surface`] keeps
-/// for `TapBeat`: a table rather than a comment, so a key that grows a second
-/// derivation of a record is a failing test naming the function instead of a
-/// line nobody reads. Every operation named here answers `Owed::NotSettled`,
-/// which is asserted separately — see
-/// [`the_keys_that_keep_their_own_path_are_the_ones_whose_record_is_not_settled`]
-/// — so an entry that stops being owed fails there rather than lingering here
-/// as a stale excuse.
+/// Lists methods of `Live` writing records outside `Live::operate`, paired with explanations.
 const OWED_RECORD_PATHS: &[(&str, &str)] = &[(
     "performed",
     "the route itself: this is where `written`'s records are written, and \
@@ -376,12 +291,7 @@ const OWED_RECORD_PATHS: &[(&str, &str)] = &[(
      answer",
 )];
 
-/// The method a byte offset falls inside, read off the nearest `fn` above it at
-/// `impl` indentation.
-///
-/// Four spaces and not any `fn `, because a closure or a nested helper would
-/// otherwise answer for the method it sits in. The needle is spelled with a
-/// leading newline so a `fn` inside an expression cannot match.
+/// Returns the nearest enclosing method name for the given byte offset.
 fn enclosing_method(blanked: &str, at: usize) -> &str {
     let (start, prefix_len) = [
         "\n    fn ",
