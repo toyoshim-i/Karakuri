@@ -1,24 +1,4 @@
-//! A `vec3` parameter, from the declaration to the texel.
-//!
-//! **A parameter is driven one component at a time**
-//! ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)):
-//! the uniform stays one `vec3<f32>` field and the engine holds one `f32` per
-//! component, under `glow.x`, `glow.y` and `glow.z`. Every claim here is one
-//! that could only be checked at the far end of the pipe.
-//!
-//! - **The declared default reaches the shader as those three numbers.** It
-//!   reached it as zeroes: `Param::default_scalar` folds a scalar, so a vector
-//!   never entered a node's value map and `node::write_params` packed
-//!   `[0.0; 3]`. Nothing short of a rendered texel says the three numbers made
-//!   it — the map is checked without a device in `set.rs`'s own tests, and a
-//!   map that is right and a packer that ignores it look the same there.
-//! - **A write lands on one component and leaves the others.** That is the
-//!   whole of what the spelling buys, and it is a claim about two numbers not
-//!   moving, which needs the frame.
-//! - **The published interface is the components, in `x`, `y`, `z` order.** The
-//!   order is an address — a MIDI control is learned against a position in this
-//!   list — so it is asserted on a built Set rather than on the key list a
-//!   procedure hands over.
+//! Integration tests for vector parameters driven as individual scalar components or atomic values.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -63,11 +43,7 @@ proc glowing {
 }
 "#;
 
-    /// Declaration order and `x`, `y`, `z` order are different at every scale
-    /// here: `wash` is a `vec2` before `depth`, which is a scalar, and `glow`
-    /// is a `vec3` after it. Nothing about the expected list can be produced by
-    /// sorting, by taking declarations in the order they appear, or by
-    /// flattening one node's parameters into anything but this.
+    // Procedure with mixed vec2, scalar, and vec3 parameters to verify ordering.
     const MIXED: &str = r#"
 proc mixed {
   kind  L4
@@ -156,11 +132,7 @@ proc mixed {
         );
     }
 
-    /// **The declared default, in the frame.**
-    ///
-    /// Before ADR-0268 this read `[0.0, 0.0, 0.0]` — the packer wrote
-    /// `[0.0; 3]` for every vector param, because no fold put one in the value
-    /// map. The three numbers were in the `.kir` the whole time.
+    /// Verifies that declared vector parameter defaults reach the shader uniform buffer.
     #[test]
     fn a_vector_params_declared_default_reaches_the_shader() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -171,13 +143,7 @@ proc mixed {
         close(b, 1.0, "glow.z");
     }
 
-    /// **One component moves and the other two stay**, which is what an
-    /// address per component is for and is the half a wider value channel
-    /// would not have bought: `--param glow.y=0.7` is one number written at one
-    /// key, and the value the frame is packed from still has the other two.
-    ///
-    /// `set_param` is the bare-name route a `--param` and a `param` record both
-    /// come through, so the key here is exactly what the command line spells.
+    /// Verifies that writing to a single component modifies only that component and leaves others intact.
     #[test]
     fn a_write_lands_on_one_component_and_leaves_the_others() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -198,19 +164,7 @@ proc mixed {
         close(b, 1.0, "glow.z moved and nothing asked it to");
     }
 
-    /// **The published interface is one control per component, in declaration
-    /// order and `x`, `y`, `z` within a declaration.**
-    ///
-    /// The order is an address: `docs/manual/console.html`, *"A MIDI control is
-    /// learned against the deck and the position in its published interface"*,
-    /// and `crates/karakuri/src/main.rs` turns that position into the row's
-    /// ordinal. So this asserts the whole list in order rather than membership.
-    ///
-    /// **The built-in camera's three publish first.** Every `Set` carries one
-    /// whether or not `MIXED` declares an L3 procedure of its own
-    /// ([ADR-0318](../../../docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md)),
-    /// and `Kind::ALL` walks L3 before L4, so `radius`, `speed` and `height`
-    /// sit ahead of `MIXED`'s own components rather than beside them.
+    /// Verifies that vector parameters publish one control per component in declaration and xyz order.
     #[test]
     fn the_published_interface_is_the_components_in_order() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -239,11 +193,7 @@ proc mixed {
         }
     }
 
-    /// **Setting a vector parameter atomically updates the uniform buffer.**
-    ///
-    /// The bare name `"glow"` can be written atomically as a `Value::Vec3`,
-    /// updating the node's typed vector storage and syncing component parameters,
-    /// and packing directly into the uniform buffer with bit-exact results.
+    /// Verifies that setting a vector parameter atomically updates uniform buffers.
     #[test]
     fn setting_a_vector_param_atomically_updates_the_uniform_buffer() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -304,11 +254,7 @@ proc mixed {
         );
     }
 
-    /// **Atomic and component writes interoperate seamlessly.**
-    ///
-    /// Writing an atomic vector updates individual components. Subsequently
-    /// mutating a single component updates the vector representation, and vice versa.
-    /// Incompatible arities are safely refused without corrupting existing state.
+    /// Verifies seamless interoperation between atomic vector writes and individual component writes.
     #[test]
     fn atomic_and_component_writes_interoperate_seamlessly() {
         let gpu = Gpu::headless().expect("no GPU available");

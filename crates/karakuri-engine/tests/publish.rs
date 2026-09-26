@@ -1,18 +1,5 @@
-//! A Set's interface: which of its controls a console shows.
-//!
-//! **Publishing decides what is shown, never what is reachable** —
-//! `docs/ir-spec.md`, "What a Set publishes". Every claim here is one of the
-//! four that section makes:
-//!
-//! - **An empty interface publishes everything**, so the feature is additive and
-//!   every Set that predates it keeps working.
-//! - **A published range narrows, never redefines.** A subset is checkable and a
-//!   range outside the declared one is refused rather than clamped.
-//! - **A `param` still reaches an unpublished control**, because a surface is a
-//!   choice about attention and not about authority.
-//! - **A macro is a binding whose source is a published control**, which is the
-//!   case the whole thing is for: two scenes, one knob on the desk, and the
-//!   twenty other numbers left where the author put them.
+//! Integration tests for published Set controls: interface publishing, range narrowing,
+//! reachability of unpublished parameters, and macro bindings.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -43,12 +30,7 @@ proc grid {
 }
 "#;
 
-    /// Two of them, so the Set has two `exposure`s to tell apart — which is the case
-    /// an interface exists for.
-    ///
-    /// **They declare different ranges**, which is what makes the wildcard control's
-    /// range a decision rather than a copy: one knob moving both cannot offer a
-    /// position that only one of them said it still looks like itself at.
+    /// Returns an L4 renderer declaring parameter `exposure` with upper bound `top`.
     fn dots(name: &str, top: f32) -> String {
         format!(
             r#"
@@ -92,21 +74,7 @@ proc {name} {{
         .expect("one L1 and two L4s")
     }
 
-    /// **A fixture whose declaration order and alphabetical order are
-    /// different at every scale the walk has**, which is the whole of what
-    /// makes the ordering test say anything.
-    ///
-    /// Declared, in the order the nodes run and each procedure declares:
-    /// `radius`, `amount`, `exposure`, `gain`, `blur`. Sorted by spelling:
-    /// `amount`, `blur`, `exposure`, `gain`, `radius`. Nothing is in the same
-    /// place in both — first and last are exchanged, and inside one node
-    /// `radius` precedes `amount`. A fixture that happened to declare its
-    /// parameters alphabetically would pass this test under the sort it exists
-    /// to refuse.
-    ///
-    /// **And `exposure` is declared by both renderers**, so the list also says
-    /// where a repeated key goes: once, where it first appears, over the
-    /// intersection of the two declared ranges.
+    /// Test fixture where declaration order intentionally differs from alphabetical order across nodes.
     const SHELL: &str = r#"
 proc shell {
   kind     L1
@@ -217,26 +185,9 @@ proc cool {
         let set = build(&gpu);
         let all = set.published();
 
-        // **One control per key, not per declaration.** Two renderers declare
-        // `exposure` and it is one knob moving both — which is what a bare name
-        // means everywhere else in this system, and what publishing it per
-        // declaration could not be: two controls of one name is a console that
-        // cannot address either.
-        // **Five, and three of them are the built-in camera's.** Every Set has
-        // one, it declares `radius`, `speed` and `height`, and they publish
-        // **addressed** rather than bare — a bare `radius` is a control over
-        // every node that declares one and this Set's L1 declares one of its
-        // own (ADR-0318).
+        // Exactly five controls: two procedure controls plus three built-in camera controls.
         assert_eq!(all.len(), 5, "{all:#?}");
-        // **The intersection, not the union.** `near` declares `[0, 8]` and `far`
-        // declares `[0, 4]`; one knob moving both must not offer a position only one
-        // of them said it still looks like itself at.
-        // **In declaration order**: the L1 runs first and declares `radius`, and
-        // the two renderers after it declare `exposure`. Alphabetically it is
-        // the other way round, which is what this pair asserts as well as the
-        // ranges — see
-        // `a_default_interface_is_in_declaration_order_and_does_not_move` for
-        // the fixture that says so at both scales.
+        // Range takes the intersection [0, 4] in declaration order.
         assert_eq!(
             all,
             vec![
@@ -407,14 +358,7 @@ proc cool {
         assert_eq!(set.param("radius"), Some(7.0));
     }
 
-    /// **A macro is a binding whose source is a published control**, which needed no
-    /// new record and no new semantics — `bind`'s source became "a signal, or a
-    /// published control", and each bound control follows through its own curve and
-    /// range.
-    ///
-    /// This is the case the whole feature is for: one knob on the desk moving two
-    /// renderers' exposure in opposite directions, and neither of them on the
-    /// console.
+    /// Verifies that a single published control can drive multiple internal parameters via bindings.
     #[test]
     fn one_published_control_drives_several_internal_ones_through_their_own_ranges() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -483,17 +427,7 @@ proc cool {
         );
     }
 
-    /// **A binding on a control nothing publishes is refused.**
-    ///
-    /// It used to be accepted, hold its param wherever it found it, and be reported
-    /// by the terminal as deciding that param outright — the same failure the
-    /// confidence display had, one step further along. A misspelt `control:` name is
-    /// a mistake, and the only moment it can be caught is when the binding is
-    /// attached.
-    ///
-    /// The order it puts on a caller is the order a macro needs anyway: publish,
-    /// then bind. Both the command line and the swap worker already do that, for
-    /// this reason.
+    /// Verifies that binding to an unpublished control name is refused with Bound::NoSuchControl.
     #[test]
     fn a_binding_on_a_control_nothing_publishes_is_refused() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -537,21 +471,7 @@ proc cool {
         );
     }
 
-    /// **The default interface is in declaration order**, and it holds still.
-    ///
-    /// `docs/manual/console.html`, "A knob is bound to a deck, not to a Set":
-    /// a MIDI control is learned against *the position in the deck's published
-    /// interface*, so this list's order is an address and not a presentation.
-    /// Where a Set published nothing the order is its own — node by node in the
-    /// order the nodes run, inside a node the order its procedure declared
-    /// them, each key taken where it first appears.
-    ///
-    /// **Stability is the requirement, and it is asserted here rather than
-    /// assumed.** The engine sorted these keys alphabetically for exactly this
-    /// reason — they came out of a `HashMap` and a console whose controls move
-    /// between runs is not a console — so an order that is not sorted has to
-    /// say for itself that it does not move. Two Sets built the same way must
-    /// publish the same list.
+    /// Verifies that the default published interface preserves declaration order stably across runs.
     #[test]
     fn a_default_interface_is_in_declaration_order_and_does_not_move() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -561,11 +481,7 @@ proc cool {
         let names: Vec<&str> = all.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(
             names,
-            // **Node by node in the order the nodes run**, and the built-in
-            // camera is a node between the deformations and the renderers —
-            // so its three sit there, which is where the Inspector draws them
-            // (ADR-0318). The second `radius` is the camera's and is addressed;
-            // the first is the L1's and is a wildcard.
+            // Declaration order: L1 parameters, camera parameters, then L4 parameters.
             vec!["radius", "amount", "radius", "speed", "height", "exposure", "gain", "blur"],
             "not the order the procedures declare them in"
         );

@@ -1,9 +1,4 @@
-//! Headless correctness tests for order-preserving stream compaction.
-//!
-//! Every test goes through `Gpu::headless()` and reads results back off the
-//! GPU — there is no CPU-side scan to fall back on, so these are the only
-//! check that the multi-pass WGSL actually computes the exclusive prefix
-//! sum the module doc promises.
+//! Headless GPU correctness tests for multi-pass prefix sum order-preserving compaction.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -351,11 +346,7 @@ mod gpu {
         );
     }
 
-    /// The one ordering constraint that is easy to get wrong and silent when it
-    /// is: `finalize` writes `survivors` and must leave `range` and the dispatch
-    /// arguments alone, because `element` runs after the scan and still has to
-    /// cover the pre-scan range. If `finalize` rolled the range forward here,
-    /// every element that died this step would take a survivor's place.
+    /// Verifies that finalize updates survivor counts while preserving pre-scan dispatch ranges.
     #[test]
     fn finalize_leaves_the_pre_scan_range_alone() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -391,16 +382,7 @@ mod gpu {
         );
     }
 
-    // --- cost, measured on the GPU ---
-    //
-    // "Any change touching performance comes with a GPU-timestamp measurement"
-    // (`docs/contributing.md`, working style). `karakuri-engine::Probe` is another agent's
-    // work in progress and not this module's to depend on, so this brackets
-    // `Compaction::record` with the same two-no-op-compute-pass timestamp
-    // technique `probe.rs` uses, independently, to get a real number for the
-    // scan at full capacity rather than asserting a budget with nothing behind
-    // it.
-
+    /// Measures execution cost of full capacity prefix scan via GPU timestamps.
     #[test]
     fn full_capacity_scan_gpu_timestamp() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -496,14 +478,9 @@ mod gpu {
 
     // --- previous live range, not whole capacity ---
 
+    /// Verifies that successive compaction passes ignore stale alive entries beyond the previous live count.
     #[test]
     fn a_second_scan_ignores_stale_data_past_the_previous_live_count() {
-        // The compaction restricts itself to the previous frame's live range.
-        // Simulate that: after the first scan shrinks the live count, poke
-        // "alive" flags into the alive buffer *past* the new live count without
-        // telling compaction the range grew — a second `record` call must still
-        // ignore them, because that memory is exactly the kind of stale data
-        // the module doc says this restriction exists for.
         let gpu = Gpu::headless().expect("no GPU available");
         let capacity = 1000u32;
         // Only the first 200 are alive; the rest start dead.

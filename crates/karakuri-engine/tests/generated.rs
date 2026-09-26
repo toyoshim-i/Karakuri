@@ -1,16 +1,6 @@
-//! The V1 assumption, minus the LLM and the hot swap.
-//!
-//! > Can an LLM generate constrained IR, can we validate it and compile it to
-//! > WGSL, and can we hot-swap it without dropping a frame?
-//!
-//! This exercises the middle of that: `.kir` text goes in, and pixels come out
-//! of a real GPU, through every stage in between — parse, check, cost, generate
-//! WGSL, build pipelines against the published binding layout, dispatch
-//! compute, render. Nothing here is hand-written shader code.
-//!
-//! It is deliberately the same shape as `offscreen.rs`, which guards the
-//! hand-written stand-in: when the generated path can do everything the
-//! stand-in does, the stand-in can go.
+//! Integration tests verifying end-to-end IR execution without hand-written shaders:
+//! parsing, checking, cost estimation, WGSL generation, pipeline construction,
+//! dispatch, and rendering.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -234,15 +224,7 @@ proc soft_points {
         )
     }
 
-    /// An L4 consuming attributes with no derivation rule, for the composition
-    /// tests below.
-    ///
-    /// **`velocity` and `age` cannot be used for this any more**, and that is the
-    /// point rather than an inconvenience: both have a rule now, so a pair missing
-    /// one of them composes instead of failing. Two tests here used exactly those
-    /// two as their "unsatisfiable" fixture and started passing for the wrong
-    /// reason — a refusal test whose fixture became satisfiable asserts nothing and
-    /// says nothing about it.
+    /// An L4 procedure consuming attributes without derivation rules, used for composition tests.
     pub(super) const L4_UNSATISFIABLE: &str = r#"
 proc wants_shape {
   kind  L4
@@ -261,18 +243,7 @@ proc wants_shape {
 }
 "#;
 
-    /// Stage 6, the one check that needs both procedures at once. An L4 reads the
-    /// element struct its paired L1 wrote, so consuming an attribute that L1 never
-    /// emitted — and that nothing knows how to synthesise — has no field to read.
-    /// Without this check it surfaces as a WGSL parse failure from inside
-    /// `create_shader_module`, which is an internal error where the contract calls
-    /// for a diagnostic naming what to fix.
-    /// Every missing attribute at once, not just the first — a regeneration should
-    /// be able to fix all of them in one pass. Same rule the IR checker follows.
-    /// **And the pair that used to fail now composes**, which is the other half of
-    /// the change and the half a refusal test cannot state. An L1 emitting only
-    /// `position` paired with a renderer wanting `velocity` and `age` builds, and
-    /// the two attributes are the engine's to provide.
+    /// Verifies that an L4 procedure successfully composes when missing attributes can be derived.
     #[test]
     fn an_l4_consuming_a_derivable_attribute_composes_with_an_l1_that_emits_neither() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -329,19 +300,7 @@ proc wants_shape {
         assert_eq!(before, paused, "the simulation advanced while paused");
     }
 
-    /// The substepping invariant, on the shape that can actually detect a
-    /// violation of it.
-    ///
-    /// `static_shell` computes `position` as a closed-form function of `t`, so
-    /// only the final `t` reaches the buffer and any intermediate value is
-    /// overwritten. That makes it blind to *when* the substeps happened: it passes
-    /// whether `t` advances once per frame or once per step. This procedure
-    /// accumulates instead, and the term it accumulates depends on `t`, so the sum
-    /// records every instant it was evaluated at.
-    ///
-    /// Two steps in one frame with `t` held constant across them gives `2·t₂·dt`;
-    /// two frames of one step gives `t₁·dt + t₂·dt`. Those differ, visibly, and no
-    /// amount of care elsewhere recovers it — which is why `t` is per substep.
+    /// Verifies that `t` advances per substep for accumulating procedures under differing frame step configurations.
     #[test]
     fn an_accumulating_procedure_reading_t_is_substep_invariant() {
         const ACCUM: &str = r#"
@@ -394,19 +353,7 @@ proc accumulate {
         );
     }
 
-    /// **A validation error is a diagnostic, not a dead process.**
-    ///
-    /// wgpu's default answer to one is an uncaptured-error handler that panics the
-    /// thread that made the call — which on the swap worker is recoverable and at
-    /// startup is the process. `Set::build_many` runs inside a validation error
-    /// scope, and per the WebGPU rules an error a scope captures is not reported to
-    /// the uncaptured handler, so it comes back as a value.
-    ///
-    /// **The fixture asks for something no `.kir` can express**, deliberately: this
-    /// is the net under the check pass, and a test that reached it through a
-    /// checker hole would stop testing the net the moment the hole was closed. Five
-    /// such holes were found in one milestone, each a process death before it was a
-    /// refusal, and the net is what makes the sixth cost a message instead.
+    /// Verifies that device validation errors during Set construction return as diagnostic errors rather than panicking.
     #[test]
     fn a_validation_error_at_build_is_returned_rather_than_fatal() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -436,28 +383,14 @@ proc accumulate {
     }
 }
 
-/// **The refusals, which reach no device.**
-///
-/// Each of these used to acquire an adapter and hand `Set::build` two
-/// procedures, purely to be told the pair was illegal — a check that runs
-/// before a single pipeline is built, reachable only through a constructor
-/// that took a `&wgpu::Device`. `Set::validate` is that check pass on its own,
-/// and `Set::build_many` reaches it by calling it: there is one copy of each
-/// rule below, and this module and the build path both go through it.
+/// Refusal tests verified without device acquisition via `Set::validate`.
 mod refused {
     use super::gpu::{compile, narrow_l1, CAPACITY, L1, L4, L4_UNSATISFIABLE};
     use karakuri_engine::set::{Layering, Wiring};
     use karakuri_engine::Set;
     use karakuri_ir::typed::Checked;
 
-    /// One geometry at `capacity`, one renderer over it and nothing else —
-    /// written out because it is the Set under test, and it is the same shape
-    /// `Set::build` hands to `Set::build_many`.
-    ///
-    /// Returns the refusal's sentence, and says `why` loudly when there was
-    /// none: a check that starts accepting is the failure this module exists
-    /// to catch, and it is the one a bare `expect_err` would report as "called
-    /// `Result::unwrap_err()` on an `Ok` value".
+    /// Validates a single L1/L4 pair at the given capacity, returning the error message.
     fn refused(l1: &Checked, l4: &Checked, capacity: u32, why: &str) -> String {
         match Set::validate(
             &[(l1, capacity)],
@@ -490,12 +423,7 @@ mod refused {
         assert!(msg.contains("999999") && msg.contains("262144"), "{msg}");
     }
 
-    /// Stage 6, the one check that needs both procedures at once. An L4 reads
-    /// the element struct its paired L1 wrote, so consuming an attribute that
-    /// L1 never emitted — and that nothing knows how to synthesise — has no
-    /// field to read. Without this check it surfaces as a WGSL parse failure
-    /// from inside `create_shader_module`, which is an internal error where the
-    /// contract calls for a diagnostic naming what to fix.
+    /// Verifies that consuming an attribute that is neither emitted nor derivable produces a validation error.
     #[test]
     fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
         let l1 = compile(&narrow_l1("position, normal"));
