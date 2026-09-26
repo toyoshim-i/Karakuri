@@ -1,21 +1,7 @@
-//! Attributes a consumer asks for and no procedure emits.
+//! Integration tests for automatic attribute derivation rules (`age`, `velocity`).
 //!
-//! `age` and `velocity` are the two `docs/ir-spec.md` settled a rule for. Until
-//! now the rule was design only and an unmet `consumes` was an unconditional
-//! error — so a renderer that wanted a motion streak could only be paired with
-//! an L1 that had thought to emit `velocity`, which is the coupling the slot
-//! interface contract exists to remove.
-//!
-//! **Every test here is a comparison against a procedure that emits the
-//! attribute by hand**, and that anchor is the point. A test that only asserted
-//! the derived value was *non-zero* would pass on any number at all, and one
-//! that only asserted the pair *builds* would pass on zeros — which is exactly
-//! the failure the old unconditional rejection was written to prevent, so
-//! reintroducing it here would be undoing the reason the rejection existed.
-//!
-//! Each comparison carries a second assertion beside it: that the anchor and
-//! the derived Set both differ from the picture the attribute's *absence* would
-//! give. Two agreeing wrong answers look exactly like two agreeing right ones.
+//! Validates derived attributes against hand-emitted procedure baselines and
+//! verifies slot allocation behavior.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -32,11 +18,7 @@ mod gpu {
     const W: u32 = 64;
     const H: u32 = 64;
 
-    /// One element at the origin, drifting along `y` at a known rate.
-    ///
-    /// `emit` and the body are parameters because the whole method here is to run
-    /// the same motion twice — once with the attribute written by hand and once
-    /// with nothing writing it — and see the same picture.
+    /// Generator for an L1 procedure drifting along y at a known rate.
     fn mover(name: &str, emit: &str, extra: &str) -> String {
         format!(
             r#"
@@ -55,11 +37,7 @@ proc {name} {{
         )
     }
 
-    /// Draws one sprite, placed by whatever it is told to read.
-    ///
-    /// The attribute under test decides *where* rather than how bright, because a
-    /// position is what this file can measure to a texel — see `deform.rs` for the
-    /// same reasoning about the pinned camera below.
+    /// Generator for an L4 renderer placing sprites according to consumed attributes.
     pub(super) fn reader(name: &str, consumes: &str, y: &str) -> String {
         format!(
             r#"
@@ -82,14 +60,7 @@ proc {name} {{
         )
     }
 
-    /// The same motion, but with elements **spawned over time** rather than alive
-    /// from frame zero.
-    ///
-    /// **This is what a `birth_t` of zero survives.** With no `spawn` block every
-    /// element exists at `t = 0`, so "the clock" and "the clock since this element
-    /// was born" are the same number and a rule that forgot to record the spawn
-    /// instant is exactly right by accident. Only a population with a spread of
-    /// ages can tell them apart.
+    /// Generator for an L1 procedure with dynamic element spawning over time.
     fn spawner(name: &str, emit: &str, spawn_extra: &str, element_extra: &str) -> String {
         format!(
             r#"
@@ -258,14 +229,7 @@ proc {name} {{
     );
     }
 
-    /// **The same claim over a population with a spread of ages**, which is the
-    /// only shape that can see whether the spawn instant was recorded at all.
-    ///
-    /// Everything alive from frame zero has one age, and it is the clock — so a
-    /// rule that measured from zero instead of from birth is right by accident and
-    /// stays right forever. Spawning over time separates the two: the mean age of a
-    /// population filling up is about half the elapsed time, and a rule reading the
-    /// clock puts every element at the oldest one's row.
+    /// Verifies that derived age is measured from each element's individual spawn instant.
     #[test]
     fn a_derived_age_is_measured_from_the_spawn_instant() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -291,12 +255,7 @@ proc {name} {{
         );
     }
 
-    /// **A derived `velocity` is the motion the simulation actually had.**
-    ///
-    /// The anchor emits `velocity` and writes the same constant the body moves by;
-    /// the subject emits only `position`. The renderer places the sprite by the
-    /// velocity's length, so the two agree only if the difference and the division
-    /// are both right — a factor of `dt` either way moves the sprite off the frame.
+    /// Verifies that derived velocity matches hand-written element motion.
     #[test]
     fn a_derived_velocity_matches_one_the_procedure_writes() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -336,16 +295,7 @@ proc {name} {{
         );
     }
 
-    /// **The slot is allocated because something asked**, and a Set nothing asks in
-    /// pays nothing.
-    ///
-    /// A slot per element per rule is what an unconditional one would cost every Set
-    /// in the library. **The observable is the slot list and not the stride**, which
-    /// it used to be: every slot was a padded sixteen bytes then, so "one more slot"
-    /// and "sixteen more bytes" were the same sentence. They are not any more —
-    /// `birth_t` is a `f32` and lands in the four bytes `seed` and `birth_frac`
-    /// leave, so it is now free — and a stride assertion would have read that as the
-    /// slot not existing.
+    /// Verifies that derivation slots are only allocated when consumed by downstream nodes.
     #[test]
     fn a_derivations_slot_exists_only_where_something_consumes_it() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -398,20 +348,7 @@ proc {name} {{
         );
     }
 
-    /// **An attribute somebody emits is never derived**, wherever in the chain the
-    /// emitter sits.
-    ///
-    /// Both at once would mean a slot and a substitution for one name, and every
-    /// reader would have to know which applied where. So an L1 that emits `age`
-    /// keeps its own — the stride says so — and the renderer reads what the
-    /// procedure wrote rather than what the clock would have said.
-    ///
-    /// The second half is the one the first cannot reach. Where the *L1* emits it,
-    /// the attribute is available from the start and the rule is never even
-    /// considered; the guard that matters is for an emitter **below** a consumer,
-    /// where "nobody has emitted this yet" and "nobody emits this" come apart. That
-    /// stays a composition error naming the position, because the alternative is a
-    /// chain in which one name is a slot at one node and a substitution at another.
+    /// Verifies that explicit procedure attributes take precedence over automatic derivation.
     #[test]
     fn an_emitted_attribute_is_read_rather_than_derived() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -474,17 +411,7 @@ proc emits_age {
         );
     }
 
-    /// **An L1 may consume a derived attribute, and the substitution it gets is its
-    /// own previous frame's.**
-    ///
-    /// Nothing here read one before, and that was the file's largest hole: deleting
-    /// the derived branch of either the L1 or the L2 resolver left the whole
-    /// workspace green, and what it produces is a shader naming a field the struct
-    /// does not have — a wgpu validation panic at build, from a `.kir` the checker
-    /// accepted.
-    ///
-    /// The anchor is the same procedure emitting `age` and accumulating it. Both
-    /// place the sprite by the age they read, so agreement is agreement to a texel.
+    /// Verifies that L1 procedures consuming derived attributes receive their previous frame's values.
     #[test]
     fn an_l1_reading_a_derived_age_matches_one_that_accumulates_its_own() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -571,19 +498,7 @@ proc lift {
         );
     }
 
-    /// **An element's first update has no velocity**, and the alternative measured
-    /// twenty times the true speed.
-    ///
-    /// A newly spawned element's first pass runs over a *fraction* of a step, and
-    /// the step it is divided by is scaled to that fraction — right for a body that
-    /// integrates, wrong for one that computes position from `t` and jumps a whole
-    /// step regardless. An element of a procedure with no `spawn` block has the
-    /// same problem from the other end: it starts at the origin because that is
-    /// what an unwritten buffer holds, and its first pass is a difference against a
-    /// state it was never in.
-    ///
-    /// Read off the buffer rather than out of the picture, because the artifact is
-    /// one frame of one batch and a mean position cannot see it.
+    /// Verifies that newly spawned elements have zero derived velocity during their initial update.
     #[test]
     fn a_first_update_has_no_derived_velocity() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -651,11 +566,7 @@ proc jumps {{
     }
 }
 
-/// **The refusal, which reaches no device.**
-///
-/// A derivation rule whose source attribute the L1 does not emit is decided by
-/// `Set::validate` — the check pass `Set::build_many` reaches by calling it,
-/// rather than by holding a copy.
+/// Validation refusal tests for attribute derivation requirements.
 mod refused {
     use super::gpu::{compile, reader};
     use karakuri_engine::set::{Layering, SetError, Wiring};
@@ -687,15 +598,7 @@ mod refused {
         .map(|_| ())
     }
 
-    /// **A rule that could not run says why**, rather than repeating advice that
-    /// contradicts it.
-    ///
-    /// `velocity` is synthesised from `position`, so an L1 emitting neither cannot
-    /// have it. The refusal for that used to drop the reason and fall through to
-    /// the generic hint — which asserts, on a refusal *of* `velocity`, that
-    /// `velocity` is synthesised where nothing emits it. A regenerating model
-    /// reading that is being told the specification is wrong, and the one thing
-    /// that would fix the file is the one thing the message does not name.
+    /// Verifies that derivation refusal diagnostics name the missing source attribute.
     #[test]
     fn a_blocked_rule_names_the_attribute_it_needed() {
         let no_position = r#"
