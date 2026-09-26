@@ -31,6 +31,7 @@ pub fn head_of(region: &Region) -> Option<Head> {
         Kind::Library => (library::LIBRARY_TITLE, &[]),
         Kind::Staging => (staging::STAGING_TITLE, &[]),
         Kind::Sequencer => (sequencer::SEQUENCER_TITLE, &[]),
+        Kind::Prompt => (prompt::PROMPT_TITLE, &[]),
         Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => {
             return None
         }
@@ -49,7 +50,12 @@ pub fn head_of(region: &Region) -> Option<Head> {
 pub(crate) const fn head_grip(kind: Kind) -> bool {
     match kind {
         Kind::Bay { grip, .. } => grip,
-        Kind::Library | Kind::Master | Kind::Mixer | Kind::Staging | Kind::Sequencer => true,
+        Kind::Library
+        | Kind::Master
+        | Kind::Mixer
+        | Kind::Staging
+        | Kind::Sequencer
+        | Kind::Prompt => true,
         Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => false,
     }
 }

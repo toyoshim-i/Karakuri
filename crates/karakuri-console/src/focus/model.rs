@@ -10,7 +10,10 @@ pub const MIXER: &str = "mixer";
 /// whose head's remembered control is the marked scope. [`MIXER`]'s reason.
 pub const LIBRARY: &str = "library";
 
-/// Returns whether a region is one of the nine top-level focusable bays (ADR-0259).
+/// Name of the Prompt bay, which embeds the interactive agent terminal.
+pub const PROMPT: &str = "prompt";
+
+/// Returns whether a region is one of the ten top-level focusable bays (ADR-0259).
 ///
 /// Sub-regions within Program and Inspector are treated as items reached via digits rather than `Tab`.
 pub const fn is_bay(kind: Kind) -> bool {
@@ -19,6 +22,7 @@ pub const fn is_bay(kind: Kind) -> bool {
         | Kind::Transport
         | Kind::Library
         | Kind::Staging
+        | Kind::Prompt
         | Kind::Mixer
         | Kind::Master
         | Kind::Sequencer

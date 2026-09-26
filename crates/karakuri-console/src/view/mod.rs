@@ -87,10 +87,16 @@ mod sequencer;
 
 /// Sequencer bay module re-exports (ADR-0121).
 pub use sequencer::*;
+
 mod staging;
 
 /// Staging bay module re-exports (ADR-0121).
 pub use staging::*;
+
+pub mod prompt;
+
+/// Prompt bay module re-exports (ADR-0121).
+pub use prompt::*;
 
 mod layout;
 
@@ -253,6 +259,8 @@ impl View {
             transition: TransitionSettings::START,
             // Sequencer unconfigured.
             sequencer: None,
+            // Prompt bay unselected and menu closed.
+            prompt: PromptState::new(),
             // Pre-allocate region layout cache up to REGIONS capacity.
             placed: Vec::with_capacity(REGIONS.len()),
         }

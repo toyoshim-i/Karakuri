@@ -26,6 +26,8 @@ pub enum ModalOverlay {
     SequencerLaneChooser,
     /// Master chain add operation chooser card.
     MasterChainAddChooser,
+    /// Prompt bay agent CLI selection dropdown menu.
+    PromptCliMenu,
 }
 
 impl ModalOverlay {
@@ -41,6 +43,7 @@ impl ModalOverlay {
             Self::InspectorPaneTarget(_) => "InspectorPaneTarget",
             Self::SequencerLaneChooser => "SequencerLaneChooser",
             Self::MasterChainAddChooser => "MasterChainAddChooser",
+            Self::PromptCliMenu => "PromptCliMenu",
         }
     }
 }
@@ -74,6 +77,9 @@ impl View {
         }
         if self.chain_add_open() {
             return Some(ModalOverlay::MasterChainAddChooser);
+        }
+        if self.prompt.menu_open {
+            return Some(ModalOverlay::PromptCliMenu);
         }
         None
     }
@@ -109,6 +115,10 @@ impl View {
             ModalOverlay::InspectorPaneTarget(_) => self.shut_pane_target(),
             ModalOverlay::SequencerLaneChooser => self.shut_lane(),
             ModalOverlay::MasterChainAddChooser => self.shut_chain_add(),
+            ModalOverlay::PromptCliMenu => {
+                self.prompt.shut_menu();
+                true
+            }
         }
     }
 

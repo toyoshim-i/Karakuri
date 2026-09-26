@@ -55,6 +55,7 @@ impl Readout {
         match (event, claim) {
             // Update pointer coordinates and emit operation if dragging an active fader.
             (Pointer::Moved(p), _) => {
+                self.panel.set_cursor(p);
                 let fading = matches!(self.panel.in_hand(), Some(InHand::Fader));
                 let operation = self.moved(p);
                 if fading {

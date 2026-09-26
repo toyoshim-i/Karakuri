@@ -440,7 +440,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 
     // Increasing window height provides space for exactly one row above kind band and foot (ADR-0338).
     let barely = solved(Rect {
-        h: 375.0,
+        h: 642.0,
         ..SMALLEST
     });
     let region = to_egui(rect_of(&barely, "library"));

@@ -93,6 +93,12 @@ fn left_pane() -> Spec {
                 .min(66.0)
                 .max(125.0)
                 .collapsed_size(size::HEAD_H),
+            // Prompt bay: embedded agent terminal; natural height 220px; minimum 96px (ADR-0364).
+            Spec::view("prompt")
+                .fixed(220.0)
+                .min(96.0)
+                .max(f32::INFINITY)
+                .collapsed_size(size::HEAD_H),
         ],
     )
     .named("left-pane")

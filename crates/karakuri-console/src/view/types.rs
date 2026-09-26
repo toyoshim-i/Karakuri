@@ -117,5 +117,7 @@ pub struct View {
     pub(crate) transition: TransitionSettings,
     /// Sequencer bay pattern and trigger state snapshot for this frame, or `None` (ADR-0156).
     pub sequencer: Option<Sequenced>,
+    /// Prompt bay terminal and agent CLI session state.
+    pub prompt: PromptState,
     pub(crate) placed: Vec<Placed>,
 }

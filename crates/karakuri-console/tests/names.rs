@@ -12,6 +12,7 @@ const MANUAL: &[&str] = &[
     "transport",
     "library",
     "staging",
+    "prompt",
     "program",
     "inspector",
     "mixer",

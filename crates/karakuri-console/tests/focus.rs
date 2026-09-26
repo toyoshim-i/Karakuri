@@ -9,11 +9,12 @@ use karakuri_console::room::{size, Room};
 use karakuri_console::view::{region, Mask, Scope, Strip, Tally, View, REGIONS};
 use karakuri_operation::BlendMode;
 
-/// Ordered list of nine bays visited during focus ring traversal across arrangement regions.
+/// Ordered list of ten bays visited during focus ring traversal across arrangement regions.
 const WALK: &[&str] = &[
     "transport",
     "library",
     "staging",
+    "prompt",
     "program",
     "inspector",
     "mixer",
@@ -92,8 +93,8 @@ fn every_bay_and_only_the_bays_are_in_the_ring() {
     );
     assert_eq!(
         walked.len(),
-        9,
-        "the manual's *What each region is standing on* lists nine bays and the \
+        10,
+        "the manual's *What each region is standing on* lists ten bays and the \
          ring holds {}",
         walked.len()
     );

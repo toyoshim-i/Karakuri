@@ -33,6 +33,13 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         Hit::Divider { .. } => Claim::Panel,
         // Rule 4: short-circuiting hit-test across registered [`PROBES`].
         Hit::View(_) | Hit::Nothing => {
+            if let Some(id) = panel.layout().find("prompt") {
+                let bay_rect = crate::view::to_egui(panel.layout().rect(id));
+                let pill = crate::view::prompt_pill(ctx, bay_rect, &view.prompt.selection);
+                if pill.contains(egui::Pos2::new(p.x, p.y)) {
+                    return Claim::Panel;
+                }
+            }
             match PROBES.iter().any(|probe| (probe.ask)(panel, ctx, view, p)) {
                 true => Claim::Panel,
                 false => Claim::Egui,

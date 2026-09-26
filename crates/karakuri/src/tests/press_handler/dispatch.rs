@@ -615,3 +615,61 @@ fn the_press_handler_selects_active_bay_on_mouse_click() {
     );
     readout.pointer(&ctx, Pointer::Up);
 }
+
+/// Verifies Prompt bay header pill clicks toggle dropdown menu and menu clicks select presets/custom.
+#[test]
+fn the_press_handler_dispatches_prompt_bay_controls() {
+    let ctx = crate::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    let prompt_id = readout
+        .panel
+        .layout()
+        .find("prompt")
+        .expect("prompt bay exists");
+    let bay_rect = view::to_egui(readout.panel.layout().rect(prompt_id));
+    let viewport = view::to_egui(readout.panel.layout().viewport());
+
+    let pill = view::prompt_pill(&ctx, bay_rect, &readout.view.prompt.selection);
+    let pill_center = Point::new(pill.center().x, pill.center().y);
+
+    // Initial state: menu closed, unselected
+    assert!(!readout.view.prompt.menu_open);
+    assert!(readout.view.prompt.selection.is_unselected());
+
+    // 1. Click on header selector pill opens dropdown menu
+    readout.pointer(&ctx, Pointer::Moved(pill_center));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(readout.view.prompt.menu_open);
+    assert_eq!(
+        readout.view.active_overlay(),
+        Some(view::ModalOverlay::PromptCliMenu)
+    );
+
+    // 2. Click on custom option inside menu
+    let menu = view::prompt_menu_rect(pill, viewport);
+    let custom_y = menu.min.y + 6.0 + view::MENU_ITEM_H * (view::CliPreset::ALL.len() as f32) + 2.0;
+    let custom_pt = Point::new(menu.center().x, custom_y);
+
+    readout.pointer(&ctx, Pointer::Moved(custom_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(!readout.view.prompt.menu_open);
+    assert_eq!(
+        readout.view.prompt.selection,
+        view::CliSelection::Custom(String::new())
+    );
+
+    // 3. Open menu again and click outside to dismiss (Rule 2)
+    let new_pill = view::prompt_pill(&ctx, bay_rect, &readout.view.prompt.selection);
+    let new_pill_center = Point::new(new_pill.center().x, new_pill.center().y);
+
+    readout.pointer(&ctx, Pointer::Moved(new_pill_center));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(readout.view.prompt.menu_open);
+
+    let outside_pt = Point::new(bay_rect.min.x + 10.0, bay_rect.max.y - 10.0);
+    readout.pointer(&ctx, Pointer::Moved(outside_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(!readout.view.prompt.menu_open);
+}
