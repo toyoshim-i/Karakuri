@@ -18,22 +18,8 @@ mod gpu {
         let _ = Gpu::headless();
     }
 
-    /// The claim, operationally: **a build does not block the render loop, and its
-    /// result appears between two frames rather than inside one.**
-    ///
-    /// "Does not block" is not directly observable — there is no such thing as
-    /// asking a loop whether it was blocked. What is observable is that frames
-    /// continued to be produced between the request going out and the swap coming
-    /// back, which is the same statement from the outside. A `recv` instead of a
-    /// `try_recv` on the frame path would make that count zero.
-    ///
-    /// "Not inside a frame" is checked by observing the live Set's identity at the
-    /// top and at the bottom of every frame body. Note what that does *not* check:
-    /// the borrow `begin_frame` returns stops a second call while it is held, but
-    /// the encoder is the caller's and borrows nothing, so a caller that calls
-    /// `begin_frame` twice inside one encoder still gets two Sets in one frame.
-    /// This asserts the property for a frame loop shaped like the CLI's, which is
-    /// the convention both callers keep — see the module doc on `swap.rs`.
+    /// Verifies that hot-swap builds compile in the background without blocking the render loop
+    /// and install atomically at frame boundaries.
     #[test]
     fn a_build_runs_in_the_background_and_lands_between_two_frames() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -60,15 +46,7 @@ mod gpu {
             "the swap reported success but the live Set is still the old one"
         );
 
-        // No state transfer, by design: a new procedure means new buffers, so the
-        // incoming Set starts cold. Priming a Set out of sight before showing it
-        // is the deck's Priming, and a partial version of it here would be a
-        // second answer to remove.
-        //
-        // One step, not zero: the frame the swap landed on is a rendered frame
-        // like any other, and it stepped the Set that was live at its top — which
-        // by then was the new one. The claim is that it started from zero, and one
-        // step after ten frames of the old Set is that claim.
+        // Verifies the swapped-in set starts cold with step count 1 on its first frame.
         assert_eq!(
             steps_taken(h.swap.set()),
             1,
@@ -92,17 +70,7 @@ mod gpu {
         assert_eq!(changes, 1, "expected exactly one swap, saw {changes}");
     }
 
-    /// A swapped-in Set carries the bindings the request stated.
-    ///
-    /// A binding is Set state and a swap builds a whole new Set, so it is carried
-    /// by being restated — and losing it is silent: `--watch` would keep working,
-    /// the picture would keep updating, and the only symptom would be a parameter
-    /// that quietly stopped moving after the first save.
-    ///
-    /// **The params were the example this pointed at and are no longer.** A
-    /// parameter value is the one thing the outgoing Set can hand over itself,
-    /// and a rebuild inherits the ones somebody moved rather than restating them
-    /// — see the tests at the bottom of this file.
+    /// Verifies that a swapped-in Set preserves external bindings specified in the request.
     #[test]
     fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -141,30 +109,7 @@ mod gpu {
         assert_eq!(set.bindings()[0].signal, "beat");
     }
 
-    /// **A swapped-in Set is under the authority the request states**, and not
-    /// back at the default because a `.kir` was saved.
-    ///
-    /// This is the field
-    /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`
-    /// says the engine owes, and its consequences section names the failure it
-    /// prevents: *"a rebuild that let a node's authority be re-derived would
-    /// hand a node back to an agent an operator had taken it from, on the next
-    /// save of any `.kir`, saying nothing."*
-    ///
-    /// **Both directions, because the loss is silent in both and only one of
-    /// them is the sentence above.** A rebuild that drops the restatement puts
-    /// every node back at `Authority::Manual`, so what it actually destroys is
-    /// a grant — the operator who let an agent at `L1:0` finds it theirs again
-    /// and nothing said so. The other half is the one the ADR names, and it is
-    /// asserted here as *the default is not inherited*: `L4:0` is granted on
-    /// one build, stated by nobody on the next, and must come up manual rather
-    /// than carrying the previous Set's grant forward. A rebuild is not a
-    /// surface, so no surface could have refused either
-    /// (`docs/principles/0078-…`).
-    ///
-    /// Two nodes in two different layers, so that the address is exercised past
-    /// `L1:0` and so that one rebuild can ask both questions at once: `L1:0`
-    /// restated and `L4:0` not.
+    /// Verifies that a swapped-in Set inherits authority specified in the request (ADR-0211).
     #[test]
     fn a_swapped_in_set_carries_the_authority_the_request_stated() {
         use karakuri_engine::swap::AuthorityAt;
@@ -227,20 +172,7 @@ mod gpu {
         );
     }
 
-    /// **A swapped-in Set is aimed where the request says**, and not at
-    /// `Orbit::default()`.
-    ///
-    /// The camera is Set state the way the bindings are, and it was the one piece
-    /// of it a request did not carry. `Set::build_many` starts every
-    /// Set it builds from the default orbit, so a swap silently re-aimed the slot —
-    /// and it stayed silent, because the picture still moved and nothing was
-    /// refused. Downstream of that, a caller that *records* `Set::camera` — which
-    /// is what `karakuri-cli`'s live save does — writes the defaults into a file
-    /// the operator asked to keep, so the loss outlives the run.
-    ///
-    /// Asserted on all six numbers rather than on the two a `camera` record spells:
-    /// a request that carried half of them would be as wrong as one that carried
-    /// none, and only quieter.
+    /// Verifies that a swapped-in Set preserves camera orbit orientation stated in the request.
     #[test]
     fn a_swapped_in_set_is_aimed_where_the_request_states() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -283,12 +215,7 @@ mod gpu {
         );
     }
 
-    /// A build that fails leaves the running Set **completely** untouched: not
-    /// merely still rendering, but at the same `t`, with the same live count, and
-    /// the same buffers. The composition check is the failure used here because it
-    /// happens inside `Set::build`, on the worker thread, which is the case a
-    /// render thread could plausibly mishandle — it is holding a `Result` and has
-    /// to put the `Err` down without disturbing anything.
+    /// Verifies that worker build failures leave running Set state, buffers, and clock unaffected.
     #[test]
     fn a_build_that_fails_changes_nothing() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -332,23 +259,7 @@ mod gpu {
         );
     }
 
-    /// **A build arrives measured, and still arrives cold.**
-    ///
-    /// The governor budgets against a per-Set measurement taken on the worker as
-    /// part of building — see "The worker also measures what it built" in
-    /// `swap.rs`. Two things have to hold together and each is easy to have
-    /// without the other:
-    ///
-    /// - the measurement exists and travels with the Set, so a slot the operator
-    ///   might want to prime is budgetable at all;
-    /// - and measuring it left **no trace**. Measuring means stepping, and a
-    ///   swapped-in Set is documented as arriving cold with `t` at zero. A probe
-    ///   run that forgot to rewind would hand over a Set sixteen steps into its own
-    ///   simulation, which nothing downstream would ever notice — the picture would
-    ///   simply be slightly wrong on the first frame after every swap, forever.
-    ///
-    /// The cold half is asserted in step counts rather than in pixels for the
-    /// reason `steps_taken` gives.
+    /// Verifies that swapped-in Sets carry worker performance measurements while arriving unstepped (rewound).
     #[test]
     fn a_build_arrives_measured_and_still_arrives_cold() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -393,12 +304,7 @@ mod gpu {
         assert_eq!(cost.resolution, h.swap.measure_size());
     }
 
-    /// The other half of "a failed compile changes nothing", and the half that is
-    /// enforced by shape rather than by handling: a `.kir` that does not compile
-    /// never becomes a `Request`, so there is nothing for the render thread to
-    /// reject. A [`Source`] that produces nothing is exactly what
-    /// `karakuri-environment`'s watcher becomes on a parse error, and the running Set must
-    /// not notice.
+    /// Verifies that idle/unproductive sources leave the running Set executing normally.
     #[test]
     fn a_source_that_produces_nothing_leaves_the_running_set_running() {
         let mut h = Harness::new(GENEROUS_MS, FIRST, (WIDTH, HEIGHT), Box::new(Silent));

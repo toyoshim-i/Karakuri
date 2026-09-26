@@ -3,14 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// **A parameter move is a uniform write and not a build**, and this is
-    /// what says the two paths draw the same frame.
-    ///
-    /// `Record::MasterChain` is written whole, so applying one is ordinarily a
-    /// list whose shape is the shape already running with one number different
-    /// — and `Present::set_chain_params` takes it without allocating. A frame
-    /// drawn that way has to be the frame a full rebuild would have drawn, or
-    /// the cheap path is a second answer (P-0091).
+    /// Verifies parameter-only updates modify uniforms in place without reallocation and match full rebuild results.
     #[test]
     fn moving_a_parameter_draws_what_rebuilding_the_list_draws() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -60,16 +53,7 @@ mod gpu {
         );
     }
 
-    /// **The chain's price is the sum over its slots**, which is not the
-    /// addition ADR-0013 forbids: those are three different quantities, these
-    /// are rates against one — the frame's texels, covered once by every slot.
-    ///
-    /// The figures are `karakuri_ir::cost`'s own and are asserted here as a sum
-    /// rather than as three numbers, because the three are `cost.rs`'s to hold.
-    /// What the sum becomes in milliseconds is
-    /// `karakuri_engine::estimate::chain_ms`, and what spends it is
-    /// `Deck::govern` — see `the_three_shipped_procedures_price_the_chains_rate`
-    /// below.
+    /// Verifies that chain fragment cost calculates as the sum of per-slot operations per fragment.
     #[test]
     fn a_chains_price_is_the_sum_of_its_slots() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -102,15 +86,7 @@ mod gpu {
         assert_eq!(present.chain_ops_per_fragment(), sum);
     }
 
-    /// A chain slot's procedure reads the clock the frame hands it, and it
-    /// reads all three of `t`, `beats` and `dt`.
-    ///
-    /// The three shipped procedures read none of them. [`CLOCK`] writes the
-    /// clock into the frame's colour channels, so every texel of the readback
-    /// is a statement about what the shader was handed.
-    ///
-    /// Two clocks are run and not one: the second is the negative control, and
-    /// the picture has to move with it.
+    /// Verifies chain slot procedures receive frame uniforms `(t, beats, dt)` correctly.
     #[test]
     fn a_chain_slot_reads_the_clock_the_frame_hands_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -197,11 +173,7 @@ mod gpu {
         );
     }
 
-    /// The three shipped procedures are what the chain's rate was calibrated
-    /// on, so the price of that chain at the size the measurement was taken at
-    /// comes back as the measurement.
-    ///
-    /// It is the order of magnitude that is held, not the third decimal.
+    /// Verifies reference execution cost estimates for the three shipped master chain procedures.
     #[test]
     fn the_three_shipped_procedures_price_the_chains_rate() {
         use karakuri_engine::estimate::{
@@ -317,19 +289,7 @@ mod gpu {
         gpu.queue.submit([encoder.finish()]);
     }
 
-    /// **A chain built on `karakuri-chain` draws what a chain built here
-    /// draws**, and it lands at a frame boundary rather than when the build
-    /// finished.
-    ///
-    /// Three slots including a retention, because that is the whole of what a
-    /// build allocates: a pipeline and a uniform buffer per slot, an entry
-    /// target, the ping-pong between slots, and the history the `mix` cut is
-    /// held in. A worker that made any of them differently would draw a
-    /// different frame here.
-    ///
-    /// The frame between the build finishing and the boundary is the one that
-    /// says the install waits: the empty chain draws it, and it is not the
-    /// frame the built chain draws (P-0094 — the show does not stop).
+    /// Verifies that chains built via background workers produce identical frames and install at frame boundaries.
     #[test]
     fn a_chain_built_on_the_worker_draws_what_building_it_here_draws() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -404,11 +364,7 @@ mod gpu {
         );
     }
 
-    /// **Two builds waiting at one frame boundary install the newest, once**,
-    /// and the one it superseded is retired without ever being seen.
-    ///
-    /// Both are waited for before the boundary is taken, so this is about which
-    /// one an install chooses rather than about how fast either was.
+    /// Verifies that when multiple chain builds are pending at a frame boundary, only the newest installs.
     #[test]
     fn the_newest_of_two_pending_builds_wins() {
         let gpu = Gpu::headless().expect("no GPU available");

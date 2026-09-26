@@ -18,15 +18,7 @@ mod gpu {
         let _ = Gpu::headless();
     }
 
-    /// **A rewound Set is a fresh Set**, in every way anything downstream can see.
-    ///
-    /// This is the claim `Set::rewind` has to hold up and the one that is silent
-    /// when it does not: a swapped-in Set that kept a trace of its own probe run is
-    /// wrong from its first frame and nothing reports it. Asserted by *equivalence*
-    /// rather than field by field — one Set is probed and rewound, another never
-    /// is, and then both are driven through the same frames and compared on their
-    /// element bytes, their live count, their `t` and their pixels. A field
-    /// `rewind` forgot shows up in one of those or it was not state.
+    /// Verifies that rewinding a probed Set restores it to bit-exact equivalence with an unstepped Set.
     #[test]
     fn a_rewound_set_is_indistinguishable_from_one_that_was_never_stepped() {
         use karakuri_engine::probe::Probe;
@@ -90,18 +82,7 @@ mod gpu {
         );
     }
 
-    /// **A swap carries the Set's interface, and a macro survives it.**
-    ///
-    /// The bindings are restated on every rebuild for the reason `Request::bindings`
-    /// gives, and the interface was not — so a `control:` binding survived a swap
-    /// and the control it named did not. A source that is gone leaves its param
-    /// where it was, silently, for the rest of the run: the picture would simply
-    /// stop responding to a knob, with nothing said.
-    ///
-    /// The order matters as much as the presence. Publishing happens *before* the
-    /// bindings are attached, because a binding on a name nothing answers is
-    /// refused — which is the diagnostic, and would fire on every rebuild if the
-    /// two were the other way round.
+    /// Verifies that hot-swaps preserve the macro interface and associated parameter bindings.
     #[test]
     fn a_swap_carries_the_interface_a_macro_is_bound_to() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -157,17 +138,7 @@ mod gpu {
         );
     }
 
-    /// **An author edits a declared default and saves; the picture moves.** That
-    /// is the one thing `--watch` exists to do, and it is the half of the rule
-    /// that a rebuild inheriting *every* value by name would break — a Set holds
-    /// one number per key, so carrying them all would carry the outgoing
-    /// declaration forward and an edit would show nothing, forever
-    /// (`docs/adr/0280-…`, §6, which is why that section said the information was
-    /// not there).
-    ///
-    /// Nobody has touched `radius` here, so nothing about it was ever stated: the
-    /// value comes from the code because the code is the only thing that has
-    /// spoken.
+    /// Verifies that editing declared parameter defaults in source files updates unridden values on rebuild.
     #[test]
     fn an_edited_declaration_lands_on_a_value_nobody_moved() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -193,14 +164,7 @@ mod gpu {
         );
     }
 
-    /// **A knob is ridden and then a `.kir` is saved; the knob stays where the
-    /// operator left it.** The other half, and the one that was broken: the
-    /// rebuild used to restate what the slot was *loaded* with, so a ride was
-    /// walked back on the next save of any file in the slot, silently.
-    ///
-    /// The same save also carries an edited declaration for the parameter nobody
-    /// touched, so one assertion pair covers both directions of the rule at once
-    /// — which is the point of it being one rule.
+    /// Verifies that live-ridden parameter values persist across rebuilds while unridden defaults update.
     #[test]
     fn a_ridden_value_crosses_a_rebuild_and_a_declared_one_does_not() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -228,11 +192,7 @@ mod gpu {
         );
     }
 
-    /// **A value this build states beats a value the outgoing Set was holding**,
-    /// which is what separates *loading a Set* from *rebuilding one*. A slot
-    /// pointed at a Set file states every declaration of every node, because that
-    /// is what a live save writes; an operator who loads a preset over a slot
-    /// they have been riding asked for the preset.
+    /// Verifies that parameter values explicitly specified in the request override live-ridden values.
     #[test]
     fn a_value_the_request_states_beats_the_one_the_operator_moved() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -259,15 +219,7 @@ mod gpu {
         );
     }
 
-    /// **A name the rebuild dropped lands nowhere, and a node that is new comes
-    /// up at its own declaration.** Two of the five cases the rule has to answer,
-    /// in one save: the renderer that declared `exposure` is replaced by one that
-    /// does not, and a second renderer appears behind it.
-    ///
-    /// The carry is addressed by `(layer, index)` — `ParamWrite::at`'s spelling —
-    /// so the ridden `L4:0 exposure` is offered to `L4:0` and to nothing else. It
-    /// declares no such name, so the value is gone; `L4:1` is a node the outgoing
-    /// Set never had and takes what `wide_points` declares.
+    /// Verifies that dropped parameter names are discarded and newly introduced nodes initialize to declared defaults.
     #[test]
     fn a_dropped_name_is_gone_and_a_new_node_starts_at_its_declaration() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);

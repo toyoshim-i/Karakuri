@@ -3,15 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// **The default look is what it was before this chain existed**, bit for
-    /// bit, and it is the claim the whole design rests on: an empty chain is no
-    /// pass at all rather than a pass that does nothing.
-    ///
-    /// Three ways of having no chain are compared: one never told about a
-    /// chain, one told an empty one, and one that held three slots and had them
-    /// taken out again. The third is the one that could fail on its own — it
-    /// has allocated, recorded and retained, and the picture still has to be
-    /// the same picture.
+    /// Verifies that an empty chain produces identical frames to rendering without a chain.
     #[test]
     fn an_empty_chain_is_the_frame_with_no_chain() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -84,13 +76,7 @@ mod gpu {
         }
     }
 
-    /// **`examples/feedback.kir` is `master.wgsl`'s `fs_feedback`**, bit for
-    /// bit, with a history that is a picture rather than a black frame.
-    ///
-    /// The history is the previous frame's mix, which is what `Cut::Mix` means,
-    /// so the comparison is run on the *second* frame: the chain reads what it
-    /// retained from the first, and the hand-written pass is handed the same
-    /// frame from a copy of it.
+    /// Verifies that the feedback KIR procedure matches the reference hand-written feedback pass bit-for-bit.
     #[test]
     fn the_shipped_feedback_is_the_hand_written_pass_bit_for_bit() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -132,24 +118,7 @@ mod gpu {
         );
     }
 
-    /// **`examples/bloom.kir` is not the pass it replaces, and this is where
-    /// the difference is measured.**
-    ///
-    /// The hand-written bloom is two passes with an intermediate target — a
-    /// bright-and-blur-x, then a blur-y-and-add that needs **both** that buffer
-    /// and the frame it was taken from. A chain slot's output replaces the
-    /// frame, so a second slot could not name the earlier value: letting it is
-    /// a graph and the chain is a list. So the shipped procedure is one 9x9
-    /// kernel where the pair was two 9-tap passes — 81 fetches against 19 — at
-    /// the same radius, the same weights and the same knee (ADR-0340's
-    /// *Bloom as two chain slots*).
-    ///
-    /// **What differs is the filtering and not the arithmetic.** The pair's
-    /// second half samples an already-blurred buffer with a bilinear tap; the
-    /// single pass taps the frame itself at eighty-one offsets. So this asserts
-    /// a *tolerance* and prints the number, rather than asserting an equality
-    /// that is not true — and the tolerance is relative to the light the frame
-    /// holds, because these are unbounded HDR values.
+    /// Verifies that the single-pass 9x9 bloom procedure approximates the reference two-pass bloom within a 2% peak tolerance.
     #[test]
     fn the_shipped_bloom_is_the_hand_written_pair_within_a_stated_tolerance() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -197,11 +166,7 @@ mod gpu {
             "bloom: one 9x9 pass against the separable pair at amount {AMOUNT} — \
              worst channel {worst:.4}, mean {mean:.6}, against a frame peaking at {peak:.3}"
         );
-        // **The same picture, and the tolerance says how nearly.** 2% of the
-        // frame's peak: enough to admit a bilinear tap's difference and far
-        // too tight to admit a different radius, a different knee or a
-        // different normalisation, each of which moves the blurred light by
-        // tens of percent.
+        // Within 2% peak tolerance to account for single-pass 9x9 vs separable bilinear filtering.
         assert!(
             worst < 0.02 * peak,
             "the shipped bloom differs from the pair it replaces by {worst} \
