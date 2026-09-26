@@ -41,6 +41,7 @@ karakuri-pattern = { version = "0.1.0", path = "../karakuri-pattern" }
 egui = "0.36"
 egui-wgpu = "0.36"
 egui-winit = "0.36"
+portable-pty = "0.9.0"
 
 [dev-dependencies]
 # Only the round-trip test needs a concrete format; the arrangement itself is
