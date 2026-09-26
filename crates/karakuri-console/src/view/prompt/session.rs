@@ -19,280 +19,7 @@ pub enum SessionStatus {
     Failed(String),
 }
 
-/// ANSI terminal escape events for cursor manipulation, line clearing, and character output.
-#[derive(Debug, PartialEq, Eq)]
-pub enum AnsiEvent {
-    Print(char),
-    Newline,
-    CarriageReturn,
-    Backspace,
-    Tab,
-    ClearLine(u8),
-    ClearDisplay(u8),
-    CursorUp(usize),
-    CursorDown(usize),
-    CursorForward(usize),
-    CursorBack(usize),
-    CursorCol(usize),
-    CursorPos(usize, usize),
-}
-
-#[derive(Default, PartialEq, Eq)]
-enum AnsiState {
-    #[default]
-    Normal,
-    Escape,
-    Csi,
-    Osc,
-    Charset,
-}
-
-/// Streaming parser for ANSI escape sequences converting characters into terminal events.
-#[derive(Default)]
-struct AnsiParser {
-    state: AnsiState,
-    csi_params: String,
-}
-
-impl AnsiParser {
-    fn parse_char(&mut self, c: char) -> Option<AnsiEvent> {
-        match self.state {
-            AnsiState::Normal => {
-                if c == '\x1b' {
-                    self.state = AnsiState::Escape;
-                    None
-                } else if c == '\r' {
-                    Some(AnsiEvent::CarriageReturn)
-                } else if c == '\n' {
-                    Some(AnsiEvent::Newline)
-                } else if c == '\x08' {
-                    Some(AnsiEvent::Backspace)
-                } else if c == '\t' {
-                    Some(AnsiEvent::Tab)
-                } else if c.is_control() {
-                    None
-                } else {
-                    Some(AnsiEvent::Print(c))
-                }
-            }
-            AnsiState::Escape => match c {
-                '[' => {
-                    self.state = AnsiState::Csi;
-                    self.csi_params.clear();
-                    None
-                }
-                ']' => {
-                    self.state = AnsiState::Osc;
-                    None
-                }
-                '(' | ')' | '*' | '+' => {
-                    self.state = AnsiState::Charset;
-                    None
-                }
-                _ => {
-                    self.state = AnsiState::Normal;
-                    None
-                }
-            },
-            AnsiState::Csi => {
-                if c.is_ascii_digit() || c == ';' || c == '?' || c == '<' || c == '>' {
-                    self.csi_params.push(c);
-                    None
-                } else if ('@'..='~').contains(&c) {
-                    self.state = AnsiState::Normal;
-                    match c {
-                        'K' => {
-                            let n: u8 = self.csi_params.parse().unwrap_or(0);
-                            Some(AnsiEvent::ClearLine(n))
-                        }
-                        'J' => {
-                            let n: u8 = self.csi_params.parse().unwrap_or(0);
-                            Some(AnsiEvent::ClearDisplay(n))
-                        }
-                        'A' => {
-                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
-                            Some(AnsiEvent::CursorUp(n))
-                        }
-                        'B' => {
-                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
-                            Some(AnsiEvent::CursorDown(n))
-                        }
-                        'C' => {
-                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
-                            Some(AnsiEvent::CursorForward(n))
-                        }
-                        'D' => {
-                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
-                            Some(AnsiEvent::CursorBack(n))
-                        }
-                        'G' => {
-                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
-                            Some(AnsiEvent::CursorCol(n))
-                        }
-                        'H' | 'f' => {
-                            let mut parts = self.csi_params.split(';');
-                            let r: usize = parts
-                                .next()
-                                .and_then(|s| s.parse().ok())
-                                .unwrap_or(1)
-                                .max(1);
-                            let col: usize = parts
-                                .next()
-                                .and_then(|s| s.parse().ok())
-                                .unwrap_or(1)
-                                .max(1);
-                            Some(AnsiEvent::CursorPos(r, col))
-                        }
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }
-            AnsiState::Osc => {
-                if c == '\x07' || c == '\x1b' {
-                    self.state = AnsiState::Normal;
-                }
-                None
-            }
-            AnsiState::Charset => {
-                self.state = AnsiState::Normal;
-                None
-            }
-        }
-    }
-}
-
-/// Buffer holding terminal lines and active cursor position.
-#[derive(Debug, Default)]
-pub struct Scrollback {
-    /// Rendered lines of text.
-    pub lines: Vec<String>,
-    /// Active cursor coordinates (row, col) (0-indexed).
-    pub cursor: (usize, usize),
-}
-
-impl Scrollback {
-    /// Maximum number of scrollback lines retained in memory.
-    pub const MAX_LINES: usize = 2048;
-
-    /// Dispatches an ANSI terminal event to update buffer lines and cursor.
-    pub fn handle_event(&mut self, ev: AnsiEvent) {
-        if self.lines.is_empty() {
-            self.lines.push(String::new());
-        }
-        match ev {
-            AnsiEvent::Print(c) => {
-                while self.lines.len() <= self.cursor.0 {
-                    self.lines.push(String::new());
-                }
-                let line = &mut self.lines[self.cursor.0];
-                let char_count = line.chars().count();
-                if self.cursor.1 >= char_count {
-                    while line.chars().count() < self.cursor.1 {
-                        line.push(' ');
-                    }
-                    line.push(c);
-                } else {
-                    let mut new_line = String::with_capacity(line.len());
-                    for (i, existing_ch) in line.chars().enumerate() {
-                        if i == self.cursor.1 {
-                            new_line.push(c);
-                        } else {
-                            new_line.push(existing_ch);
-                        }
-                    }
-                    *line = new_line;
-                }
-                self.cursor.1 += 1;
-            }
-            AnsiEvent::Newline => {
-                self.cursor.0 += 1;
-                self.cursor.1 = 0;
-                while self.lines.len() <= self.cursor.0 {
-                    self.lines.push(String::new());
-                }
-                if self.lines.len() > Self::MAX_LINES {
-                    self.lines.remove(0);
-                    self.cursor.0 = self.cursor.0.saturating_sub(1);
-                }
-            }
-            AnsiEvent::CarriageReturn => {
-                self.cursor.1 = 0;
-            }
-            AnsiEvent::Backspace => {
-                self.cursor.1 = self.cursor.1.saturating_sub(1);
-            }
-            AnsiEvent::Tab => {
-                self.cursor.1 = (self.cursor.1 / 8 + 1) * 8;
-            }
-            AnsiEvent::ClearLine(mode) => {
-                if self.cursor.0 < self.lines.len() {
-                    match mode {
-                        2 => {
-                            self.lines[self.cursor.0].clear();
-                            self.cursor.1 = 0;
-                        }
-                        1 => {
-                            let line = &mut self.lines[self.cursor.0];
-                            let remaining: String = line.chars().skip(self.cursor.1).collect();
-                            *line = format!("{}{}", " ".repeat(self.cursor.1), remaining);
-                        }
-                        _ => {
-                            let line = &mut self.lines[self.cursor.0];
-                            let kept: String = line.chars().take(self.cursor.1).collect();
-                            *line = kept;
-                        }
-                    }
-                }
-            }
-            AnsiEvent::ClearDisplay(mode) => {
-                if mode == 2 || mode == 3 {
-                    self.lines.clear();
-                    self.lines.push(String::new());
-                    self.cursor = (0, 0);
-                }
-            }
-            AnsiEvent::CursorUp(n) => {
-                self.cursor.0 = self.cursor.0.saturating_sub(n);
-            }
-            AnsiEvent::CursorDown(n) => {
-                self.cursor.0 = (self.cursor.0 + n).min(self.lines.len().saturating_sub(1));
-            }
-            AnsiEvent::CursorForward(n) => {
-                self.cursor.1 += n;
-            }
-            AnsiEvent::CursorBack(n) => {
-                self.cursor.1 = self.cursor.1.saturating_sub(n);
-            }
-            AnsiEvent::CursorCol(n) => {
-                self.cursor.1 = n.saturating_sub(1);
-            }
-            AnsiEvent::CursorPos(r, col) => {
-                self.cursor.0 = r.saturating_sub(1).min(self.lines.len().saturating_sub(1));
-                self.cursor.1 = col.saturating_sub(1);
-            }
-        }
-    }
-
-    /// Pushes a single character into the scrollback buffer.
-    pub fn push_char(&mut self, ch: char) {
-        let mut parser = AnsiParser::default();
-        if let Some(ev) = parser.parse_char(ch) {
-            self.handle_event(ev);
-        }
-    }
-
-    /// Returns all completed lines plus any current in-progress line.
-    pub fn lines(&self) -> Vec<String> {
-        self.lines.clone()
-    }
-
-    /// Returns the active cursor coordinates (row, col).
-    pub fn cursor(&self) -> (usize, usize) {
-        self.cursor
-    }
-}
+use super::ansi::{Cell, Scrollback};
 
 /// Interactive terminal session running inside a native PTY.
 pub struct TerminalSession {
@@ -303,6 +30,7 @@ pub struct TerminalSession {
     /// Scrollback line buffer.
     pub scrollback: Arc<Mutex<Scrollback>>,
     writer: Arc<Mutex<Option<Box<dyn Write + Send>>>>,
+    master: Arc<Mutex<Option<Box<dyn portable_pty::MasterPty + Send>>>>,
     child: Arc<Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>>,
 }
 
@@ -321,6 +49,7 @@ impl TerminalSession {
         let status = Arc::new(Mutex::new(SessionStatus::Running));
         let scrollback = Arc::new(Mutex::new(Scrollback::default()));
         let writer = Arc::new(Mutex::new(None));
+        let master = Arc::new(Mutex::new(None));
         let child = Arc::new(Mutex::new(None));
 
         let pty_system = native_pty_system();
@@ -334,7 +63,7 @@ impl TerminalSession {
             Err(e) => {
                 let err_msg = format!("[PTY allocation failed: {e}]");
                 if let Ok(mut sb) = scrollback.lock() {
-                    sb.lines.push(err_msg.clone());
+                    sb.push_str(&err_msg);
                 }
                 if let Ok(mut st) = status.lock() {
                     *st = SessionStatus::Failed(err_msg);
@@ -344,6 +73,7 @@ impl TerminalSession {
                     status,
                     scrollback,
                     writer,
+                    master,
                     child,
                 };
             }
@@ -365,7 +95,7 @@ impl TerminalSession {
             Err(e) => {
                 let err_msg = format!("[Failed to start `{program}`: {e}]");
                 if let Ok(mut sb) = scrollback.lock() {
-                    sb.lines.push(err_msg.clone());
+                    sb.push_str(&err_msg);
                 }
                 if let Ok(mut st) = status.lock() {
                     *st = SessionStatus::Failed(err_msg);
@@ -375,6 +105,7 @@ impl TerminalSession {
                     status,
                     scrollback,
                     writer,
+                    master,
                     child,
                 };
             }
@@ -394,6 +125,7 @@ impl TerminalSession {
                     status,
                     scrollback,
                     writer,
+                    master,
                     child,
                 };
             }
@@ -403,6 +135,10 @@ impl TerminalSession {
             if let Ok(mut w_lock) = writer.lock() {
                 *w_lock = Some(w);
             }
+        }
+
+        if let Ok(mut m_lock) = master.lock() {
+            *m_lock = Some(pty_pair.master);
         }
 
         if let Ok(mut c_lock) = child.lock() {
@@ -420,8 +156,6 @@ impl TerminalSession {
             .spawn(move || {
                 let mut reader = reader;
                 let mut buf = [0u8; 1024];
-                let mut parser = AnsiParser::default();
-
                 while let Ok(n) = reader.read(&mut buf) {
                     if n == 0 {
                         break;
@@ -429,9 +163,7 @@ impl TerminalSession {
                     let chunk = String::from_utf8_lossy(&buf[..n]);
                     if let Ok(mut sb) = scrollback_clone.lock() {
                         for c in chunk.chars() {
-                            if let Some(event) = parser.parse_char(c) {
-                                sb.handle_event(event);
-                            }
+                            sb.push_char(c);
                         }
                     }
                 }
@@ -457,6 +189,7 @@ impl TerminalSession {
             status,
             scrollback,
             writer,
+            master,
             child,
         }
     }
@@ -576,6 +309,36 @@ impl TerminalSession {
             .lock()
             .map(|sb| sb.cursor())
             .unwrap_or((0, 0))
+    }
+
+    /// Returns a snapshot of all rendered character cell rows.
+    pub fn rows(&self) -> Vec<Vec<Cell>> {
+        self.scrollback
+            .lock()
+            .map(|sb| sb.rows.clone())
+            .unwrap_or_default()
+    }
+
+    /// Returns whether the terminal cursor is currently set to visible.
+    pub fn is_cursor_visible(&self) -> bool {
+        self.scrollback
+            .lock()
+            .map(|sb| sb.cursor_visible)
+            .unwrap_or(true)
+    }
+
+    /// Resizes the PTY terminal window dimensions.
+    pub fn resize(&self, rows: u16, cols: u16) {
+        if let Ok(mut m_lock) = self.master.lock() {
+            if let Some(ref mut m) = *m_lock {
+                let _ = m.resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                });
+            }
+        }
     }
 
     /// Returns the OS process ID if the child is still running.
