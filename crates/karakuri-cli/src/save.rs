@@ -47,33 +47,15 @@ pub(crate) fn session_head(
             capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
-            // **Which node fills each declared slot**, saved so the file
-            // rebuilds: a slot nothing binds is refused where the Set is built,
-            // so a Set file that dropped its edges would be one that no longer
-            // loads.
+            // Which node fills each declared slot.
             edges: &args.edges,
             camera: &camera,
-            // **The flags', on the terms every other value here is theirs.**
-            // This head is written before the first frame, from the material
-            // the run was started with — there is no Set to read a layering
-            // off yet — and a session whose slot 0 composites has to say so or
-            // the `select` records it goes on to write land on a replay with
-            // no fold to select in. The other branch above needs none of this:
-            // a run started from `--load-set` copies that file's lines
-            // verbatim, `merge` among them.
+            // Evaluates layering from flags and defaults for initial material record.
             layering: layering_for(args, 0, recorded_layering(args, 0)),
-            // **Nothing yet, and it is not an omission.** A selection is made
-            // with `r` during a performance, so at the instant a head is
-            // written there is none — and one made later is a `select` record
-            // in the stream, which replays where it happened rather than
-            // before the first frame.
             live: None,
             seeds: &saving_seeds(args, l1s),
         },
     ) {
-        // Fatal, on the same terms the recorder itself is: `--record-session`
-        // was asked for, and a run that continued would be a performance
-        // nobody can replay with nothing saying so.
         eprintln!("karakuri-cli: writing the session's material: {e}");
         std::process::exit(2);
     }
@@ -86,18 +68,7 @@ pub(crate) fn session_head(
     }
 }
 
-/// What the deck holds at the instant a recording opens, read off the deck.
-///
-/// **Read rather than restated from the flags.** `--gain`, `--blend` and the
-/// rest reach the deck before this runs, and the deck is where a value ends up
-/// whatever put it there — so asking it is one derivation of *what is in the
-/// mix* where asking the arguments again would be a second one.
-///
-/// The look and the chain are the two the deck does not hold. The look is the
-/// present pass's and is the flag's until a record moves it; the chain is empty
-/// until an operator puts something in it, and this runs before the first frame,
-/// so an empty chain is not a default standing in for a reading — it is the
-/// reading.
+/// Captures active deck configuration and residency state at the start of a session.
 pub(crate) fn held_deck(
     args: &Args,
     placed: &[Vec<Placed>],
@@ -113,11 +84,6 @@ pub(crate) fn held_deck(
             .map(|slot| {
                 let at = EngineSlot(slot as u8);
                 session::SlotHeld {
-                    // **The addresses the run compiled with**, which are the
-                    // ones `seed_store_for_replay` puts in the store. A slot
-                    // with nothing placed names no node and replays as the
-                    // Set it was built with — which, for this program, cannot
-                    // happen: every slot of this deck is built from a `--set`.
                     nodes: placed
                         .get(slot)
                         .map(|nodes| {
@@ -136,9 +102,7 @@ pub(crate) fn held_deck(
                     gain: deck.gain(at),
                     opacity: deck.opacity(at),
                     blend: deck.blend(at),
-                    // **The request and not the grant**, which is
-                    // `Record::Residency`'s own rule: the governor re-derives
-                    // the effective level on the machine that replays.
+                    // Records requested residency; effective level is re-governed on replay.
                     residency: deck.requested_residency(at),
                     policy: karakuri_operation::SlotPolicy::Auto,
                     mask: deck.mask(at),
@@ -165,34 +129,7 @@ pub(crate) fn seed_store_for_replay(store: &karakuri_store::store::Store, placed
     }
 }
 
-/// Where one slot's sources come from at save time: the hashes of what it is
-/// running, and nothing else.
-///
-/// A slot is running a version whose bytes need not be on disk under any name.
-/// An edit that fails to compile stays on disk untouched, and a run without
-/// `--watch` never picks a file up at all — so the path and the picture can
-/// disagree in ordinary ways, and in each of them a save that re-read the path
-/// would write down a version nobody had seen. The hash is what still points at
-/// what is on screen, which is why it is the *only* thing this reads and why
-/// every slot has one from launch — see [`Running::at_launch`]. The bytes
-/// behind a launch hash travel with it, because on a run that has saved nothing
-/// they exist nowhere else; see [`SavedNode::source`].
-///
-/// `None` is a slot with no address to name: one filled straight from a Set
-/// file with nothing to watch it, or one that has just taken a build whose
-/// sources could not be stored and said so at the time. It saves nothing rather
-/// than guessing, and `Live::save_set` says which it was.
-///
-/// The operator's names are zipped on by position. Both lists are in the order
-/// the files were spelled — `sort_slot` keeps that deliberately and the watcher
-/// zips its hashes onto the same list — so entry `n` of one is entry `n` of the
-/// other. A name cannot come from the hashes: it belongs to the *use* rather
-/// than to the procedure, so nothing a `procedure` record carries could hold
-/// it.
-///
-/// A free function rather than a method, so that the choice — which is the
-/// whole of what a live save gets right or wrong about what is on screen — can
-/// be checked without a window and a GPU.
+/// Resolves active procedure hashes and sources for a slot to be saved.
 pub(crate) fn live_sources(playing: Option<&Nodes>, startup: &[Placed]) -> Sources {
     Sources(playing.map_or_else(Vec::new, |nodes| {
         nodes
@@ -224,9 +161,7 @@ pub(crate) fn live_sources(playing: Option<&Nodes>, startup: &[Placed]) -> Sourc
     }))
 }
 
-/// One slot's nodes as the records they will be written as, with every source
-/// put in the store first — which is what makes the hashes the file references
-/// resolve on the way back in.
+/// Prepares node records for saving and writes corresponding source artifacts to store.
 pub(crate) fn saving_nodes(
     store: &karakuri_store::store::Store,
     placed: &[Placed],
@@ -244,29 +179,12 @@ pub(crate) fn saving_capacities(args: &Args, l1s: &[karakuri_ir::typed::Checked]
     l1s.iter().map(|l1| capacity_for(args, l1)).collect()
 }
 
-/// What a saved Set says each of its geometries is salted with: what the run it
-/// describes will be salted with, one number per geometry.
-///
-/// The same function the run itself asks, for the reason [`saving_capacities`]
-/// exists — a writer with its own copy of the rule records numbers the run was
-/// not using, and the file then describes a picture nobody has seen. Slot 0's,
-/// because a Set file describes one Set and slot 0 is the one that gets saved.
-///
-/// Derived today and recorded from here on. Nothing on the command line assigns
-/// a salt, so these are the ordinals — and writing them down is exactly what
-/// stops them being ordinals: `docs/ir-spec.md` says *where it came from stops
-/// mattering once it is recorded*, and from this line onward the file is where
-/// the value lives. Reordering the paths in `--set` moves the colours of a Set
-/// that was never saved and no longer moves the colours of one that was.
+/// Computes salt seeds for geometries in slot 0 to be recorded in the Set file.
 pub(crate) fn saving_seeds(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
     salts_for(seed_for(0), recorded_salts(args, 0), l1s.len())
 }
 
-/// Write the material as a Set file, and say where it went.
-///
-/// The first `--set` pair only. A Set file describes one Set, and a deck of
-/// four is a session's arrangement rather than a Set's — that is the same line
-/// `Record::is_set_state` draws, seen from the writing side.
+/// Saves slot 0 as a Set file into the store.
 pub(crate) fn save_set(
     args: &Args,
     placed: &[Vec<Placed>],
@@ -285,12 +203,6 @@ pub(crate) fn save_set(
         );
     }
     let camera = karakuri_engine::camera::Orbit::default();
-    // **Every node, on the layer its own `kind` put it on**, and its source in
-    // the store before the file that references it. The sorter already answered
-    // the layer question for the engine — see [`sort_slot`] — so an L2, an L3
-    // or a field is saved as what it is rather than refused for want of a slot
-    // to write it in; the `put` is here rather than in the writer because this
-    // is the caller holding paths that are still true. See `setfile::Node`.
     let nodes = match saving_nodes(&store, nodes) {
         Ok(nodes) => nodes,
         Err(e) => {
@@ -300,7 +212,6 @@ pub(crate) fn save_set(
     };
     match setfile::save(
         &store,
-        // `--save-set ID`, which is a flag an operator typed.
         Asked::Operator,
         id,
         setfile::Saving {
@@ -308,17 +219,9 @@ pub(crate) fn save_set(
             capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
-            // **Which node fills each declared slot**, saved so the file
-            // rebuilds: a slot nothing binds is refused where the Set is built,
-            // so a Set file that dropped its edges would be one that no longer
-            // loads.
             edges: &args.edges,
             camera: &camera,
-            // Evaluated via `layering_for` from flags and defaults for one-shot save.
             layering: layering_for(args, 0, recorded_layering(args, 0)),
-            // **No selection, because nothing has selected.** `r` is a key
-            // pressed at a running frame and there is no flag for it, so a
-            // one-shot save has none to record — see `recorded_live`.
             live: None,
             seeds: &saving_seeds(args, l1s),
         },
@@ -334,12 +237,7 @@ pub(crate) fn save_set(
     }
 }
 
-/// Read a Set file and fold what it says back into the arguments, so everything
-/// downstream is driven the way the flags drive it.
-///
-/// Every note is printed. A Set file this build cannot honour in full still
-/// loads, and the alternative — succeeding quietly — is the material being
-/// subtly not what was saved with nothing anywhere saying so.
+/// Loads a Set file and merges its definitions with CLI arguments.
 pub(crate) fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     let store = open_store(args);
     let loaded = match setfile::load(&store, id) {
@@ -352,36 +250,18 @@ pub(crate) fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     for note in &loaded.notes {
         eprintln!("  {note}");
     }
-    // **`capacity_given` too, or the number is read and then discarded.** It
-    // is what makes `capacity_for` stop falling back to the procedure's own
-    // declared default — and a Set file that recorded a capacity is somebody
-    // having said so as much as `--capacity` is. Without it, `--capacity 100000
-    // --save-set x` followed by `--load-set x` ran at whatever the `.kir`
-    // declared, which falsifies the one promise a Set file makes.
-    // The first geometry's, because that is what one number can hold; the rest
-    // travel per geometry on `from_set` and are applied where the sources are
-    // in hand. This one is still needed as the flag: it is what a rebuilt slot
-    // is given — see `Watch::new` — and what the status line prints.
+    // Propagate recorded capacity to CLI args.
     if let Some(capacity) = loaded.capacities.first().copied().flatten() {
         args.capacity = capacity;
         args.capacity_given = true;
     }
-    // Appended rather than replacing: a `--param` or `--bind` given alongside
-    // `--load-set` is the operator overriding the file, and the later value is
-    // what `build` applies.
     let mut overrides = loaded.params.clone();
     overrides.append(&mut args.overrides);
     args.overrides = overrides;
     let mut bindings = loaded.bindings.clone();
     bindings.append(&mut args.bindings);
     args.bindings = bindings;
-    // **The file's edges, then the flags'**, on the terms the params above
-    // follow: an `--edge` given beside `--load-set` is the operator rebinding a
-    // slot the file bound. It *replaces* rather than piling up, which is where
-    // this differs from a `--param` — two edges on one slot are refused where
-    // the Set is built, so appending both would turn an override into a
-    // refusal. Only the slot the flag names is dropped; the file's other edges
-    // stand.
+    // Retain file edges not explicitly overridden on the command line.
     let mut edges = loaded.edges.clone();
     edges.retain(|e| {
         !args
@@ -394,9 +274,6 @@ pub(crate) fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     args.from_set = Some(FromSet {
         salts: loaded.salts.clone(),
         camera: loaded.camera,
-        // **Carried rather than folded into `--merge`**, and read back through
-        // [`layering_for`] — which is where the flag and the file meet, once,
-        // for everything that builds this slot or writes it out again.
         layering: loaded.layering,
         live: loaded.live,
         capacities: loaded.capacities.clone(),
@@ -404,14 +281,7 @@ pub(crate) fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     loaded
 }
 
-/// Every save still in flight, collected until they are all in or `deadline`
-/// passes.
-///
-/// A free function over the channel rather than a loop inside
-/// [`Live::awaited_saves`], so that the bound — which is the whole of what
-/// makes waiting at the end of a run safe rather than a way to hang on a bad
-/// disk — can be checked without a window and a GPU. That is the same reason
-/// [`live_sources`] is a free function.
+/// Drains completed background saves from the receiver until all arrive or deadline passes.
 pub(crate) fn drained_saves(
     rx: &std::sync::mpsc::Receiver<Saved>,
     in_flight: usize,
@@ -424,41 +294,24 @@ pub(crate) fn drained_saves(
         };
         match rx.recv_timeout(left) {
             Ok(saved) => landed.push(saved),
-            // Timed out, or every sender is gone and nothing more can arrive.
-            // Either way there is nothing left to wait for.
             Err(_) => break,
         }
     }
     landed
 }
 
-/// One live save, from the frame that asked for it to the file on disk.
+/// Background task payload for writing a Set file to the store.
 pub(crate) struct Save {
     pub(crate) slot: usize,
-    /// Whose act this save is, which decides the directory it lands in and is
-    /// decided at the call site — see [`Live::save_set`] and
-    /// [`karakuri_environment::Asked`].
     pub(crate) asked: Asked,
     pub(crate) id: String,
-    /// The store root, not an open store: opening it creates directories, which is
-    /// I/O, which belongs on the thread below rather than on a frame.
     pub(crate) root: PathBuf,
     pub(crate) sources: Sources,
-    /// What the file will say, with `nodes` still empty. The nodes are the one part
-    /// of a Set file that needs a store — a hash per source — so they are filled in
-    /// where one is opened and never here.
-    ///
-    /// A half-built value crossing a thread boundary is worth a sentence, because
-    /// the alternative was considered and is worse: a second struct holding "the
-    /// other six fields" is a type whose whole content is which field it is
-    /// missing, and it would have to be kept in step with `setfile::Owned` by hand
-    /// forever.
     pub(crate) values: setfile::Owned,
 }
 
 impl Save {
-    /// Write it. Everything here is off the render thread: opening a store creates
-    /// directories, and the Set file itself is written and renamed into place.
+    /// Writes the Set file and referenced procedure source artifacts off-thread.
     pub(crate) fn run(self) -> Result<(), String> {
         let Save {
             asked,
@@ -470,44 +323,21 @@ impl Save {
         } = self;
         let store = karakuri_store::store::Store::open(&root)
             .map_err(|e| format!("store `{}`: {e}", root.display()))?;
-        // **Before the file that references them**, which is what
-        // [`setfile::Node`] carrying a hash asks of every caller: the writer
-        // cannot check that a hash resolves without reading the store back, so
-        // putting them is the caller's promise. See [`Sources::into_nodes`].
         values.nodes = sources.into_nodes(&store)?;
         setfile::save(&store, asked, &id, values.saving())
     }
 }
 
-/// What a live save came back with, at the frame it arrives.
+/// Completion report of an asynchronous save operation.
 pub(crate) struct Saved {
     pub(crate) slot: usize,
-    /// Carried through so the sentence at the end names the right directory: the
-    /// library's line tells an operator how to load it back, and the sandbox's
-    /// cannot, because nothing loads one.
     pub(crate) asked: Asked,
     pub(crate) id: String,
-    /// `Ok` and the file is on disk under `id`. A failure is printed and no record
-    /// is written: a stream saying a save happened when the disk refused is exactly
-    /// the shape of lie this codebase spends its comments refusing.
     pub(crate) outcome: Result<(), String>,
-    /// Where a client that asked for this save is waiting, and `None` when a hand
-    /// pressed `k`.
-    ///
-    /// It rides the save rather than being looked up when the outcome lands. A map
-    /// from an id to whoever asked would be a second place that knows which save is
-    /// which, and the outcome already carries everything needed to find its way
-    /// home.
     pub(crate) reply: Option<mcp::Reply>,
 }
 
-/// A save that will not happen, to the terminal and to whoever asked if it was
-/// not a hand.
-///
-/// One sentence and one home. Every refusal here reaches two audiences now, and
-/// the way that goes wrong is a copy of the words for the second one — which is
-/// free to be right on the day it is written and wrong at the next correction.
-/// The wording of the refusal below has already needed one.
+/// Emits a refusal message to stderr and resolves any pending client reply.
 pub(crate) fn refused(reply: Option<mcp::Reply>, said: String) {
     eprintln!("{said}");
     if let Some(reply) = reply {
