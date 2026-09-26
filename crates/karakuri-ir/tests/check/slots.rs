@@ -34,8 +34,7 @@ fn a_field_checks_clean_and_carries_no_geometry() {
     assert!(checked.block(BlockKind::Field).is_some());
 }
 
-/// **`point` is a field's only input, and no other block has one.** Every other
-/// block is handed an element or a fragment; this one is handed a position.
+/// `point` ambient is exclusive to field blocks.
 #[test]
 fn point_is_readable_in_a_field_block_and_nowhere_else() {
     check_ok(BLOB);
@@ -82,9 +81,7 @@ proc silent {
     );
 }
 
-/// **A field has no element**, so nothing an element carries is readable in
-/// one. The diagnostic says why rather than telling the author to declare it,
-/// because declaring it is not available and would not help.
+/// Field procedures reject element attribute access.
 #[test]
 fn attributes_are_refused_in_a_field_block() {
     let errs = check_err(
@@ -473,9 +470,7 @@ fn a_slot_name_cannot_shadow_or_be_shadowed() {
     );
 }
 
-/// **`other` is an ordinary name again.** It was reserved everywhere because it
-/// was the one spelling a paired read could have; a slot is named by the
-/// procedure now, so reserving a word would be reserving one nothing means.
+/// Unreserved identifier `other` can be used as a standard variable name.
 #[test]
 fn other_is_no_longer_a_reserved_name() {
     let checked = check_ok(

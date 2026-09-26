@@ -1,5 +1,4 @@
-//! Naming a region, and what a name is worth: it addresses **one** node, of
-//! either kind.
+//! Region naming tests: names address exactly one node of either kind.
 
 mod common;
 

@@ -99,9 +99,7 @@ fn a_pair_assembles_into_sixteen_thousand_positions_and_scales_onto_the_range() 
             "the pair {value} did not assemble onto the range"
         );
     }
-    // **Two adjacent pairs are a 128th of a 7-bit step apart**, which is
-    // the number this line exists for: a 7-bit fader moves a gain by
-    // 1/127 and this one by 1/16383.
+    // Two adjacent 14-bit pairs differ by 1/16383 rather than 1/127.
     let step = |value: u16| match m.operation_wide(pair(1, 33, value)[1], value) {
         Some(Operation::SetGain { gain, .. }) => gain,
         other => panic!("{other:?}"),
@@ -137,8 +135,7 @@ fn an_msb_alone_does_not_leave_the_fader_between_two_values() {
         m.operation(cc(1, 127)),
         Some(Operation::SetGain { deck: 0, gain: 1.0 })
     );
-    // **And a lone LSB moves nothing**: there is nothing to refine until
-    // an MSB has been seen, and a caller holding no MSB has no pair.
+    // A lone LSB without preceding MSB emits no operation.
     assert_eq!(m.operation(cc(33, 100)), None);
     assert_eq!(m.parameter(cc(33, 100)), None);
 }
@@ -196,8 +193,7 @@ fn an_echo_says_what_to_read_and_the_wire_shows_it() {
     gain.wire(gain.position(Shown::At(1.0)), &mut wire);
     assert_eq!(wire, vec![[0xb0, 1, 127]]);
 
-    // A pair: two messages, **MSB first**, and the two halves of the
-    // number the position is.
+    // 14-bit pair: two messages emitted MSB first.
     wire.clear();
     let opacity = of(Control::Opacity { deck: 1 });
     assert_eq!(opacity.position(Shown::At(1.0)), 16383);
@@ -275,8 +271,7 @@ fn a_param_line_names_a_deck_and_a_position_and_is_not_an_operation_here() {
     assert_eq!(asked.deck, 0);
     assert_eq!(asked.position, 3);
     assert_eq!(asked.range, None, "no range on the line is the Set's own");
-    // **The declared range is the caller's**, and both ends are exact on
-    // it for the reason every other fader's are.
+    // Declared range preserves exact endpoints.
     assert_eq!(asked.value([0.0, 8.0]), 8.0);
     assert_eq!(
         m.parameter(cc(30, 0)).expect("bottom").value([0.0, 8.0]),

@@ -324,10 +324,7 @@ impl Parser {
                     }
                     "capacity" => capacity = Some(self.parse_capacity()),
                     "amplify" => amplify = Some(self.parse_amplify()),
-                    // **A bare word and nothing after it**, so there is no
-                    // operand to parse and no way for one to be wrong. A second
-                    // `retains` overwrites the first with the same value, which
-                    // is what a repeated declaration of a flag is.
+                    // `retains` flag in header takes no arguments.
                     "retains" => {
                         retains = Some(RetainsDecl {
                             span: self.advance().span,

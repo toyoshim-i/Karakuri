@@ -42,9 +42,6 @@ pub mod binding {
     /// `array<u32>`, one flag per element. Not part of `Element` — see the
     /// module doc for why it is its own buffer.
     pub const ALIVE: u32 = 1;
-    /// [`group::PREV`](super::group::PREV): the **far** geometry, for an L2
-    /// that declares `uses <name> : Geometry` — `array<ElementFar>`, read-only.
-    ///
     /// Binding index for far geometry input storage buffer in an L2 node.
     pub const FAR: u32 = 2;
 
@@ -278,10 +275,7 @@ impl UniformLayoutBuilder {
         self.push(name, wgsl_name, wgsl_ty)
     }
 
-    /// Adds a field for a **field's** declared `param` — see
-    /// [`mangle_field_param`]. The semantic `name` is prefixed too, because the
-    /// engine looks a uniform field up by that name and a Set may hold a field
-    /// and a renderer that declare the same one.
+    /// Appends a mangled uniform field for a field's declared `param` (see [`mangle_field_param`]).
     pub fn field_param_field(
         &mut self,
         slot: &str,

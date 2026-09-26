@@ -407,8 +407,7 @@ fn a_kset_resolves_to_the_kbset_it_names_with_its_parts_in_the_store() {
         "the L4 part kept the name this Set gave it: {:?}",
         records[2]
     );
-    // **And everything else is passed through unchanged**, which is half of
-    // what makes the two forms one format.
+    // Unmodified records pass through unchanged.
     assert!(
         matches!(records[0], Record::Set { id, v: 1 } if id == "authored"),
         "{:?}",

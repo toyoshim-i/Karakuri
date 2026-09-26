@@ -14,10 +14,8 @@ pub enum Message {
         controller: u8,
         value: u8,
     },
-    /// A pad or a key going down. **A note-on at velocity 0 is a note-off**,
-    /// and is reported as one: the MIDI spec allows either spelling and
-    /// hardware disagrees about which it sends, so a reader that took velocity
-    /// 0 for a press would see every release as a second press.
+    /// A pad or a key going down. Note-on at velocity 0 is treated as note-off
+    /// per MIDI specification conventions.
     NoteOn { channel: u8, note: u8, velocity: u8 },
     /// A pad or a key coming up. Carried rather than dropped because a
     /// momentary control — hold to preview, release to go back — is a thing a

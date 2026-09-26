@@ -61,10 +61,7 @@ fn every_shipped_renderer_is_bounded_or_named_as_refused() {
     /// A renderer with no `vertex` block, which emits no rate at all.
     const FULLSCREEN: &[&str] = &["field_lens", "field_march", "glow_march"];
 
-    /// **What is refused, and why**, which is the half of this that tells a
-    /// maintainer whether the analysis is worth extending. Two of these are
-    /// attributes with no declaration to read; two are rates that genuinely
-    /// reach zero, where no height makes the primitive a pixel.
+    /// Point rate analysis refusal classifications.
     const REFUSED: &[(&str, f32)] = &[
         // `dot_scale * size` — `size` is an attribute.
         ("hard_dots", f32::NEG_INFINITY),
@@ -130,8 +127,7 @@ fn every_shipped_renderer_is_bounded_or_named_as_refused() {
         seen.push(*name);
     }
 
-    // **Nothing unaccounted for.** A renderer added to `examples/` and not to
-    // one of the three lists above is a coverage figure nobody re-took.
+    // Verifies all example renderers are catalogued in rate test coverage.
     let mut missing: Vec<&str> = renderers
         .keys()
         .map(String::as_str)
@@ -144,9 +140,7 @@ fn every_shipped_renderer_is_bounded_or_named_as_refused() {
     );
 }
 
-/// **The coverage figure, stated as a figure**, because *what fraction does it
-/// answer for* is the question this analysis was built to answer and a reader
-/// should not have to count the list above.
+/// Point rate estimation coverage metric across example renderers.
 #[test]
 fn nine_of_the_thirteen_renderers_that_draw_a_primitive_state_a_floor() {
     let renderers = renderers();

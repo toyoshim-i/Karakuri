@@ -456,9 +456,7 @@ proc guessed {
 // kind L5 — the grammar, which is two words and a block
 // ---------------------------------------------------------------------------
 
-/// **The whole of what the sixth kind adds to the grammar**: `L5` as a `kind`
-/// value, `retains` as a bare header word, `frame` as a block, and `Texture` as
-/// a `uses` type. Nothing else in the language moves.
+/// L5 grammar additions: `L5` kind, `retains` flag, `frame` block, and `Texture` slot type.
 #[test]
 fn an_l5_header_parses_to_its_four_new_words() {
     let src = r#"

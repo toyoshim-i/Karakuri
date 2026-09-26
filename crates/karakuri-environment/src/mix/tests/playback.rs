@@ -99,9 +99,7 @@ fn an_attachment_decodes_into_the_binding_a_deck_takes_and_a_take_back_into_none
         "the binding is not the attachment the operation named"
     );
 
-    // **The take-back is the same record with nothing in it**, and what it
-    // has to carry is the address — a decoder that lost the index would
-    // take the layer's binding away instead of this node's.
+    // Unbinding retains specific node address targeting.
     let record = from_operation(karakuri_operation::Operation::TakeParamBack {
         deck: 2,
         param: karakuri_operation::BindAt {
@@ -122,10 +120,7 @@ fn an_attachment_decodes_into_the_binding_a_deck_takes_and_a_take_back_into_none
         "a take-back did not come back as an attachment that is absent"
     );
 
-    // **One decoder, so the `bind` diagnostics are reached.** A tempo is
-    // not a `[0, 1]` signal, and a binding to it would sit at the top of
-    // its range for the whole run — which is the same sentence a Set file
-    // and a `--bind` meet, in `setfile::binding_from_record`.
+    // Binding diagnostics reject non-normalized signals (see `setfile::binding_from_record`).
     let pinned = Record::Source {
         slot: DeckSlot(0),
         layer: karakuri_store::record::Layer::L1,
@@ -235,10 +230,7 @@ fn a_record_this_build_cannot_obey_says_so_rather_than_vanishing() {
     assert!(message.contains("filmic"), "{message}");
     assert!(message.contains("aces"), "{message}");
 
-    // **And a feedback cut this build has not got**, refused on the tone
-    // map operator's terms and for the sharper reason: a default would not
-    // report a wrong level, it would silently play the other picture — one
-    // echo where the session had a trail.
+    // Unsupported feedback cut specifications are explicitly rejected.
     let unknown_cut = Record::MasterChain(karakuri_store::record::Chain {
         slots: vec![karakuri_store::record::ChainSlot {
             procedure: "sha256:feedback".into(),

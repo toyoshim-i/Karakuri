@@ -74,8 +74,7 @@ fn blanked(text: &str) -> String {
     String::from_utf8(out).expect("blanking preserves UTF-8 because it only removes ASCII runs")
 }
 
-/// **Neither host names a function that compiles a chain or allocates its
-/// targets.**
+/// Verifies render loop contains no chain compilation or target allocations.
 #[test]
 fn the_render_path_compiles_no_chain() {
     for at in RENDER_PATH {
@@ -91,7 +90,7 @@ fn the_render_path_compiles_no_chain() {
     }
 }
 
-/// **Both hosts ask through `apply_chain` and install through a `ChainSwap`.**
+/// Chain installation occurs via `apply_chain` and `ChainSwap` transfer.
 ///
 /// The other half of the test above: a file that mentions neither would pass it
 /// by having no chain at all, which is not what either of these is.

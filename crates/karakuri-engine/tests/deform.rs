@@ -188,7 +188,7 @@ proc dots {
 
     // ---------------------------------------------------------------------------
 
-    /// **A deformation reaches what is drawn.** It runs between the simulation and
+    /// Deformation passes modify output geometry prior to drawing.
     /// the draw and touches no buffer anything else reads, so the picture is the
     /// only place its work exists.
     #[test]
@@ -197,7 +197,7 @@ proc dots {
         let plain = centre_y(&gpu, &mut build(&gpu, &[]));
         let moved = centre_y(&gpu, &mut build(&gpu, &[&shift("push", 0.5)]));
 
-        // **Upward, so the row number goes down**: `+y` in the world is toward the
+        // Upward displacement corresponds to decreasing row index in screen space.
         // top of the frame. Asserted as a distance rather than a direction, since
         // which way a screen axis runs is a fact about the projection and not about
         // the layer under test.
@@ -225,7 +225,7 @@ proc dots {
         );
     }
 
-    /// **They chain**, and the second sees the first one's work rather than the
+    /// Sequential deformation stages compose in chain declaration order.
     /// simulation's.
     #[test]
     fn two_deformations_compose_in_chain_order() {
@@ -247,7 +247,7 @@ proc dots {
         );
     }
 
-    /// **A deformation's params are its own**, addressed like any other node's. The
+    /// Deformation parameters are addressed per node instance.
     /// two nodes here declare one `amount` and hold two values.
     #[test]
     fn each_deformation_holds_its_own_parameters() {
@@ -281,7 +281,7 @@ proc dots {
         );
     }
 
-    /// **An L2 may widen the element**, and a renderer downstream can consume what
+    /// L2 deform stages may widen element layouts with additional attributes.
     /// it added — which the same renderer over the bare L1 cannot. The composition
     /// check therefore has to walk the chain rather than compare against the L1.
     #[test]
@@ -564,7 +564,7 @@ proc paint {{
          reach an attribute other than `position`"
         );
 
-        // **Both, and they multiply.** `weight` replacing the mask would give the
+        // Mask strength and parameter weight multiply together.
         // full 0.5 here rather than a quarter, which is the mutation that survived.
         let both = brightness(&paint("param weight : float [0.0, 1.0] = 0.5", "0.5"));
         assert!(

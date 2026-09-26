@@ -398,8 +398,7 @@ fn a_save_in_flight_at_the_end_of_a_run_is_waited_for() {
         "the run quit before the save it was told to wait for reported back"
     );
 
-    // **The bound, held against a save that never arrives.** The sender is
-    // still alive, so there is nothing but the deadline to end this.
+    // Bounded timeout waiting on an absent save notification.
     let (_alive, rx) = std::sync::mpsc::channel::<Saved>();
     let started = Instant::now();
     let landed = drained_saves(&rx, 1, started + Duration::from_millis(80));

@@ -46,10 +46,7 @@ proc plain {
     assert_eq!(checked.amplify, None);
 }
 
-/// **`amplify` is L2's, and each refusal names what the layer does instead.**
-/// An L1's count is `capacity`, which a Set turns; an L3 makes a viewpoint; an
-/// L4 draws what reaches it. Amplification is a multiplier on an input, which
-/// is a thing only a stage with an input can be.
+/// `amplify` declaration is exclusive to L2 deformation stages.
 #[test]
 fn amplify_is_refused_outside_an_l2() {
     let l1 = r#"
@@ -105,9 +102,7 @@ proc dots {
     }
 }
 
-/// **Below two, and the two cases are refused for different reasons.** Zero
-/// would make the layer decide liveness, which belongs entirely to the L1's
-/// compaction; one would allocate a second buffer to hold a copy of the first.
+/// Amplification factor must be at least two.
 #[test]
 fn an_amplify_factor_below_two_is_refused() {
     for (factor, expected) in [(0u32, "discards every element"), (1, "endomorphism")] {
@@ -344,9 +339,7 @@ proc sprites {
 // L2 — geometry modulation
 // ---------------------------------------------------------------------------
 
-/// A modulator that wobbles what reaches it and tints it. Reads `position` from
-/// upstream, writes it back, and **widens the element** by emitting a `color`
-/// nothing before it produced.
+/// Modulator fixture: deforms `position` and widens element layout by emitting `color`.
 const WOBBLE: &str = r#"
 proc wobble {
   kind L2
@@ -365,8 +358,7 @@ proc wobble {
 }
 "#;
 
-/// **A `deform` is the whole of what an L2 is**, and the resolved shape says
-/// which layer it belongs to without any of the L1 or L4 header state.
+/// L2 procedures consist entirely of a deform stage without topology or blend state.
 #[test]
 fn an_l2_checks_clean_and_carries_neither_topology_nor_blend() {
     let checked = check_ok(WOBBLE);
@@ -388,10 +380,7 @@ fn an_l2_is_closed_form_whatever_it_writes() {
     assert!(check_ok(WOBBLE).closed_form);
 }
 
-/// **A `deform` may read what it emits**, which is not the same permission an
-/// `element` block has even though it looks like it. There the two lists are one
-/// buffer; here `consumes` is the input edge and `emit` is the output one, and
-/// an L2 that adds an attribute has to be able to read the field it is writing.
+/// L2 deform stages may read attributes that they emit into the output buffer.
 #[test]
 fn a_deform_reads_both_what_it_consumes_and_what_it_emits() {
     let src = r#"
@@ -512,10 +501,7 @@ proc empty {
     assert!(rendered.contains("deform"), "{rendered}");
 }
 
-/// **`consumes` is not checked against `emit` on an L2**, unlike an L1 where
-/// consuming something unemitted is a contradiction inside one file. What an L2
-/// may read depends on its position in a chain, which no single procedure can
-/// know — that is the Set's check, against the whole chain.
+/// L2 consumes requirements are validated against upstream chain outputs by Set check.
 #[test]
 fn an_l2_may_consume_what_it_does_not_emit() {
     let src = r#"

@@ -176,9 +176,7 @@ fn a_build_whose_sources_never_reached_the_store_is_still_a_swap() {
          whatever it reported is not what is on screen"
     );
 
-    // **And the next build that can be named puts the slot back on an
-    // address**, which is what makes `None` a state rather than a dead end:
-    // nothing has to remember A for the slot to become savable again.
+    // Subsequent named builds restore concrete slot addresses.
     let c: Vec<Landed> = vec![
         stored(
             &store,
@@ -238,8 +236,7 @@ fn a_recorded_run_puts_its_launch_sources_where_a_replay_looks() {
 
     let root = dir.path().join("store");
     let store = karakuri_store::store::Store::open(&root).expect("store");
-    // **The control.** Opening a store does not fill it, so everything
-    // below is about the seeding.
+    // Control test: verifying store state before seeding.
     for nodes in &placed {
         for node in nodes {
             assert!(
@@ -252,8 +249,7 @@ fn a_recorded_run_puts_its_launch_sources_where_a_replay_looks() {
 
     seed_store_for_replay(&store, &placed);
 
-    // **Slot 1's launch addresses, which are what it is recorded as running
-    // until something rebuilds it.**
+    // Initial launch addresses for slot 1.
     let running = Running::at_launch(&placed, 2);
     let at_launch = running
         .playing(1)

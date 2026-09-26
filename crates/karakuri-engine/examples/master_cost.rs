@@ -13,7 +13,7 @@ use karakuri_engine::swap::HotSwap;
 use karakuri_engine::{Gpu, Present, Set};
 use karakuri_ir::typed::Checked;
 
-/// **The final output size**, which the mix is composited once at and which
+/// Target composite resolution for master output pass (ADR-0247).
 /// every output is a resize of (ADR-0247) — and the size every figure in this
 /// file is about, because a pass's cost is per output texel.
 const OUTPUT: (u32, u32) = (1280, 720);

@@ -165,10 +165,7 @@ fn the_seven_tools_still_work_with_every_class_closed() {
         }
     }
 
-    // **The seventh needs the other half of the surface**, so it gets the
-    // fixture that has one: `no_loop` never applies an edge, and a client
-    // waiting out `WIRE_REPLY` for it would be this test hanging rather
-    // than this test failing.
+    // Target operation requires the complementary control surface.
     let (wiring, _seen) = wired(true);
     let (failed, said) = call(
         wiring.port,

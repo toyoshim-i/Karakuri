@@ -151,9 +151,7 @@ proc marcher {
     validate(&karakuri_codegen::generate_l4(&full, &layout, &[("shape", &field)]).source);
 }
 
-/// **A caller that mentions no field carries none of it**, which is what keeps
-/// a bad field body from taking down shaders with nothing to do with it — and
-/// keeps every node in the Set from growing the field's params.
+/// Unreferenced fields generate no uniform fields or helper functions.
 #[test]
 fn a_caller_that_evaluates_no_field_is_not_spliced() {
     let field = spliced();
@@ -193,10 +191,7 @@ proc plain {
     );
 }
 
-/// **The clock is the caller's own spelling**, passed at the call site. An L1
-/// reads `t` per substep from `step_args` where everything else reads `u` — one
-/// spliced body cannot say both, and a body that assumed either produced a
-/// module naming a field that module does not have.
+/// Clock variable name is bound at the call site per stage requirements.
 #[test]
 fn a_spliced_field_takes_the_clock_from_its_caller() {
     let field = spliced();
@@ -372,9 +367,7 @@ fn naga_agrees_with_the_element_layout_for_every_emit_shape() {
     }
 }
 
-/// **An L4 addresses the very buffer an L1 wrote**, under a struct it declares
-/// itself, so the two have to place every member identically — and this asks a
-/// front end rather than comparing the generator to itself.
+/// L4 vertex stage element layout matches L1 compute layout stride and alignment.
 #[test]
 fn naga_agrees_with_the_element_layout_in_a_renderer() {
     let layout = layout_for(&drift_shell());
@@ -474,8 +467,7 @@ proc dissolve {
         &[Attr::Position, Attr::Size],
         karakuri_ir::layout::Synthetic::NONE,
     );
-    // **Two slots, two fields.** One would be an edge answering for both, which
-    // is the failure the name on the slot exists to prevent.
+    // Multiple source slots generate distinct uniform fields.
     assert!(
         out.source.contains("u.source_a") && out.source.contains("u.source_b"),
         "each slot reads its own uniform field: {}",
@@ -538,9 +530,7 @@ proc march {
     }
 }
 
-/// **A procedure that declares no Source slot carries no such uniform field**,
-/// which is what keeps this from being a `u32` every module in every Set pays
-/// for.
+/// Procedures without Source slots omit uniform source fields.
 #[test]
 fn a_procedure_with_no_source_slot_declares_no_field_for_one() {
     let layout = karakuri_ir::layout::generate_element_layout(

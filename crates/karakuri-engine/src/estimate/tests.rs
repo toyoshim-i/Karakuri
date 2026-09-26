@@ -274,7 +274,7 @@ fn the_correction_covers_the_worst_frame_the_flooring_can_build() {
         "the flooring hid {hid} where the bound says at most {}",
         floored.share
     );
-    // **And the adversary is a real one**: it hides very nearly the whole
+    // Adversarial workload test case covering most of the frame.
     // of what the bound allows, so the correction is being exercised at
     // its limit rather than against a frame that never needed it.
     assert!(
@@ -557,8 +557,7 @@ fn an_estimate_is_re_read_at_a_new_target_rather_than_dropped() {
     );
 }
 
-/// **A refusal taken before any draw keeps its refusal and records the new
-/// target.** There are no rungs to re-read, so there is nothing a second
+/// Pre-draw cost refusal records new target while maintaining refusal state.
 /// size can say that the first did not.
 #[test]
 fn a_refusal_with_no_rungs_is_re_targeted_and_stays_a_refusal() {

@@ -298,8 +298,7 @@ mod gpu {
             cost.capacity, SECOND,
             "the measurement is labelled with a capacity the Set was not built at"
         );
-        // **The size the slot was told to measure at**, which is the deck's
-        // own until somebody narrows it (ADR-0303) — and a `HotSwap` built
+        // Measurement size defaults to deck resolution unless constrained (ADR-0303).
         // outside a deck is at its own viewport.
         assert_eq!(cost.resolution, h.swap.measure_size());
     }

@@ -232,9 +232,7 @@ fn a_deformation_a_camera_and_a_field_are_written_as_themselves() {
     assert!(said.contains("not interchangeable"), "{said}");
 }
 
-/// **The schema offers every layer a slot can hold**, because a layer a
-/// client is not told about is one it will not ask for — the enum said
-/// `L1` and `L4` for as long as a slot could hold five kinds of node.
+/// Schema exposes every layer type that can occupy a slot.
 #[test]
 fn the_advertised_layers_are_every_layer_a_slot_can_hold() {
     let server = start_chain();
@@ -244,9 +242,7 @@ fn the_advertised_layers_are_every_layer_a_slot_can_hold() {
     );
     let listed: Value = serde_json::from_str(&listed).expect("json");
     let tools = listed["result"]["tools"].as_array().expect("tools");
-    // **Five, where `Kind` is six** — see `LAYERS`. `kind L5` compiles and
-    // lowers and is not a layer a *slot* holds, so this list is the one a
-    // client can address rather than the one the language has.
+    // Five layers (excluding L5) in `LAYERS`.
     let expected = json!(["L1", "L2", "L3", "L4", "Field"]);
     for name in ["read_procedure", "write_procedure"] {
         let tool = tools
@@ -275,7 +271,7 @@ fn the_advertised_layers_are_every_layer_a_slot_can_hold() {
 }
 
 /// A procedure that does not compile never reaches the disk, and what comes
-/// back is the checker's words — **the return value is the point**.
+/// Verifies checker feedback is returned in tool call results.
 #[test]
 fn a_procedure_that_does_not_compile_is_refused_with_diagnostics() {
     let server = start(true);
@@ -312,10 +308,7 @@ fn a_procedure_for_the_other_layer_is_refused() {
     assert!(said.contains("not interchangeable"), "{said}");
 }
 
-/// **A body larger than this server will read is refused before it is
-/// allocated.** `vec![0u8; length]` on an attacker's number aborts the
-/// process — not a panic, not catchable, and not confined to this thread.
-/// A fifty-six byte request line used to take the render process down.
+/// Payloads exceeding max request length are rejected prior to buffer allocation.
 #[test]
 fn an_enormous_content_length_is_refused_and_not_allocated() {
     let server = start(true);
@@ -332,9 +325,7 @@ fn an_enormous_content_length_is_refused_and_not_allocated() {
     assert_eq!(status, 200, "the server did not survive");
 }
 
-/// **A page on any site can POST here.** It cannot read the reply, and
-/// `write_procedure` does not need to be read to have happened. The first
-/// version of this server treated loopback as a boundary; it is not one.
+/// Verifies Origin header validation prevents cross-origin requests.
 #[test]
 fn a_cross_origin_request_is_refused() {
     let server = start(true);

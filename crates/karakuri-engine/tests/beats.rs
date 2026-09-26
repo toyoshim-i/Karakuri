@@ -123,8 +123,7 @@ proc plain_points {
         set
     }
 
-    /// One frame, driven the way `Frame::render` drives one: **the session clock
-    /// advances first, by exactly what the Set is about to advance by.** A helper
+    /// Verifies session clock advances prior to Set advancement matching `Frame::render`.
     /// that skipped that would leave the grid at zero and every test here would
     /// pass against a `beats` that never moved.
     fn frame(gpu: &Gpu, set: &mut Set, signals: &mut Signals, steps: u8) -> Vec<u16> {

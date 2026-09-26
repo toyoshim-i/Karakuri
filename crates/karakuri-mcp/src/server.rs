@@ -119,10 +119,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
                 // request beats guessing what was meant.
                 return respond(&mut writer, 400, "text/plain", b"malformed header");
             };
-            // **Case-insensitively**, because field names are, and because
-            // `CONTENT-LENGTH:` is lawful and used to be read as a body of zero
-            // — after which the client was told its JSON was malformed and its
-            // bytes were reparsed as headers.
+            // Header names are matched case-insensitively per HTTP specification.
             match name.trim().to_ascii_lowercase().as_str() {
                 "content-length" => match value.trim().parse::<usize>() {
                     Ok(n) => length = Some(n),
@@ -140,10 +137,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
             }
         }
 
-        // **The check the first version did not have.** A page on any site can
-        // POST here; it cannot read the reply, and `write_procedure` does not
-        // need to be read to have happened. A client that is genuinely local
-        // sends no `Origin` at all.
+        // Validate origin: reject non-local Origin headers to prevent cross-origin POSTs.
         if let Some(origin) = &origin {
             if !is_local_origin(origin) {
                 return respond(
@@ -260,10 +254,7 @@ impl Pending {
                 "id": id,
                 "result": tool_result(applied(&news, OPERATE_REPLY)),
             })),
-            // **The note is appended to what the loop said and only where the
-            // loop said it worked.** A refusal is the loop's whole sentence;
-            // adding "and by the way this run does not rebuild" to it would put
-            // two answers in front of a model that has one mistake to fix.
+            // Append note only on success to keep error responses focused on the refusal reason.
             Pending::Wiring { id, news, note } => Some(json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -298,9 +289,7 @@ pub(crate) fn dispatch(request: &Value, state: &mut State) -> Pending {
         "resources/list" => Ok(json!({ "resources": resources() })),
         "resources/read" => read_resource(request).map_err(Refused::BadParams),
         "tools/call" => match call_tool(request, state) {
-            // **Out from under the lock before it is waited for.** See
-            // [`Pending`]; this `return` is the only thing carrying that
-            // decision, so it is the one line here worth reading twice.
+            // Return pending work to release lock before awaiting completion.
             Ok(Called::Saving(news)) => return Pending::Saving { id, news },
             Ok(Called::Wiring { news, note }) => return Pending::Wiring { id, news, note },
             Ok(Called::Operating(news)) => return Pending::Operating { id, news },
@@ -312,9 +301,7 @@ pub(crate) fn dispatch(request: &Value, state: &mut State) -> Pending {
 
     Pending::Done(Some(match result {
         Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-        // **The code says which kind of wrong.** Everything used to come back
-        // as "method not found", so a client could not tell a method it had
-        // invented from arguments it had got wrong.
+        // Map error variants to distinct JSON-RPC error codes.
         Err(Refused::NoMethod(m)) => error(&id, -32601, &m),
         Err(Refused::BadParams(m)) => error(&id, -32602, &m),
     }))

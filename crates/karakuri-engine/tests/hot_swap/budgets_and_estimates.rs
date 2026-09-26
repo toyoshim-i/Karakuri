@@ -57,7 +57,7 @@ mod gpu {
 
         let (cost_ms, basis) = verdict
             .unwrap_or_else(|| panic!("the swap landed and no verdict came with it: {seen:?}"));
-        // **The candidate is what is in the slot.** `FIRST` here would be the
+        // The candidate is what is in the slot. `FIRST` here would be the
         // old behaviour exactly: a Set the operator did not ask for, put back
         // by the engine, with the file on disk still holding the one they did.
         assert_eq!(
@@ -70,7 +70,7 @@ mod gpu {
             "a candidate over the budget left the slot unmarked, so nothing \
              downstream can know to stop stepping it"
         );
-        // **The number is the candidate's own frame and not an interval.** A
+        // The number is the candidate's own frame and not an interval. A
         // frame interval on this harness is milliseconds of a real submit and a
         // real poll; what this has to be is the probe's reading of the Set that
         // just arrived, which is a positive finite number the worker took.
@@ -106,7 +106,7 @@ mod gpu {
             said.contains("its own frame"),
             "the message still describes the number as a frame interval: {said}"
         );
-        // **The sentence says the state and not an action taken.** A reader of
+        // The sentence says the state and not an action taken. A reader of
         // this line has a slot to attend to, so the words that have to be in it
         // are the ones that say the material is still there and stopped.
         assert!(
@@ -114,7 +114,7 @@ mod gpu {
             "the message does not say what happened to the slot: {said}"
         );
 
-        // **A build that fits clears the freeze**, which is the third way out
+        // A build that fits clears the freeze, which is the third way out
         // and the only one the engine takes by itself. The budget is what makes
         // the same machinery answer differently, so it is the budget that moves.
         h.swap.set_budget_ms(GENEROUS_MS);
@@ -189,7 +189,7 @@ mod gpu {
             );
         }
         let stopped_at = verdict.expect("just set");
-        // **And the verdict spent the slot's own number**, whichever of the two
+        // And the verdict spent the slot's own number, whichever of the two
         // the one rule picked. Exact rather than banded: the candidate was
         // kept, so the readings that travelled with it are the ones the slot is
         // holding now.
@@ -198,7 +198,7 @@ mod gpu {
             Some(stopped_at),
             "the verdict decided on a number that is not what this slot is budgeted at"
         );
-        // **Kept, and stopped.** The candidate is the live Set — a budget below
+        // Kept, and stopped. The candidate is the live Set — a budget below
         // its own cost takes nothing away — and the flag is what says the slot
         // is not to be stepped.
         assert_eq!(
@@ -223,7 +223,7 @@ mod gpu {
         );
     }
 
-    /// A candidate that fits is kept **and runs** — the other branch of the same
+    /// A candidate that fits is kept and runs — the other branch of the same
     /// verdict, and the one that has to work for a hot swap to be useful rather
     /// than merely safe. Since ADR-0316 both branches keep the candidate, so
     /// what separates them is [`HotSwap::overloaded`] and nothing else.
@@ -286,8 +286,7 @@ mod gpu {
             "the Set the harness was constructed with was never built by a worker, \
              so nothing can have estimated it"
         );
-        // **The size the worker is to answer for is the slot's viewport**, and
-        // not the size it measures at. The harness's `HotSwap` was seeded from
+        // Measurement evaluates against slot viewport dimensions.
         // a Set `Set::build` left at 1x1 and then resized, which is what a deck
         // does to every slot it holds.
         assert_eq!(h.swap.estimate_size(), (WIDTH, HEIGHT));
@@ -345,8 +344,7 @@ mod gpu {
             "the rungs were not placed against the output's size"
         );
 
-        // **And the verdict spent it, or said why it did not.** One rule, and
-        // it is the same one a cold slot is governed by.
+        // Hot-swap verdict enforces the same criteria as initial slot allocation.
         let (spent, spent_ms) = budgeted_by_the_one_rule(&h.swap);
         assert_eq!((cost_ms, basis), (spent_ms, spent));
         match e.ms() {
@@ -361,8 +359,7 @@ mod gpu {
                 assert!(seen.iter().any(|s| s.contains("host clock")), "{seen:?}");
             }
         }
-        // **The measurement is kept beside it rather than overwritten.** A slot
-        // that fell back must not read like one nothing ever asked (ADR-0296
+        // Empirical measurement is preserved alongside fallback estimate (ADR-0296).
         // §2), and a status line saying *measured* has to have a measurement.
         assert!(h.swap.measured_cost().is_some());
         // And estimating left no trace, exactly as measuring does not: the
@@ -421,7 +418,7 @@ mod gpu {
         );
         assert_eq!(e.ms(), None, "a refusal handed out a number");
 
-        // **So the measurement decides**, and says so.
+        // Measured basis takes precedence in final decision.
         assert_eq!(basis, Basis::Measured);
         assert_eq!(
             cost_ms,
@@ -478,8 +475,7 @@ mod gpu {
         assert_eq!(after.floor, before.floor);
         assert_eq!(after.floor_from, before.floor_from);
 
-        // **And it is the fit that moved, not the number.** Four times the
-        // area, so the fragment term is four times what it was and the
+        // Regression fit slope scales with viewport raster area.
         // invariant term is untouched — which is `a + b·area` re-read rather
         // than a number carried across.
         match (before.fit, after.fit) {

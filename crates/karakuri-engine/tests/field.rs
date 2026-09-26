@@ -82,7 +82,7 @@ proc lens {
 }
 "#;
 
-    /// Marches whatever the Set gives it. **It contains no shape at all**, which is
+    /// Marches whatever the Set gives it. It contains no shape at all, which is
     /// the whole claim: the same renderer draws any field — and it says which field
     /// by declaring a slot the Set binds, rather than by naming a word the language
     /// reserved.
@@ -133,7 +133,7 @@ proc lens {
         build_wired(gpu, field.as_slice(), l4, &edges)
     }
 
-    /// **A list of fields**, because a Set holds as many as it is given — and one
+    /// A list of fields, because a Set holds as many as it is given — and one
     /// renderer, because every claim here is about what a caller draws.
     fn build_wired(
         gpu: &Gpu,
@@ -226,7 +226,7 @@ proc lens {
 
     // ---------------------------------------------------------------------------
 
-    /// **A renderer with no shape in it draws a shape**, because the Set gave it
+    /// A renderer with no shape in it draws a shape, because the Set gave it
     /// one. That is the whole feature.
     #[test]
     fn a_marcher_draws_a_field_it_does_not_contain() {
@@ -243,7 +243,7 @@ proc lens {
         );
     }
 
-    /// **The field's own `param` is an operator's to ride**, addressed by its kind
+    /// The field's own `param` is an operator's to ride, addressed by its kind
     /// even though it addresses no node — every caller writes the same value into
     /// its own uniform.
     #[test]
@@ -300,7 +300,7 @@ proc lens {
             "the two together carve a figure, and covered {hit} texels"
         );
 
-        // **The two are addressed apart**, which is what the slot in the name is
+        // The two are addressed apart, which is what the slot in the name is
         // for. Both reach one field here, so both read that field's values — one
         // procedure is one set of numbers however many names reach it — and the
         // picture is the proof that each name resolved to a body of its own.
@@ -376,7 +376,7 @@ proc lens {
             "the second renderer draws a shape the first one does not: {plain} texels"
         );
 
-        // **Each address moves its own node and only its own.** If both nodes read
+        // Each address moves its own node and only its own. If both nodes read
         // one field, one of these two is a Set nothing changed.
         let mut first = mixed(&gpu);
         assert!(first.set_param_at(karakuri_ir::Kind::Field, 0, "radius", 2.0));
@@ -413,7 +413,7 @@ proc lens {
             7,
             &[],
             karakuri_engine::set::Wiring {
-                // **Both, and separately.** Two uses of one procedure are two nodes
+                // Both, and separately. Two uses of one procedure are two nodes
                 // — `lens` and `lens-2` — and a slot is bound per node, so "the same
                 // field everywhere" is a thing the Set says twice rather than a
                 // thing it assumes.
@@ -450,7 +450,7 @@ proc lens {
         );
     }
 
-    /// **A field's `param` is an operator's on every surface, not just `--param`.**
+    /// A field's `param` is an operator's on every surface, not just `--param`.
     /// It has no node, and five separate loops over the layers decided which
     /// surfaces reach it — `Field` was in none of them, so a value could be
     /// overridden and then not bound, published, read back or saved.
@@ -555,7 +555,7 @@ mod refused {
         );
     }
 
-    /// **Neither file is over budget and the pair is**, which is what a Set-level
+    /// Neither file is over budget and the pair is, which is what a Set-level
     /// check exists for: a `field(p)` weighs nothing where a single procedure is
     /// estimated, so the ceiling each of them passed was applied to a figure
     /// missing the other.

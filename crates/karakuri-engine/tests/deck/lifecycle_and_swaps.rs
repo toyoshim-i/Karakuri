@@ -78,7 +78,7 @@ mod gpu {
             }
             let off_air_at = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
 
-            // **The target is thrown away and remade**, so nothing in it can be
+            // Resize reallocates targets without stale buffer carryover.
             // left over from when the slot was Live.
             deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
@@ -474,7 +474,7 @@ mod gpu {
             seen.starts_with("Overloaded"),
             "a candidate that cannot fit a zero budget was judged in its favour: {seen}"
         );
-        // **The candidate is in the slot, off air or not** (ADR-0316): `CAPACITY`
+        // Candidate set occupies slot regardless of on-air status (ADR-0316).
         // here would be the Set the build displaced, put back.
         assert_eq!(
             deck.slot(karakuri_engine::DeckSlot(1)).set().capacity(),
@@ -500,7 +500,7 @@ mod gpu {
             "the off-air slot did not step before the build landed, so this test is no \
          longer about a slot that is paying into the interval it is not being judged by"
         );
-        // **And it stops paying into it now**, which is the freeze reaching the
+        // Freeze suppresses simulation steps on off-air slots.
         // off-air branch of `Frame::render`: a stopped slot takes no step
         // whatever its residency, so the Set that just landed is still at zero
         // several frames later.

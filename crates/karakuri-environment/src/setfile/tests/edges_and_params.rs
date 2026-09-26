@@ -63,8 +63,7 @@ fn an_edge_and_the_names_it_points_with_survive_the_file() {
         text.contains(r#"{"t":"edge","node":"warp","slot":"far","to":"far"}"#),
         "the edge is one line naming both ends: {text}"
     );
-    // **After the slots**, so a reader has every name in hand by the time
-    // it meets the record that uses them.
+    // Edges serialise after slot declarations.
     assert!(
         text.find(r#""t":"edge""#) > text.rfind(r#""t":"slot""#),
         "an edge is written after the slots it names: {text}"
@@ -150,9 +149,7 @@ fn a_source_slot_edge_survives_the_file() {
             bindings: &[],
             edges: &edges,
             camera: &DEFAULT_CAMERA,
-            // **The salts are the identities the mask compares**, so a
-            // saved Set that gave them back differently would be a mask
-            // pointing at a different geometry after a reload.
+            // Preserves geometry salt identities across reload.
             layering: Layering::Overdraw,
             live: None,
             seeds: &[11, 22],
@@ -493,10 +490,7 @@ fn a_component_write_round_trips_through_the_file() {
         loaded.notes
     );
 
-    // **The same Set, spelled as one vector line.** Three `param` records
-    // under the component keys and one under the declared name are two
-    // spellings of one thing, and a file that meant different things by
-    // them would be a format with two answers.
+    // Single vector parameter line encodes equivalent values to component lines.
     let spelled_out = Saving {
         params: &[
             ParamWrite::at(Kind::L4, 0, "glow.x", 0.4),

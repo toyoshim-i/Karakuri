@@ -333,16 +333,10 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     let mut field_calls = crate::typed::FieldCalls::default();
 
     for block in &checked.blocks {
-        // **Counted per block**, because which of the three ceilings a call
-        // charges is decided by the block it is in: a field call in a `vertex`
-        // is once per element and one in a `fragment` is once per covered
-        // pixel, and the two are not comparable numbers.
+        // Field invocations are tracked per block to charge against appropriate ceilings.
         let mut block_calls: Vec<(String, u64)> = Vec::new();
         let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot, &mut block_calls);
-        // **Every block, before the match below decides which ceiling it is
-        // charged to.** Two of them are charged to none — a `camera` scales with
-        // nothing, and a `field` is charged to its callers — and a call in
-        // either is still a call.
+        // Accumulate field invocations across all blocks.
         for (slot, n) in &block_calls {
             let entry = field_calls.entry(slot);
             entry.total = entry.total.saturating_add(*n);
@@ -369,7 +363,6 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
                     entry.per_spawn = entry.per_spawn.saturating_add(*n);
                 }
             }
-            // **The same axis, and the same rate against the same quantity.**
             // Fragment and frame blocks scale with rasterized fragment/texel counts.
             BlockKind::Fragment | BlockKind::Frame => {
                 ops_per_fragment = ops_per_fragment.saturating_add(block_cost);

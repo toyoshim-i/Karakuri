@@ -122,9 +122,7 @@ fn everything_advertised_can_be_called() {
 /// Verifies that save_set is offered in tool list and delegates slot save requests to the render loop.
 #[test]
 fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
-    // **Two slots**, so that the slot the loop is handed is a fact about
-    // the call rather than the only slot there is: a request that carried a
-    // constant would pass against a one-slot deck.
+    // Two configured slots to test per-slot routing.
     let dir = tempfile::tempdir().expect("tempdir");
     let l1 = dir.path().join("l1.kir");
     let l4 = dir.path().join("l4.kir");

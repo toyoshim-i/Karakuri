@@ -252,9 +252,8 @@ fn aged(published: &Published, since: Duration) -> Reading {
             confidence: published.estimate.confidence * believed,
             ..published.estimate
         },
-        // **A**, plus however long ago the publish was. Not multiplied by
-        // anything: how old the measurement is and how much it is believed are
-        // two different statements, and the lead needs the first one whole.
+        // Analysis lag plus elapsed time since publish; measurement age
+        // is tracked independently of confidence staleness.
         age: since.as_secs_f32() + published.analysis_lag,
     }
 }

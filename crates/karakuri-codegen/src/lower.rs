@@ -22,10 +22,7 @@ pub trait Resolver {
     /// Emits the expression to read `attr` from the appropriate stage-specific source.
     fn read_attr(&self, attr: Attr) -> String;
 
-    /// A read of the **far** element, from the geometry bound to this node's
-    /// declared slot. Only an L2 that declares one has such a resolver; the
-    /// checker refuses the read anywhere else, so every other implementation
-    /// says so rather than inventing an answer.
+    /// Reads the far element from the geometry bound to this node's declared slot.
     fn read_far(&self, attr: Attr) -> String {
         unreachable!(
             "a read of `{}` from a used geometry is refused where none is declared",

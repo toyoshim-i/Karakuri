@@ -149,10 +149,7 @@ fn check_node_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("a node name cannot be empty".to_string());
     }
-    // **The layer spellings are reserved**, so that `--param near:radius=1` and
-    // `--param L4:0:exposure=1` can never be the same sentence about different
-    // things. The two forms are told apart by counting colons, and a node called
-    // `L4` would make that count a lie.
+    // Layer names are reserved identifiers to disambiguate node names from layer addresses.
     if crate::meta::layer_named(name).is_some() {
         return Err(format!(
             "`{name}` is a layer, so it cannot also be a node's name — a `--param` is told \

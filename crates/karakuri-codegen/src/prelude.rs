@@ -410,10 +410,7 @@ pub fn render(req: &Requirements) -> String {
     });
     let need_perlin = need_gradient; // everything that needs the gradient lattice calls perlin for it
 
-    // **First, because nothing else calls it and it reads only the uniform.**
-    // `texel` and `tap` have no helper — they lower straight to
-    // `textureLoad`/`textureSampleLevel` at the call site — so this is the
-    // whole of what the three L5 builtins ask the prelude for.
+    // L5 frame helpers: texel and tap lower inline, while sample helpers are generated on demand.
     if b.contains(&Builtin::FrameStep) {
         out.push_str(FRAME_STEP);
         out.push('\n');

@@ -325,10 +325,7 @@ impl Analysis<'_> {
                 }
             }
             TStmt::If { then, els, .. } => {
-                // **Both arms are walked and their environments joined**, and
-                // the condition is not read at all: which arm an element takes
-                // is per-element and undecidable here, so a `point_rate`
-                // written in either is one this Set can emit.
+                // Join environments from both branches without evaluating runtime conditions.
                 let saved = self.env.clone();
                 self.stmts(then);
                 let after_then = std::mem::replace(&mut self.env, saved.clone());

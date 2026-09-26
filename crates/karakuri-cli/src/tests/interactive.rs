@@ -168,7 +168,7 @@ fn a_trailing_save_is_named_and_not_only_counted() {
          go and load: {notes:?}"
     );
 
-    // **The control.** Nothing to name and the count stands alone.
+    // Control test: standalone record count.
     let counted = trailing_notes(&[Record::Gain {
         slot: DeckSlot(1),
         value: 0.5,
@@ -314,9 +314,7 @@ mod value_tests {
             let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
             assert!(err.contains("--record-session"), "{args:?} -> {err}");
         }
-        // A live run is where it belongs, and it does **not** need `--load-set`:
-        // the material is saved under `ID-material` and put at the head. The
-        // help text said otherwise long after that stopped being true.
+        // Session recording in live run does not require --load-set.
         assert!(parse(&["--record-session", "s"]).is_none());
         assert!(parse(&["--record-session", "s", "--load-set", "base"]).is_none());
     }

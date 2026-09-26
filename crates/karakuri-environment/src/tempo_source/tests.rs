@@ -148,10 +148,7 @@ fn an_anchor_arrives_and_extrapolates_from_its_own_timestamp() {
     assert_eq!(source.peers(), 3);
     assert_eq!(source.playing(), Some(true));
 
-    // 120 bpm is two beats a second, so a second past the anchor is beat
-    // 102. **This is the arithmetic that makes the transport's delay
-    // irrelevant**: the anchor is read from its own timestamp rather than
-    // from when it happened to arrive.
+    // Delay compensation: anchor is calculated from its own timestamp rather than arrival time.
     let a_second_later = anchor.at_us + 1_000_000;
     assert!(
         (anchor.beat_at(a_second_later) - 102.0).abs() < 1e-6,
@@ -202,9 +199,8 @@ fn the_offset_is_estimated_from_the_least_delayed_message() {
         epoch
     ));
     let anchor = wait_for_anchor(&mut source).expect("no anchor");
-    // Our clock starts at zero, theirs at a billion, so the offset is about
-    // minus a billion and the anchor lands near *our* now rather than a
-    // billion microseconds in the future.
+    // When the local clock starts at zero and the remote clock at one billion,
+    // epoch normalization maps the anchor timestamp near local time zero.
     assert!(
         anchor.at_us.abs() < 2_000_000,
         "the anchor landed at {} — the source's epoch was not removed",
@@ -336,8 +332,8 @@ fn the_first_anchor_aligns_and_the_rest_are_trimmed() {
         at_us: 0,
     };
 
-    // Our grid is at 7.0 and the room is at 1024.25: the first anchor moves
-    // the whole way, and modulo `ALIGN_MODULUS` so the count stays small.
+    // When the local grid is at 7.0 and the remote room is at 1024.25, the first
+    // anchor aligns modulo `ALIGN_MODULUS` to keep the beat count small.
     let Correction::Align { shift, bpm } = source.correction(anchor, 7.0, 0) else {
         panic!("the first anchor did not align");
     };
@@ -354,8 +350,8 @@ fn the_first_anchor_aligns_and_the_rest_are_trimmed() {
         "the alignment moved the downbeat"
     );
 
-    // A second anchor claiming we are a hundred beats out is *not* obeyed:
-    // it is trimmed, and only sustained disagreement re-aligns.
+    // A second anchor claiming a large beat discrepancy is trimmed rather than
+    // immediately obeyed; only sustained disagreement triggers re-alignment.
     for _ in 0..(RELOCK_EVIDENCE - 1) {
         let Correction::Trim { shift, .. } = source.correction(anchor, 924.25, 0) else {
             panic!("a single large disagreement re-aligned");

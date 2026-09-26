@@ -237,13 +237,9 @@ impl ApplicationHandler for App {
                     .and_then(|procs| procs.first())
                     .map(|m| m.l1s.as_slice())
                     .unwrap_or(&[]);
-                // **The sources first**, because the head names them: a
-                // `procedure` record for slot 1 is an address, and an address
-                // the store cannot resolve is the same silence as no record.
+                // Seed sources first so that procedure addresses resolve against the store.
                 seed_store_for_replay(&store, &self.placed);
-                // **The head slot's Set file, then what the deck held**, put
-                // together by the one function both this program and the
-                // console's `rec` pill write a head through.
+                // Assemble head slot Set file followed by deck state.
                 let material = session_head(&self.args, &self.placed, geometries, &store, id);
                 let head = session::head(
                     material,
@@ -354,10 +350,7 @@ impl ApplicationHandler for App {
             if let Some(source) = live.tempo_source.take() {
                 source.close();
             }
-            // **Before the recorder is finished**, so a save that landed after
-            // the last frame is still in the stream it belongs to — including
-            // one that was still being written when the window closed, which is
-            // what the bounded wait is for. See [`Live::awaited_saves`].
+            // Flush pending saves before finishing recorder (see [`Live::awaited_saves`]).
             live.awaited_saves();
             if let Some(recorder) = live.recorder.take() {
                 match recorder.finish() {

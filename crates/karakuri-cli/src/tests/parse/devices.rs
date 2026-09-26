@@ -15,9 +15,7 @@ fn an_edge_names_a_node_a_slot_and_the_geometry_bound_to_it() {
         }]
     );
 
-    // **The last dot, not the first.** A node name may hold one — nothing
-    // refuses `--set my.morph=morph.kir` — and a slot is a `.kir`
-    // identifier, which cannot.
+    // Split on the last dot to support node names with dots.
     let args = parse(&["--edge", "my.morph.far=sphere"]).expect("parses");
     assert_eq!(args.edges[0].node, "my.morph");
     assert_eq!(args.edges[0].slot, "far".into());
@@ -129,10 +127,7 @@ fn every_source_runs_at_the_capacity_it_declares() {
         vec![8192, 8192]
     );
 
-    // **And a Set file's own number wins over both**, per geometry: the
-    // file is where that geometry's count was decided, and a Set that came
-    // back at another size is a Set that was not saved. Where the file said
-    // nothing, the declaration underneath still answers.
+    // Set file configuration takes precedence over defaults.
     assert_eq!(
         capacities_for(&args, &[small, large], &[Some(16384), None]),
         vec![16384, 131072]
@@ -213,10 +208,7 @@ fn the_latency_offset_defaults_takes_a_sign_and_is_validated() {
             .latency_offset_ms,
         35.0
     );
-    // **Negative is a value, not a typo.** A room whose sound arrives after
-    // its picture is corrected for by turning this below zero, and there is
-    // no other control that can: nothing at this end sees the PA or the
-    // projector.
+    // Negative audio latency offsets compensate for delayed room acoustics.
     assert_eq!(
         parse(&["--latency-offset-ms", "-45"])
             .expect("a negative offset is a room, not a mistake")

@@ -238,7 +238,7 @@ mod gpu {
         let halfway = run(Some(Mask::new(MaskKind::Linear, 0.0, 0.5, 0.0)), 0.5);
         let faded = run(None, 0.5);
 
-        // **Only where the slot actually contributes.** Where it drew nothing, the
+        // Evaluates pixels where the slot actively rendered content.
         // masked frame, the faded one and the silent one all agree, and counting
         // those would drown the claim in background.
         let mut hidden = 0;
@@ -570,7 +570,7 @@ mod gpu {
             "the gain fade was cancelled too"
         );
 
-        // **The gain half of the rule, which this test claimed and did not check.**
+        // Gain adjustment overrides active fade animations.
         // `[`, `]` and `\` all end in `set_gain`, so a gain fade that kept writing
         // after one of them would be a control fighting the hand on it.
         let start = deck.signals().oscillator().beats();

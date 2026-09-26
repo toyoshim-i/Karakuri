@@ -215,7 +215,7 @@ proc mixed {
         assert_eq!([r, g, b, a], [0.25, 0.5, 0.75, 1.0]);
     }
 
-    /// **Setting an addressed vector parameter atomically updates uniform.**
+    /// Setting an addressed vector parameter atomically updates uniform.
     ///
     /// Addressing a specific node with `NodeAddress { layer, index }` works for
     /// vector parameters, correctly matching the layer and slot.

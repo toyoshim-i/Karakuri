@@ -317,9 +317,7 @@ fn both_ends_of_the_master_chain_decode_from_their_records() {
     };
     assert_eq!(level, 0.5);
 
-    // **Every cut, through its wire word**, which is the tone map
-    // operator's test one bay along: a cut added to the engine and not to
-    // the spelling fails here rather than in a replay.
+    // Validates wire serialization round-trip across all defined cuts.
     for want in Cut::ALL {
         let record = Record::MasterChain(karakuri_store::record::Chain {
             slots: vec![
@@ -347,18 +345,12 @@ fn both_ends_of_the_master_chain_decode_from_their_records() {
             want.name()
         );
         assert_eq!(slots[0].params.get("amount"), Some(&0.34));
-        // **A slot whose procedure declares no `retains` carries no cut**,
-        // and the decode does not invent one: the engine refuses a cut that
-        // was not asked for, so a default here would build a chain this
-        // build then refuses to install.
+        // Slots without retains declaration emit no cut in decoded state.
         assert_eq!(slots[1].cut, None);
         assert_eq!(slots[1].params.get("amount"), Some(&0.6));
     }
 
-    // **An empty list is a chain and not an absence.** The default chain is
-    // empty, so this is the record a session writes when the last slot is
-    // taken out — and reading it as *nothing to do* would leave the chain
-    // that was running on air.
+    // An empty slot list represents an explicit empty chain clearing previous slots.
     let Some(Change::MasterChain(slots)) = change(
         &Record::MasterChain(karakuri_store::record::Chain::default()),
         1,

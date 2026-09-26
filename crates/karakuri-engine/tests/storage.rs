@@ -207,9 +207,7 @@ proc dots {
     /// file be cancelled by the same wrong capacity on the other.
     const PAIR_CAPACITY: u64 = 64;
 
-    /// **An L1 pays for two directions of everything.** It reads what it wrote last
-    /// step, so the element buffer and the alive array each exist twice and swap.
-    /// Nothing below it in a chain does, which is why this is the only figure with
+    /// L1 simulation buffers allocate double-buffered ping-pong storage.
     /// a factor of two in it.
     #[test]
     fn a_static_l1_pays_for_both_directions_and_nothing_else() {
@@ -436,9 +434,7 @@ proc dots {
             "a chain instantiated once per geometry",
         );
 
-        // **The pairing Set, and the node each entry names.** Three instances
-        // under one source, and the `node` field is what a reader prints a name
-        // from — so this is where it is asserted rather than in a sixth case
+        // Storage reports verify node naming across multi-instance sources.
         // that would only repeat the equality.
         let near = source("near");
         let far = source("far");

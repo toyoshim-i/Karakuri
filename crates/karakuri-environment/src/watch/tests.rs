@@ -137,9 +137,7 @@ fn a_file_the_checker_turns_down_is_a_refusal_carrying_its_diagnostics() {
         refusal.said
     );
 
-    // **The negative control.** The same watcher, the same slot, the file
-    // as it was: a build, which is what says the refusal above was the
-    // bytes and not this watcher having given up.
+    // Negative control: watcher processes subsequent valid build after error.
     std::fs::write(&paths[0], &good).expect("repair the head");
     let request = rebuild(&mut watch).expect("the repaired file compiles");
     assert!(
@@ -218,10 +216,7 @@ fn the_values_a_slot_was_aimed_with_are_stated_once() {
         1,
         vec![1],
         karakuri_engine::camera::Orbit::default(),
-        // **What this watcher was constructed with, and it is never
-        // stated**: the caller built the live Set with these and handed it
-        // over, so the first save owes the operator whatever is on the Set
-        // rather than whatever the flags said before the run started.
+        // Watcher initialized with camera settings from caller.
         aimed_with.clone(),
         Vec::new(),
         Vec::new(),
@@ -549,9 +544,7 @@ fn a_rebuild_addresses_a_slot_exactly_as_startup_did() {
         "the fields"
     );
 
-    // **The addresses, file by file**, which is the half a request cannot
-    // show: a `procedure` record names a node by `(layer, index)`, and the
-    // history files a version under the same pair.
+    // Procedure records map nodes by (layer, index) pair.
     let built = rx.try_recv().expect("a recorded build is reported");
     let rebuilt: Vec<(&str, u32)> = built
         .nodes
@@ -680,10 +673,7 @@ fn an_aim_points_the_slot_at_what_it_names_and_is_not_debounced() {
         "a watcher nobody touched asked for a build"
     );
 
-    // **A salt and a capacity no derivation here produces**, so that a
-    // re-point which kept the outgoing slot's values cannot pass: the
-    // symptom of that is invisible on the load and arrives at the first
-    // later save.
+    // Distinct salt and capacity verify slot state updates on repoint.
     aim.send(Aim {
         head: crate::compile::Named::bare(now),
         rest: vec![crate::compile::Named::bare(renderer)],
@@ -740,8 +730,7 @@ fn a_re_point_files_the_versions_after_it_under_the_set_it_loaded() {
     let (watch, paths) = watch_over(&dir, &["drift_shell.kir", "soft_points.kir"]);
     let shared = crate::history::Snapshots::shared(&store);
     let (aim, aimed) = std::sync::mpsc::channel();
-    // **Launched on material no Set names**, which is what every slot of
-    // `crates/karakuri` launches on and what `record` writes `None` for.
+    // Watcher initialized with unnamed launch material.
     let mut watch = watch.snapshotting_to(shared.clone(), None).aimed_by(aimed);
 
     rebuild(&mut watch).expect("the files appearing is an edit like any other");

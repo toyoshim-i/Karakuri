@@ -92,7 +92,7 @@ fn shader_module_ast_constructs_valid_wgsl() {
         address_space: AddressSpace::StorageReadWrite,
     });
 
-    // fn compute_wave(pos: vec3<f32>, t: f32) -> vec3<f32>
+    // Function definition: compute_wave(pos: vec3<f32>, t: f32) -> vec3<f32>.
     module.functions.push(FunctionDef {
         name: "compute_wave".to_string(),
         params: vec![

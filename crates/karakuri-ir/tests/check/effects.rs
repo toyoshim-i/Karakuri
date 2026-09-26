@@ -24,14 +24,11 @@ fn a_legal_frame_block_is_accepted() {
     assert_eq!(checked.kind, Kind::L5);
     assert!(checked.block(BlockKind::Frame).is_some());
     assert!(!checked.retains, "no `retains` was declared");
-    // **Nothing about a topology**, and that is the fact `cost::fragment_ceiling`
-    // had to be taught: an L5 covers the frame exactly once and never says so.
+    // L5 post-processing procedures declare no topology.
     assert_eq!(checked.topology, None);
 }
 
-/// **`seed` names the fix**, which is the whole of what a refusal owes here: a
-/// fullscreen pass has no element, and the sentence says what to reach for
-/// instead rather than restating the rule.
+/// Fullscreen passes have no element seed ambient.
 #[test]
 fn an_l5_reading_seed_is_refused_with_the_fix_named() {
     let src = r#"
@@ -142,8 +139,7 @@ proc echo {
         hint.contains("add a bare `retains`"),
         "the hint has to say what to add: {hint}"
     );
-    // **And that the cut is not the file's**, which is the half a reader is
-    // most likely to try to write down.
+    // Tone map cuts are specified by the set rather than procedure files.
     assert!(
         hint.contains("mix") && hint.contains("exit"),
         "the hint has to say the cut is answered elsewhere: {hint}"
@@ -152,15 +148,14 @@ proc echo {
     let with = without.replace("kind L5", "kind L5\n  retains");
     let checked = check_ok(&with);
     assert!(checked.retains, "a bare `retains` is carried through");
-    // **Reading the previous frame is accumulation**, whatever it is spelled
-    // with: the trail at `t` is every frame that led to it.
+    // Retaining previous frame marks procedure as non-closed-form accumulation.
     assert!(
         !checked.closed_form,
         "a procedure that reads a retained frame cannot be evaluated at any `t`"
     );
 }
 
-/// **`retains` is refused on every kind but L5**, at the declaration.
+/// Retains header declaration is refused on all non-L5 procedure kinds.
 #[test]
 fn retains_is_refused_off_an_l5() {
     let src = r#"
@@ -237,8 +232,7 @@ proc over {
     assert_eq!(checked.texture_slots(), vec!["under"]);
 }
 
-/// **A Texture slot is L5's and nowhere else's**, and each refusal says which
-/// kind it is talking about.
+/// Texture slots are exclusive to L5 procedures.
 #[test]
 fn a_texture_slot_is_refused_on_every_other_kind() {
     for (kind, body) in [
@@ -274,8 +268,7 @@ proc probe {{
     }
 }
 
-/// **A texture is not a value, and it is the one slot type that can never
-/// become one.** What it offers is a fetch, and the refusal says which.
+/// Textures cannot be used as bare values without sampling builtins.
 #[test]
 fn reading_a_texture_as_a_value_is_refused_with_the_two_builtins_named() {
     let src = r#"
@@ -301,10 +294,7 @@ proc grab {
     );
 }
 
-/// **The three builtins are refused outside a `kind L5`**, and `frame_step` is
-/// the one that needed saying: its two neighbours refuse themselves for want of
-/// a texture name, and it would type-check anywhere and lower to a read of a
-/// `viewport` field no other module carries.
+/// Frame builtins (`texel`, `tap`, `frame_step`) are exclusive to L5 procedures.
 #[test]
 fn the_frame_builtins_are_refused_outside_an_l5() {
     let src = r#"
@@ -340,8 +330,7 @@ proc smear {
     );
 }
 
-/// **An L5 declares nothing about the material that made the picture**, and
-/// every one of those declarations is refused at the header.
+/// L5 procedures reject geometry declarations at header check.
 #[test]
 fn an_l5_declaring_geometry_is_refused() {
     let src = r#"
@@ -380,9 +369,7 @@ proc wrong {
     );
 }
 
-/// **A `vertex` block in an L5 is refused by the block-owner rule**, which is
-/// where it belongs: `vertex` is L4's, and the sentence says so rather than
-/// inventing a second rule about frame passes.
+/// Vertex blocks are refused in L5 procedures.
 #[test]
 fn a_vertex_block_in_an_l5_is_refused_as_l4s() {
     let src = r#"
@@ -408,7 +395,7 @@ proc wrong {
     );
 }
 
-/// **An L5 requires its one block**, and the message names it.
+/// L5 procedures require exactly one frame block.
 #[test]
 fn an_l5_without_a_frame_block_is_refused() {
     let errs = check_err("proc empty {\n  kind L5\n}\n");
@@ -441,8 +428,7 @@ proc wrong {
     );
 }
 
-/// **The two reserved names of a `frame` block cannot also name a slot**, in
-/// the one kind where a Texture slot is legal at all.
+/// Reserved frame block inputs (`src`, `held`) cannot name slots.
 #[test]
 fn a_texture_slot_may_not_be_called_src_or_held() {
     for name in ["src", "held"] {
@@ -469,8 +455,7 @@ proc collide {{
     }
 }
 
-/// **`texel` takes no coordinate on purpose**, and the refusal says why rather
-/// than reporting an arity.
+/// `texel` builtin fetches current coordinate without arguments.
 #[test]
 fn texel_with_a_coordinate_is_refused_with_the_reason() {
     let src = r#"

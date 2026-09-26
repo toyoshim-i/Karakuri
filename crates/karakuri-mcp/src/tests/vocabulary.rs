@@ -155,8 +155,7 @@ fn a_node_is_indexed_within_its_own_layer() {
         (Kind::L4, 0, sprites.clone()),
         (Kind::L2, 1, warp_b.clone()),
         (Kind::L4, 1, strokes.clone()),
-        // **The head keeps L1 0**, so a second source is 1 — a chain that
-        // names another geometry is another source, not a fresh count.
+        // The head slot retains L1 0; subsequent sources increment the index.
         (Kind::L1, 1, source_b.clone()),
         (Kind::L3, 0, camera.clone()),
         (Kind::Field, 0, blob.clone()),

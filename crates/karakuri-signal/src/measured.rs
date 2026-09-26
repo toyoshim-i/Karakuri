@@ -295,8 +295,7 @@ mod tests {
         }
     }
 
-    /// A silent room and a dead input are the same numbers and different
-    /// confidences, and that difference is the whole point.
+    /// A silent room and a disconnected input yield the same values with distinct confidences.
     #[test]
     fn silence_is_zero_at_full_confidence_and_nothing_is_zero_at_none() {
         let silent = AudioFrame::silent(8);

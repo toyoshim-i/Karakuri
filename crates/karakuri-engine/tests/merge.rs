@@ -184,9 +184,7 @@ proc {name} {{
         }
     }
 
-    /// **Each input has its own edge**, which is the whole reason to pay for a
-    /// target apiece. Pulling one renderer's opacity to zero takes its colour out
-    /// of the frame and leaves the other's exactly where it was — the second half
+    /// Each merge input connects via an independent edge buffer.
     /// being what separates a per-input fader from a fader on the Set.
     #[test]
     fn an_inputs_own_fader_reaches_only_that_input() {
@@ -301,9 +299,7 @@ proc {name} {{
         }
     }
 
-    /// **The targets are frame-sized and a Set is built before it is sized**, so a
-    /// merge that did not follow a resize would fold one-texel inputs into a full
-    /// frame for the rest of the run. Drawing at two sizes is the whole test.
+    /// Merge targets resize dynamically following viewport size changes.
     #[test]
     fn the_merge_targets_follow_a_resize() {
         let gpu = Gpu::headless().expect("no GPU available");

@@ -63,9 +63,7 @@ mod gpu {
              driving it, or the value it last wrote was left behind"
         );
 
-        // **And a take-back on a knob nobody is holding says so rather than
-        // failing**, which is the caller's cue and not an error: a rebuild may
-        // no longer declare the name.
+        // Unbinding an unbound control returns false without error.
         let (mut deck, _present) = deck_of(&gpu, vec![material()], 6);
         assert!(!deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, None, "radius"));
         assert!(deck.bind(karakuri_engine::DeckSlot(0), driven()).attached());
@@ -74,9 +72,7 @@ mod gpu {
             !deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, None, "radius"),
             "a second take-back claimed to remove something"
         );
-        // **And it is addressed**: the attachment above is the layer's, so a
-        // take-back naming one node of it is a different address and removes
-        // nothing.
+        // Addressed binding scope: node-specific unbind does not remove layer-wide bindings.
         assert!(deck.bind(karakuri_engine::DeckSlot(0), driven()).attached());
         assert!(
             !deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, Some(0), "radius"),
@@ -308,7 +304,7 @@ mod gpu {
             "the spawn accumulator produced {live} elements, not the bound rate's ~1500"
         );
     }
-    /// A param that is bound **and** given a manual value. The manual value is the
+    /// Parameter with both dynamic binding and manual override value.
     /// base of the blend and is never overwritten, so the answer does not depend
     /// on which of the two happened last.
     #[test]

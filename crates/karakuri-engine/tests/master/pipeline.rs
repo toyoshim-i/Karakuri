@@ -37,9 +37,7 @@ mod gpu {
         );
     }
 
-    /// **`examples/rgb_shift.kir` is `master.wgsl`'s `fs_rgb_shift`**, bit for
-    /// bit, on a frame that is not square — so the conversion from a fraction
-    /// of the frame's *height* into a step along x is part of what is compared.
+    /// Verifies rgb_shift procedure output matches built-in master WGSL implementation.
     #[test]
     fn the_shipped_rgb_shift_is_the_hand_written_pass_bit_for_bit() {
         let gpu = Gpu::headless().expect("no GPU available");

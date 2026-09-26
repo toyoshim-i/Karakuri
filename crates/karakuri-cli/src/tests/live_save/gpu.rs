@@ -178,9 +178,7 @@ fn a_save_after_a_rebuild_records_the_camera_the_slot_was_loaded_with() {
             swapped |= matches!(event, Event::Swapped { .. });
             seen.push(event.to_string());
         }
-        // **Read at the swap and not a frame later.** The outgoing Set is
-        // aimed correctly too, so anything that put it back would put the
-        // right camera back and hide exactly the defect this is about.
+        // State read immediately at swap boundary.
         if swapped {
             break;
         }

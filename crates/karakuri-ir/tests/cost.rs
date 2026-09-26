@@ -180,7 +180,7 @@ fn nested_loops_multiply_the_body_cost() {
 
 #[test]
 fn expensive_builtin_outweighs_cheap_one() {
-    // let a = curl(position);   vs.   let a = abs(position.x);
+    // Compares curl(position) cost against abs(position.x).
     let curl_proc = checked(
         vec![],
         vec![block(
@@ -226,7 +226,7 @@ fn expensive_builtin_outweighs_cheap_one() {
 
 #[test]
 fn fbm_scales_with_octave_count() {
-    // let a = fbm(position, N);
+    // Computes fbm procedure with N octaves.
     fn fbm_proc(octaves: i32) -> Checked {
         checked(
             vec![],
@@ -526,9 +526,7 @@ proc smear {
     );
 }
 
-/// **A refusal carries the estimate, the ceiling and the dominant term** —
-/// [ADR-0012](../../../docs/adr/0012-one-severity-and-a-rejection-carries-numbers.md),
-/// and "over budget" tells a repair prompt nothing about how much to cut.
+/// Cost refusal details estimate, ceiling, and dominant term (ADR-0012).
 #[test]
 fn an_l5_over_the_ceiling_is_refused_with_numbers() {
     // The 9x9 kernel of `examples/bloom.kir` widened to 13x13 — 169 taps where

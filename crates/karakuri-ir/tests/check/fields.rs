@@ -88,8 +88,7 @@ proc carve {
     );
     assert_eq!(checked.field_slots(), vec!["shape", "cutter"]);
 
-    // **Counted apart**, which is what lets a Set multiply each by the field
-    // bound to it rather than by whichever one it found first.
+    // Multiple field slots are estimated independently.
     let cost = karakuri_ir::cost::estimate(&checked).expect("a marcher of two fields costs");
     assert_eq!(
         cost.field_calls.slot("shape").map(|c| c.total),
@@ -471,10 +470,7 @@ fn a_member_a_camera_has_not_got_is_refused() {
 /// Verifies that camera members respect the stage restrictions of their underlying ambients.
 #[test]
 fn the_members_keep_the_ambients_stage_rules() {
-    // **Per element, and in the `fragment` stage**, which is where the ambient
-    // itself is legal: what refuses this is the procedure having a `vertex`
-    // block at all, so reading it anywhere else would be refused by the block
-    // rule instead and prove nothing about this one.
+    // Ambient stage accessibility rules verified within fragment stage.
     let errs = check_err(&THROUGH.replace(
         "color = vec4(1.0, 1.0, 1.0, 1.0)",
         "color = vec4(view.ray, 1.0)",

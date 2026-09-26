@@ -283,9 +283,7 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
-        // **A field is not a value either**, and for the mirror reason: it is a
-        // function of space, so what can be had from it is its value *at* a
-        // point. The language has no function type and nothing to pass one to.
+        // Field slots cannot be evaluated as bare values without spatial coordinates.
         if self.fields.contains(&name) {
             self.err_hint(
                 Stage::Contract,
@@ -342,9 +340,7 @@ impl<'a> Checker<'a> {
                 },
             ));
         }
-        // **A camera is not a value either.** It is six numbers and three
-        // derivations of them, and the language has no type for any of that —
-        // what can be had is one of the parts, which is what the members are.
+        // Camera slots cannot be evaluated as bare values; member access is required.
         if self.camera == Some(name) {
             self.err_hint(
                 Stage::Contract,

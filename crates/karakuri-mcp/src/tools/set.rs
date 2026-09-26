@@ -97,9 +97,7 @@ pub(crate) fn listing(args: &Value) -> Result<Operation, String> {
             let spelled = value
                 .as_str()
                 .ok_or("`layer` is a string: which layer a set must hold a node on")?;
-            // **The same spellings the other tools take**, from the same table:
-            // a model that addressed `Field` in `read_procedure` must not be
-            // told there is no such layer here.
+            // Resolve layer name using shared vocabulary spelling table.
             let kind = layer_named(spelled)
                 .ok_or_else(|| format!("no layer `{spelled}` — {}", layer_list()))?;
             Some(layer_of(kind))
@@ -124,10 +122,7 @@ pub(crate) fn save_set(
             id,
             reply: Reply(tx),
         })
-        // **Answered rather than waited for**, both ways. A model must never be
-        // left holding a call on a loop that will not answer it, and these are
-        // the two shapes of "it will not": one that has stopped taking requests,
-        // and one that is gone.
+        // Fail promptly if the channel is full or disconnected rather than blocking.
         .map_err(|e| match e {
             // Full queue indicates requests are queued waiting on render thread progress.
             mpsc::TrySendError::Full(_) => format!(
@@ -162,10 +157,7 @@ pub(crate) fn read_set(id: &str, state: &State) -> Result<String, String> {
             Store::SANDBOX
         )
     })?;
-    // **The file's own order**, which is the order [`crate::setfile::save`]
-    // wrote the nodes in, and the order a hand-written file chose. Sorting by
-    // layer would impose a reading nobody wrote, for the reason
-    // [`crate::meta::card`] keeps a procedure's parameters in declaration order.
+    // Preserves file declaration order of nodes as written.
     let nodes: Vec<(Layer, u32, Option<String>, Hash)> = lines
         .iter()
         .filter_map(|line| match line.record() {
@@ -217,10 +209,7 @@ pub(crate) fn list_sets(
     let store = Store::open(&state.store).map_err(opened)?;
     let mut sets = karakuri_environment::setfile::summarise(&store).map_err(opened)?;
     let held = sets.len();
-    // **An empty store is an answer and not a failure**, and it is a different
-    // answer from a filter that matched nothing: one sends a reader to
-    // `save_set`, the other to a different filter. Answered before the filters
-    // are applied, because a filter over nothing has nothing to say.
+    // An empty store returns a distinct informative message before filters run.
     if held == 0 {
         return Ok(format!(
             "this store holds no sets at all — nothing has been kept here yet. This lists \
@@ -252,9 +241,7 @@ pub(crate) fn list_sets(
     }
     let shown = matched.min(LISTED);
     let mut out = if matched > shown {
-        // **Never a truncated list that reads as a whole one.** A model told
-        // "here are your sets" over twenty of two hundred will tell its user
-        // they have twenty, and act on a library it has not seen.
+        // Notify caller of list truncation when results exceed LISTED limit.
         format!(
             "{matched} set{} {narrowed}, and the {shown} most recently written are below — \
              **this is not all of them**: {} more matched and are not listed. Narrow it \
@@ -284,9 +271,7 @@ pub(crate) fn list_sets(
 /// One Set as a line of a listing.
 fn set_line(set: &karakuri_environment::setfile::SetSummary) -> String {
     let written = karakuri_environment::setfile::written_at(set.written);
-    // **A file in `sets/` that will not read is listed and named.** Dropping it
-    // would answer "what have I kept" with something missing, and rendering it
-    // as a set of no nodes would say it holds nothing.
+    // Report unreadable set files explicitly rather than omitting them.
     if let Some(why) = &set.unreadable {
         return format!(
             "`{}` — written {written}, and could not be read: {why}\n",

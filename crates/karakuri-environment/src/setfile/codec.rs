@@ -110,9 +110,7 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
         id: id.to_string(),
         v: VERSION,
     })];
-    // **One `slot` record per node, in node order** — the geometries, the
-    // deformers, the camera, the renderers, then the field. Several on a layer
-    // Sort nodes deterministically by layer ordinal and slot index.
+    // Emits one slot record per node sorted deterministically by layer ordinal and slot index.
     let mut ordered: Vec<&Node> = nodes.iter().collect();
     ordered.sort_by_key(|n| (layer_ordinal(n.layer), n.index));
     for node in ordered {
@@ -225,16 +223,12 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
     // What each geometry runs at, by index, growing as the file names them.
     let mut capacities: Vec<Option<u32>> = Vec::new();
-    // **The `param` records as written**, expanded into [`ParamWrite`]s once
-    // the procedures are checked — see the `Record::Param` arm.
+    // Parsed param records, expanded into [`ParamWrite`] values once procedures are checked.
     let mut param_records: Vec<ParamRecord> = Vec::new();
     let mut params = Vec::new();
     let mut bindings = Vec::new();
     let mut camera = None;
-    // **Whether the file said this Set composites, and which renderer it left
-    // selected.** `Overdraw` until a `merge` record says otherwise, because
-    // that is what the record's absence has always meant — every file written
-    // before it existed says overdraw by saying nothing.
+    // Layering mode defaults to Overdraw when no merge record is present.
     let mut layering = Layering::Overdraw;
     let mut live: Option<u32> = None;
     // Which camera node the `camera` record above was about, checked against
@@ -329,10 +323,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 key.clone(),
                 *value,
             )),
-            // **Carried as written, both ends.** Whether the nodes it names
-            // are in this Set is not a question this decoder can answer — a
-            // name nobody wrote is derived where the Set is built — so it is
-            // asked there, once, rather than here and again there.
+            // Edge endpoint names are preserved as written for build-time validation.
             Record::Edge { node, slot, to } => edges.push(karakuri_engine::set::Edge {
                 node: node.clone(),
                 slot: slot.as_str().into(),
@@ -538,10 +529,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         (Kind::L4, &l4s),
         (Kind::Field, &fields),
     ];
-    // **Every declaration of `key` the address reaches, as its declared type.**
-    // Empty means nothing in this Set declares it — which is not an error here:
-    // a scalar write against a name a regenerated artifact no longer has is
-    // reported by the engine at build time and should not take the load down.
+    // Collect all declarations of key matching address target.
     let declared_as = |at: Option<(Kind, u32)>, key: &str| -> Vec<karakuri_ir::Ty> {
         let mut out = Vec::new();
         for (kind, procs) in layers {
@@ -654,9 +642,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         .chain(field_srcs)
         .collect();
 
-    // **Trimmed to the nodes that came back**, so the two lists cannot
-    // disagree: a name past the end of its layer belongs to a `slot` record the
-    // refusals above have already dealt with.
+    // Trim names to loaded node bounds.
     let mut names = Names {
         l1s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L1) as usize]),
         l2s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L2) as usize]),

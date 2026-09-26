@@ -152,10 +152,7 @@ impl Live {
             self.key(&key);
             at += 1;
         }
-        // **It loops**, because a demonstration nobody happened to be looking
-        // at is a demonstration that did not happen. Every script is under half
-        // a minute and starts over, so glancing at the window at any moment
-        // eventually shows the thing.
+        // Demo scripts loop continuously for unattended display.
         if at >= script.len() && elapsed >= demo.loop_seconds() {
             self.demo_started = Instant::now();
             at = 0;

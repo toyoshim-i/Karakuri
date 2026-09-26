@@ -26,15 +26,13 @@ fn shipped_l5(name: &str) -> karakuri_codegen::L5Shader {
                 .join("\n")
         )
     });
-    // **Costed here too**, because a shipped part that lowers and is refused at
-    // stage 4 is a part nobody can load.
+    // Cost estimation validation ensures shipped procedures remain within budget.
     karakuri_ir::cost::estimate(&checked)
         .unwrap_or_else(|errs| panic!("{name} is over the ceiling: {errs:?}"));
     karakuri_codegen::generate_l5(&checked)
 }
 
-/// **All three, through a real WGSL front end** — the checklist item that is
-/// not optional for this crate (`docs/contributing.md` §7).
+/// Validates shipped L5 post-processing procedures against Naga WGSL frontend.
 #[test]
 fn the_three_shipped_l5_procedures_compile_and_validate() {
     for name in ["feedback", "bloom", "rgb_shift"] {
@@ -43,8 +41,7 @@ fn the_three_shipped_l5_procedures_compile_and_validate() {
     }
 }
 
-/// **The bind group is `master.wgsl`'s, entry for entry**, so pass 2 binds a
-/// written slot with the layout the engine already has.
+/// Bind group layout matches master post-processing pipeline layout.
 #[test]
 fn an_l5_lays_its_bind_group_out_the_way_the_chain_does() {
     let feedback = shipped_l5("feedback");
@@ -62,9 +59,7 @@ fn an_l5_lays_its_bind_group_out_the_way_the_chain_does() {
     }
     assert!(feedback.retains, "`feedback` declares `retains`");
 
-    // **Binding 2 is left empty rather than renumbered** where nothing is
-    // retained: the sampler's number must not depend on whether a pass reads
-    // its own history.
+    // Binding index 2 remains unallocated when history texture is not retained.
     let shift = shipped_l5("rgb_shift");
     assert!(!shift.retains);
     assert!(
@@ -160,10 +155,7 @@ fn frame_step_lowers_to_the_viewport_conversion_and_only_when_it_is_called() {
         "and the uniform carries the size it reads:\n{shift}"
     );
 
-    // **Demand-driven, like every other helper.** `feedback` never displaces
-    // anything, so it must not carry the conversion — and the `viewport` field
-    // stays in the uniform either way, because the layout is the engine's
-    // contract rather than a function of what a body happened to call.
+    // Helper emission is demand-driven based on shader body usage.
     let feedback = shipped_l5("feedback").source;
     assert!(
         !feedback.contains("fn frame_step("),
@@ -171,10 +163,7 @@ fn frame_step_lowers_to_the_viewport_conversion_and_only_when_it_is_called() {
     );
 }
 
-/// **The 9x9 kernel is one pass and 81 taps**, which is the whole of what
-/// `bloom` gives up by being a chain slot rather than a pair of them: the
-/// second half of the separable blur needs both the bright buffer *and* the
-/// frame it was taken from, and a slot's output replaces the frame.
+/// Single-pass 9x9 kernel (81 taps) for post-processing bloom shader.
 #[test]
 fn blooms_lowering_is_one_pass_of_eighty_one_taps() {
     let src = shipped_l5("bloom").source;
@@ -199,9 +188,7 @@ fn blooms_lowering_is_one_pass_of_eighty_one_taps() {
     );
 }
 
-/// **A nested merge's fan-in is `uses` plus `edge` and no new mechanism**, and
-/// the bindings are numbered by what the file declared rather than by what an
-/// edge bound first.
+/// Nested merge fan-in binds declared slots in declaration order.
 #[test]
 fn texture_slots_are_bound_after_the_sampler_in_header_order() {
     let src = r#"

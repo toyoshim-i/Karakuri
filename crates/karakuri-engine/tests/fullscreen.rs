@@ -237,7 +237,7 @@ proc marcher {{
         );
     }
 
-    /// **`ray` is a unit vector and it fans out across the frame.** Both halves
+    /// `ray` is a unit vector and it fans out across the frame. Both halves
     /// matter: a constant direction would still be unit, and an unnormalised one
     /// would still fan.
     #[test]

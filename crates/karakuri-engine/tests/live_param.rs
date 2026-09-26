@@ -32,8 +32,7 @@ proc dots {
 }
 "#;
 
-    /// **An L1 that declares `heat`**, so that a bare name reaches two nodes on
-    /// two layers and the refusal has something to refuse.
+    /// L1 declaring `heat` to test disambiguation refusals across layers.
     const HOT_DOTS: &str = r#"
 proc hot_dots {
   kind     L1
@@ -50,8 +49,7 @@ proc hot_dots {
 }
 "#;
 
-    /// **A fullscreen L4 whose colour *is* its parameters**, so the readback is
-    /// the numbers themselves rather than a function of them. One scalar and
+    /// Fullscreen L4 whose output color directly reflects input parameters.
     /// one vector, because a component key is an address like any other and a
     /// write must land on one component and leave the rest.
     const GLOW: &str = r#"
@@ -82,8 +80,7 @@ proc glowing {
         set
     }
 
-    /// A deck of one fixed Set — **no worker**, so nothing in these tests can
-    /// swap and a value that changed cannot have been carried in by a build.
+    /// Fixed deck fixture without background compilation workers.
     /// That is the whole control on the claim.
     fn deck_of(gpu: &Gpu, set: Set) -> Deck {
         Deck::new(&gpu.device, vec![HotSwap::fixed(set)], W, H)
@@ -186,8 +183,7 @@ proc glowing {
         );
     }
 
-    /// **An addressed write names one node**, which is what makes a component
-    /// key an address rather than a suggestion — and what a published control
+    /// Addressed write targets a specific node in the layer hierarchy.
     /// on one renderer of several needs.
     #[test]
     fn an_addressed_write_names_one_node() {

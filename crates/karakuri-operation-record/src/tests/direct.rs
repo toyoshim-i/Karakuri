@@ -157,10 +157,8 @@ fn an_attachment_and_a_take_back_are_one_record_with_and_without_a_source() {
         "a take-back is not the attachment's record with its attachment absent"
     );
 
-    // **The address crosses whole, and a wildcard stays a wildcard.** A
-    // binding with no index is the layer's — every node of it declaring
-    // the key — and an `index` invented here would narrow it to one node
-    // silently.
+    // Address preservation: a binding without an index targets the entire
+    // layer, keeping wildcard semantics intact.
     let wild = records(written(
         &Operation::TakeParamBack {
             deck: 0,

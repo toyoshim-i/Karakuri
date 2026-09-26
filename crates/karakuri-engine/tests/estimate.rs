@@ -138,7 +138,7 @@ proc wash {
         build(gpu, &l1, &l4)
     }
 
-    /// **A renderer whose rate nothing can bound**: `size` is an attribute, so
+    /// Unbounded renderer fixture with attribute-dependent primitive sizing.
     /// there is no declaration to read it against. `examples/hard_dots.kir`
     /// ships the same expression.
     fn unbounded_set(gpu: &Gpu) -> Set {
@@ -184,7 +184,7 @@ proc loose_dots {
         build(gpu, &l1, &l4)
     }
 
-    /// **A renderer whose rate is one param**, so a write to that param is the
+    /// Parameter-scaled renderer fixture for bounded cost estimation.
     /// whole of what the bound rests on.
     fn scaled_set(gpu: &Gpu) -> Set {
         let l1 = compile(
@@ -236,7 +236,7 @@ proc scaled_dots {
         sub_pixel_floor_rows(PLAIN_DOTS_RATE).expect("a positive rate has a floor")
     }
 
-    /// **The rule, on real draws.** Two rungs come back, low area first, at the
+    /// Validates dual-rung area scaling and regression fit on executed draws.
     /// sizes `rungs` places; the fit's two terms sum to the answer it hands
     /// out; and the measurements travel with it, instrument and capacity and
     /// size, so a consumer can check what it was given.
@@ -357,7 +357,7 @@ proc scaled_dots {
             rungs(AT, floor()).expect("two rungs fit"),
         );
 
-        // **And it says where the floor came from**, which is what makes the
+        // Floor source attribution identifies the bounding procedure.
         // number checkable: one bound per renderer, naming the procedure and
         // the declarations it rests on.
         match &e.floor_from {
@@ -411,7 +411,7 @@ proc scaled_dots {
             ),
             other => panic!("expected an analysed floor, got {other:?}"),
         }
-        // **The correction is on the answer and not on the line.** A caller
+        // Cost estimate incorporates conservative rounding adjustments.
         // reading `ms` gets the number that rounds toward refusing; one
         // reading the two terms gets the line that was fitted.
         if let Ok(f) = e.fit {
@@ -435,10 +435,7 @@ proc scaled_dots {
         let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = scaled_set(&gpu);
 
-        // In range first: the same Set, answered. **The floor is the declared
-        // minimum's and not this value's** — 0.005 is one pixel at 200 rows,
-        // and 201 because the nearest `f32` to 0.005 is a shade under it and
-        // the floor rounds up.
+        // Cost floor reflects declared parameter minimum rather than active value.
         assert!(set.set_param("point_scale", 0.01) > 0);
         let ok = estimate(&mut probe, &gpu.device, &gpu.queue, &mut set, AT);
         assert_eq!(ok.floor, Some(201));

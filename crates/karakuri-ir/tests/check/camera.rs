@@ -82,10 +82,7 @@ proc full {
     check_ok(src);
 }
 
-/// **A camera reads the clock and its params, and no element.** An L3 runs once
-/// a frame over nothing, so there is no element for an attribute to belong to —
-/// and the hint has to send an author to the spec rather than to a `consumes`
-/// list that would not help.
+/// Camera blocks execute once per frame without element attribute access.
 #[test]
 fn a_camera_block_cannot_read_an_attribute() {
     let src = r#"
@@ -137,8 +134,7 @@ proc follow {
     );
 }
 
-/// **`seed` is not available**, which is the one ambient an L3 loses relative to
-/// every other layer: it is a per-element value, and there is no element.
+/// Per-element seed ambient is unavailable in camera blocks.
 #[test]
 fn a_camera_block_has_no_seed() {
     let src = r#"
@@ -159,9 +155,7 @@ proc noisy {
     assert!(rendered.contains("seed"), "{rendered}");
 }
 
-/// **`dt` is**, and an L4 does not get it. That asymmetry is the one an L3 being
-/// allowed to hold state buys: a camera's craft is mostly smoothing, and
-/// smoothing is written against a step.
+/// Delta time ambient is available in camera blocks for smoothing calculations.
 #[test]
 fn a_camera_block_gets_dt_where_a_renderer_does_not() {
     let src = r#"
@@ -228,8 +222,7 @@ proc empty {
     assert!(rendered.contains("camera"), "{rendered}");
 }
 
-/// **A `camera` block belongs to an L3 and nowhere else**, which is what giving
-/// it its own `BlockKind` buys — the same argument `deform` was named for.
+/// Camera blocks are exclusive to L3 procedures.
 #[test]
 fn a_camera_block_is_refused_in_an_l4() {
     let src = r#"
@@ -315,9 +308,7 @@ proc marcher {
     );
 }
 
-/// And it **is** reserved where it exists, which is the other half: a `camera`
-/// block's `far` is a stage output, so a local of that name would shadow the
-/// thing the block is there to write.
+/// Stage output variable `far` cannot be shadowed by a local variable.
 #[test]
 fn a_camera_output_is_reserved_inside_a_camera_block() {
     for decl in ["param far : float [1.0, 90.0] = 40.0", ""] {
@@ -345,9 +336,7 @@ proc shadowed {{
     }
 }
 
-/// **`eye` stays refused everywhere**, and as an *ambient* rather than an
-/// output: a marching fragment reads it, so it genuinely is in scope in an L4
-/// and a local of that name would shadow a value the procedure can use.
+/// Ambient `eye` is protected from local shadowing.
 #[test]
 fn the_eye_is_reserved_in_every_layer_because_a_marcher_reads_it() {
     let src = r#"
