@@ -462,11 +462,7 @@ pub(crate) fn awaited(
             Ok(News::Accepted(said)) => accepted = Some(said),
             Ok(News::Settled(outcome)) => return outcome,
             Err(mpsc::RecvTimeoutError::Timeout) => break,
-            // **The loop dropped the request without answering it**, which is
-            // what the end of a run looks like from here. Which of the two
-            // sentences depends on whether it was ever taken: one that was
-            // never taken saved nothing, and one that was may well have reached
-            // the disk on the way out.
+            // Request was dropped without a response during shutdown.
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(match accepted {
                     Some(said) => format!(

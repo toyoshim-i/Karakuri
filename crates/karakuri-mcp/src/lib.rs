@@ -1,10 +1,5 @@
 //! Model Context Protocol (MCP) server for Karakuri.
-//!
-//! Provides an MCP interface over HTTP loopback to allow tools and models to query
-//! slot procedures, trigger hot-swaps, wire inputs, and interact with the engine.
-//!
-//! Requests and modifications are mapped into standard engine operations and
-//! evaluated against validation and budget checks before application.
+//! Maps incoming tool invocations over HTTP loopback to engine operations and inspection queries.
 
 pub mod protocol;
 pub mod resources;

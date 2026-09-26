@@ -50,12 +50,7 @@ fn the_vocabulary_lists_every_topology_every_blend_and_every_stage_output() {
         );
     }
 
-    // **Every blend mode, and each one round-tripped through the parser**,
-    // for the same reason the topologies are: a page listing a mode the
-    // language does not accept sends a model into a diagnostic, and one
-    // omitting a mode hides a whole way of drawing. `weighted` is this
-    // milestone's `clip_b` — the only way to make material occlude
-    // anything, and invisible to anyone not told it exists.
+    // Verify each blend mode round-trips through the parser cleanly.
     let blends = section(&rendered, "# Blend modes");
     for name in ["additive", "weighted"] {
         assert!(
@@ -122,12 +117,7 @@ fn a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused() {
     );
     assert!(slots.holds(1).is_ok());
 
-    // **A layer this slot does not use is a different answer from a layer
-    // this surface cannot reach**, and it used to give the second: "no
-    // layer `L2` here" was true of the surface and false of the language.
-    // Every layer resolves now, so what is left to say is that this
-    // particular slot has none — with what a slot holds one for, because a
-    // model that reads that can decide whether to ask for a different slot.
+    // Distinguish between an unused layer in this slot vs an unreachable layer.
     let none_held = slots.path(0, Kind::L2, 0).expect_err("this slot has no L2");
     assert!(none_held.contains("holds no L2"), "{none_held}");
     assert!(none_held.contains("optional"), "{none_held}");

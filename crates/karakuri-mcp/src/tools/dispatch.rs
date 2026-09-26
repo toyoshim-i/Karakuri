@@ -26,14 +26,7 @@ pub(crate) enum Sayable {
 /// Exhaustive, with no wildcard arm — see [`Sayable`].
 pub(crate) fn sayable(operation: &Operation) -> Sayable {
     match operation {
-        // ----- the thirty `operate` takes ----------------------------------
-        //
-        // Twenty-eight of them are refused by the audit until an operator opens
-        // their class, which is a built route and not a missing one
-        // (ADR-0235: *"a closed class is reached and answered with a refusal"*).
-        // `Operation::RestoreProcedure` is the one the audit lets through and
-        // the panel then performs, and `Operation::LoadSet` is the one whose
-        // class is a predicate over its target.
+        // Closed operation classes return standard refusals under ADR-0235.
         Operation::TapBeat
         | Operation::ScaleGrid { .. }
         | Operation::SetLatencyOffset { .. }
@@ -85,21 +78,10 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
         Operation::SaveSet { .. } => Sayable::Tool("save_set"),
         Operation::ReadSet { .. } => Sayable::Tool("read_set"),
         Operation::ListSets { .. } => Sayable::Tool("list_sets"),
-        // **The eighth, and it joined the seven on 2026-09-10 by having its
-        // payload settled** — it names the Set it is a walk of now, so this
-        // surface can say it. It is a tool rather than an `operate` name for
-        // the property that puts the other seven here and not for its shape: it
-        // reads the store and answers with rows, which is what only this server
-        // can do, and a walk performed on the drain's frame would be a
-        // directory walk on the path that must not wait. See
-        // `docs/adr/0342-…`.
+        // Walk operation: reads store and answers with rows.
         Operation::WalkHistory { .. } => Sayable::Tool("walk_history"),
 
-        // ----- the seventeen a model has no window for ---------------------
-        //
-        // ADR-0315's twelve and the sequencer's six, which carry that record's
-        // sentence on the page for the same reason: a route into a surface's
-        // own state is a route into a window the model is not looking at.
+        // Operations requiring dedicated UI window contexts are excluded from models.
         Operation::SelectDeck { .. }
         | Operation::SelectScope { .. }
         | Operation::SetTransition { .. }
