@@ -119,14 +119,7 @@ fn a_bind_can_address_one_renderer_and_defaults_to_all_of_them() {
     assert!(err.contains("index"), "a bad index is not named: {err}");
 }
 
-/// A third path is a second renderer, and there is no new syntax for it.
-///
-/// This used to be an error, and the reasoning was sound while a Set was a
-/// pair: `b.kir,c.kir` had been silently accepted as one literal L4 filename,
-/// so a stray comma got blamed on a missing file. Now a Set holds a list, and
-/// one comma-separated list read as one L1 and however many L4s is exactly what
-/// the command line should look like — *no new syntax at all*. See
-/// `docs/adr/0154-a-third-path-on-set-is-a-second-renderer-and-there-is-no-new-syntax.md`.
+/// Verifies that multiple comma-separated paths on `--set` map to one geometry and subsequent renderers.
 #[test]
 fn set_with_three_paths_is_one_geometry_and_two_renderers() {
     let args = parse(&["--set", "a.kir,b.kir,c.kir"]).expect("should parse");

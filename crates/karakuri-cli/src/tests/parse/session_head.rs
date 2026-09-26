@@ -2,14 +2,7 @@ use super::*;
 
 // -- defaults and the positional pair --------------------------------
 
-/// A session recorded with no flags carries its material and replays.
-///
-/// The head used to be the `--load-set` file or nothing, and "or nothing" meant
-/// a timeline of ticks with no material under it: `--replay` refused it with
-/// "has no L1 slot" long after the set was over, and nothing said so at the
-/// time. This is the round trip that catches it — the head is written the way
-/// the recorder writes it and read back the way the replay reads it, so a head
-/// that describes nothing fails here rather than on stage.
+/// Verifies that a session recorded without flags correctly captures its default material and replays.
 #[test]
 fn a_session_head_carries_the_material_a_replay_needs() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -20,10 +13,6 @@ fn a_session_head_carries_the_material_a_replay_needs() {
 
     let mut args = parse(&[]).expect("parses");
     args.sets = vec![(Named::bare(&l1), vec![Named::bare(&l4)])];
-    // **And the edge that makes it buildable.** `morph` takes a geometry it
-    // calls `far` and a Set that does not say which one is refused where it
-    // is built — so a head recorded without it is a head no replay can
-    // open, which is exactly the failure this test is about.
     args.edges = vec![karakuri_engine::set::Edge {
         node: "morph".to_string(),
         slot: "far".into(),
@@ -35,8 +24,6 @@ fn a_session_head_carries_the_material_a_replay_needs() {
     let head = session_head(&args, &[placed], &material.l1s, &store, "a_set");
     assert!(!head.is_empty(), "the head describes nothing");
 
-    // Read back the way `--replay` reads it, which is the whole claim: the
-    // artifacts resolve out of the store and both slots are there.
     let loaded = setfile::from_lines(&store, "a_set", &head)
         .expect("the head a recording writes is a head a replay can load");
     assert_eq!(loaded.l1s[0].kind, karakuri_ir::Kind::L1);
@@ -44,19 +31,7 @@ fn a_session_head_carries_the_material_a_replay_needs() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// **A head written for a two-slot deck splits back into the material and the
-/// deck**, and the material still loads clean.
-///
-/// The writer's own output through the reader's own rule. `session_head` writes
-/// the head slot's Set file, `session::head` puts the deck's records after it,
-/// and `session::split` is what `--replay` sorts the two with — so a head whose
-/// deck records leaked into the material, or whose material leaked into the
-/// deck, fails here rather than on the way back from a set.
-///
-/// What this cannot check is the *reading* of a live deck — `held_deck` takes a
-/// `Deck` and a deck takes a device. The values below are written by hand for
-/// that reason, and the far end of the claim is
-/// `karakuri-cli/tests/replay.rs`'s two-slot head driven through the binary.
+/// Verifies that a two-slot session head splits into initial material and opening deck records.
 #[test]
 fn a_two_slot_head_splits_into_the_material_and_the_deck() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -70,8 +45,6 @@ fn a_two_slot_head_splits_into_the_material_and_the_deck() {
     )];
     args.store = dir.path().to_path_buf();
     let (material, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
-    // The same material in the second slot, which is what this program's own
-    // deck holds when it is given one `--set`: four slots of one pair.
     let nodes: Vec<_> = placed
         .iter()
         .map(|node| {
@@ -106,8 +79,6 @@ fn a_two_slot_head_splits_into_the_material_and_the_deck() {
     );
 
     let stream = session::split(head);
-    // The material loads the way `--replay` loads it, with nothing of the deck's
-    // among it: a `gain` reaching `from_lines` comes back as a note.
     let loaded = setfile::from_lines(&store, "two", &stream.head)
         .expect("the head a recording writes is a head a replay can load");
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
@@ -130,15 +101,7 @@ fn a_two_slot_head_splits_into_the_material_and_the_deck() {
     assert!(stream.frames.is_empty(), "a head is not a frame");
 }
 
-/// A session opens with a Set file, so what a Set file cannot hold is a
-/// performance that cannot be recorded.
-///
-/// A cube morphing into a sphere is two geometries, an L2 that pairs them and a
-/// renderer — a chain `--set` has spelled for a while and the head could not
-/// carry: `session_head` wrote every path after the first as an `L4` slot, so
-/// `--record-session` refused it outright rather than recording a performance
-/// nobody could replay. This is that chain through the head and back, layer by
-/// layer.
+/// Verifies that multi-node deformation chains are captured and reconstructed from the session head.
 #[test]
 fn a_session_head_carries_a_whole_chain_and_not_just_a_pair() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -208,28 +171,13 @@ fn compiled(files: &[&str]) -> Vec<(Named, karakuri_ir::typed::Checked, std::syn
         .collect()
 }
 
-/// A slot that cannot be assembled refuses with a sentence, and the two callers
-/// decide what to do about it — a startup prints it and stops, a rebuild prints
-/// it and leaves the Set that is running alone. That difference is the only
-/// thing the two paths do differently, and it is the reason this sort was
-/// written twice before it was written once.
-///
-/// The sentence names the file, because the file is what an operator can fix;
-/// the slot is prefixed by whichever caller is reporting it.
+/// Verifies that multiple cameras and fields are preserved with indexed addresses.
 #[test]
 fn a_slot_refuses_nothing_that_draws_and_keeps_a_second_camera_and_field() {
-    // Matched rather than `expect_err`, which would want `Material` to be
-    // `Debug` — a derive on a production type to print something no test
-    // reaching here ever prints.
     let refused = |files: &[&str]| match sort_compiled(compiled(files)) {
         Err(e) => e,
         Ok(_) => panic!("this slot cannot be assembled"),
     };
-    // **A second camera is not a refusal, and this is where that stopped
-    // being one.** It said a slot looks from one viewpoint, which was true
-    // of the plumbing and not of the material: a renderer declares `uses
-    // view : Camera` and an `edge` names which node fills it, so two
-    // cameras are two nodes addressed as `L3:0` and `L3:1`.
     let (two_cameras, placed_cameras) = match sort_compiled(compiled(&[
         "drift_shell.kir",
         "beat_jump.kir",
@@ -249,11 +197,6 @@ fn a_slot_refuses_nothing_that_draws_and_keeps_a_second_camera_and_field() {
         [(karakuri_ir::Kind::L3, 0), (karakuri_ir::Kind::L3, 1)],
         "the cameras are numbered from 0 with no gaps"
     );
-    // **A second field is not a refusal, and this is where that stopped
-    // being one.** The sort was the last thing in the tree saying a Set
-    // holds one, and it said so about the plumbing rather than about the
-    // material: two fields are two nodes, addressed as `Field:0` and
-    // `Field:1` and bound by name.
     let two_fields = sort_compiled(compiled(&[
         "drift_shell.kir",
         "melt_blob.kir",
@@ -265,9 +208,6 @@ fn a_slot_refuses_nothing_that_draws_and_keeps_a_second_camera_and_field() {
         Err(e) => panic!("two fields are two nodes: {e}"),
     };
     assert_eq!(material.fields.len(), 2, "both were kept");
-    // **At its own index**, which is what `--param Field:1:x` and a Set
-    // file's `slot` record both address it by. The second used to be
-    // dropped, and before the refusal above it was dropped silently.
     let addresses: Vec<(karakuri_ir::Kind, u32)> = placed
         .iter()
         .filter(|p| p.layer == karakuri_ir::Kind::Field)
@@ -280,12 +220,8 @@ fn a_slot_refuses_nothing_that_draws_and_keeps_a_second_camera_and_field() {
     );
     let no_renderer = refused(&["drift_shell.kir", "swirl_warp.kir"]);
     assert!(no_renderer.contains("nothing here draws"), "{no_renderer}");
-    // The file the slot was spelled with, which is the one an operator looks
-    // at first — and by the time this is said the list has been sorted past.
     assert!(no_renderer.contains("drift_shell.kir"), "{no_renderer}");
 
-    // ...and one of each is a slot, so none of the above is a refusal of
-    // cameras and fields as such.
     let one_of_each = sort_compiled(compiled(&[
         "drift_shell.kir",
         "beat_jump.kir",
@@ -323,11 +259,7 @@ fn a_set_may_name_any_of_its_files() {
     );
 }
 
-/// Two written names that collide are refused rather than resolved, and this is
-/// the *early* refusal — the one that names the slot, before a GPU is asked for
-/// anything. `Set::build_many` refuses the same thing again where every node is
-/// in hand, which is where a derived name could also collide with a written
-/// one.
+/// Verifies that duplicate node names within the same Set are rejected.
 #[test]
 fn two_nodes_cannot_share_a_name() {
     let names = Names {
@@ -404,11 +336,6 @@ fn the_lines_demo_supplies_its_own_two_slot_deck() {
         ],
         "there has to be more than one slot for taking one away to show anything"
     );
-    // **Three moments, one per slot plus the return to the mix**, and each
-    // moment is the keys it takes: a digit to focus the slot and `F` to
-    // fade it out, `G` to bring the previous one back. A deck of a
-    // different size leaves the script out of phase, which is what this
-    // counts.
     let fades = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'F').count();
     let restores = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'G').count();
     assert_eq!(

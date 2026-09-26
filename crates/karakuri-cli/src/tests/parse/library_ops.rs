@@ -2,19 +2,7 @@ use super::*;
 
 // -- --list-sets -----------------------------------------------------
 
-/// `--list-sets` is not a run, and the type says so.
-///
-/// The flag prints what the store holds and stops: no window, no adapter, no
-/// compile, no Set built. That is enforced by there being no [`Args`] at all on
-/// this path — [`parse_args_from`] answers with [`ParseOutcome::ListSets`],
-/// which carries a store path and nothing else, so everything `main` does with
-/// an `Args` is unreachable rather than merely skipped. A `bool` on `Args`
-/// would have needed a check above every early return in `main` and would have
-/// been wrong the day somebody added one more.
-///
-/// `--store` on either side of it, because an operator types the flags in
-/// whatever order they think of them, and a listing of the default store when
-/// `--store` was given would be a listing of the wrong library.
+/// Verifies that `--list-sets` parses as a list action without initiating a runtime engine pass.
 #[test]
 fn list_sets_prints_and_is_never_a_run() {
     for spelling in [
@@ -42,15 +30,7 @@ fn list_sets_prints_and_is_never_a_run() {
     }
 }
 
-/// Neither `--package` nor `--take-in` is a run, and the type says so for
-/// [`ParseOutcome::ListSets`]'s reason: there is no [`Args`] on either path, so
-/// the compile, the deck, the window and the adapter request are unreachable
-/// rather than merely skipped. `--take-in` does reach the checker — that is how
-/// a metadata card gets written — and the check pass needs no device.
-///
-/// `--store` on either side of each, because an operator types the flags in
-/// whatever order they think of them, and a Set packaged out of the default
-/// store when `--store` was given would be a package of the wrong library.
+/// Verifies that `--package` and `--take-in` parse into transfer outcomes rather than runs.
 #[test]
 fn package_and_take_in_print_and_are_never_a_run() {
     for spelling in [
@@ -106,11 +86,7 @@ fn named(outcome: &Result<ParseOutcome, String>) -> String {
     }
 }
 
-/// A store with two Sets in it, written at times this test decides.
-///
-/// A Set file carries no time — the mtime is the only record of when one was
-/// saved — so a fixture that means to test an order has to say what the times
-/// are rather than hope two writes land in different seconds.
+/// Creates a test Store populated with two Sets timestamped with specific mtimes.
 fn library(root: &std::path::Path) -> karakuri_store::store::Store {
     let store = karakuri_store::store::Store::open(root).expect("store");
     let hash = store.put_artifact(b"not compiled here").expect("put");
@@ -152,15 +128,7 @@ fn library(root: &std::path::Path) -> karakuri_store::store::Store {
     store
 }
 
-/// One line per Set: the id, when it was written, and what it holds.
-///
-/// The id is what goes next to `--load-set`, the time is what an operator looks
-/// for a keeper by, and the layers are enough to tell two Sets apart without
-/// opening either. Most recent first, for the reason the MCP listing is: *what
-/// did I just save* is the question.
-///
-/// A layer nothing is on is left out rather than printed as a zero — most Sets
-/// are on three of the five, and a line of zeroes reads as something missing.
+/// Verifies that `listed_sets` outputs one line per Set, ordered newest to oldest.
 #[test]
 fn the_listing_is_a_line_per_set_most_recent_first() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -223,19 +191,7 @@ fn an_empty_store_says_so_rather_than_printing_nothing() {
     );
 }
 
-/// `--package` takes a `.kset` in and packages it, which is the other moment of
-/// the one operation this flag already was — and the moment the flag is now
-/// named for.
-///
-/// What is being checked here is the *route* and not the resolution — that is
-/// `karakuri-environment`'s, tested there — so this asserts the two things only
-/// this file decides: that a value ending in `.kset` is read as a path to an
-/// authoring file rather than looked up as an id, and that what comes back is a
-/// bundle, sources and all, on the standard output a shell can redirect.
-///
-/// And that the store it writes into is established, unlike the id half:
-/// resolving is a write, so a `--store` an operator named has to exist by the
-/// time the first artifact lands.
+/// Verifies that `--package` converts an authored `.kset` file into a self-contained bundle.
 #[test]
 fn package_takes_an_authoring_file_in_and_packages_it() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -290,20 +246,7 @@ fn package_takes_an_authoring_file_in_and_packages_it() {
     assert!(refused.contains("night"), "{refused}");
 }
 
-/// `--take-in` takes both of a Set's forms, and the extension is what says
-/// which — the same sentence [`packaged_set`] reads, from the other end.
-///
-/// A `.kbset` is already resolved and is taken in as it stands; that is what
-/// `karakuri-environment`'s own tests cover. What only this file decides is the
-/// `.kset` half: a value ending in `.kset` is resolved against its own
-/// directory first and then taken in, so an operator who was sent an authoring
-/// file beside its parts does not have to package it to themselves before they
-/// can keep it.
-///
-/// And it lands the same store as packaging it would, which is why the route is
-/// `bundle_authored` and not `resolve` alone: the artifacts are there, the Set
-/// is filed under the id the file carries, and each source has the metadata
-/// card a take-in writes.
+/// Verifies that `--take-in` resolves an authoring `.kset` file and imports it into the store.
 #[test]
 fn take_in_resolves_an_authoring_file_and_then_takes_it_in() {
     let dir = tempfile::tempdir().expect("tempdir");
