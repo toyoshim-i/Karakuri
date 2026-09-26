@@ -352,3 +352,50 @@ fn terminal_session_stdin_writing_and_reading() {
         );
     }
 }
+
+#[test]
+fn prompt_boundary_drag_cascades_through_staging_into_library() {
+    use karakuri_layout::Rect;
+
+    let mut layout = karakuri_console::layout();
+    layout.set_viewport(Rect::new(0.0, 0.0, 1280.0, 800.0));
+    layout.solve();
+
+    let left_pane = layout.find("left-pane").unwrap();
+    let library = layout.find("library").unwrap();
+    let staging = layout.find("staging").unwrap();
+    let prompt = layout.find("prompt").unwrap();
+
+    let initial_lib_h = layout.rect(library).h;
+    let initial_staging_h = layout.rect(staging).h;
+    let initial_prompt_h = layout.rect(prompt).h;
+
+    assert_eq!(initial_staging_h, 125.0);
+    assert_eq!(initial_prompt_h, 220.0);
+
+    // Drag divider 1 (between staging and prompt) upward by 100px.
+    // Staging shrinks by 59px (from 125 to min 66), and the remaining 41px
+    // cascades into Library, shrinking Library by 41px while Staging stays at min 66.
+    let curr_div1 = layout.rect(staging).y + layout.rect(staging).h;
+    let landed = layout.set_divider(left_pane, 1, curr_div1 - 100.0);
+
+    assert_eq!(landed, curr_div1 - 100.0);
+    assert_eq!(layout.rect(staging).h, 66.0, "staging capped at min 66");
+    assert_eq!(layout.rect(prompt).h, 320.0, "prompt grew by 100");
+    assert_eq!(
+        layout.rect(library).h,
+        initial_lib_h - 41.0,
+        "library absorbed overflow"
+    );
+
+    // Now drag divider 1 back downward by 100px to shrink Prompt.
+    // Staging expands by 59px (from 66 to max 125), and the remaining 41px
+    // cascades into Library, expanding Library by 41px back to initial.
+    let new_div1 = layout.rect(staging).y + layout.rect(staging).h;
+    let landed_back = layout.set_divider(left_pane, 1, new_div1 + 100.0);
+
+    assert_eq!(landed_back, new_div1 + 100.0);
+    assert_eq!(layout.rect(staging).h, 125.0, "staging capped at max 125");
+    assert_eq!(layout.rect(prompt).h, 220.0, "prompt returned to 220");
+    assert_eq!(layout.rect(library).h, initial_lib_h, "library restored");
+}
