@@ -128,38 +128,44 @@ impl CliSelection {
     }
 }
 
-/// Checks whether `cmd` exists and is executable on the system PATH.
-pub fn is_executable_on_path(cmd: &str) -> bool {
+/// Resolves the file path of `cmd` if found on PATH or as a direct executable file.
+pub fn resolve_executable(cmd: &str) -> Option<std::path::PathBuf> {
     if cmd.is_empty() {
-        return false;
+        return None;
     }
 
     // Direct path specified with slashes
     if cmd.contains('/') || (cfg!(windows) && cmd.contains('\\')) {
-        let p = std::path::Path::new(cmd);
-        return is_executable_file(p);
+        let p = std::path::PathBuf::from(cmd);
+        if is_executable_file(&p) {
+            return Some(p);
+        }
+        return None;
     }
 
-    let Some(path_var) = std::env::var_os("PATH") else {
-        return false;
-    };
+    let path_var = std::env::var_os("PATH")?;
 
     for dir in std::env::split_paths(&path_var) {
         let candidate = dir.join(cmd);
         if is_executable_file(&candidate) {
-            return true;
+            return Some(candidate);
         }
         #[cfg(windows)]
         {
             for ext in &["exe", "cmd", "bat"] {
                 let with_ext = dir.join(format!("{cmd}.{ext}"));
                 if is_executable_file(&with_ext) {
-                    return true;
+                    return Some(with_ext);
                 }
             }
         }
     }
-    false
+    None
+}
+
+/// Checks whether `cmd` exists and is executable on the system PATH.
+pub fn is_executable_on_path(cmd: &str) -> bool {
+    resolve_executable(cmd).is_some()
 }
 
 fn is_executable_file(path: &std::path::Path) -> bool {
