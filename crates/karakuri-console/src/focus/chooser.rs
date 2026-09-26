@@ -1,12 +1,8 @@
 use super::*;
 
-/// `space` on a bay: the fold.
+/// Handles `space` on a bay to toggle folding across all nine bays (ADR-0333).
 ///
-/// The one press that means the same thing in all nine, which is what a badge
-/// reading `space &middot; in any bay` says and what ADR-0333 declined to bind
-/// while it meant it in two. A folded bay answers it and nothing else, which is
-/// the narrow reason a folded bay is in the ring at all: it is there so that
-/// there is something to press to open it, not so that it can be operated.
+/// A folded bay responds only to fold toggle so it can be reopened without permitting operations.
 pub fn fold(panel: &Panel, bay: &'static Region) -> Asked {
     let Some(id) = panel.layout().find(bay.name) else {
         return Asked::Nothing("this arrangement has no node for the focused bay");
@@ -17,14 +13,9 @@ pub fn fold(panel: &Panel, bay: &'static Region) -> Asked {
     })
 }
 
-/// How many things `bay` draws under `path` — the one reading in this module
-/// that is a bay's own rather than the grammar's, and it is a reading rather
-/// than a rule.
+/// Returns the number of elements `bay` draws under `path` (`[]`: items, `[n]`: controls, `[n, c]`: sub-controls).
 ///
-/// `[]` is the bay's items, `[n]` the nth item's controls, `[n, c]` what is
-/// under that control. A bay drawing nothing answers zero, and the press then
-/// declines with the bay's own sentence rather than acting on a rectangle that
-/// is not there.
+/// Returns zero if nothing is drawn, causing actions to decline cleanly.
 pub fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
     match (built.bay, path) {
         (_, []) => match built.items {
@@ -77,23 +68,13 @@ pub fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
         // the end of the row is not one of them: it is the lane's own act,
         // reached by `enter` on the lane rather than by a digit under it.
         (SEQUENCER, [lane]) if *lane <= lanes(view) => 1 + steps(view),
-        // **A card hanging off a head control**, which the Sequencer's
-        // `+ lane` chooser is the one of: the card draws one row per thing it
-        // offers, and none at all while it is up. A rung that is not on the
-        // panel draws nothing, and the press then declines with the sentence
-        // that says how to put it down.
+        // Head card rungs (e.g. Sequencer `+ lane` chooser): draws one row per choice, or zero when closed.
         (_, [HEAD, through]) => match built.head.get(through.wrapping_sub(1)).copied() {
             Some(control) => card_rows(view, control),
             None => 0,
         },
-        // **The Master's two rungs**: a slot draws its parameter rows, its cut
-        // chip and its `−`, and `+ add` draws one row per `kind L5` procedure
-        // the library holds.
-        //
-        // **The cut chip is counted on every slot**, drawn or not, so that a
-        // digit names the same control on every slot of the chain; a slot
-        // whose procedure declares no `retains` draws none and the chip
-        // declines (ADR-0352).
+        // Master rungs: slots draw parameters, cut chip, and `−`; `+ add` lists library procedures.
+        // Cut chips maintain a consistent digit index across all slots even when omitted (ADR-0352).
         (MASTER, [through]) => match built.item().nth(*through, drawn(view, built, &[])) {
             Some(Control::Slot) => match chain_slot(view, *through) {
                 Some(slot) => slot.params.len() + 2,
@@ -114,12 +95,9 @@ pub fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
     }
 }
 
-/// The slot of the running chain the Master bay's `through`th item is, or `None`
-/// where that item is not a slot or the chain has not got one there.
+/// Maps Master item index (`through`) to 0-based chain slot index, or `None`.
 ///
-/// The bay's items are the out fader, then one per slot, then `+ add`, so the
-/// slot's position in the chain — which is the address every chain operation
-/// takes — is two less than the item's number.
+/// Accounts for leading `out` fader offset: slot index is `through - 2`.
 fn chain_slot(view: &View, through: usize) -> Option<&crate::view::ChainSlot> {
     view.master_chain
         .as_ref()?
@@ -137,12 +115,7 @@ pub const SLOT_SHORT: &str =
     "this slot does not draw that many controls — the digits count what is \
                           drawn, from one";
 
-/// One press of an arrow on a chain parameter row, or `space` on one: a tenth of
-/// the range the slot's procedure declares, or the value it declared.
-///
-/// [`param`]'s rule one bay along — *"a tenth of the published range"* — read on
-/// a range that is declared in a `.kir` rather than published by a Set
-/// ([ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)).
+/// Adjusts a chain parameter by 10% of declared range on arrow, or resets to default on `space` (ADR-0343).
 pub fn chain_param(view: &View, through: usize, nth: usize, step: Step) -> Asked {
     let (Some(at), Some(slot)) = (chain_at(through), chain_slot(view, through)) else {
         return Asked::Nothing("this slot is not drawn");
@@ -254,13 +227,7 @@ pub fn name_item(
     }
 }
 
-/// An arrow at bay or item level, walking the bay's items.
-///
-/// From the item the bay remembers, not from the address, which is the one
-/// place the two fields of an [`Address`] are read together on purpose: at bay
-/// level there is no addressed item, and arrows that declined until a digit had
-/// been pressed would take away the two keys the Library bay has today
-/// (ADR-0333).
+/// Walks bay items via arrows using the remembered item if no item is addressed (ADR-0333).
 pub fn walk(
     view: &mut View,
     panel: &Panel,
