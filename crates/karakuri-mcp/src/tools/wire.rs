@@ -80,11 +80,7 @@ pub(crate) fn wire_input(
                     .to_string()
             }
         })?;
-    // **What the loop's own sentence will not say.** The loop knows what it did
-    // with the edge; only this side knows how the run was started, and a run
-    // without `--watch` has no watcher to rebuild the slot with the new wiring —
-    // which is the same thing `write_procedure` says about a file nothing will
-    // pick up, about the other half of one edit.
+    // Non-watch runs cannot automatically reload slot pipelines upon file rewrite.
     let note = if state.watching {
         String::new()
     } else {

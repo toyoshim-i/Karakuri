@@ -25,12 +25,7 @@ fn page() -> String {
     })
 }
 
-/// Every row's title and its MCP badge, in page order: the badge's class —
-/// `has`, `plan` or `gap` — and the text it names the route with.
-///
-/// Read verbatim and never decoded, exactly as the vocabulary's own test reads
-/// a heading: a `gap` badge says `&mdash;`, and a tool name that needed
-/// decoding to match would be a tool nobody could type.
+/// Every row's title and its MCP badge in page order (`has`, `plan`, or `gap`).
 fn mcp_routes() -> Vec<(String, String, String)> {
     let html = page();
     let mut found = Vec::new();
@@ -84,15 +79,7 @@ fn sample(name: &str) -> Value {
         "read_set" => json!({ "id": "a_set" }),
         "list_sets" => json!({}),
         "walk_history" => json!({ "set": "a_set" }),
-        // **The one operation `operate` names that the audit lets through**,
-        // which is what makes this survey mean the same thing for the eighth
-        // tool as it does for the seven: the other twenty-nine are refused
-        // by the gate by design, and a sample drawn from those would make
-        // *every tool names an operation the gate lets through* false about
-        // a tool that is working exactly as ADR-0235 says it should. The
-        // rows that are closed are surveyed by
-        // `every_operation_operate_takes_stands_where_the_page_says_it_does`
-        // instead.
+        // Test the single open operation that passes audit validation.
         "operate" => json!({
             "operation": "Put a node's previous version back",
             "with": { "deck": 0, "revision": { "previous": { "layer": "L4" } } },
@@ -202,12 +189,7 @@ fn every_tool_this_server_publishes_has_a_route_on_the_page() {
     }
 }
 
-/// The other direction: a `has` badge with no tool is the page claiming a route
-/// that does not exist.
-///
-/// It fails apart from the test above because it is a different failure: that
-/// one says the surface reached past the specification, this one says the
-/// specification promises a model something it cannot do.
+/// Verifies that a `has` badge corresponds to a valid existing tool route.
 #[test]
 fn every_mcp_route_the_page_claims_is_a_tool_this_server_publishes() {
     let routes = mcp_routes();
@@ -223,12 +205,7 @@ fn every_mcp_route_the_page_claims_is_a_tool_this_server_publishes() {
     );
     let published = published();
     for (title, _, names) in claimed {
-        // **`operate` is checked against the spelling rather than against
-        // one operation**, which is the difference between the eighth tool
-        // and the seven: a tool of its own names one row, and `operate`
-        // names every row the spelling takes. So the page claiming
-        // `operate` on a row is checked by asking [`SPELLED`] whether it
-        // takes that row's operation — the same question a call asks.
+        // Validates `operate` against operation spelling rather than individual operations.
         if names == "operate" {
             let row = spelled_named(title).unwrap_or_else(|| {
                 panic!(
@@ -264,13 +241,7 @@ fn every_mcp_route_the_page_claims_is_a_tool_this_server_publishes() {
     }
 }
 
-/// Every operation the spelling takes has a row marked `has operate`, and every
-/// row that is not marked so is one the spelling refuses.
-///
-/// The other direction of the test above, and the one that catches the silent
-/// half: a row `operate` reaches whose badge still reads `plan` is a route a
-/// model can take and the page does not describe, which nothing else here would
-/// notice.
+/// Verifies that all operations accepted by spelling are marked `has operate`.
 #[test]
 fn every_operation_operate_takes_stands_where_the_page_says_it_does() {
     let routes = mcp_routes();

@@ -20,13 +20,7 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
         ("list_sets", json!({})),
         ("walk_history", json!({"set": "a"})),
         ("save_set", json!({"slot": 0})),
-        // **`operate` names thirty operations and twenty-nine of them are
-        // closed**, so what is driven here is the one the audit lets
-        // through. That is not this test going soft: the promise it holds
-        // is *a tool this server publishes is callable today*, and for
-        // `operate` that promise is about the tool rather than about every
-        // name it takes. Which name stands where is
-        // `every_operation_operate_takes_stands_where_the_page_says_it_does`.
+        // Drives the operation allowed by audit policy (`RestoreProcedure`).
         (
             "operate",
             json!({

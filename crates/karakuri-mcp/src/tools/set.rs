@@ -108,20 +108,7 @@ pub(crate) fn listing(args: &Value) -> Result<Operation, String> {
     Ok(Operation::ListSets { holds, layer })
 }
 
-/// [`Operation::SaveSet`], done: ask the render loop to keep what a slot is
-/// playing.
-///
-/// Nothing about the Set is read here and nothing could be: this thread does
-/// not hold it. What this does is hand the request over and give the caller
-/// back the half it waits on — everything decidable from the arguments alone
-/// was decided in [`kept`].
-///
-/// This is the one tool that reaches the render loop, and it is not a second
-/// save path. The request is taken where the MIDI surface is taken and ends in
-/// `Live::save_set`, the method the `k` key ends in. The record is
-/// `Record::Save` and it is written at the frame the save landed, which is why
-/// `karakuri_operation_record::written` answers `Silent(OnLanding)` for this
-/// operation rather than handing anybody a record to write here.
+/// [`Operation::SaveSet`]: requests the render loop to save current slot state.
 pub(crate) fn save_set(
     deck: u8,
     id: Option<&str>,
@@ -142,12 +129,7 @@ pub(crate) fn save_set(
         // the two shapes of "it will not": one that has stopped taking requests,
         // and one that is gone.
         .map_err(|e| match e {
-            // **What `Full` proves and no more.** It used to say the loop "has
-            // taken none of them", which the error does not support: the queue
-            // holds [`ASKED`] requests nobody has taken *yet*, and a loop
-            // running slowly reaches that as surely as one that has stopped.
-            // Naming the second as though it were the fact would send a model
-            // looking for a dead render thread when the answer is to ask again.
+            // Full queue indicates requests are queued waiting on render thread progress.
             mpsc::TrySendError::Full(_) => format!(
                 "the render loop has {ASKED} save requests queued and no room for another: \
                  it is taking them slower than they are arriving, or it is not running \
@@ -228,11 +210,7 @@ pub(crate) fn list_sets(
     layer: Option<karakuri_operation::Layer>,
     state: &State,
 ) -> Result<String, String> {
-    // **Lowercased once here rather than per node.** Case-insensitive because a
-    // model that read `drift_shell` in one answer and types `Drift_Shell` into
-    // the next is not asking a different question. Folded here rather than in
-    // [`listing`], because it is a decision about *matching* and an operation
-    // carries what it was asked for.
+    // Performs case-insensitive matching against requested procedure name.
     let holds = holds.map(str::to_ascii_lowercase);
     let layer = layer.map(karakuri_environment::meta::op_to_record);
     let opened = |e: StoreError| format!("the store at `{}`: {e}", state.store.display());
@@ -253,11 +231,7 @@ pub(crate) fn list_sets(
         ));
     }
     sets.sort_by(|a, b| b.written.cmp(&a.written).then_with(|| a.id.cmp(&b.id)));
-    // **A set matches, not a node.** With both filters given the question is
-    // "which of the sets that use this also deform something", so each is
-    // answered against the whole set rather than against one node — a set whose
-    // `drift_shell` is a geometry and whose deformation is called something
-    // else is exactly what that question is looking for.
+    // Evaluates filter criteria across the entire Set rather than individual nodes.
     sets.retain(|set| {
         holds.as_ref().is_none_or(|holds| {
             set.nodes

@@ -199,13 +199,7 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
         &l3s,
         &fields,
         &l4s,
-        // **What `--load-set` builds this file as**, which the file itself now
-        // records — a `merge` record, or its absence for a Set that overdraws.
-        // Read from the file rather than defaulted, so this refuses a
-        // composited Set with more renderers than a fold can hold exactly where
-        // loading it would. The choice changes no *number* here either way:
-        // compositing costs a render target per renderer, and a render target
-        // is not element storage.
+        // Reads merge record from file to validate compositing limits against stored configuration.
         loaded.layering,
         // A salt decides what the elements *are* and never how many bytes they
         // take, so the set's own is enough here and a source deriving one from
@@ -261,12 +255,7 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
              its own.\n",
         );
     }
-    // **What the number means, for a reader who has never seen this system.**
-    // The withdrawn figure was as wrong in what it was taken to mean as in its
-    // arithmetic, and a number relayed as "what this costs a GPU" would be that
-    // mistake in a new costume. A renderer having no row at all is part of the
-    // same sentence: it draws from the buffer the node above it allocated, so a
-    // row for it would be that memory counted twice.
+    // Renderers draw from upstream buffers without allocating separate element storage rows.
     out.push_str(
         "What that covers: one element struct per element, the four-byte liveness flag \
          beside it, the second copy a geometry keeps so it can read what it wrote last \
@@ -282,12 +271,6 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
 }
 
 /// One node of a Set: its address in the Set, its artifact, and its card.
-///
-/// What it is called is [`crate::setfile::node_called`]'s answer, and this is
-/// the function that used to decide it. `list_sets` names the same node in a
-/// listing and a model has to find, when it reads the Set, the node the listing
-/// told it about — so the three candidates are weighed in one place and read
-/// here rather than weighed a second time.
 pub(crate) fn node_block(
     store: &Store,
     layer: Layer,
@@ -295,11 +278,7 @@ pub(crate) fn node_block(
     name: Option<&str>,
     hash: &Hash,
 ) -> String {
-    // **Twelve hex characters and not sixty-four.** A hash is not an argument
-    // anything here takes — see [`read_set`] — so what this is for is telling
-    // two nodes apart and recognising the same artifact in two Sets, which
-    // twelve does at a length a reader can hold. `Hash::short` is the same
-    // shortening every log line in this program uses.
+    // Truncates artifact hash to 12 lowercase hex characters for display.
     let short = hash.short(12);
     let address = format!("{}:{index}", layer_spelled(layer));
     // The head of one block: the address, what the node is called, and the
@@ -318,11 +297,7 @@ pub(crate) fn node_block(
             let (declared, body) = rendered_card(&card);
             let called =
                 karakuri_environment::setfile::node_called(name, declared.as_deref(), hash);
-            // **What did not win, where something had to lose.** A Set's own
-            // name for a node hides the name the procedure gives itself, and a
-            // model choosing between saved material wants both: the one this
-            // set addresses the node by, and the one that identifies the
-            // artifact wherever else it appears.
+            // Reports both the Set's internal node name and the procedure's source identifier.
             let also = match &declared {
                 Some(declared) if *declared != called => {
                     format!(", and the artifact calls itself `{declared}`")
@@ -331,22 +306,7 @@ pub(crate) fn node_block(
             };
             format!("{}{also}\n{body}", head(&called))
         }
-        // **Not an error, and it must not read as one.** `Store::read_meta`
-        // answers `NotFound` for a card that was never written, which is an
-        // ordinary state of a working store rather than damage: a card is
-        // derived, `Store::put_artifact` writes none of its own — it takes bytes
-        // and does not compile — and an artifact stored before cards existed has
-        // none either. A model told "not found" would report a broken library;
-        // what it is owed is the sentence that says the source is there and the
-        // description is not.
-        //
-        // **Two absences, and the pair is worth the extra read.** A hash with no
-        // card and a hash this store has never seen are the same `NotFound` from
-        // here and completely different facts: the second means the Set was
-        // written against another store and will not load here at all, which is
-        // the more useful thing anyone could be told and is invisible if both
-        // say "no card". The artifact is only fetched on this branch, so the
-        // ordinary path pays nothing for it.
+        // Missing metadata is expected for uncompiled artifacts; verifies existence before reporting missing.
         Err(StoreError::NotFound(_)) => {
             let standing = if store.get_artifact(hash).is_err() {
                 "this store does not hold that artifact at all, so nothing here can \

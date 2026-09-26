@@ -109,46 +109,17 @@ pub struct Slots(std::sync::Arc<std::sync::RwLock<Vec<Pointed>>>);
 pub type Pointed = (std::path::PathBuf, Vec<std::path::PathBuf>);
 
 impl Slots {
-    /// The deck as it stands, one pair per slot in slot order.
-    ///
-    /// What a run seeds this with is where its watchers are pointed when it is
-    /// made, and a run whose slots never move — `karakuri-cli`, which loads nothing
-    /// mid-run — keeps that value for the whole run and calls nothing else here.
+    /// Returns the active deck slot state pairs.
     pub fn of(pairs: Vec<Pointed>) -> Slots {
         Slots(std::sync::Arc::new(std::sync::RwLock::new(pairs)))
     }
 
-    /// A deck nothing is published to, for a harness that builds an engine and
-    /// serves nothing.
-    ///
-    /// It holds no row, so [`Slots::re_point`] writes nothing into it and every
-    /// address it could be asked about is refused with what it holds — which is
-    /// zero slots. It cannot reach a client: [`serve`] refuses a handle with no
-    /// slots in it before it binds, which is the same refusal a run given no
-    /// procedure files gets.
+    /// Constructs an unpopulated slots instance for dummy testing harnesses.
     pub fn unpointed() -> Slots {
         Slots::of(Vec::new())
     }
 
-    /// One slot is pointed somewhere else, said by whoever moved it.
-    ///
-    /// Called where an aim is *sent* — a library load, and a rewiring that restates
-    /// one — so that the published layout cannot be a step behind the watcher's.
-    /// The pair is derived from the aim here rather than by the caller, because a
-    /// caller deriving it would be the second derivation of *what is this slot
-    /// running* that [`Slots`]' own head is about.
-    ///
-    /// A slot this handle does not hold is not written, and nothing is grown to
-    /// make room: the row count is the deck's, settled when the run made the
-    /// handle, and a handle with no row for this slot is one no server and no
-    /// landing is reading — a harness that built an engine and served nothing.
-    ///
-    /// A poisoned lock is recovered rather than dropped, which is where this parts
-    /// company with [`crate::Opening::set`]. What is behind that lock is a whole
-    /// pair per slot written in one assignment, so a panic elsewhere cannot have
-    /// left half of one; and the safe answer there — a closed class — has no
-    /// counterpart here, because *the layout before the load* is exactly the wrong
-    /// answer this type exists to stop giving.
+    /// Updates the published layout and watchers when a slot target changes.
     pub fn re_point(&self, slot: usize, at: &karakuri_environment::watch::Aim) {
         let mut held = self.0.write().unwrap_or_else(|held| held.into_inner());
         if let Some(pair) = held.get_mut(slot) {
@@ -180,22 +151,9 @@ impl Slots {
         let held = self.held();
         let pair = held
             .get(slot)
-            // **The one sentence, from [`crate::no_such_slot`].** This used to
-            // be its own spelling — `this deck holds 0-3` against the keys'
-            // `this deck holds slots 0-3` — so a model calling `save_set` and
-            // an operator pressing a digit were told the same mistake in
-            // different words about the same control. It also handled the empty
-            // deck for its own reason, which that function has too: `len() - 1`
-            // underflowed on an empty deck and took the whole surface with it,
-            // the panic unwinding out of the listener thread so that a process
-            // which had announced a port was silently no longer on it. `serve`
-            // refuses an empty deck now; this stays correct anyway.
+            // Reuses standardized slot range error message from no_such_slot.
             .ok_or_else(|| karakuri_environment::no_such_slot(slot, held.len()))?;
-        // **The head's own `kind` line, and `L1` only where it has none.**
-        // That fallback is `history::seed`'s, exactly: the first path of a
-        // chain with no `kind` in it falls back to L1 and every later one to
-        // L4, so a file this scan cannot read is addressed here under the layer
-        // its snapshots are filed under there.
+        // Resolves node layer kind from procedure header, falling back to L1 for head nodes.
         let head = std::fs::read(&pair.0)
             .ok()
             .and_then(|source| karakuri_environment::history::declared_kind(&source))
@@ -269,11 +227,8 @@ impl Slots {
         if let Some((_, _, path)) = nodes.iter().find(|(l, i, _)| *l == layer && *i == index) {
             return Ok(path.clone());
         }
-        // **What the slot holds, rather than "no such node".** An index past
-        // the end and a layer this slot does not use are different mistakes,
-        // and a model told which one it made can fix its own call — the same
-        // reason the checker's diagnostics come back through here instead of
-        // going to a terminal nobody is watching.
+        // Distinguish between an out-of-bounds index and an unused layer to provide
+        // actionable diagnostics to the caller.
         let name = layer_name(layer);
         Err(match nodes.iter().filter(|(l, _, _)| *l == layer).count() {
             0 => format!("slot {slot} holds no {name}: {}", absent(layer)),
@@ -317,20 +272,7 @@ pub(crate) fn layer_name(layer: Kind) -> &'static str {
     }
 }
 
-/// The compiler's layer, in the vocabulary's spelling.
-///
-/// One function per list, in the one package that depends on both — which is
-/// what `karakuri-operation`'s module documentation prescribes for every list
-/// it copies, and what `mix::blend_mode` and its three neighbours already are
-/// for the mix. Exhaustive both ways round, so a sixth `Kind` or a sixth
-/// `karakuri_operation::Layer` stops the build here until somebody has said
-/// what the other one calls it.
-///
-/// [`NodeAddress`]'s first caller in this workspace is this surface, and that
-/// is not an accident: the manual's own gap section says MIDI *"cannot express
-/// a node address, a parameter name or an id"*, a key press has nothing to say
-/// one with, and the panel does not reach inside a Set. A node address is the
-/// thing MCP can say and the other three cannot.
+/// Maps a compiler `Kind` to an operation `Layer`.
 pub(crate) fn layer_of(layer: Kind) -> karakuri_operation::Layer {
     karakuri_environment::meta::op_layer_of(layer)
 }
@@ -351,15 +293,10 @@ pub(crate) fn layer_list() -> String {
         .join(", ")
 }
 
-/// What it means for a slot to hold none of a layer, which is a different thing
-/// for each of them: three are optional and two cannot be missing.
+/// Returns a descriptive message explaining why a slot is missing a required or optional layer.
 pub(crate) fn absent(layer: Kind) -> &'static str {
     match layer {
-        // Reachable now that the head is filed under the `kind` it declares:
-        // a chain of nothing but a deformation and a renderer holds no
-        // geometry, and this is what such a slot is told. It does not get as
-        // far as a frame — the build refuses a Set with no L1 — but this
-        // surface answers before anything is built.
+        // Explain missing L1 geometry when other layers are declared.
         Kind::L1 => {
             "a Set needs a geometry, and every file this slot names declares some other layer"
         }
@@ -373,10 +310,7 @@ pub(crate) fn absent(layer: Kind) -> &'static str {
             "a `kind Field` is optional, and is code the other procedures evaluate rather \
              than a node of its own"
         }
-        // **Every slot holds none, and will while the chain is fixed.** A frame
-        // effect runs in the master chain rather than in a Set, and the chain is
-        // still three hand-written passes — so this is what a slot is told
-        // about a kind that compiles and has nowhere to be placed yet.
+        // Frame effects run in the master chain rather than inside a Set.
         Kind::L5 => {
             "a frame effect runs in the master chain rather than in a Set, and the chain is \
              still three fixed passes"

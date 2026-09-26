@@ -58,11 +58,7 @@ pub fn serve(
             for stream in listener.incoming() {
                 let Ok(stream) = stream else { continue };
                 let state = state.clone();
-                // **A thread per connection.** One thread for the listener and
-                // every conversation meant a socket that said nothing wedged
-                // the surface for the rest of the run — and a panic inside it
-                // dropped the listener, leaving a process that had announced a
-                // port and was no longer on it.
+                // Spawns a dedicated worker thread per incoming TCP connection.
                 let spawned =
                     std::thread::Builder::new()
                         .name("mcp-conn".into())
@@ -104,14 +100,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
         }
         let mut request_line = line.split_whitespace();
         let method = request_line.next().unwrap_or("").to_string();
-        // **The path, which the first version threw away.** It answered 405 to
-        // every request whatever it asked for, and a client's auth discovery
-        // asks for `/.well-known/oauth-protected-resource` before it does
-        // anything else. 405 says "that exists, but not by this verb", so the
-        // client concluded there was protected-resource metadata to fetch and
-        // went looking for it — then failed parsing `this server only answers
-        // POST` as JSON. The whole handshake died on a path this server has
-        // never had.
+        // Handles routing before verb checking to respond 404 to unserved paths like oauth discovery.
         let target = request_line.next().unwrap_or("").to_string();
 
         let mut length: Option<usize> = None;
@@ -166,11 +155,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
             }
         }
 
-        // **Path before method**, because "no such thing here" and "not by that
-        // verb" are different answers and only one of them is true of a path
-        // this server does not serve. A 404 is what tells a client there is no
-        // authorization metadata to find, which is how a server with no auth
-        // says so.
+        // Returns 404 for unknown endpoints to clarify lack of authorization services.
         let path = target.split(['?', '#']).next().unwrap_or("");
         if path != ENDPOINT {
             return respond(
@@ -182,16 +167,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
         }
 
         if method != "POST" {
-            // 405 rather than 404 *here*: the path is real, and the Streamable
-            // HTTP transport says a server offering no SSE stream at its
-            // endpoint answers GET with exactly this. Answered and closed
-            // rather than answered and continued: the body of a non-POST was
-            // left in the reader, so it became the next request line and ran.
-            // Closing cannot be smuggled through.
-            //
-            // JSON rather than plain text because a client that reached here
-            // is a client parsing JSON — the same reason the 404 above carries
-            // a body it can read.
+            // Responds 405 Method Not Allowed with JSON body on non-POST requests.
             return respond(
                 &mut writer,
                 405,
@@ -219,14 +195,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
             Ok(request) => {
                 let mut state = state.lock().map_err(|_| "the mcp state is poisoned")?;
                 let pending = dispatch(&request, &mut state);
-                // **The lock, let go before anything is waited for.** There is
-                // a thread per connection and one mutex over the state, so a
-                // `save_set` that waited for the render loop and the disk here
-                // would hold up every other connection for as long as it took —
-                // including a client that only wanted to read a procedure, and
-                // including the client that would have asked what the swap did.
-                // Dropped by name rather than by a scope, because a scope is a
-                // thing somebody widens later without noticing what it was for.
+                // Releases state lock prior to waiting on asynchronous loop replies.
                 drop(state);
                 pending.settled()
             }
@@ -257,18 +226,7 @@ pub(crate) enum Pending {
         id: Value,
         news: mpsc::Receiver<News>,
     },
-    /// An edge the render loop has been asked to write.
-    ///
-    /// A variant of its own rather than a second `Saving`, because the two wait
-    /// different lengths for differently shaped news — see [`WIRE_REPLY`] against
-    /// [`SAVE_REPLY`], and [`applied`] against [`awaited`]. An operation the render
-    /// loop has been asked to perform.
-    ///
-    /// [`Pending::Wiring`]'s shape with no note, and it waits with [`applied`] for
-    /// that variant's reason: the loop performs it at the frame it takes it and
-    /// answers there, and everything slow that an operation starts — a rebuild, a
-    /// transition, a save — happens after the answer and is reported where it
-    /// lands.
+    /// Asynchronous pending operations awaiting engine application or save completion.
     Operating {
         id: Value,
         news: mpsc::Receiver<News>,
@@ -324,11 +282,7 @@ impl Pending {
 pub(crate) fn dispatch(request: &Value, state: &mut State) -> Pending {
     let id = request.get("id").cloned();
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-    // **No `id` is a notification: never answered, and this server acts on none
-    // of them.** The comment here used to say "acted on", which was false —
-    // nothing below this line runs — and the test asserting `is_none()` could
-    // not tell the difference. There is nothing a notification asks of this
-    // server today; when there is, it goes above this line.
+    // Notifications (requests without an `id`) are discarded without a response.
     let Some(id) = id else {
         return Pending::Done(None);
     };
