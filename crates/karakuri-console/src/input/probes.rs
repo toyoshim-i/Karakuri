@@ -31,11 +31,8 @@ pub const PROBES: [Probe; 39] = [
         claims: 1,
         ask: on_learn,
     },
-    // **A readout and still a row here**, which is what this table is for: it
-    // registers what the *pointer* reaches, and a press on the `map` pill
-    // lands on the panel and does nothing. Handing it to `egui` instead would
-    // make a press on a control the panel drew fall through to whatever is
-    // behind it, and it is what carries the pill's tooltip.
+    // Readout registered to capture pointer clicks and prevent fall-through to egui,
+    // also hosting the pill's tooltip.
     Probe {
         name: "the transport row's map pill",
         claims: 1,
@@ -218,45 +215,21 @@ pub const PROBES: [Probe; 39] = [
     },
 ];
 
-/// One of rule 4's derivations, as a value.
-///
-/// A control's registration is this row and nothing else: naming it, saying how
-/// many controls a pointer reaches through it, and carrying the probe [`claim`]
-/// asks. There is nowhere else to add one and nowhere else to forget one.
+/// Hit-test probe descriptor registering a control's name, claim count, and test fn.
 pub struct Probe {
-    /// What the derivation answers for, in the words the rule above uses for it.
-    ///
-    /// It is what `karakuri/src/main.rs` keys its own half of the seam on. That
-    /// file has to *act* on every control this file claims, and until 2026-09-07 it
-    /// rebuilt the list by scanning this crate's source for `pub fn`s taking a
-    /// `Point`, because there was no list here to read. A row is a value and has a
-    /// name, so the scan is gone.
+    /// Human-readable descriptor of what the derivation answers for, keyed by the host.
     pub name: &'static str,
     /// How many controls a pointer reaches through this one derivation, and what
     /// [`CONTROLS`] is a sum of.
     pub claims: usize,
-    /// The derivation that draws those controls, asked whether the point is on one
-    /// of them — and nothing is stored.
-    ///
-    /// A `fn` and not a closure, because every one of these rows wants exactly the
-    /// four values [`claim`] itself takes: the panel for its solved layout, the
-    /// `egui` context for a galley, the view for what the deck and the store said
-    /// this frame, and the point. The derivations have nothing else in common —
-    /// they answer nine different types to the caller — but the question *is the
-    /// point on one of these* is one signature.
+    /// Derivation testing whether the point hits this control given panel layout, egui ctx, and view.
     pub ask: fn(&Panel, &egui::Context, &View, Point) -> bool,
 }
 
 /// Upper bound on the number of controls the Sequencer bay can claim across all lanes.
 const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 2) + 1 + karakuri_pattern::BANKS + 1;
 
-/// How many controls rule 4 hit-tests, summed over [`PROBES`].
-///
-/// Exported because the answer to *what can the pointer press here* is this
-/// crate's and nobody else's: `egui` owns no widget anywhere on the console, so
-/// a caller has no other way to ask. `karakuri/src/main.rs` prints it in its
-/// legend, where the sentence it replaced said the panel had three controls and
-/// went on saying it while ten more landed.
+/// Total number of hit-testable controls across all [`PROBES`].
 pub const CONTROLS: usize = summed(&PROBES);
 
 /// [`PROBES`]' claims added up in a `const`, which `Iterator::sum` is not.

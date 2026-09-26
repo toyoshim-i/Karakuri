@@ -1,91 +1,7 @@
-//! When the panel is drawn again, and when the window sleeps.
+//! Repaint scheduling and idle sleep policies for the console panel.
 //!
-//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
-//! still-panel clause and nothing else: *a panel with nothing changing on it is paid
-//! for once and not again.* A window loop that drives itself pays that price on
-//! every frame nobody is touching, and the price is the panel's rather than a
-//! fixed one:
-//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
-//! measured 184 allocations and 226.2 kB a frame with every bay empty, and the
-//! panel as it now stands — a live picture, the preview row, the mixer bay, the
-//! transport and the outputs row — reads 525 and 694.3 kB in the middle of
-//! nine runs on 2026-08-26, which spread 524 to 538 (`crates/karakuri/src/main.rs` takes
-//! it, and holds its own quoted figure against every run of it). This is the
-//! decision that stops those frames being drawn at all.
-//!
-//! Two regions declare a cost and a staleness now, and the scheduler still
-//! does not exist. [`crate::view::View::declares`] is the declaration — the
-//! transport row for as long as the beat grid is drawn, and the mixer bay
-//! while a residency request has not landed or a fade has not run — and
-//! [`Change::Animating`] carries the soonest move out of them and turns
-//! that into a deadline. A region declares a staleness for the motion it has
-//! rather than for the fact that it is pending, so the mixer's roll asks for
-//! its thirty a second through the 400 ms it travels and for the remainder of
-//! the rest through the 600 ms it does not
-//! ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-//! The cost reaches nothing here and is not meant
-//! to: both schedulability conditions are arithmetic over the declarations and
-//! `tests/schedulable.rs` asserts them, which is what ADR-0164 asks for in place
-//! of a stage discovering them. What is still absent is arbitration — nothing
-//! chooses between the two, and nothing has to: `Σ (cost / staleness)` is
-//! 0.0889 against 1.0, so the frame that meets the sooner deadline meets the
-//! other one as well.
-//!
-//! # Why this is a module and not a line beside each handler
-//!
-//! Because a panel that under-repaints is far worse than one that
-//! over-repaints, and it fails silently: a control left on screen showing a
-//! value that is no longer true says nothing anywhere, and there is no
-//! assertion to write against it in a window — a stale pixel is not an error.
-//! So the decision is made a value a test can ask for, away from an event loop
-//! that cannot be called from a test at all. That is the seam
-//! [`crate::panel`] came out of the window loop through, used again.
-//!
-//! [`Change`] is therefore one list of everything that can change what the
-//! console shows. A path that changes the screen and reaches no repaint is
-//! then a missing arm, which the compiler finds, rather than a forgotten line
-//! at one of a dozen call sites, which nothing finds.
-//!
-//! # Which way it errs, and where
-//!
-//! Towards drawing. Every arm below that could be argued either way is
-//! [`Repaint::Now`], and each is on a gesture the operator is making — ADR-0210
-//! budgets the frames nobody is touching and says outright that *what the
-//! operator does costs what it costs*. What is not allowed to err that way
-//! is a frame with nobody touching the window, which is the whole of the
-//! clause being implemented, and no arm here produces one.
-//!
-//! # What changes on this panel and asks for nothing
-//!
-//! One thing, and it is a decision rather than a hole in the list below: the
-//! mixer's level meter. [`crate::view::Strip::level`] is a measurement of
-//! a frame the engine has already rendered, and it moves inside the caller's
-//! `Deck::begin_frame` — once per composed frame, which is once per frame this
-//! panel is drawn on. So the reading on screen is the newest one taken at
-//! every moment there is, and an arm for it could only ask for another
-//! frame, which would produce the next reading, which would ask again: the
-//! spin [`Repaint::asked`] refuses to let `egui`'s own delays become. What
-//! holds it is the caller's frame clock rather than anything here, which is
-//! why it is written down rather than left to be noticed
-//! ([ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md);
-//! the mixer bay's own declaration is where the same argument is made for why
-//! it earns no *deadline* either, under [`crate::view::View::declares`]).
-//!
-//! # Who else asks for frames
-//!
-//! Two more, and neither is a [`Change`]:
-//!
-//! - `egui`, for an event it consumed. `egui_winit::EventResponse::repaint`
-//!   is true for every window event `egui` reacts to at all, so an event routed
-//!   to `egui` ([`Claim::Egui`]) already earns its frame there, and this
-//!   returns [`Repaint::Never`] for it rather than asking a second time.
-//! - `egui`, after a delay it names. It animates, it blinks a text cursor,
-//!   it fades a tooltip in, and it says so as a `repaint_delay` on the frame's
-//!   `ViewportOutput`. [`Repaint::asked`] is that number, and the delay is
-//!   honoured rather than collapsed to now — repaint immediately for a
-//!   250 ms animation and the animation becomes a spin at whatever rate the
-//!   loop can manage, which is exactly the cost this module exists to stop
-//!   paying.
+//! Implements ADR-0164's still-panel policy, mapping state transitions ([`Change`]) to repaint
+//! deadlines ([`Repaint`]) (ADR-0210, ADR-0283, ADR-0290).
 
 use std::time::Duration;
 
@@ -113,12 +29,7 @@ impl Repaint {
         !matches!(self, Repaint::Never)
     }
 
-    /// What `egui` asked for, from the frame's `ViewportOutput::repaint_delay`.
-    ///
-    /// Its two sentinels are `egui`'s own and are documented there rather than
-    /// guessed at: `Duration::MAX` is what a pass that wants nothing leaves behind,
-    /// and zero is *"schedule a repaint immediately"*. Anything between the two is
-    /// a deadline and is kept as one.
+    /// Converts `egui`'s requested `repaint_delay` into a [`Repaint`] deadline or sentinel.
     pub fn asked(delay: Duration) -> Repaint {
         if delay == Duration::MAX {
             Repaint::Never
@@ -129,13 +40,7 @@ impl Repaint {
         }
     }
 
-    /// The sooner of two answers.
-    ///
-    /// The direction is the whole of the safety argument: this can only bring a
-    /// frame forward, never push one back, so combining the panel's answer with
-    /// `egui`'s cannot lose either. [`Repaint::Never`] loses to everything and
-    /// [`Repaint::Now`] beats everything, which leaves two deadlines to compare and
-    /// the shorter wins.
+    /// Returns the earlier of two repaint requests, prioritizing sooner deadlines.
     pub fn soonest(self, other: Repaint) -> Repaint {
         match (self, other) {
             (Repaint::Now, _) | (_, Repaint::Now) => Repaint::Now,
@@ -146,76 +51,22 @@ impl Repaint {
     }
 }
 
-/// Everything that can change what the console shows, in one list.
-///
-/// A list rather than a `bool` returned from a dozen places, because the
-/// failure being prevented is an omission. Something new the panel reacts to is
-/// a new variant here, and the `match` in [`Change::repaint`] does not compile
-/// until it has been decided; a new `request_redraw()` beside a handler is a
-/// decision nobody can find and no test can reach.
-///
-/// The operation arm carries what the model returned rather than what the
-/// operator pressed, which is the difference between *a key was pressed* and
-/// *something moved*: `z` with nothing folded reached the model and changed
-/// nothing, and it earns no frame.
+/// Exhaustive enumeration of events that may change the console display and trigger a repaint.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Change<'a> {
     /// The pointer moved, or a button went down or up, with `claim` saying who got
     /// the event ([`crate::input`]).
     Pointer(Claim),
-    /// A wheel turned, with `claim` saying who got it and `moved` saying whether
-    /// the console scrolled anything for it.
-    ///
-    /// `moved` for [`Change::Pointed`]'s reason, one event along: a wheel over an
-    /// Inspector pane already at the top of its list reaches the console and
-    /// changes nothing, and an arm that answered *draw* regardless would pay a
-    /// frame for every notch of a wheel somebody is spinning against a stop. It is
-    /// also `false` for the wheel [`crate::input`]'s rule 1 withholds from `egui`
-    /// in the middle of a drag, which moves nothing by construction.
+    /// Scroll wheel event with routing `claim` and whether content actually scrolled.
     Wheeled(Claim, bool),
     /// An operation ran — a fold, a solo, a reset, a report — and this is what it
     /// did.
     Operated(&'a Outcome),
-    /// A key went into the arrangement pill's name, with `moved` saying whether the
-    /// buffer actually changed.
-    ///
-    /// Its own variant for [`Change::Room`]'s reason: nothing in the arrangement
-    /// moves while a name is being typed, so no [`Outcome`] says so and a decision
-    /// asked only of [`crate::panel`] would leave the caret where it was until
-    /// something else happened. It is the second key that changes what is drawn
-    /// without touching the model.
-    ///
-    /// And `moved` for [`Change::Rearranged`]'s reason: a rub-out on an empty name
-    /// and a key that is not a character reach the console and change nothing, and
-    /// a variant that answered *draw* regardless would pay a frame for every key an
-    /// operator leant on.
+    /// Text input into arrangement name pill, with `moved` indicating buffer modification.
     Naming(bool),
-    /// A console pointer moved — the library cursor, or the deck selection — with
-    /// `moved` saying whether it actually did.
-    ///
-    /// Its own variant for [`Change::Naming`]'s reason, one control along: a
-    /// pointer is the console's own state, so nothing in the arrangement moves and
-    /// no [`Outcome`] says so, and a decision asked only of [`crate::panel`] would
-    /// leave the cursor and the selection ring where they were drawn until
-    /// something else happened.
-    ///
-    /// And it is not [`Change::Emitted`], which the deck selection *does* also
-    /// raise, because these two are not the same question. That arm is *a control
-    /// translated a gesture into an operation* and answers `Now` for every
-    /// operation there is; this one is *a key moved a pointer*, and the library
-    /// cursor is a pointer no operation names at all — a walk past the end of a
-    /// listing is a press that reached the console and changed nothing, and a
-    /// variant that drew regardless would pay a frame for every press of a key an
-    /// operator is leaning on.
+    /// Internal pointer movement (e.g. library cursor or deck selection), noting if position changed.
     Pointed(bool),
-    /// The room was toggled.
-    ///
-    /// Its own variant because no outcome says so. The room is the view's and not
-    /// the model's: every colour on the panel changes and nothing in the
-    /// arrangement moves, so a repaint decision asked only of [`crate::panel`]
-    /// would leave the whole console in the other room's palette until something
-    /// else happened to move. This is the key that changes what is drawn without
-    /// touching the pointer.
+    /// Palette/room toggle requiring immediate panel repaint with new room colors.
     Room,
     /// Program bay layout rearrangement between vertical and horizontal preview positions.
     ///
@@ -225,119 +76,13 @@ pub enum Change<'a> {
         /// Whether the layout configuration changed.
         moved: bool,
     },
-    /// A control the panel draws translated a gesture into an operation, with
-    /// `Some(op)` for one asked for and `None` for a gesture that asked for
-    /// nothing.
-    ///
-    /// The mixer's two faders are what raise it: a drag on one emits
-    /// [`karakuri_operation::Operation::SetGain`] or `SetOpacity`, the caller turns
-    /// it into a record and applies it to the deck (P-0090), and the strip is drawn
-    /// from what the deck says on the next frame.
-    ///
-    /// # Why it is not [`Change::Pointer`], which already covers the event
-    ///
-    /// Because that arm cannot say *nothing changed*, and here that case is real
-    /// and common. A fader held against the top of its track while the pointer runs
-    /// on asks for 1.0 sixty times a second; the value is already 1.0, nothing on
-    /// the panel is different, and `Change::Pointer(Panel)` is [`Repaint::Now`] for
-    /// every one of them.
-    ///
-    /// # Why it *may* be decided from what the drag returned, where the boundary's
-    /// may not
-    ///
-    /// The pointer arm says outright that it is deliberately not decided from
-    /// `Panel::moved`'s `Option`, because that one is `None` for a boundary that
-    /// moved less than half a pixel — a threshold for what is worth *printing*, and
-    /// half a logical pixel is a whole physical one on a 2x display, so a repaint
-    /// decided from it leaves a boundary drawn where it no longer is.
-    ///
-    /// A fader's `None` is an exact comparison of the value that would be sent, not
-    /// a threshold on a position: there is no distance below which the panel would
-    /// look the same, because the same value *is* the same picture. So this arm is
-    /// the [`Change::Rearranged`] shape — what the model returned, and a frame owed
-    /// only where something happened — rather than the pointer's.
-    ///
-    /// The `Some` arm errs towards drawing, which is this module's stated
-    /// direction: the caller is the one that applies the operation, and this cannot
-    /// know that it did. It is a frame on a gesture an operator is making, which
-    /// ADR-0210 does not budget.
+    /// Control gesture emitted an operation (`Some`), or had no effect (`None`) (P-0090, ADR-0210).
     Emitted(Option<&'a Operation>),
-    /// Something on the panel is moving, with the soonest any live region on it
-    /// will next look different from what is on screen — and `None` for a panel
-    /// where nothing is.
-    ///
-    /// The soonest *move*, and not the soonest staleness declared. A staleness is
-    /// how finely a region has to be drawn while it moves; a region that is pending
-    /// and at rest declares one and is not using it, and a deadline taken from it
-    /// draws the panel exactly as it already is
-    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-    /// The number that arrives here is never sooner than the staleness behind it,
-    /// so this arm cannot ask for a frame the schedulability arithmetic did not
-    /// admit.
-    ///
-    /// [`crate::view::View::animating`] is the answer, and it is the whole content
-    /// of this arm: the view is what knows the rate, so the deadline is a number it
-    /// hands over rather than one this module keeps. A rate written here would be a
-    /// presentation's constant living where the presentation is not, and a roll
-    /// redrawn at the wrong rate is a silent failure of exactly the kind this
-    /// module's own opening describes.
-    ///
-    /// # Why it is a deadline and not a frame
-    ///
-    /// [`Repaint::After`] names *draw then, and not before*. A once-a-second
-    /// animation asking for a frame instead is an animation that becomes a spin at
-    /// whatever rate the loop can manage — which is what [`Repaint::asked`] already
-    /// refuses to do to `egui`'s own delays, for the same reason.
-    ///
-    /// # Why it is raised every frame rather than on a gesture
-    ///
-    /// It is [`Change::Rearranged`]'s shape: a bit re-derived from the model every
-    /// frame, and `None` has to be [`Repaint::Never`] or the still panel is gone.
-    /// Nothing an operator does raises it — a slot is parked because the *governor*
-    /// has not found room, which happens between frames and reaches this console
-    /// through no event at all. So the frame that draws the panel is the only place
-    /// that can notice, and the arm that answers for a panel with nothing pending
-    /// is the one carrying ADR-0164's still-panel clause.
-    ///
-    /// A parked slot ends the still panel for as long as it is parked, and that is
-    /// the honest cost rather than an accident: `egui` is immediate mode, so what
-    /// repaints is the panel and not the chip
-    /// ([ADR-0188](../../../docs/adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)).
-    ///
-    /// And the beat ends it for as long as the console is live, which is
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// arriving in this arm: something has to be moving whether or not anything is
-    /// happening, or a panel that has stopped and a panel that is idle are the same
-    /// picture. So `None` here is now a console with no engine behind it or with
-    /// the transport row folded away, rather than simply a console with nothing
-    /// pending
-    /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
+    /// Active animation with duration until the next visual change, or `None` if idle (ADR-0164, ADR-0188, ADR-0212, ADR-0283).
     Animating(Option<Duration>),
-    /// What the hover layer is owed ([`crate::hover`]).
-    ///
-    /// Its own variant beside [`Change::Animating`] and not one of its deadlines,
-    /// because the layer is not a region of the arrangement: a tip is drawn over
-    /// the whole console and belongs to no node, so it is not something
-    /// `crate::view::View::declares` can name and not a term `tests/schedulable.rs`
-    /// can sum ([`crate::budget::Declared::region`]). What it does carry is the
-    /// same third number — *when is this layer's picture next different from the
-    /// one on screen* — and here that is the remainder of a dwell, which is a time
-    /// the layer knows because it is the one keeping it
-    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-    ///
-    /// Nothing at rest. [`crate::hover::Tip::Still`] is a pointer on no tipped
-    /// control *and* a tip already up: the box does not move while it is shown, so
-    /// a frame drawn for it would draw it where it already is, which is exactly the
-    /// repaint ADR-0283 was written to stop.
+    /// Hover layer state changes: remaining dwell duration, dismissal, or still (ADR-0283, ADR-0330).
     Tip(crate::hover::Tip),
-    /// The window resized, or the display's scale factor changed: the arrangement
-    /// is re-solved into a different viewport, so every rectangle on the panel is a
-    /// new one.
-    ///
-    /// A scale change is here beside a resize rather than left to the resize that
-    /// usually follows it, because *usually* is a platform's habit and not a
-    /// guarantee, and the failure if it does not follow is a panel drawn at the
-    /// wrong size with nothing saying so.
+    /// Viewport size or display scale change requiring re-solving layout rectangles.
     Viewport,
 }
 
@@ -345,64 +90,21 @@ impl Change<'_> {
     /// The repaint decision, and the whole of it.
     pub fn repaint(&self) -> Repaint {
         match self {
-            // **A pointer event the panel claimed always earns a frame.**
-            // `crate::input`'s rule hands the panel one in exactly two cases:
-            // a boundary is in hand, or the pointer is within `GRAB` of one.
-            // In the first the boundary is moving under the pointer. In the
-            // second `crate::view::View::cursor` is drawing the resize cursor
-            // from the hit, and the pointer crossing into or out of that band
-            // is what changes it — so the frame is owed on the way in and on
-            // the way out.
-            //
-            // **It is deliberately not decided from what `Panel::moved`
-            // returned.** That is `None` for a boundary that moved less than
-            // half a pixel, which is `panel`'s `WORTH_SAYING` — a threshold
-            // for what is worth *printing* at sixty asks a second. Half a
-            // logical pixel is a whole physical one on a 2x display, so a
-            // repaint decided from that `Option` leaves the boundary drawn
-            // where it no longer is: an under-repaint, silent, and in the
-            // middle of the one gesture an operator is watching closely.
-            //
-            // A button the panel claimed is the start or the end of that
-            // gesture and is drawn for the same reason — and where it is not
-            // (a press over a boundary that never becomes a drag) it is one
-            // frame on the operator's own action, which ADR-0210 does not
-            // budget.
+            // Panel-claimed pointer interaction (boundary drag or cursor hover band) repaints immediately (ADR-0210).
             Change::Pointer(Claim::Panel) => Repaint::Now,
 
             // `egui` has the event, and `EventResponse::repaint` is its
             // answer; asking again here would be a second one.
             Change::Pointer(Claim::Egui) | Change::Wheeled(Claim::Egui, _) => Repaint::Never,
 
-            // **A wheel that scrolled a pane earns a frame**, and it is the
-            // operator's own action rather than anything on the budget — the
-            // `Change::Pointer(Claim::Panel)` arm above, one event along.
-            //
-            // **And one that scrolled nothing earns none.** `input::claim`
-            // routes a wheel to the panel while a drag is in hand so that it
-            // cannot reach `egui` mid-gesture — a claim withheld rather than
-            // an action taken — and `input::wheeled` answers `None` for it, so
-            // nothing on screen moved. A pane already at the top of its list
-            // is the same nothing from the other side.
+            // Wheel scroll repaints only if content actually moved.
             Change::Wheeled(Claim::Panel, moved) => match moved {
                 true => Repaint::Now,
                 false => Repaint::Never,
             },
 
             Change::Operated(outcome) => match outcome {
-                // A fold moves every region in the split it happened in, and
-                // the siblings absorb what it gave up — folding the left pane
-                // widens the centre. So the frame is owed for the panel and
-                // not for the region named, which is why nothing here is
-                // finer-grained than "draw".
-                //
-                // **A restore is here for the same reason a reset is**, and
-                // unconditionally for a reason of its own: nothing compares
-                // the arrangement that arrived against the one it replaced, so
-                // an operator who put back the arrangement already on screen
-                // pays one frame. That is the cheap side of the trade — the
-                // expensive side is a whole new arrangement drawn a frame late
-                // — and it is a comparison of two trees, not of a flag.
+                // Operations modifying visible layout structure trigger an immediate repaint.
                 Outcome::Folded { .. }
                 | Outcome::Soloed(_)
                 | Outcome::Reset
@@ -417,44 +119,11 @@ impl Change<'_> {
                     false => Repaint::Now,
                     true => Repaint::Never,
                 },
-                // A report is a print and nothing else, and `Nothing` is an
-                // operation that had nothing to act on — `g` on the root,
-                // which is the one node with no split enclosing it. Neither
-                // moved anything on screen, and **these are the arms that make
-                // the clause true**: an operation that reaches the model and
-                // changes nothing costs nothing.
-                //
-                // **The report is the arm this clause is most exposed to**: it
-                // is the one outcome that comes back carrying a `Vec` of every
-                // region, so it reads like a change and is not. No key reaches
-                // it since `p` became the latency offset the operations page
-                // specifies (`panel::Op::Report`), so what asks it is this
-                // crate's own suite — the arm is here for the operation rather
-                // than for a key.
-                //
-                // Two more used to be here — the pointer on a divider, and
-                // nothing under the pointer — and they left with the pointer
-                // itself when an operation started naming its target
-                // (`panel::Op`). They are not gone: they are what
-                // `Panel::under` answers, in the caller, *before* an operation
-                // is emitted, so those two keys now reach no `Change` at all
-                // and are stiller than they were.
+                // Reports and no-op actions change nothing on screen and require no repaint (ADR-0164).
                 Outcome::Report(_) | Outcome::Nothing => Repaint::Never,
             },
 
-            // **A rearrangement that happened is every rectangle in the
-            // Program bay being a new one** — the picture's and all four
-            // cells' — which is `Change::Viewport`'s argument one bay down,
-            // and the layout is dirty besides, so anything holding a rectangle
-            // from before it is holding a stale one. It is drawn on the frame
-            // that discovered it, and this arm is what covers the frames that
-            // did not: a rearrangement decided anywhere but inside a pass is
-            // otherwise a panel drawn in the arrangement it left.
-            //
-            // **A rearrangement that did not happen is the still panel**, and
-            // this is the only arm on the list asked on every frame rather
-            // than on a gesture — see the variant, where that argument is
-            // written out.
+            // Layout rearrangement repaints immediately if layout changed; otherwise idle.
             Change::Rearranged { moved } => match moved {
                 true => Repaint::Now,
                 false => Repaint::Never,
@@ -476,11 +145,7 @@ impl Change<'_> {
                 None => Repaint::Never,
             },
 
-            // See the variant. A dwell is a deadline the layer keeps; a tip
-            // that has to come down is owed a frame now, because nothing else
-            // is going to draw one — the pointer that left the control was
-            // over the console's ground and `Change::Pointer(Claim::Egui)`
-            // above answers `Never` for it.
+            // Tooltip dwell schedules deadline; dismissal repaints immediately; stationary tip sleeps.
             Change::Tip(tip) => match tip {
                 crate::hover::Tip::Dwelling(left) => Repaint::After(*left),
                 crate::hover::Tip::Gone => Repaint::Now,

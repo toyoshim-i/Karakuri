@@ -33,11 +33,7 @@ pub fn flat() -> impl Iterator<Item = &'static Tipped> {
     TIPS.iter().flat_map(|(_, tips)| tips.iter())
 }
 
-/// Which control the pointer is on, as an index into [`flat`], or `None` where
-/// it is on none of them.
-///
-/// The first row that answers wins, which is why the order inside a slice is
-/// the caller's: the controls inside a container come before the container.
+/// Returns the index in [`flat`] for the control under `p`, using first-match order.
 pub fn resolve(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option<usize> {
     if ctx.cumulative_pass_nr() == 0 || view.has_modal_overlay() {
         return None;

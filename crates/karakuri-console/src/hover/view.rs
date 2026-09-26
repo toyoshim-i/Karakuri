@@ -7,13 +7,7 @@ use karakuri_layout::Point;
 use super::probes::{descriptor_at, flat, hotkey_for_tip};
 use crate::room::Palette;
 
-// -- the box, transcribed from `[data-tip]::after` ------------------------
-//
-// **The mock draws the tip in CSS and this is that rule, term for term.**
-// Every constant below cites `style.css`, and `tests/hover.rs` resolves each
-// citation the way `tests/transcribed_constants_cite_the_mock.rs` resolves
-// `room::size`'s: the stylesheet is the specification and it is the half that
-// moves.
+// Tooltip layout constants transcribed from CSS `[data-tip]::after` rules in `style.css`.
 
 /// `[data-tip]::after`'s `min-width: 150px`: a tip is never narrower than this,
 /// however few words are in it.
@@ -42,12 +36,7 @@ pub const TIP_LINE: f32 = 1.55;
 /// explained and the box explaining it.
 pub const TIP_GAP: f32 = 6.0;
 
-/// What the words wrap to: [`TIP_MAX_W`] less the padding either side, which is
-/// the width a browser lays this text out in.
-///
-/// The console's own arithmetic and not a number in the stylesheet —
-/// `box-sizing` is the browser's rule rather than a declaration, and this is
-/// it.
+/// Max text wrapping width: [`TIP_MAX_W`] minus horizontal padding [`TIP_PAD_X`].
 pub const TIP_WRAP: f32 = TIP_MAX_W - TIP_PAD_X * 2.0;
 
 /// `[data-tip]::after`'s `box-shadow: 0 8px 26px rgba(0,0,0,0.22)`, and it is
@@ -332,29 +321,9 @@ pub fn annotate(words: &str, hotkey: Option<&str>, on: Option<&str>) -> String {
     assigned(&with_key, on)
 }
 
-/// The tip, with its MIDI line read off the live map where there is one to
-/// read.
+/// Replaces the manual's trailing `⊕ MIDI:` clause with live MIDI mappings (ADR-0336).
 ///
-/// The page's `⊕ MIDI:` clause is the last thing every tip says, so what this
-/// does is cut there and write the fact instead of the picture — see
-/// [`crate::hover::Hover::assign`] for why, and
-/// `docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`
-/// for the whole argument.
-///
-/// Three cases and only one of them rewrites anything.
-///
-/// - A control the map reaches: the clause becomes what the map says.
-/// - A control nothing is mapped to (`on` is `None`): the page's own
-///   sentence stays, because it carries the reason — *a map line names a
-///   slot, a range or a word from a closed list* — which is worth more than
-///   the word *unassigned* this could put there instead.
-/// - A tip with no `⊕ MIDI:` clause at all: untouched. The mock is not
-///   exhaustive and a clause invented for a control the page is silent about
-///   would be this console writing the manual.
-///
-/// It is a `Cow` in effect and an allocation only where it rewrites: a
-/// `String` is built on the frame a tip appears and on no other, which is the
-/// same frame the galley is laid out on.
+/// Leaves unmapped controls and tips without MIDI clauses unchanged.
 pub fn assigned(words: &str, on: Option<&str>) -> String {
     let Some(on) = on else {
         return words.to_owned();
@@ -365,32 +334,12 @@ pub fn assigned(words: &str, on: Option<&str>) -> String {
     format!("{head}{MIDI_LINE} {on}, which is what the map in use says today.")
 }
 
-/// The last clause of every tip on the page, as `console.html` spells it once
-/// the entities are resolved — the `⊕` is `&#8853;`.
-///
-/// Written here rather than derived because it is the page's own punctuation
-/// and there is nothing to derive it from: what makes it safe is that
-/// `tests/hover.rs` fails if the page stops ending its tips this way.
+/// Prefix of trailing MIDI assignment clause in manual tip texts (`\u{2295} MIDI:`).
 pub const MIDI_LINE: &str = "\u{2295} MIDI:";
 
-/// Where the box goes: under the pointer, and inside the window.
+/// Positions the tooltip rectangle relative to pointer `at`, keeping it constrained inside `viewport`.
 ///
-/// The mock hangs a tip off the element it explains — `top: calc(100% + 6px)`,
-/// `left: 0` — and flips it at two edges: `.tip-right` and the last column open
-/// leftward, and the Outputs row opens upward, *so that hovering cannot summon
-/// a scrollbar*. This console has no scrollbar to summon and the rule is the
-/// same one: a tip never leaves the window, so it opens down and to the right
-/// of the pointer and flips at whichever edge it would cross.
-///
-/// It is anchored to the pointer rather than to the control, which is the one
-/// place this departs from the page. A [`crate::hover::Tipped::at`] answers *is the pointer
-/// on this control* and not *where is it*, so a box hung off the control's own
-/// box would need every derivation to hand back a rectangle. The pointer is
-/// where the operator is looking; the day a rectangle is wanted for something
-/// else, this is what would change.
-///
-/// A box wider or taller than the window is clamped to the near edge rather
-/// than flipped, because a flip would only move which half is cut off.
+/// Flips direction at edges to stay within bounds and clamps if viewport is too small.
 pub fn placed(viewport: Rect, at: Point, size: egui::Vec2) -> Rect {
     let x = match at.x + size.x > viewport.max.x {
         true => at.x - size.x,

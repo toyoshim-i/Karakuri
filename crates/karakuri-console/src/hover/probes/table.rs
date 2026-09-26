@@ -315,19 +315,8 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_pane_target,
         }],
     ),
-    // **Six entries for the row's seven controls**, in the order the press
-    // handler asks them: the scrub is one entry and the mock draws two arrows
-    // — `.scrub` carries the tip and the arrows inside it are one control to a
-    // hand, which is `DeckHead::scrub`'s own answer.
-    //
-    // **The capacity chip and `re-salt` are the head's second row**
-    // (ADR-0328), and the two cites are the *first* pane's: the mock draws
-    // each of them twice and gives the first the whole of what the control is
-    // — a number somebody asked for and what a step does to it, a salt and
-    // what moves with it — where the second pane's pair says what those two
-    // are on `lattice_shell`. This is the node head keep capsule's rule, for
-    // its reason: the long one is the one an operator meeting the control
-    // needs.
+    // Six entries for deck head controls in press-handler order; capacity and re-salt
+    // cite the primary pane's definitions (ADR-0328).
     (
         "a deck head's seven",
         &[
@@ -471,12 +460,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_auth,
         }],
     ),
-    // **The capsule at the right of the same head.** The mock writes the whole
-    // of it once, on `drift_shell`'s — what it keeps, where it goes, what it
-    // is filed as, where a model's lands, and the two heads that carry none —
-    // and gives the other two capsules a sentence apiece pointing back at it.
-    // This cites the long one, because it is the one an operator meeting the
-    // control needs.
+    // Cites the comprehensive node head keep capsule description from `drift_shell`.
     (
         "a node head's keep capsule",
         &[Tipped {
@@ -531,15 +515,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
     // **A bay head's grip has no tip in the mock.** The page draws it as
     // `.grip` and explains folding in its prose rather than on the control.
     ("the grip in a bay head", &[]),
-    // **Four cells and four tips**, in `DECK_LETTERS` order, which is the
-    // order the page draws them in: `ProgramBay::cell` answers *which* deck
-    // the pointer is over, so each cell explains its own. The mock's classes
-    // run out after two — A and B are `.preview.a` and `.preview.b` and the
-    // last two are bare `.preview` — which is what `Cite::nth` is for.
-    //
-    // **The words are the mock's decks and not this run's**, which is
-    // ADR-0330's third consequence: D's tip says nothing is behind that cell
-    // because nothing is behind the mock's.
+    // Four preview cells in `DECK_LETTERS` order, citing mock deck descriptions (ADR-0330).
     (
         "the deck preview cells",
         &[
@@ -765,16 +741,8 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
     // of a *reading* — `declares 6 knobs` and its kin — and the menu items a
     // secondary press puts down, and neither is the row this probe claims.
     ("the Library bay's list", &[]),
-    // **One entry per class**, in `Class::ALL`'s order, which is the order the
-    // four pills appear in the page: the Program bay's, the Mixer's, the
-    // Master's and the Outputs row's. Every one of them is a bare
-    // `.pill` reading `mcp &middot; shut`, so the four cites are one pair and
-    // four ordinals — the one place on this console where `Cite::nth` is
-    // carrying the whole of the distinction.
-    //
-    // **And the four tips are four different sentences**: each names the
-    // operations its own class refuses while it reads shut, which is the thing
-    // an operator hovers one of these to find out.
+    // One entry per class in `Class::ALL` order, using `Cite::nth` ordinals to differentiate
+    // identical `.pill` markups and their class-specific refused operations.
     (
         "the class pills",
         &[
@@ -816,20 +784,8 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             },
         ],
     ),
-    // **Six kinds of control and nine entries**, in `Sequencer::press`'s own
-    // order — the bank pills, a cell, a label, a lane's minus, the mode pill
-    // — and then `+ lane`, whose press is not an operation and comes back
-    // through `Sequencer::chose`.
-    //
-    // **The four banks are four entries and the cells, the labels and the
-    // minus glyphs are one each.** A bank is one of `karakuri_pattern::BANKS` fixed pills that
-    // the page tips one at a time — `seq 3` is where the plus went and its tip
-    // says so, which is not what `seq 1`'s says — and `SelectPattern` carries
-    // which one. A cell and a label are per drawn step and per lane of a
-    // pattern the host handed in: the page tips lane A's row and this console
-    // draws whatever lanes there are, so a second entry there would be a cite
-    // for a lane the mock does not have. A lane's minus is the same reading:
-    // the page draws one per lane and this cites lane A's.
+    // Sequencer controls in `Sequencer::press` order (bank pills, cells, labels, minus glyphs,
+    // mode pill) followed by `+ lane` chooser action.
     (
         "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane",
         &[

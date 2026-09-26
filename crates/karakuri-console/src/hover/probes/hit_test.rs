@@ -10,14 +10,8 @@ use crate::view::{
     Field, KindChip, Scope, View,
 };
 
-// -- the derivations, one per tipped control ------------------------------
-//
-// **Each is `crate::input`'s probe for the row it belongs to, asked one
-// question finer**: the same derivation, and then the sub-question the caller
-// asks to find out *which* control a press landed on. A second derivation
-// would be a second answer that could disagree with the one the frame drew,
-// which is that module's rule and is the reason these are written out here
-// rather than composed out of the probes.
+// Hit-test derivations per tipped control, refining `crate::input` probes to identify
+// specific sub-controls without diverging from frame layout.
 
 pub(crate) fn on_program_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     outputs(ctx, panel.layout(), view.opening)
@@ -169,12 +163,7 @@ pub(crate) fn on_length(panel: &Panel, ctx: &egui::Context, view: &View, p: Poin
     transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.length(p).is_some())
 }
 
-/// The `go` capsule, as what is left of the row. `TransitionRow::go` takes the
-/// selection and the deck count with the point — it answers *what a press asks
-/// for*, and a press on it is refused where there is no deck to run it on —
-/// where this question is only *is the pointer on the capsule*. The row's own
-/// `owns` is that question over all four, so the three above it having been
-/// asked first is what leaves this one the capsule.
+/// Hit-tests the transition `go` capsule over remaining row bounds.
 pub(crate) fn on_go(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.owns(p))
 }
@@ -240,11 +229,7 @@ pub(crate) fn on_scrub(panel: &Panel, ctx: &egui::Context, view: &View, p: Point
     on_head(panel, ctx, view, |head| head.scrub(p).is_some())
 }
 
-/// The capacity chip, and it is `resized` rather than `hit_size`. The two are
-/// one question — `DeckHead::hit_size` is the chip *and* somewhere to step to —
-/// and this is the one the press handler asks, so a chip that is drawn and
-/// claims nothing (a deck whose geometries share no range) explains itself
-/// exactly where a press on it does something.
+/// Hit-tests the deck head capacity chip via `DeckHead::resized`.
 pub(crate) fn on_size(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.resized(p).is_some())
 }
@@ -332,12 +317,7 @@ pub(crate) fn on_take_back(panel: &Panel, ctx: &egui::Context, view: &View, p: P
     })
 }
 
-/// Which of a sensitivity row's two controls the pointer is on, told apart by
-/// what a press on it would ask for — `InspectorPane::sensitivity` walks the
-/// row's four chips and answers the operation the one under the pointer names,
-/// which is `SensChip::operation` and is where the signal and the range being
-/// readouts is already decided. A second walk here would be a second answer to
-/// *which chip is this*.
+/// Hit-tests sensitivity row controls using `InspectorPane::sensitivity` operations.
 pub(crate) fn on_sens(
     panel: &Panel,
     ctx: &egui::Context,
@@ -372,12 +352,7 @@ pub(crate) fn on_cell_d(panel: &Panel, _ctx: &egui::Context, view: &View, p: Poi
     on_cell(panel, view, p, 3)
 }
 
-/// One preview cell, told from the three beside it by the deck
-/// `ProgramBay::cell` says the pointer is over — the row's own answer, which is
-/// what `ProgramBay::owns` is the union of and what a release on the row is
-/// resolved against. The cell of a deck with no slot is a cell like any other
-/// here: it is drawn, so it is pointed at, and `dropped`'s refusal is about the
-/// carry rather than about the rectangle.
+/// Hit-tests a preview cell against the specified deck index in `ProgramBay`.
 pub(crate) fn on_cell(panel: &Panel, view: &View, p: Point, deck: u8) -> bool {
     program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.cell(p) == Some(deck))
 }
@@ -613,13 +588,7 @@ pub(crate) fn on_step_mode(panel: &Panel, ctx: &egui::Context, view: &View, p: P
     })
 }
 
-/// Which kind of control the pointer is on in the Sequencer bay, told apart by
-/// the operation a press there would ask for.
-///
-/// `Sequencer::press` is *four controls and one answer*, and which of them it
-/// was is inside the operation it hands back — the press handler's own sentence
-/// about this bay. So the sub-question is that operation read, and there is no
-/// second walk of the cells here to disagree with the one the paint made.
+/// Hit-tests controls in the Sequencer bay by matching against `Sequencer::press` operations.
 pub(crate) fn on_seq(
     panel: &Panel,
     ctx: &egui::Context,
