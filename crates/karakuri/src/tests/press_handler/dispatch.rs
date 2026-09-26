@@ -70,8 +70,10 @@ fn the_press_handler_dispatches_solo_and_bay_grips() {
         matches!(acted, Acted::Operated(_)),
         "press on solo pill should produce an operated action, got {acted:?}"
     );
+    readout.panel.op(Op::Unsolo);
+    readout.panel.solve();
 
-    // 2. Bay grips across all regions that have a fold grip
+    // 2. Bay grips across all regions that have a menu grip: reserved for menu, header double-click toggles fold
     for region in REGIONS {
         if let Some(grip) = bay_grip(readout.panel.layout(), region.name) {
             let at = Point::new(grip.grip.center().x, grip.grip.center().y);
@@ -85,11 +87,42 @@ fn the_press_handler_dispatches_solo_and_bay_grips() {
 
             let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
             assert_eq!(claim, Claim::Panel);
-            assert!(
-                matches!(acted, Acted::Operated(_)),
-                "press on bay grip for {} should fold/unfold bay, got {acted:?}",
+            assert_eq!(
+                acted,
+                Acted::Nothing,
+                "press on bay grip for {} is reserved for bay menu (Acted::Nothing), got {acted:?}",
                 region.name
             );
+
+            // Double click on bay head toggles fold
+            readout.panel.solve();
+            let bay_id = readout.panel.layout().find(region.name).unwrap();
+            let bay_rect = readout.panel.layout().rect(bay_id);
+            let head_at = Point::new(bay_rect.x + 20.0, bay_rect.y + 10.0);
+            let _ = readout.pointer(&ctx, Pointer::Moved(head_at));
+            let (claim, acted) = readout.pointer(&ctx, Pointer::DoubleDown);
+            assert_eq!(claim, Claim::Panel);
+            assert!(
+                matches!(acted, Acted::Operated(Outcome::Folded { folded: true, .. })),
+                "double click on bay head for {} should fold bay, got {acted:?}",
+                region.name
+            );
+
+            // Double click again unfolds the bay
+            readout.panel.solve();
+            let bay_rect = readout.panel.layout().rect(bay_id);
+            let head_at = Point::new(bay_rect.x + 20.0, bay_rect.y + 10.0);
+            let _ = readout.pointer(&ctx, Pointer::Moved(head_at));
+            let (_, acted) = readout.pointer(&ctx, Pointer::DoubleDown);
+            assert!(
+                matches!(
+                    acted,
+                    Acted::Operated(Outcome::Folded { folded: false, .. })
+                ),
+                "second double click on bay head for {} should unfold bay, got {acted:?}",
+                region.name
+            );
+            readout.panel.solve();
         }
     }
 }

@@ -8,6 +8,7 @@ use super::Outcome;
 pub(crate) enum Pointer {
     Moved(Point),
     Down,
+    DoubleDown,
     Up,
     /// A press of the secondary button, which on this panel opens the menu on a row
     /// of the Library bay's list and does nothing anywhere else.

@@ -94,6 +94,8 @@ pub(crate) struct App {
     pub(crate) clock: Clock,
     /// Last seen mixer state revision to detect when mixer bay needs dirtying.
     pub(crate) last_mixer_revision: u64,
+    /// Timestamp and position of previous mouse press for double-click detection.
+    pub(crate) last_click: Option<(Instant, karakuri_layout::Point)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,6 +237,7 @@ impl App {
             recording: Sessions::new(),
             clock: Clock::new(Instant::now()),
             last_mixer_revision: 0,
+            last_click: None,
         }
     }
 

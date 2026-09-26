@@ -68,6 +68,19 @@ pub fn bay_at(layout: &Layout, p: Point) -> Option<&'static Region> {
     None
 }
 
+/// Finds the bay whose header bar contains point `p`, excluding divider grab margins.
+pub fn bay_head_at(layout: &Layout, p: Point) -> Option<&'static Region> {
+    let bay = bay_at(layout, p)?;
+    crate::view::head_of(bay)?;
+    let id = layout.find(bay.name)?;
+    let rect = layout.rect(id);
+    let in_head = p.x >= rect.x
+        && p.x <= rect.x + rect.w
+        && p.y >= rect.y
+        && p.y <= rect.y + crate::room::size::HEAD_H;
+    in_head.then_some(bay)
+}
+
 /// Calculates the bounding rectangle for a bay's dashed focus ring, or `None` if folded/hidden (ADR-0159, ADR-0259).
 ///
 /// Covers the bay head, or the entire row for headless bays (Transport, Outputs). Requires solved `layout`.

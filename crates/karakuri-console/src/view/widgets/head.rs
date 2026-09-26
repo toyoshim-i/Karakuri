@@ -49,8 +49,7 @@ pub fn head_of(region: &Region) -> Option<Head> {
 pub(crate) const fn head_grip(kind: Kind) -> bool {
     match kind {
         Kind::Bay { grip, .. } => grip,
-        Kind::Library | Kind::Master => true,
-        Kind::Mixer | Kind::Staging | Kind::Sequencer => false,
+        Kind::Library | Kind::Master | Kind::Mixer | Kind::Staging | Kind::Sequencer => true,
         Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => false,
     }
 }
