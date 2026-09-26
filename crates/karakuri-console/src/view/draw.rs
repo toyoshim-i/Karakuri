@@ -330,6 +330,14 @@ impl View {
                 }
             }
 
+            // Keyboard focus indicator ring, rendered proud of bay heads but below floating cards/menus (Rule 2).
+            if let Some((mark, _)) = folded {
+                folded_wfocus_into(ui, &pal, mark);
+            }
+            if let Some(mark) = focused {
+                wfocus_into(ui, &pal, mark);
+            }
+
             // Audio-in and arrangement cards/menus rendered above the bays (Rule 2).
             if let Some(audio) = audio {
                 if let Some(pill) = audio_in(ui.ctx(), panel.layout(), values, Some(audio)) {
@@ -455,13 +463,6 @@ impl View {
             // Prompt bay CLI selection dropdown menu rendered above bays (Rule 2).
             if self.prompt.menu_open {
                 prompt::prompt_menu_into(ui, &pal, panel.layout(), &self.prompt);
-            }
-            // Dashed keyboard focus indicator ring, rendered proud of bay heads.
-            if let Some((mark, _)) = folded {
-                folded_wfocus_into(ui, &pal, mark);
-            }
-            if let Some(mark) = focused {
-                wfocus_into(ui, &pal, mark);
             }
         });
     }
