@@ -4,24 +4,7 @@ use super::transition_common::*;
 // A control claims what it acts on and no more
 // ---------------------------------------------------------------------------
 
-/// A press elsewhere in the bay asks this row for nothing and is not claimed by
-/// it.
-///
-/// `input`'s rule 4: *"a control claims what it acts on and no more."* The
-/// ground either side of the pills, the gaps between them and the card under
-/// the row are all painted by the console and none of them is a control, so
-/// `egui` gets the event — which owns no widget there either, so the two
-/// answers are the same nothing, arrived at without the panel claiming a press
-/// it would throw away.
-///
-/// Both halves, because either alone is satisfiable by the wrong code. A row
-/// that emitted nothing but was claimed would take presses it does nothing
-/// with; one that emitted from anywhere would change what the next wipe means
-/// from a press on the card beside it.
-///
-/// A strip's own controls are asserted the other way round, exactly as
-/// `blend.rs` does with the tally and the mask: the panel claims each, and this
-/// row must answer nothing for it.
+/// Asserts that pointer events outside transition pills/capsules are not claimed by the row and emit nothing.
 #[test]
 fn a_press_off_the_pills_asks_for_nothing_and_is_not_claimed() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -125,19 +108,7 @@ fn a_press_off_the_pills_asks_for_nothing_and_is_not_claimed() {
     );
 }
 
-/// No pill of the transition row is inside a boundary's [`GRAB`].
-///
-/// `input`'s rule 3 comes before rule 4, so a control under a boundary's grab
-/// band is a control that cannot be clicked, with nothing on screen saying so.
-/// This row is the lowest thing in the Mixer bay — 24 pixels above the boundary
-/// between the mixer and the master chain — where the blend chip measured for
-/// this is at the bottom of a *strip*, so it is a different clearance against
-/// the same boundary and is measured rather than inherited.
-///
-/// It asks `Layout::hit` directly as well as `claim`, which is ADR-0185's
-/// caught test: `claim` says *the panel's* for a boundary and for a control, so
-/// a version of this that only asked `claim` would pass with `GRAB` widened to
-/// 60.
+/// Verifies that no transition pill overlaps panel divider grab bands (ADR-0185).
 #[test]
 fn no_pill_is_inside_a_boundarys_grab() {
     let strips = strips();
@@ -197,15 +168,7 @@ fn no_pill_is_inside_a_boundarys_grab() {
 // The `go` capsule
 // ---------------------------------------------------------------------------
 
-/// The `go` capsule is at the right end of the row, which is what `.sep`'s
-/// `flex: 1` puts it — measured back from `.xfade`'s own padding on that side
-/// rather than forward from the length pill.
-///
-/// The three settings grow with their words and this one does not move, which
-/// is the property a separator has and a fourth pill laid end to end would not:
-/// at `no shape · now · cut` and at `back diagonal · next beat · 8 beats` the
-/// capsule is in the same place, and the gap between it and the length pill is
-/// what changes.
+/// Verifies that the `go` capsule stays pinned to the right edge padding via separator flex layout.
 #[test]
 fn the_go_capsule_sits_against_the_rows_right_padding() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -272,19 +235,7 @@ fn the_go_capsule_sits_against_the_rows_right_padding() {
     );
 }
 
-/// A press on `go` asks for a wipe naming the addressed deck and the next one
-/// round, and the last deck wraps to the first.
-///
-/// `Operation::Wipe` carries *the deck being covered* and *the deck arriving
-/// over it*, and which two those are is a surface's translation — the
-/// vocabulary carries both decks precisely so that it is not the operation's.
-/// This row names them `karakuri-cli`'s way: the selection is covered and the
-/// next slot round arrives over it, which is ADR-0259's *fade, crossfade and
-/// wipe are acts on the addressed strip*.
-///
-/// The wrap is not a case in the assertion: the loop's last step is the last
-/// strip and the expected answer is the first, reached by the same modulo every
-/// other step uses.
+/// Verifies that pressing `go` requests a wipe from the currently addressed deck to the next round (ADR-0259).
 #[test]
 fn a_press_on_go_covers_the_addressed_deck_with_the_next_one_round() {
     let strips = strips();
@@ -319,19 +270,7 @@ fn a_press_on_go_covers_the_addressed_deck_with_the_next_one_round() {
     }
 }
 
-/// A press on `go` with no shape chosen is refused, and the refusal says which
-/// of the two it is.
-///
-/// The refusal is the *surface's* and not the conversion's: `Operation::Wipe`
-/// says *"Refused with no shape chosen"* at its own definition,
-/// `karakuri-operation-record`'s three answers contain no refusal at all, and
-/// the shape is this console's own setting — so this is the only place a wipe
-/// with nothing to move can be turned away. `karakuri-cli`'s `c` is the
-/// precedent and refuses the same two, in this order.
-///
-/// `WipeKind::None` is the first entry of the cycle and is where a run begins,
-/// so this is the state a console nobody has pressed anything on is in rather
-/// than one a test had to arrange.
+/// Verifies that pressing `go` with no wipe shape chosen returns `Go::NoShape`.
 #[test]
 fn a_press_on_go_with_no_shape_chosen_is_refused() {
     let strips = strips();
@@ -375,17 +314,7 @@ fn a_press_on_go_with_no_shape_chosen_is_refused() {
     );
 }
 
-/// A press on `go` with one strip in the bay is refused, and it is the other
-/// refusal.
-///
-/// `karakuri-cli`'s *"a wipe needs somewhere to come from — this deck holds one
-/// slot"*, and it is asked before the shape for that program's reason: a deck
-/// with nowhere to go is refused whatever is armed.
-///
-/// A console with no deck at all is the same answer, which is the row being
-/// drawn without one ([`a_console_with_no_deck_still_draws_the_row`]): the
-/// capsule is there, it is not lit, and a press on it says why rather than
-/// reaching nothing.
+/// Verifies that pressing `go` with fewer than two available mixer strips returns `Go::NoOtherDeck`.
 #[test]
 fn a_press_on_go_with_nowhere_to_come_from_is_refused() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -421,12 +350,7 @@ fn a_press_on_go_with_nowhere_to_come_from_is_refused() {
     );
 }
 
-/// The `go` capsule answers for itself and for none of the three settings, and
-/// none of them answers for it.
-///
-/// [`a_pill_answers_for_its_own_setting_and_no_other`] with the fourth capsule
-/// added, and it is the direction that matters most on this row: a press meant
-/// for a length that ran a wipe would put a deck on air.
+/// Asserts mutual exclusion: `go` click handling does not trigger setting cycles, and vice versa.
 #[test]
 fn the_go_capsule_answers_for_itself_and_no_setting_answers_for_it() {
     let strips = strips();

@@ -1,22 +1,4 @@
-//! What every bay head holds, and that only one of them moved.
-//!
-//! The Sequencer's head gained four capsules on 2026-09-09 — `seq 1 … seq 4`,
-//! the armed one drawn `.pill.armed` — and the head machinery gained the field
-//! that carries them (`view::Head::banks`) and the bit that says which is lit
-//! (`view::HeadWords::armed`). Both are shared: every head on the console is
-//! laid out by `head_pills` off `Head::words`, so a change there is a change to
-//! seven heads.
-//!
-//! This is the test that says the other six did not move. It states each head's
-//! capsules as data — the table's own controls, then the class pill — and it
-//! states the arming rule for both kinds: a class pill is lit when its class is
-//! open, a bank pill when it is the armed bank, and nothing else is lit ever. A
-//! head handed banks it should not have, an extra capsule, or a pill armed on
-//! the wrong question fails here rather than in a screenshot.
-//!
-//! The pixel-level tests of the same heads are `tests/mcp_pill.rs`,
-//! `tests/solo_pill.rs` and `tests/fold_grip.rs`, which were not touched by
-//! that change.
+//! Bay head pill contents and arming state consistency checks across all bay heads.
 
 use karakuri_console::view::{class_at, head_of, mcp_word, region, Head, REGIONS};
 use karakuri_operation::gate::{Class, Open};
@@ -41,12 +23,7 @@ fn the_table_hands_no_head_any_banks() {
     }
 }
 
-/// Every head's capsules are its table entry and its class pill, in that order,
-/// and nothing else — under a shut opening and under an open one.
-///
-/// This is the *before* of *before and after*: it is what a head held before
-/// the Sequencer's four pills existed, written down so that a head that starts
-/// holding something else says so.
+/// Verifies each head contains only its designated table entry and class pill in order.
 #[test]
 fn every_heads_words_are_its_own_controls_and_its_class_pill() {
     for open in [Open::CLOSED, everything_open()] {

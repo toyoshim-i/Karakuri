@@ -1,34 +1,6 @@
 use super::view_common::*;
 
-/// The picture is the canvas's shape at every window, centred in whatever the
-/// region has, and a whole number of pixels.
-///
-/// The rule ADR-0170 took for a deck preview cell, applied where it was first
-/// refused. Before it, the picture was the whole region and `Present::draw`
-/// letterboxed into it — so at any window above the mock's narrowest a texture
-/// was allocated at the region's full size and the bars inside it were rendered
-/// and uploaded every frame. At 1920 wide that is 1396 x 262 where 466 x 262 is
-/// the picture: two texels in three are black nobody looks at.
-///
-/// The wide end and the tall end both matter and they fail differently. Wide is
-/// the ordinary case and the region is wider than the canvas, so the height is
-/// what limits and the leftover is ground either side. Tall only happens when
-/// an operator drags the program's height past what the width can carry, and
-/// then the width limits and the leftover is above and below — a case a rule
-/// written for wide windows alone gets wrong in silence.
-///
-/// # The window is arranged first, and the region is a different region past
-/// the crossover
-///
-/// Every assertion below is against the `program-view` region, and past a
-/// 1588-wide window that region is the whole bay: the cells have gone down the
-/// sides and the row is set aside, so the picture's region is the bay itself
-/// less nothing. The claims still hold term for term — the picture is still the
-/// canvas's shape, still whole pixels, still centred in what the region leaves,
-/// still inside it — which is the point worth having: *the picture never leaves
-/// the rectangle it is clipped to* is the one property that does not care which
-/// arrangement won, and it is the property a rearrangement half-applied would
-/// break.
+/// The picture matches the canvas aspect ratio and whole-pixel constraints across all window layouts (ADR-0170).
 #[test]
 fn the_picture_is_the_canvass_shape_at_every_window() {
     for width in [990.0, 1010.0, 1280.0, 1920.0, 3440.0] {
@@ -80,13 +52,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
         );
     }
 
-    // **The width stops following the window**, which is the pass the change
-    // removes: the region grows and the picture does not. Stated **within an
-    // arrangement**, because ADR-0182 put a step between the two — below, the
-    // picture stops at the mock's 466 and the leftover is ground; beside, it
-    // stops at what the bay's *height* carries and the leftover is ground
-    // again. Neither follows the window; there is one step between them and
-    // `tests/rearrange.rs` is where it is held.
+    // Picture width stops tracking window width within each layout arrangement (ADR-0182).
     let below = |w: f32| {
         let panel = arranged(karakuri_layout::Rect { w, ..SMALLEST }, CANVAS);
         picture_rect(panel.layout(), CANVAS).expect("on screen")
@@ -119,15 +85,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     layout.set_divider(centre, 0, 4000.0);
     layout.solve();
     let dragged = picture_rect(&layout, CANVAS).expect("on screen");
-    // **Against the same window before the drag**, and it is a ratio rather
-    // than the 400 pixels this used to add: `wide` is the picture *beside* the
-    // cells now, 592 x 333 rather than the mock's 466 x 262, so the margin it
-    // was compared against was measured on a rectangle that is no longer the
-    // one at this window. Doubling was the claim while the bay was 378; with
-    // the preview captions in it the picture beside is 350 rather than 333, so
-    // what a full-height drag buys is 642 against 350 — under twice, and the
-    // ratio is written as what it measures rather than rounded up to a claim
-    // the rectangle no longer supports.
+    // Verify vertical expansion relative to baseline height when dragged taller.
     assert!(
         dragged.height() > wide.height() * 1.8,
         "dragging the program taller left the picture at {} tall against the {} it had \
@@ -184,17 +142,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     );
 }
 
-/// The shape is the canvas's and not a 16:9 written into this crate.
-///
-/// The failure is silent and it lasts until somebody runs a performance at a
-/// canvas the mock's designer never drew: a hard-coded 16:9 gives a picture of
-/// the wrong shape, `Present::draw` letterboxes the real canvas inside it, and
-/// what comes back is bars in a rectangle that was supposed to have none —
-/// which is exactly the state this whole rule exists to leave behind, with
-/// nothing on screen saying it came back.
-///
-/// `--canvas` takes any pair of numbers and reaches a replay through
-/// `Record::Canvas`, so the shape is a value and not a constant.
+/// Asserts that picture dimensions derive from the dynamic canvas shape rather than a fixed 16:9 ratio.
 #[test]
 fn the_shape_is_the_canvass_and_not_a_sixteen_by_nine_in_this_crate() {
     let layout = solved(PLAUSIBLE);
@@ -223,17 +171,7 @@ fn the_shape_is_the_canvass_and_not_a_sixteen_by_nine_in_this_crate() {
     );
 }
 
-/// No rectangle where the picture is folded away, which is the manual's *"there
-/// is no state where it is hidden and still costing a pass"*: a caller that
-/// renders into this rectangle records no pass at all when there is none.
-///
-/// What carries it is the size test and not a visibility test, and that was
-/// learnt from this test rather than assumed: written with both, deleting the
-/// visibility check left it passing, because a folded region keeps its
-/// rectangle and loses its extent. So the check went and this is what holds the
-/// remaining line — including for a picture folded by its bay rather than by
-/// itself, which a visibility test and a size test answer alike and which is
-/// asserted here so that the equivalence is not left as a belief.
+/// Asserts that a folded picture produces no render rectangle regardless of whether it was collapsed directly or via its bay.
 #[test]
 fn a_folded_picture_has_no_rectangle() {
     let mut layout = solved(PLAUSIBLE);
@@ -265,21 +203,7 @@ fn a_folded_picture_has_no_rectangle() {
     assert_eq!(picture_rect(&layout, CANVAS), None);
 }
 
-/// The four preview cells are the mock's own, at the width the mock draws them.
-///
-/// Every figure here is `lib.rs`'s Program bay derivation read from the other
-/// end. At `SMALLEST` the centre track is 484, `.program-body`'s 9px padding
-/// either side leaves 466, and 466 less three 6px gaps over four tracks is 112
-/// — which at 16:9 is 63, the image's height. A cell is that image and the
-/// caption band under it, `.cell`'s 4 and `.caption`'s 13, so the row is 80 and
-/// the arrangement gave `deck-previews` that plus its 9px of padding
-/// underneath. The sum the bay was built from and the rectangles it solves to
-/// are the same numbers or the bay is wrong.
-///
-/// The insets are three of the four on purpose: nothing at the top, because the
-/// 9 above the cells in the CSS is the split's 8px divider plus
-/// `program-view`'s own bottom and belongs to neither this region nor the
-/// picture.
+/// Verifies mock preview cell dimensions and padding against the program bay layout.
 #[test]
 fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
     let layout = solved(SMALLEST);
@@ -440,11 +364,7 @@ fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
         "the cells are still in the row at 1484 wide"
     );
 }
-/// rule stated once more on the other half of the bay: a caller that renders
-/// four auditions into these rectangles records no pass at all when there are
-/// none, and *"a priming deck draws only while something auditions it"*.
-///
-/// folds the row, and `g` over the bay folds the picture with it.
+/// Asserts that a folded preview row yields no preview rectangles.
 #[test]
 fn a_folded_preview_row_has_no_rectangles() {
     let mut layout = solved(PLAUSIBLE);
@@ -463,13 +383,7 @@ fn a_folded_preview_row_has_no_rectangles() {
     layout.solve();
     assert!(preview_rects(&layout, CANVAS).is_some());
 
-    // **And the fold the other way round, which is the sentence the program's
-    // readout now prints**: *"fold the picture away (f over it) and deck A
-    // keeps the loop awake on its own"*. The manual's own words are the same
-    // claim — *"The deck previews under it are auditions of their own, so they
-    // stay when it goes"* — and a readout that says a thing the arrangement
-    // does not do is how this project has been wrong twice about what folding
-    // the picture costs.
+    // Folding the picture leaves preview auditions active and visible.
     let mut layout = solved(PLAUSIBLE);
     layout.collapse(id_of(&layout, "program-view"));
     layout.solve();

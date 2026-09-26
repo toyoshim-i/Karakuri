@@ -1,15 +1,4 @@
-//! The panel under a pointer: a drag, a fold, a solo, and every hostile thing a
-//! window can do to them.
-//!
-//! These drove `examples/layout.rs` when the model lived inside it. The model
-//! is [`karakuri_console::panel`] now, so they are ordinary tests of the crate
-//! and `cargo test -p karakuri-console` runs them — no event loop, no device,
-//! and nothing built that needs either.
-//!
-//! They assert on what an operation returned, which is the point of an
-//! operation returning a value rather than a line: a stop holding a drag is
-//! `Dragged::held`, and a boundary that had nothing to say is a `None` rather
-//! than a string that was not printed.
+//! Layout interactions under pointer events: dragging, folding, soloing, and error edge cases.
 
 mod common;
 
@@ -71,15 +60,7 @@ fn label(p: &Panel, id: NodeId) -> String {
     }
 }
 
-/// Whether a boundary is one a drag can fold a pane at — a region beside it
-/// whose fold leaves its edge behind (ADR-0300).
-///
-/// The two tests below drag every boundary far past every stop, which is the
-/// gesture that closes such a pane; what they are about is a boundary that
-/// *moves*, so those two are left to `tests/fold_grip.rs`, where the fold is
-/// the subject rather than the accident. Read off the arrangement rather than
-/// listed, so a third pane declaring it is skipped here without anybody editing
-/// this file.
+/// Identifies whether a boundary belongs to a fold-retaining pane (ADR-0300).
 fn folds_a_pane(p: &Panel, split: NodeId, index: usize) -> bool {
     match p.pair(split, index) {
         Some((a, b)) => p.layout().keeps_its_edge(a) || p.layout().keeps_its_edge(b),
@@ -87,19 +68,8 @@ fn folds_a_pane(p: &Panel, split: NodeId, index: usize) -> bool {
     }
 }
 
-/// Every divider in the arrangement, dragged and dragged back — including far
-/// past whatever stops it — leaves the arrangement exactly as it was, and at
-/// least one of them moves on the way.
-///
-/// The second half is the point: `set_divider` takes an absolute coordinate, so
-/// the frames spent past a stop contribute nothing to accumulate. A caller that
-/// fed it deltas would come back short.
-///
-/// A boundary beside a pane that keeps its edge is not one of these, and that
-/// is a change rather than an exemption. A drag far past that pane's own
-/// minimum closes it, and bringing the pointer back does not open it: one
-/// gesture asks for one fold, and the way back is another gesture (ADR-0300).
-/// `tests/fold_grip.rs` is where both halves are demonstrated.
+/// Dragging boundaries past stops and back preserves the original layout,
+/// ignoring edge-retaining fold boundaries (ADR-0300).
 #[test]
 fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -207,20 +177,8 @@ fn a_drag_past_the_left_edge_of_the_window() {
     }
 }
 
-/// A pointer dragged on past a stop says so once.
-///
-/// This is the readout's own bug, and it is worst exactly where a person is
-/// looking hardest: at a stop the boundary does not move, and a report per
-/// pointer event is hundreds of identical lines a second into a terminal that
-/// has to keep up with them. So the first move past the stop comes back `held`,
-/// and the two hundred after it come back with nothing to say at all.
-///
-/// A boundary beside a pane that keeps its edge answers the first move with a
-/// fold instead (ADR-0300): pulling on past the stop is what closes the pane,
-/// so what the drag has to say is *that* rather than *held*. The property under
-/// test is the same one either way and the two hundred moves after it are what
-/// it is about — the pane is closed, its boundary does not move again, and one
-/// gesture asks for one fold.
+/// Dragging past a stop reports `held` (or a fold under ADR-0300) once,
+/// suppressing redundant updates for subsequent moves.
 #[test]
 fn a_drag_held_at_a_stop_says_so_once() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -296,13 +254,7 @@ fn a_sweep_of_hostile_input() {
                 point,
             ] {
                 let _ = p.moved(to);
-                // **This loop used to be a list of seven `Op`s** and it
-                // compiled only because an operation meant *whatever is under
-                // the pointer*: the hostile part of it was that the pointer
-                // was at `f32::MAX`, and the model did the resolving. The
-                // resolution is the caller's now, so the sweep does it — which
-                // is the same hostility, with the failing resolution visible
-                // rather than swallowed into an `Outcome::Nothing`.
+                // Resolves target under out-of-bounds pointer, asserting that resolution fails cleanly.
                 let target = match p.under() {
                     Hit::View(id) => Some(id),
                     Hit::Divider { split, .. } => Some(split),
@@ -343,18 +295,7 @@ fn a_sweep_of_hostile_input() {
     }
 }
 
-/// Every operation, in a debug build, with a read after each one.
-///
-/// `rect()` and `hit()` both `debug_assert!` that the layout is not dirty, so
-/// this fails if any operation here leaves a solve owed — which is the mistake
-/// a real view will make first, and the reason the panel solves at the top of
-/// everything that reads.
-///
-/// It also asserts what each operation is *for*, and asserts it twice over:
-/// once on the rectangles, and once on what the operation said it did. A fold
-/// folds, an unfold puts the arrangement back exactly and names what it
-/// unfolded, a solo leaves one region visible, and an unsolo restores what it
-/// replaced.
+/// Verifies operations clean dirty layout state and perform expected layout mutations.
 #[test]
 fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
     let mut p = Panel::new(1600.0, 1000.0);
@@ -549,18 +490,7 @@ fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
     );
 }
 
-/// A fold during a drag takes the boundary away, and the release says so.
-///
-/// [`Released::Gone`] has existed for exactly this since the model was written,
-/// and it was unreachable: where a boundary is was answered by checking that
-/// the visible child before it was there and returning that child's far edge,
-/// so folding the far side handed back a position — the split's own far edge —
-/// for a boundary that is not there. A release then rested on a coordinate that
-/// is not a boundary and the readout said so.
-///
-/// The route is the one an operator takes: press in a gap, move the pointer
-/// into the region on the far side of it, and fold that region from the
-/// keyboard while the button is still down.
+/// Folding a region during an active divider drag reports `Released::Gone` on release.
 #[test]
 fn a_fold_during_a_drag_leaves_the_release_with_no_boundary() {
     let mut p = Panel::new(1600.0, 1000.0);
@@ -609,22 +539,7 @@ fn a_fold_during_a_drag_leaves_the_release_with_no_boundary() {
     );
 }
 
-/// With the root folded, the panel is blank and answers no pointer — and the
-/// way back was never the pointer's.
-///
-/// `g` over the transport folds the split enclosing it, which is the root, and
-/// what that leaves is a window with nothing drawn in it: a view's plan skips
-/// every node `Layout::visible` says no to, and `visible` walks up to the root.
-/// The hit test used to disagree with the plan — it descends from the root
-/// testing *children* — so `f`, `g` and `s` went on folding and soloing regions
-/// nobody could see.
-///
-/// What the change leaves working is the whole of what an operator needs, and
-/// it is what it always was: `z` and `r` take no target. `UnfoldAll` reads the
-/// arrangement and `Reset` builds a fresh one, so neither asks where the
-/// pointer is — which is the manual's own sentence, *"a folded region has no
-/// rectangle, so a pointer cannot reach it to undo itself"*, one node further
-/// up than it was written for.
+/// Folding the root makes the panel blank and unreachable by pointer; `UnfoldAll` and `Reset` recover it.
 #[test]
 fn a_folded_root_answers_no_pointer_and_z_and_r_are_still_the_way_back() {
     let mut p = Panel::new(1600.0, 1000.0);

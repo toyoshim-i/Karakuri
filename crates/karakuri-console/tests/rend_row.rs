@@ -1,33 +1,7 @@
-//! The renderer chips under a node group's head: the control that turns a
-//! deck's fold into a choice.
+//! Layout, hit-testing, and event generation for renderer chips in node groups.
 //!
-//! Seven things:
-//!
-//! 1. Where the row is inside its group — under `.node-head`, and exactly
-//!    as tall as `group_h` counted it, so the parameter rows under it start
-//!    where the row ends.
-//! 2. Where the chips are in it, as `.rend-row`'s own padding and gap lay
-//!    them out, each as wide as the name in it.
-//! 3. That the chips clear every boundary's grab, which is the deck head's
-//!    arithmetic two rows up: `.rend-row`'s left padding is 12 against a
-//!    `GRAB` of 6.
-//! 4. That a press on a chip asks for that renderer, by its index in draw
-//!    order — the numbering a `select` record uses.
-//! 5. That an overdrawn deck's chips are drawn and claimed by nothing,
-//!    which is the manual's *"Only where the deck composites"* answered by
-//!    a state rather than by a missing row.
-//! 6. That a lone renderer is drawn and not claimed — *"and holds two or
-//!    more"*, the other half of the same sentence.
-//! 7. That a group the pane had no room to draw is not pressable, which is
-//!    `InspectorPane::shown` reaching a control.
-//!
-//! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
-//! because a chip is as wide as the name in it — see `common::drawn_once`.
-//!
-//! What is not here and cannot be: that `input::claim` gives the panel a press
-//! on a chip. That is a row in `input::PROBES` and it is the registration half
-//! of this control, which lives in files this test's author does not own; until
-//! it lands a press here reaches `egui`.
+//! Verifies chip placement, boundary grab clearance, selection indices,
+//! disabling single or overdrawn renderers, and clipping to visible panes.
 
 mod common;
 
@@ -298,14 +272,7 @@ fn every_chip_clears_every_boundarys_grab() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// A press on a chip asks for that renderer, by its position in draw order —
-/// the numbering `--param L4:1:…` and a `select` record use, and not a position
-/// in whatever this row managed to draw.
-///
-/// The lit chip is claimed with the rest: it names a destination the deck is
-/// already at, which is the anchor's shape two rows up, and a chip that stopped
-/// being pressable the moment it lit would take the claim out from under a hand
-/// on the beat the swap landed.
+/// Presses on renderer chips target their absolute draw order index, even when already active.
 #[test]
 fn a_press_on_a_chip_asks_for_that_renderer() {
     let pane = mock();
@@ -417,14 +384,7 @@ fn a_press_off_every_chip_asks_for_nothing() {
     }
 }
 
-/// A row the pane's body does not reach is not pressable, which is the clip
-/// reaching a control: what is not drawn is not a target.
-///
-/// The body says so and no longer `shown`. A pane scrolls now (ADR-0307), so
-/// *what is on screen* is the body rectangle rather than a count of whole
-/// groups — `InspectorPane::drawn` walks it, `grip` and this refuse a press
-/// outside it, and `inspector_into` clips the paint to it. The body is emptied
-/// down to nothing here, which is a pane folded to its two heads.
+/// Renderer rows outside the visible pane body rectangle are clipped and non-interactive (ADR-0307).
 #[test]
 fn a_row_the_body_does_not_reach_is_not_pressable() {
     let pane = mock();

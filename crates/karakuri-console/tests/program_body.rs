@@ -1,23 +1,4 @@
-//! How the Program bay's body arranges itself in the rectangle it has, and the
-//! arithmetic checked against the mock rather than against the code that
-//! produced it.
-//!
-//! None of this needs a window or a device, and none of it needs a solved
-//! layout either: `view::program_body` takes a rectangle and answers where the
-//! picture and the four cells go, so every case here is two numbers in and a
-//! handful out. The one test that does read a layout is the last one, and it is
-//! there to hold the new arithmetic against what the console draws today.
-//!
-//! # Why the expected numbers are written out rather than derived
-//!
-//! Every rectangle below is a literal arrived at by hand from the mock's own
-//! figures, and the derivation is written above it. A test that recomputed the
-//! answer from the same constants the code uses would pass against a wrong
-//! constant, which is exactly the failure
-//! [ADR-0179](../../../docs/adr/0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md)
-//! records; [`largest`] is the one piece of shared arithmetic and it is
-//! deliberately a second implementation of the fit rather than a call to the
-//! first.
+//! Program bay body layout calculations, checked against mock values (ADR-0179).
 
 mod common;
 
@@ -39,13 +20,7 @@ const CANVAS: (u32, u32) = (1280, 720);
 /// that followed the canvas when it should not.
 const SQUARISH: (u32, u32) = (1024, 768);
 
-/// The Program bay's body at the narrowest console the mock will draw.
-///
-/// `.console`'s `min-width: 1010px` less its 10px of padding either side is
-/// 990; the centre track is 990 - 218 - 268 - two 10px gaps = 484; the bay is
-/// that wide, and `.program-body`'s 9px padding leaves 466. The bay is 395
-/// tall, less the 27 of bay head painted over it and 9 of that padding top and
-/// bottom, which is 350.
+/// Derives expected body dimensions (466x350) for the narrowest supported console window.
 const NARROWEST: (f32, f32) = (466.0, 350.0);
 
 /// The same body in a 1920 window. The two side tracks and the four dividers do

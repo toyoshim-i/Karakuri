@@ -71,15 +71,7 @@ fn the_deck_head_is_the_rows_own_geometry() {
     );
 }
 
-/// The two build chips are measured leftwards from the fold, which is what
-/// `.sep`'s `flex: 1` does to everything after it: the fold against the
-/// right-hand padding, `re-salt` one gap before it, and the capacity one gap
-/// before that.
-///
-/// At a plausible window rather than the smallest one, because
-/// `the_deck_head_is_the_rows_own_geometry` above is what says they are not
-/// there at the smallest — the two facts are the same measurement read at two
-/// widths.
+/// Verifies build chips are positioned leftward from the fold grip at plausible window widths.
 #[test]
 fn the_build_chips_are_measured_leftwards_from_the_fold() {
     let pane = mock();
@@ -106,17 +98,7 @@ fn the_build_chips_are_measured_leftwards_from_the_fold() {
     );
 }
 
-/// A pane too narrow for the two build chips keeps the five that were here
-/// before them, which is the one place this row answers *a control that does
-/// not fit is no control at all* by dropping part of the row rather than all of
-/// it.
-///
-/// The measurement is the argument. An Inspector pane at the console's declared
-/// minimum window is 237.5 pixels wide and the row needs about 296 for all
-/// seven, so a row that took all of them or none would draw nothing at the
-/// width this arrangement claims to work at — trading two controls that were
-/// never there for four that were. The threshold is a window of about 1360 with
-/// two panes open, and the console page says so.
+/// Tests that panes too narrow for build chips retain the five standard chips rather than dropping all.
 #[test]
 fn a_pane_too_narrow_for_the_build_chips_keeps_the_rest_of_the_row() {
     let pane = mock();
@@ -177,14 +159,7 @@ fn a_free_deck_draws_no_anchor_and_the_row_closes_up() {
     assert!(near(head.back.min.x, head.mode.max.x + size::DECK_HEAD_GAP));
 }
 
-/// A row that cannot hold its chips draws none of them, which is `look`'s rule
-/// one bay up: half a control is a picture of something that cannot be pressed.
-///
-/// The narrow pane is built here rather than solved for, because the panel's
-/// own minimum width is wider than this: below 990 the solve stops honouring
-/// minima and scales the whole console down together, so there is no viewport
-/// that reaches this state. The rule is stated anyway, and this is what says it
-/// holds.
+/// Asserts that a deck head too narrow to fit its primary chips draws none of them.
 #[test]
 fn a_row_too_narrow_for_its_chips_draws_none_of_them() {
     let pane = mock();
@@ -216,21 +191,7 @@ fn a_row_too_narrow_for_its_chips_draws_none_of_them() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// All three controls clear every boundary's grab, measured here off their own
-/// rectangles and never inherited from the transport row's.
-///
-/// The nearest boundary is the pane divider, not the one under the row. A deck
-/// head is the second row *inside* an inspector pane, so what a chip has to
-/// clear sideways is the bar between the two panes and the bay's own edges, and
-/// the tightest of those is `.deck-head`'s left-hand padding: the mode chip
-/// starts 10 pixels in from the pane's edge, against a `GRAB` of 6. Down the
-/// row the clearance is far larger — a pane's head and the bay head are above
-/// it — and that is asserted rather than assumed.
-///
-/// So it fails if a chip moves, if the row's padding shrinks, or if `GRAB`
-/// widens past 10 — and the last is the point: 10 is the tightest clearance on
-/// this console, so the deck head is what goes first, and the fix is then to
-/// change the rule in `input`, deliberately.
+/// Asserts that all deck head controls clear divider grab zones (padding >= GRAB).
 #[test]
 fn every_control_clears_every_boundarys_grab() {
     let pane = mock();
@@ -257,13 +218,7 @@ fn every_control_clears_every_boundarys_grab() {
                  has to change"
             );
 
-            // **And down the row, which is where a deck head is unlike every
-            // control before it.** A pane's top edge is the bay's, and there
-            // are two whole rows above this one: the bay head painted over the
-            // region, the pane's own `.half-head`, and then this row's
-            // padding. 27 + 27.5 + 5 = **59.5**, against a `GRAB` of 6. The
-            // bottom is not a constant — a pane is as tall as the bay lets it
-            // be — so it is asserted as a clearance rather than as a number.
+            // Vertical clearance includes the bay head, half-head, and padding (59.5px vs GRAB 6).
             let bay = rect_of(panel.layout(), name);
             let head_top = head.mode.min.y - bay.y;
             assert!(
@@ -323,11 +278,7 @@ fn the_band_the_chips_clear_is_still_a_boundarys() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
     let (pane_at, _) = chips(&panel, &ctx, 1, &pane);
-    // **Inside the pane and still the divider's**, which is what a grab *is*:
-    // the band reaches `GRAB` in over whatever the pane draws at its edge, and
-    // the ten pixels of `.deck-head` padding are what put the first chip past
-    // it. A probe on the pane's own edge would pass with no grab at all and
-    // would measure nothing.
+    // Pane edge falls within the divider grab zone, which the 10px padding clears.
     let half = size::DECK_HEAD_PAD_X * 0.5;
     assert!(
         half < GRAB,
@@ -345,15 +296,7 @@ fn the_band_the_chips_clear_is_still_a_boundarys() {
     );
 }
 
-/// A control claims what it acts on and no more. The gaps between the chips are
-/// not controls, and neither is an arrow on a deck the scrub is inert on.
-///
-/// The fold moved from the second list to the first on 2026-09-09, which is the
-/// whole of what ADR-0314 changed about this row: it was drawn and claimed
-/// nothing, on the argument that layering is a build decision the engine has no
-/// setter for. It has none, and a press re-aims the slot instead. The two build
-/// chips joined it the same day (ADR-0328), and they are the same shape one
-/// field of the aim along.
+/// Controls claim only their hit areas; gaps and inert arrows claim nothing (ADR-0314, ADR-0328).
 #[test]
 fn nothing_beside_the_six_controls_is_claimed() {
     let pane = mock();

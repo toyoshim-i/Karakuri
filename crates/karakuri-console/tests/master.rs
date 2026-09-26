@@ -1,32 +1,4 @@
-//! The Master bay's out: the console's thirteenth control, and the first with a
-//! handle that is not in the Mixer bay.
-//!
-//! Seven things, and the first two are why this is its own file rather than a
-//! few more assertions in `fader.rs`:
-//!
-//! 1. Where the row is, measured off the bay's own rectangle — the mock's
-//!    `.master-body` padding under the bay head, and `.master-row`'s three
-//!    items across it.
-//! 2. That the knob clears every boundary's grab at both ends of its
-//!    travel, which is `tests/outputs.rs`'s arithmetic over a control that
-//!    *moves*: a knob at 0.00 and a knob at 1.00 are two rectangles, and
-//!    the one nearest a boundary is not the same one at both.
-//! 3. That the figure's box holds every reading and does not move, which is
-//!    what stops the knob walking away from the hand dragging it — and that
-//!    the knob itself does move, which is the only thing here that should.
-//! 4. That the knob is the target and the track is not — `Mixer::grab`'s
-//!    rule, and deliberately not the exposure track's.
-//! 5. What a drag asks for: `SetMasterOut`, exactly at both ends, and
-//!    naming no deck.
-//! 6. That a console with no engine behind it draws no row and claims no
-//!    press.
-//! 7. The route a window loop actually takes — `claim`, then the derivation
-//!    that drew the control, then the operation, then the release.
-//!
-//! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
-//! because the figure's box is as wide as the widest reading it can hold — see
-//! `common::drawn_once` — and a level, because a console with no engine behind
-//! it draws no row at all.
+//! Master bay output fader: layout, boundary clearance, drag tracking, and `SetMasterOut` emission (ADR-0224).
 
 mod common;
 
@@ -54,11 +26,7 @@ fn view(out: f32) -> View {
     view
 }
 
-/// The mock's own chain: `feedback 0.34 · mix` in slot 0 and `bloom 0.60` in
-/// slot 1, which is what `docs/manual/console.html` draws under the out row.
-///
-/// One of each kind: feedback declares `retains` so its row draws a cut chip,
-/// and bloom does not so its row draws none.
+/// Mock processing chain with feedback and bloom effects under the output row.
 fn mock_chain() -> Chain {
     Chain {
         slots: vec![
@@ -129,12 +97,7 @@ fn row(panel: &Panel, ctx: &egui::Context, out: f32) -> MasterRow {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// The row is the bay's own geometry: `.master-body`'s padding under the bay
-/// head, and `.master-row`'s three items across it with the fader taking what
-/// is left.
-///
-/// Every number here is one of `room::size`'s, so this fails if the mock's
-/// padding or gap is transcribed differently and not if a font is.
+/// Output row geometry: `.master-body` padding and `.master-row` fader layout.
 #[test]
 fn the_out_row_is_the_bays_own_geometry() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -269,25 +232,7 @@ fn text_width(ctx: &egui::Context, text: &str) -> f32 {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// The knob clears every boundary's grab, at both ends of its travel.
-///
-/// Measured here and never inherited from another control, which is `input`'s
-/// rule about every one of the thirteen. Above the knob the clearance is a sum
-/// rather than a centring: the bay head is painted over the top of the region,
-/// `.master-body` pads under it, and the 11-tall knob is centred in a row of
-/// 16.5 — 27 + 8 + 2.75 = 37.75. Down the sides it is the body's own padding
-/// plus the `out` and the figure either side of the track, less the half-knob
-/// that overhangs each end of it. Below is whatever is left of the bay under
-/// the row, and that one is measured rather than computed: this bay is `flex:
-/// 1` in its column.
-///
-/// Both ends, because this control moves. A knob at 0.00 and a knob at 1.00 are
-/// two rectangles at opposite ends of the track, and the boundary nearest one
-/// of them is not the one nearest the other.
-///
-/// So it fails if the row moves, if the bay's padding shrinks, or if `GRAB`
-/// widens past 37.75 — and the last is the point: the fix then is to change the
-/// rule in `input`, deliberately.
+/// Master fader knob clears boundary grab zones at both ends of travel (37.75px vertical clearance).
 #[test]
 fn the_knob_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -405,12 +350,7 @@ fn the_knob_is_grabbed_and_the_track_is_not() {
 // What a drag asks for
 // ---------------------------------------------------------------------------
 
-/// Both ends of the drag are exact, and neither names a deck.
-///
-/// `SetMasterOut` is the one operation in the mixing group that carries no
-/// slot: it is a level on the whole fold rather than on a member of it
-/// (ADR-0224). The ends are exact for `Grab::value`'s reason — the subtraction
-/// is zero at one end and the division is `travel / travel` at the other.
+/// Fader travel spans exact `0.0` to `1.0` endpoints and emits slot-independent `SetMasterOut` (ADR-0224).
 #[test]
 fn a_drag_asks_for_a_master_out_at_both_ends() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -435,11 +375,7 @@ fn a_drag_asks_for_a_master_out_at_both_ends() {
     }
 }
 
-/// A console with no engine behind it draws no row and claims no press.
-///
-/// `View::master_out` is `None` until whoever owns a deck writes it, which is
-/// every other test in this crate — and the bay then draws its card and its
-/// head, exactly as the Mixer bay does with no strips.
+/// When master output level is uninitialized (`View::master_out` is `None`), no row is rendered.
 #[test]
 fn no_level_behind_the_console_is_no_row_at_all() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -460,13 +396,7 @@ fn no_level_behind_the_console_is_no_row_at_all() {
     );
 }
 
-/// The route a window loop actually takes, end to end: `claim` says the
-/// panel's, the derivation that drew the control says what is in hand, the drag
-/// says what it asks for, and the release says what was let go.
-///
-/// The same three steps `tests/look.rs` walks over the two controls at the end
-/// of the transport row, and it is what says the thirteenth control is wired
-/// the way the other twelve are rather than merely drawn.
+/// Verifies full pointer lifecycle: claim, in-hand tracking, operation emission, and release.
 #[test]
 fn the_route_a_window_takes_is_claim_then_derivation_then_operation() {
     let (mut panel, ctx) = console(PLAUSIBLE);

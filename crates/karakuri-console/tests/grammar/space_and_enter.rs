@@ -548,12 +548,7 @@ fn enter_declines_where_a_bays_items_perform_nothing() {
 // The refusals
 // ---------------------------------------------------------------------------
 
-/// Every refusal carries the sentence that says why, which is P-0083 and the
-/// page's own rule that a key that declines and a key that is not bound are the
-/// same experience.
-///
-/// The four preview cells are ADR-0259's clearest case of an item with neither
-/// a state nor an act: a digit lands, the ring is drawn, and both keys decline.
+/// Asserts inert items (like preview cells) refuse space and enter with descriptive explanations (P-0083, ADR-0259).
 #[test]
 fn every_refusal_says_why() {
     let (panel, mut view) = console();

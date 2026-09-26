@@ -1,26 +1,4 @@
-//! The mixer's two faders, played with a pointer.
-//!
-//! `mixer.rs` is where a strip's rectangles are and which of them are controls.
-//! This is what a *hand* does to the two that are, end to end: the knob is
-//! taken hold of and the track is not, the value does not jump, both ends of
-//! the travel are exactly reachable, the drag emits one operation of the
-//! vocabulary for the right deck, it keeps the pointer while the pointer
-//! wanders off the strip, the cursor stays what it was, the console remembers
-//! none of it, and a drag that changed no value is owed no frame.
-//!
-//! None of it needs a device, and only one thing about it needs `egui`: the
-//! strips are laid out with the type in them, which is `mixer.rs`'s own
-//! opening. What a fader emits is `karakuri-operation`'s, which has no
-//! dependencies at all.
-//!
-//! # Where this stops, and what carries on in the program
-//!
-//! Everything here ends at the operation. Turning it into a `Record` and
-//! applying it to a deck is the harness's — `crates/karakuri/src/main.rs`,
-//! where there is a deck to apply it to — and the round trip that closes the
-//! loop on a real `Deck` is under that file's `mod gpu`. What is asserted here
-//! is the half that says the console did *not* close it for itself: after a
-//! whole drag, the bay drawn from the same strips is the same bay.
+//! Mixer fader pointer manipulation: grab mechanics, travel bounds, operation emission, and repaint requests.
 
 mod common;
 
@@ -76,12 +54,7 @@ fn knobs(at: StripBox, strip: &Strip) -> (egui::Rect, egui::Rect) {
     (at.trim_at(strip.gain).knob, at.fader_at(strip.opacity).knob)
 }
 
-/// What one fader's travel is, worked out here from the stylesheet's own
-/// numbers rather than asked of the crate — so that a value read back wrong is
-/// two numbers disagreeing rather than one function agreeing with itself.
-///
-/// The trim's fill runs its track edge to edge (`.fader b`), and the tall one's
-/// sits [`size::VFADER_INSET`] inside its well on every side (`.vfader b`).
+/// Computes fader travel from style constants, accounting for vertical inset (`.vfader b`).
 fn travel(at: StripBox, knob: Knob) -> f32 {
     match knob {
         Knob::Trim { .. } => at.trim.width(),
@@ -107,14 +80,7 @@ fn take(panel: &mut Panel, bay: &Mixer, p: egui::Pos2) -> Grab {
     grab
 }
 
-/// One strip as it is painted: where every shape a whole frame put wholly
-/// inside `rect` ended up. `mixer.rs`'s own helper, and written again here for
-/// the reason that one gives.
-///
-/// The bounds of each shape rather than the shape, because what a value moves
-/// is where a mark is — a fill that grew, a knob that slid — and a failure that
-/// prints fifteen rectangles is one a reader can act on where a failure that
-/// prints fifteen glyph-by-glyph galleys is not.
+/// Returns painted shape bounding rects within a strip for verification.
 fn drawn(panel: &mut Panel, strips: &[Strip], rect: egui::Rect) -> Vec<egui::Rect> {
     let ctx = drawn_once();
     let mut view = View::new(Room::Day);
@@ -141,12 +107,7 @@ fn asked(dragged: Option<Dragged>) -> Option<f32> {
 // The knob, and not the track
 // ---------------------------------------------------------------------------
 
-/// A press on the knob takes it; a press on the track does nothing.
-///
-/// A fader at 0.3 whose top is clicked must not jump to 1.0 — that is a change
-/// to the mix nobody asked for, made on stage — so the track is not a target at
-/// all, and this asserts it at both ends of both tracks and over the whole
-/// strip.
+/// Pressing a fader knob grabs it, while pressing the track does nothing.
 #[test]
 fn the_knob_is_grabbed_and_the_track_is_not() {
     let (panel, ctx) = console();
@@ -188,13 +149,7 @@ fn the_knob_is_grabbed_and_the_track_is_not() {
     }
 }
 
-/// The whole strip, swept, which is the other direction: exactly the two knobs
-/// and nothing else in it answers a grab.
-///
-/// A grid rather than named points, because *the track is not a target* is a
-/// claim about every point on it and the interesting failure — a hit test that
-/// widened to the track, or to the strip — is one this catches and the named
-/// points above might walk between.
+/// Sweeping across strip coordinates confirms only knobs respond to grab hits.
 #[test]
 fn only_the_two_knobs_in_a_strip_answer_a_grab() {
     let (panel, ctx) = console();
@@ -240,20 +195,7 @@ fn only_the_two_knobs_in_a_strip_answer_a_grab() {
 // The value does not jump
 // ---------------------------------------------------------------------------
 
-/// A press keeps whatever it took hold at, so the value does not jump.
-///
-/// The press is deliberately *off* the knob's centre, which is where the
-/// mistake shows: a drag that mapped the pointer straight onto the track would
-/// move the value by the distance between the pointer and the knob's middle the
-/// instant the button went down, and a hand that meant to nudge a fader would
-/// find it somewhere else.
-///
-/// Two assertions, and they are not the same one:
-///
-/// 1. A move to the point the press was made at emits nothing — the value
-///    is where it was.
-/// 2. A move of `n` pixels asks for the value `n` pixels away from where
-///    the knob was, not from where the pointer is.
+/// Dragging preserves grab offset relative to knob center to avoid value jumping.
 #[test]
 fn the_grab_keeps_its_offset_so_the_value_does_not_jump() {
     let (mut panel, ctx) = console();
@@ -291,20 +233,7 @@ fn the_grab_keeps_its_offset_so_the_value_does_not_jump() {
 // Both ends are exact
 // ---------------------------------------------------------------------------
 
-/// The bottom of the travel is exactly 0.0 and the top is exactly 1.0, on both
-/// faders — `karakuri-midi`'s `GAIN_RANGE` argument reached from the other
-/// side: *"chosen so that both ends of a fader are exact … a fader whose top is
-/// unity is what a fader means."*
-///
-/// Exactly, not nearly: this compares with `==`, because a mixer whose faders
-/// cannot be matched is the failure that argument is about, and 0.999997 is not
-/// unity.
-///
-/// And a gain above 1.0 cannot be asked for, which is ADR-0178's recorded gap
-/// rather than a ceiling this control invented: the trim is drawn over `[0, 1]`
-/// while `Deck::set_gain` is deliberately unclamped for an HDR mix. What is
-/// asserted is that the top of the drag is unity and stays unity, however far
-/// past the end the pointer runs.
+/// Fader travel strictly spans `0.0` to `1.0` (ADR-0178).
 #[test]
 fn both_ends_of_both_faders_are_exactly_reachable() {
     let (mut panel, ctx) = console();
@@ -368,13 +297,7 @@ fn both_ends_of_both_faders_are_exactly_reachable() {
 // What the drag emits
 // ---------------------------------------------------------------------------
 
-/// The right operation, for the right deck, from the right control.
-///
-/// Four strips and two knobs each, so a fader that named slot 0 whatever it was
-/// dragged, or emitted a gain for the opacity fader, fails eight ways. This is
-/// `karakuri-operation`'s first customer, and what it asserts is the whole of
-/// what a GUI component is: pointer motion into a number, aimed at a named
-/// target.
+/// Fader drags emit the appropriate operation and deck index for trim and volume controls.
 #[test]
 fn a_drag_emits_the_right_operation_for_the_right_deck() {
     let (mut panel, ctx) = console();
@@ -423,15 +346,7 @@ fn a_drag_emits_the_right_operation_for_the_right_deck() {
 // The claim, the cursor, and the boundary underneath
 // ---------------------------------------------------------------------------
 
-/// A fader in hand keeps its claim wherever the pointer has wandered to, which
-/// is `input`'s rule 1 covering the second kind of drag without a word being
-/// added to it.
-///
-/// The pointer is run right out of the strip, out of the bay, across the panel
-/// and off the viewport, and every event is still the panel's — including a
-/// wheel, which is a claim withheld rather than an action taken. Then the
-/// button comes up and the same point is `egui`'s again, which is what says the
-/// claim was the *gesture's* and not the position's.
+/// An in-hand fader retains pointer capture beyond the strip and viewport bounds.
 #[test]
 fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
     let (mut panel, ctx) = console();
@@ -486,18 +401,7 @@ fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
     );
 }
 
-/// A fader drag draws no resize cursor, wherever the pointer has got to.
-///
-/// `View::cursor` draws one from the boundary in hand, or from the boundary the
-/// pointer is over. A fader is neither: it is a gesture that resizes nothing,
-/// and the pointer running across a boundary in the middle of one is the
-/// ordinary case, not the odd one. So the cursor stays the arrow it is
-/// everywhere else on this panel — and the assertion is positive rather than
-/// *not a resize*, because "not one of two" is a claim that survives the cursor
-/// going missing altogether.
-///
-/// The control beside it is a boundary drag doing the opposite from the same
-/// position, which is what says the cursor still works at all.
+/// Fader drag maintains standard arrow cursor and suppresses boundary resize cursors.
 #[test]
 fn the_cursor_during_a_fader_drag_is_not_a_resize() {
     let strips = strips();
@@ -610,23 +514,7 @@ fn no_knob_is_inside_a_boundarys_grab() {
 // The console remembers nothing
 // ---------------------------------------------------------------------------
 
-/// A fader that moved a number the console kept would be a second copy of the
-/// deck's state, and this is the assertion that there is none.
-///
-/// The bay is a function of the strips it is handed and of the arrangement. So
-/// a whole drag — press, several moves, release — must leave the bay drawn from
-/// the *same* strips identical: the fills, the knobs and everything else in the
-/// same places, because the deck has not been told anything yet and the console
-/// has nothing of its own to show.
-///
-/// The frame is drawn as well as the bay laid out, because the two are not the
-/// same claim: a console that patched the values on its way into the paint pass
-/// would leave every rectangle where it was and move every mark that is painted
-/// from one.
-///
-/// And then the other direction, which is what makes the rest meaningful: the
-/// value written into the strip by whoever owns the deck does move the knob, so
-/// the bay is following something — just not the panel.
+/// Fader movements alter no internal console state until external updates are received.
 #[test]
 fn the_value_the_strip_draws_comes_back_from_the_deck() {
     let (mut panel, ctx) = console();
@@ -704,17 +592,7 @@ fn the_value_the_strip_draws_comes_back_from_the_deck() {
 // The frame a drag is owed
 // ---------------------------------------------------------------------------
 
-/// A drag that moved no value asks for no frame, and one that moved a value
-/// asks for one.
-///
-/// `Change::Emitted` is the arm, and this is why it is not
-/// `Change::Pointer(Claim::Panel)`: that one is `Repaint::Now` for every event
-/// the panel claimed, and a fader held against the top of its track while the
-/// pointer runs on is a claimed event per pointer sample with nothing on screen
-/// changing for any of them.
-///
-/// It is driven through a real drag rather than by building the two `Change`s
-/// by hand, because the claim is about what the drag *returned*.
+/// Fader drags request frames only when the underlying value actually changes.
 #[test]
 fn a_drag_that_moves_nothing_asks_for_no_frame() {
     let (mut panel, ctx) = console();

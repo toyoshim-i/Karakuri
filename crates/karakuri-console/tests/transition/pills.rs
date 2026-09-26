@@ -4,12 +4,7 @@ use super::transition_common::*;
 // Where the row is
 // ---------------------------------------------------------------------------
 
-/// The row is where the mock puts it, and every number is read off `style.css`
-/// rather than off the panel.
-///
-/// The transcription first, for `mixer.rs`'s reason (ADR-0177): everything
-/// after it is a *relation* — this box is one padding under that one — and a
-/// relation holds just as well with the padding transcribed wrong.
+/// Verifies transition row geometry and padding directly against `style.css` (ADR-0177).
 #[test]
 fn the_row_is_the_mocks_own_box() {
     assert!(
@@ -94,18 +89,7 @@ fn the_row_is_the_mocks_own_box() {
     );
 }
 
-/// The pills are drawn where they are pressed, at the widest word each cycle
-/// has.
-///
-/// The word a pill reads is painted inside the rectangle the hit test answers
-/// for, which is this crate's rule for every control it has: the derivation
-/// that draws a control is asked again rather than copied, so a pill an
-/// operator sees and a pill they click cannot come apart.
-///
-/// Every place in all three cycles, because a pill is as wide as its own word
-/// and the words are not the same length: a row laid out from one word and
-/// painted with another would come apart only at the value where the two widths
-/// differ.
+/// Verifies that every pill text across all cycles is painted within its interactive hit rectangle.
 #[test]
 fn every_word_of_every_cycle_is_painted_in_its_own_pill() {
     let strips = strips();
@@ -143,12 +127,7 @@ fn every_word_of_every_cycle_is_painted_in_its_own_pill() {
     );
 }
 
-/// The row is drawn with no deck behind the console.
-///
-/// `mixer` answers `None` there and draws no strips, because six readings a
-/// slot with no slot to read is a row of zeroes. These three are not readings —
-/// they are the console's own pointer and always have a value — so the row
-/// survives it, and a press on it is still the panel's.
+/// Verifies that the transition row remains visible and interactive even with no decks attached.
 #[test]
 fn a_console_with_no_deck_still_draws_the_row() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -174,13 +153,7 @@ fn a_console_with_no_deck_still_draws_the_row() {
 // What each pill asks for
 // ---------------------------------------------------------------------------
 
-/// A press on the shape pill asks for the next shape, and the last wraps to the
-/// first.
-///
-/// The operation names a destination and never a step, which is the whole of
-/// what P-0090 asks of a control that cycles. The wrap is not a case in the
-/// assertion: the loop's last step is the sixth shape and the expected answer
-/// is the first, reached by the same modulo every other step uses.
+/// Verifies that pressing the shape pill cycles forward through all shapes and wraps (P-0090).
 #[test]
 fn a_press_on_the_shape_pill_names_the_next_shape_and_wraps() {
     let strips = strips();
@@ -261,12 +234,7 @@ fn a_press_on_the_length_pill_names_the_next_length_and_wraps() {
     }
 }
 
-/// Each pill answers for its own setting and for neither of the other two, so a
-/// press meant for the length cannot change the shape.
-///
-/// The three sit in one row eight pixels apart and each is asked about all
-/// three points, which is `blend.rs`'s *the two neighbours that are controls*
-/// with a third neighbour added.
+/// Asserts hit-testing isolation among shape, quantum, and length pills.
 #[test]
 fn a_pill_answers_for_its_own_setting_and_no_other() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -292,14 +260,7 @@ fn a_pill_answers_for_its_own_setting_and_no_other() {
     }
 }
 
-/// Pressing the row round every cycle returns it to where it started, and
-/// visits every place on the way.
-///
-/// This is the half a per-press assertion cannot make: a cycle that skipped a
-/// value and one that repeated one both answer a plausible destination at every
-/// step, and only the walk says the row has been everywhere and come back. It
-/// goes through [`View::set_transition`] rather than through the table, so what
-/// is walked is the door the panel actually has.
+/// Tests that stepping through each setting cycle visits every curated value and wraps to start.
 #[test]
 fn the_three_cycles_wrap_and_visit_every_place() {
     let strips = strips();
@@ -356,14 +317,7 @@ fn the_three_cycles_wrap_and_visit_every_place() {
     assert_eq!(seen, LENGTHS, "the length cycle is not the curated four");
 }
 
-/// A setting off the cycles is refused, and one that names where the row
-/// already is moves nothing.
-///
-/// The second half is P-0091 at a control: a caller repaints on a move and not
-/// on a press, so a press that changed nothing costs no frame. The first is
-/// `View::select`'s rule — the row is three capsules and each reads the word
-/// its cycle gives, so a value off the cycle would be a pill with nothing to
-/// say.
+/// Confirms that out-of-cycle settings are rejected and redundant transitions report no change (P-0091).
 #[test]
 fn a_setting_off_the_cycles_is_refused_and_one_that_moves_nothing_says_so() {
     let strips = strips();

@@ -1,34 +1,4 @@
-//! A region asks for frames while it is moving, and not while it is merely
-//! pending.
-//!
-//!
-//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
-//! gives a live region two numbers — what its update costs and how stale it may
-//! get — and neither of them says whether the region has changed. So the window
-//! served the mixer bay's declared thirty a second for as long as anything in
-//! it was outstanding, and [`roll_at`](karakuri_console::view::roll_at) is
-//! exactly zero for the 600 ms of every [`ROLL_PERIOD`] that is not
-//! [`ROLL_TRAVEL`]: seventeen of those thirty-one frames redrew the panel
-//! exactly as it already was.
-//!
-//!
-//! [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
-//! is the third number, `Declared::moves_in`, and this file is what it bought
-//! and what it may not take away:
-//!
-//! 1. The count. What a parked panel asks for over one period, before and
-//!    after, counted rather than described.
-//! 2. What was dropped. Every frame that is no longer asked for would have
-//!    drawn the chip in the position it was already in — asserted off the
-//!    curve, so it is a claim about the picture and not about the schedule.
-//! 3. What may not be dropped. The beat keeps its rate at every phase of
-//!    the roll, which is
-//!    [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
-//!    a panel that stopped moving because nothing had *changed* is exactly the
-//!    console that has gone quiet.
-//!
-//! Nothing here needs a window, a device or a clock. The phase is a value the
-//! test chooses, which is what ADR-0190 made it for.
+//! Animation deadline declarations: regions request repaints only during active motion (ADR-0164, ADR-0283, P-0094).
 
 mod common;
 
@@ -52,15 +22,7 @@ fn arrangement() -> Panel {
     panel
 }
 
-/// A strip where it was asked to be, with nothing armed on either fader.
-///
-/// With a reading in its meter, which is what every strip in
-/// `crates/karakuri/src/main.rs` has — `Deck::enable_meters` is called for the
-/// whole deck at startup — so the counts below are a *metered* panel's counts.
-/// The meter moves on the frames this panel is drawn on and on no others, so it
-/// is in neither of the two numbers a deadline here is made of
-/// ([ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md),
-/// `tests/metered.rs`).
+/// Helper creating a settled strip with active meters (ADR-0290).
 fn settled() -> Strip {
     Strip {
         name: "glass_shell".to_owned(),
@@ -113,16 +75,7 @@ fn running() -> Transport {
     }
 }
 
-/// The window loop, run on a phase the test chooses: the frames a panel would
-/// be drawn on over `over`, starting with one at the origin.
-///
-/// It is `crates/karakuri/src/main.rs`'s loop and nothing else — ask the view
-/// what it wants, sleep exactly that long, draw, ask again — with the clock
-/// replaced by arithmetic. That is the whole reason
-/// [`View::animating`](karakuri_console::view::View::animating) hands back a
-/// number instead of touching one: a schedule is countable without a window.
-///
-/// A view that answers `None` has stopped asking, and the walk ends there.
+/// Simulates window event loop frame pacing across a specified time window.
 fn frames_over(view: &mut View, panel: &Panel, over: Duration) -> Vec<Duration> {
     let mut drawn = vec![Duration::ZERO];
     let mut at = Duration::ZERO;
@@ -144,29 +97,7 @@ fn frames_over(view: &mut View, panel: &Panel, over: Duration) -> Vec<Duration> 
 // 1. What a parked panel asks for
 // ---------------------------------------------------------------------------
 
-/// A parked slot asks for the roll's rate through the travel and for the rest
-/// of the rest through the rest — fourteen frames a second where it asked for
-/// thirty-one.
-///
-/// The panel here is the still one: a deck with a slot the governor has
-/// refused, the mixer bay on screen, and no transport row, because the beat is
-/// a second and sooner declaration and would decide every deadline on its own.
-/// That is the state ADR-0193 measured the old defect in — the picture and the
-/// preview row folded away, nothing making texels, and the window woken thirty
-/// times a second to redraw a chip nobody could see moving. This is the same
-/// window with the chip on screen and the chip not moving.
-///
-/// Fourteen and not twelve, and the two extra are worth naming rather than
-/// rounding away. `ROLL_STALENESS` is 33.333 ms and the travel is 400, so
-/// thirteen steps from the origin land at 399.996 ms — inside the travel by
-/// four microseconds — and the fourteenth is the first frame of the rest, which
-/// is the frame that discovers there is one. The rest itself is then a single
-/// sleep of 566.671 ms, and it is the whole of what this record buys.
-///
-/// Run against its defect: `View::animating` reading `staleness` instead of
-/// `moves_in` — which is what it did before ADR-0283 — fails with *"a parked
-/// panel drew 31 frames in a second and 17 of them were drawn while the roll
-/// was at rest"*.
+/// Parked roll requests frames only during active travel (400ms), pausing during rest (ADR-0283).
 #[test]
 fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
     let panel = arrangement();
@@ -174,11 +105,7 @@ fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
     view.mixer = vec![settled(), parked()];
 
     let drawn = frames_over(&mut view, &panel, ROLL_PERIOD);
-    // **A frame drawn while the roll is at rest**, which is the region's own
-    // answer and not a threshold this file chose: `roll_moves_in` is the
-    // declared rate through the travel and something longer through the rest.
-    // It is asked rather than `roll_at`, because the curve passes through zero
-    // at both ends of the travel as well and those two frames are motion.
+    // During rest phases, `roll_moves_in` indicates remaining sleep time rather than roll staleness.
     let resting: Vec<&Duration> = drawn
         .iter()
         .filter(|at| roll_moves_in(Phase::since(**at)) > ROLL_STALENESS)
@@ -296,29 +223,7 @@ fn the_frames_the_rest_no_longer_asks_for_would_have_drawn_the_same_chip() {
 // 3. What may not be dropped
 // ---------------------------------------------------------------------------
 
-/// The beat keeps its rate at every phase of the roll, which is P-0094 and is
-/// the thing this record is most able to break.
-///
-/// The failure it guards against is precise: the beat's declaration is written
-/// as *the row is drawn and there is an engine behind it*, which is the shape
-/// of an I am drawn claim rather than an I move at this rate one, so it is the
-/// declaration a reader would reach for first when looking for something else
-/// to gate. It is honest because the light travels on every frame the session
-/// advances — but nothing in this crate advances a session, so the honesty is
-/// the harness's and the rule has to be held here.
-///
-/// A console that stopped moving because nothing had *changed* is a console
-/// that has gone quiet, and P-0094's forced clause is that something is moving
-/// continuously while it is live. So the beat is asked at a hundred phases
-/// spread across the roll's period — including every phase at which the mixer
-/// bay has just been given permission to sleep — and it answers the same number
-/// at all of them.
-///
-/// Run against its defect: `transport_declares` handing back
-/// `roll_moves_in(self.phase)` instead of its own rate — the beat gated the way
-/// the mixer now is — fails with *"a live console asked for Some(33.333ms) at 0
-/// ms into the roll, and the beat declares 24.671ms whatever else the panel is
-/// doing"*.
+/// Beat light declaration maintains continuous animation rate independent of roll phase (P-0094).
 #[test]
 fn the_beat_keeps_its_rate_through_the_rolls_rest() {
     let panel = arrangement();

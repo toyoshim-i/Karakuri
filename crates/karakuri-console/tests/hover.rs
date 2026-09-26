@@ -128,26 +128,7 @@ fn a_row_with_no_tips_is_one_the_mock_is_silent_about() {
     );
 }
 
-/// The rows whose slice is not one entry per control the row claims, and why
-/// each one is not.
-///
-/// `input::PROBES` counts what the pointer reaches through a row and `TIPS`
-/// says what explains itself, so the two numbers agree wherever the mock tips a
-/// row's controls one at a time. Where they do not, the reason is one of four
-/// and it is written down here rather than being a number that drifts: the page
-/// tips one element over several controls, it tips several elements for one,
-/// the second control is a card the page says nothing about, or the tips are
-/// owed.
-///
-/// The third column is how many entries the row does carry, and it is here for
-/// the reason the check exists at all: an excused row is out from under
-/// `PROBES`' count, so without a number of its own an entry could be deleted
-/// from one and nothing would say so. It is a transcribed count and it moves
-/// with the bay, which is what makes touching one of these rows a line to
-/// re-read rather than a number to bump.
-///
-/// A row that gains its missing entries is a line to delete from here, and
-/// deleting it is what puts the row back under the count.
+/// Counts expected hover tooltip entries for rows where control count and tooltip count differ.
 const UNEVEN: [(&str, &str, usize); 8] = [
     // One kind of control and four chips drawn: the page tips all four sinks
     // and the two plugin chips switch nothing, so `Outputs::chip_at` answers
@@ -198,11 +179,7 @@ const UNEVEN: [(&str, &str, usize); 8] = [
         "one element over the three",
         1,
     ),
-    // A cell per drawn step and a label per lane are as many as the pattern
-    // has: the page draws four lanes of sixteen and this console draws
-    // whatever the host handed it, so the cells and the labels are one entry
-    // each and the fixed controls — four banks, the mode pill, `+ lane` — are
-    // one apiece.
+    // Sequencer steps and lane labels each provide one tooltip entry alongside fixed controls.
     (
         "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane",
         "the cells, the labels and the minus glyphs are per lane",
@@ -210,16 +187,7 @@ const UNEVEN: [(&str, &str, usize); 8] = [
     ),
 ];
 
-/// A row claiming several controls carries several tips, which is the exit
-/// `docs/roadmap.md`'s M5.11 names: *every compact control explains itself on
-/// hover*.
-///
-/// The array being `PROBES.len()` long is what stops a *row* going untipped,
-/// and it says nothing about a row that claims five controls and explains one
-/// of them — the pointer then resolves to the entry that is there, and four
-/// controls quietly say a fifth's words. This is that half: the count is
-/// `PROBES`' own, so a control added to a row arrives here as a failure with
-/// the row named.
+/// Rows with multiple compact controls provide individual tooltips for each control.
 #[test]
 fn a_row_is_tipped_at_the_granularity_it_claims() {
     for (at, (name, tips)) in TIPS.iter().enumerate() {
@@ -489,18 +457,7 @@ fn a_tip_at_an_edge_is_inside_the_window() {
     );
 }
 
-/// The tip's MIDI line is the live map's, and the page's sentence stays where a
-/// control is unmapped.
-///
-/// The page's `⊕ MIDI:` clause is the *mock's* assignment and no operator's: a
-/// run whose map puts `cc 5` on gain A read `cc → gain A` in the tip because
-/// the page said so, which is the tip being confidently wrong about the one
-/// thing somebody hovers to check (P-0087, ADR-0336).
-///
-/// Three cases and only one of them rewrites anything, which is what this
-/// checks — including that a tip with no clause is left exactly as written,
-/// because the mock is not exhaustive and inventing one would be this console
-/// writing the manual.
+/// Tooltip MIDI assignments reflect the live mapping, leaving unmapped controls with base descriptions (P-0087, ADR-0336).
 #[test]
 fn the_tips_midi_line_is_read_off_the_map_and_the_pages_reason_survives() {
     use karakuri_console::hover::{assigned, MIDI_LINE};

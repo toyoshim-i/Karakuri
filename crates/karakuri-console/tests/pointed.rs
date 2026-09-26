@@ -1,31 +1,5 @@
-//! The Library bay's `.path` row: where this library is pointed, and the folder
-//! on its way in.
-//!
-//! Four things, and the first is why this is a file rather than a few more
-//! assertions in `library.rs`:
-//!
-//! 1. That the row is drawn only once a folder has been chosen, and that
-//!    everything under it moves down by exactly its own height when it is.
-//!    Until a folder has been dropped the bay is a line shorter, which is
-//!    `console.html`'s own answer to an empty state — *"a row saying there
-//!    is no folder would be a sentence about an absence"* — and it is the
-//!    reason the derivation takes the row as a value rather than a
-//!    constant.
-//! 2. That a folder over the window replaces the line and comes up out of
-//!    its faint, in `--c-text` rather than `--c-faint`, which is the whole
-//!    of the mark this gesture gets: a drop carries no pointer position and
-//!    there is no rectangle to ring (`docs/adr/0275-a-folder-is-chosen-by-
-//!    dropping-one-on-the-window-and-the-drop-is-the-windows.md`).
-//! 3. That the row is a readout: every point of it goes to `egui`, so no
-//!    press lands on it and re-pointing the bay is another drop.
-//! 4. That the row is the bay's and not the scope row's condition — a
-//!    console handed no chips at all still draws where it is pointed,
-//!    because that is also where a send's save dialog opens (ADR-0311,
-//!    which supersedes ADR-0267's reading of the row as the destination
-//!    itself).
-//!
-//! Only the ink test needs `egui`'s fonts. Every rectangle in this bay is the
-//! full width of the list, so the rest is arithmetic.
+//! Library bay `.path` row layout, drag-and-drop folder indicators, and read-only behavior
+//! (ADR-0275, ADR-0311).
 
 mod common;
 
@@ -137,13 +111,7 @@ fn the_path_row_is_between_the_scopes_and_the_fields() {
     );
 }
 
-/// With no folder there is no row at all, and the bay is exactly the bay it was
-/// before this row existed: the fields sit straight on the scopes and the list
-/// starts where it started.
-///
-/// And with one, everything under it moves down by the row and by nothing else
-/// — the one claim that says the row is furniture rather than something drawn
-/// over the list.
+/// Without a selected folder the path row is omitted; when present, subsequent items shift down by its height.
 #[test]
 fn a_bay_pointed_nowhere_is_the_bay_it_was_and_one_pointed_costs_exactly_the_row() {
     let panel = console(PLAUSIBLE);
@@ -225,17 +193,7 @@ fn a_console_with_no_chips_still_says_where_it_is_pointed() {
 // What the row reads, and in which ink
 // ---------------------------------------------------------------------------
 
-/// A folder over the window wins over the folder that was chosen, because the
-/// mock draws one `.path` row: a hover replaces the line rather than adding
-/// one, and what is on screen is the path a release would set.
-///
-/// And more than one path over the window reads as none, which is the hover's
-/// half of *one path, and it has to be a directory*: a release sets nothing
-/// where two arrived, so there is no path a release would set — and drawing the
-/// first of them would be this row picking one out of a list the desktop
-/// happened to build. It is asserted at [`View::pointed`] because that is where
-/// the two fields become the one row, and the host is what puts a single
-/// hovered path in `incoming` at all.
+/// A hovered folder path supersedes the chosen folder, while multiple hovered paths are rejected.
 #[test]
 fn a_folder_over_the_window_replaces_the_line_and_a_bay_pointed_nowhere_has_none() {
     let mut view = View::new(Room::Day);
@@ -360,11 +318,7 @@ fn the_row_reads_the_path_and_comes_up_out_of_its_faint_while_one_is_over_the_wi
 // It is a readout
 // ---------------------------------------------------------------------------
 
-/// Nothing in the row takes a press. Re-pointing the bay is another drop, so a
-/// capsule here would be a control nobody specified. `claim` gives every point
-/// of it to `egui`. The foot's own readout stopped being one on 2026-09-08
-/// (ADR-0305), so this rule is this row's rather than a rule it shares with the
-/// capsules below it.
+/// The path row is strictly a readout; presses pass through to egui (ADR-0305).
 #[test]
 fn the_path_row_answers_no_press() {
     let mut panel = console(PLAUSIBLE);

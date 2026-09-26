@@ -1,62 +1,4 @@
-//! The two ways the console's own shape folds from the panel: the grip in a bay
-//! head, and a pane's own boundary dragged out through its edge.
-//!
-//! `docs/manual/operations.html` gives *Fold a bay away* the bay head and *Fold
-//! a pane away* the pane edge, and until these landed the console painted the
-//! first of them and hit-tested neither — so the only route into either row was
-//! `f` and `g`.
-//!
-//! The two halves are no longer the same shape, and that is
-//! [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md).
-//! The bay's fold is a rectangle: `view::bay_grip` answers a `view::FoldGrip`
-//! over the mark the head already draws, and a press on it asks for `Op::Fold`.
-//! The pane's is a gesture: its boundary dragged out past the pane's own
-//! minimum closes it, and the divider the closed pane keeps at the window's
-//! edge is what brings it back. ADR-0295 gave the pane a rectangle too — a band
-//! on its outer edge — and that band lay over the outer three pixels of every
-//! Library row, which is why it was never registered. There is no band now:
-//! while the pane is open there is nothing at the window's edge at all.
-//!
-//! Eight things:
-//!
-//! 1. Where the grip's target is, as the head's own units put it — the
-//!    strip `head_pills` reserves for the mark, `GRIP_W + PILL_GAP` wide
-//!    and hard against `HEAD_PAD_X`, grown to `PILL_H` about the head's
-//!    mid-line.
-//! 2. That exactly the heads the mock draws a grip in have one, counted off
-//!    the console's own table rather than listed here.
-//! 3. That it abuts the capsule beside it in the same head and never
-//!    overlaps it, so a press on `solo` is `solo`'s and a press on the grip
-//!    is the fold's.
-//! 4. What it costs against a boundary's grab, measured by asking
-//!    `Layout::hit` at the target's own corners and stepping down its top
-//!    edge — never by doing `view::bay_grip`'s arithmetic a second time.
-//!    The answer is `program_head`'s 0.75 of a pixel, which is the same
-//!    capsule box in the same head.
-//! 5. Which regions fold to their edge, read off the arrangement — the two
-//!    panes the page names and nothing else, the centre included: *"folding
-//!    it is not a thing anybody wants, and solo is."*
-//! 6. That a closed pane keeps a boundary at the window's edge, and that
-//!    while it is open there is none — which is the whole of why this
-//!    control can exist where ADR-0295's band could not.
-//! 7. That a drag closes the pane and a drag brings it back, through
-//!    `Panel::press`, `moved` and `released`, with the reopened pane at its
-//!    declared minimum and `z` still holding the width it had.
-//! 8. That a press on the grip performs the fold it names, read back off
-//!    the layout rather than off the operation.
-//!
-//! None of it needs a window, a device, a disk or `egui`: neither route is as
-//! wide as a word, which is the one thing that separates these from every other
-//! capsule on this console.
-//!
-//! What is not here and cannot be: that `input::claim` gives the panel a press
-//! on the grip. That is a row in `input::PROBES` and it is the registration
-//! half of that control, which lives in files this test's author does not own;
-//! until it lands, a press there reaches `egui` and *Fold a bay away*'s panel
-//! badge is not yet earned. `tests/keep_pill.rs` says the same sentence about
-//! the capsule one bay over, and for the same reason. The pane's half owes
-//! nothing: a boundary is claimed by `input`'s rule 3 before any control is
-//! asked, and the window loop already routes a boundary drag into `Panel`.
+//! Console folding interactions: bay head grip targets and pane boundary drag gestures (ADR-0300).
 
 mod common;
 
@@ -108,14 +50,7 @@ fn gripped() -> Vec<&'static str> {
 // Where the grip is
 // ---------------------------------------------------------------------------
 
-/// The target is the strip the head reserves for the mark, grown to a line's
-/// height.
-///
-/// Four numbers and every one of them is the head's own: `HEAD_PAD_X` from the
-/// right of the bay, `GRIP_W + PILL_GAP` wide — what `head_pills` steps back
-/// before it places a capsule — `PILL_H` tall, and centred on the mid-line of
-/// the box `bay_head` paints into, which is `head_box`: the top `HEAD_H` of the
-/// bay, so a bay clipped short takes its grip up with it.
+/// Derives bay head fold grip target bounds from `HEAD_PAD_X`, `GRIP_W`, `PILL_GAP`, and `PILL_H`.
 #[test]
 fn the_target_is_the_strip_the_head_reserves_for_the_mark() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -164,12 +99,7 @@ fn the_target_is_the_strip_the_head_reserves_for_the_mark() {
     }
 }
 
-/// The heads with a target are the heads the mock draws a mark in, both ways
-/// round, and there are `BAY_GRIPS` of them.
-///
-/// The count is asserted against the console's own `const` rather than against
-/// a four, because that `const` is what `input::PROBES` says this control
-/// reaches: a grip drawn in a fifth head has to move both together.
+/// Exactly `BAY_GRIPS` heads render fold grip targets corresponding to marked bays.
 #[test]
 fn exactly_the_marked_heads_have_a_target() {
     let panel = console(PLAUSIBLE);
@@ -181,14 +111,7 @@ fn exactly_the_marked_heads_have_a_target() {
          and the count have come apart, and the count is what says how many controls a pointer \
          reaches"
     );
-    // **The guard is on what the walk found rather than on the constant it was
-    // just matched against.** The two are one number by the assertion above, so
-    // nothing is given up by asking the walk — and asserting the `const` was
-    // asserting a literal: `BAY_GRIPS >= 2` is decided where it is written and
-    // says nothing about this run, which is what clippy's
-    // `assertions_on_constants` is for. `gripped` is read off `REGIONS` and
-    // `head_of` every time, so this is the premise the loop below actually
-    // needs: that there are marked heads to walk at all.
+    // Verifies gripped heads collected during traversal match expected count before testing coordinates.
     assert!(
         gripped.len() >= 2,
         "the walk found a grip in {gripped:?} and `BAY_GRIPS` counts {BAY_GRIPS} — with fewer \
@@ -237,14 +160,7 @@ fn nothing_without_a_head_has_a_target() {
     }
 }
 
-/// The target abuts the capsule beside it and never overlaps it.
-///
-/// The Program bay is the case: `solo` and the class pill are laid out right to
-/// left from the same padding this target is measured off, and a target padded
-/// like a pill — the mark inside `PILL_PAD_X` either side — would reach six
-/// pixels back into that capsule. What is asserted is that the target's left
-/// edge is exactly where `head_pills` stops: the head's padding, less the mark
-/// and one `PILL_GAP`.
+/// Grip targets abut adjacent capsules without overlapping their hit bounds.
 #[test]
 fn the_target_abuts_the_capsule_beside_it() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -275,14 +191,7 @@ fn the_target_abuts_the_capsule_beside_it() {
 // What the grip costs against a boundary's grab
 // ---------------------------------------------------------------------------
 
-/// The target clears every boundary but the one above the bay, and that one
-/// takes 0.75 of a pixel — `program_head`'s number, arrived at again because it
-/// is the same capsule box in the same head.
-///
-/// Measured by asking `Layout::hit` at the target's own corners and stepping
-/// down its top edge until the boundary lets go, rather than by doing
-/// `bay_grip`'s arithmetic a second time. A bay whose top edge is not a
-/// boundary loses nothing at all, and nothing here assumes which is which.
+/// Grip targets clear horizontal boundaries, with 0.75px clearance at bay top edge.
 #[test]
 fn the_target_gives_a_boundary_the_top_three_quarters_of_a_pixel_and_no_more() {
     /// The most of the target's own height any boundary is allowed to reach, and it
@@ -384,17 +293,7 @@ fn a_press_on_the_grip_folds_that_bay_and_takes_the_control_with_it() {
     }
 }
 
-/// A head with no room for the target draws none rather than half of one, which
-/// is `deck_head`'s rule and `head_capsule`'s guard, stated on a control that
-/// is one rectangle.
-///
-/// The viewport is driven under the console's own minimum on purpose: below it
-/// the solve stops honouring minima and scales everything down together
-/// (ADR-0250), which is the one way to get a bay shorter than its own head
-/// without building a rectangle by hand. What is asserted at every size is the
-/// invariant — a target that exists is inside the head it is drawn in — and at
-/// the smallest of them, that the guard fires rather than clipping a control in
-/// half.
+/// Bay heads with insufficient height omit fold grips rather than rendering clipped targets (ADR-0250).
 #[test]
 fn a_head_with_no_room_for_the_target_draws_none() {
     let mut refused = 0usize;
@@ -481,14 +380,7 @@ fn only_the_two_panes_the_page_names_fold_to_their_edge() {
     );
 }
 
-/// An open pane has no boundary at the window's edge, and a closed one does —
-/// which is the whole of why this control can exist where ADR-0295's band could
-/// not.
-///
-/// The band that record chose was `GRAB` deep on the pane's outer edge *while
-/// the pane was open*, so it lay over the outer three pixels of every Library
-/// row (`.lib-list`'s padding is 3). Here there is nothing at the window's edge
-/// until the pane is folded, and by then the pane draws nothing at all.
+/// Open panes place no boundary at the window edge; folded panes expose an edge drag boundary.
 #[test]
 fn the_window_edge_is_a_boundary_only_while_the_pane_is_closed() {
     for name in ["left-pane", "right-pane"] {
@@ -594,11 +486,7 @@ fn a_drag_out_closes_the_pane_and_a_drag_in_brings_it_back_at_its_minimum() {
              stop from one that was already there"
         );
 
-        // **Out, in two moves, and the first of them is exactly as far as the
-        // pane goes.** A drag to the pane's own minimum and no further is an
-        // ordinary drag and folds nothing — that is the stop an operator meets
-        // every time they make a pane as narrow as it goes. What folds it is
-        // the `GRAB` after that.
+        // Dragging to minimum width stops normally; dragging past `GRAB` folds the pane.
         let at = take_hold(&mut panel, row, index);
         let out = match leading {
             true => -1.0,

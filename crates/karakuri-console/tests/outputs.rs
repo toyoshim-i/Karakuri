@@ -1,22 +1,5 @@
-//! The Outputs row, and the console's first clickable control.
-//!
-//! Four things, and the middle two are the reason this file exists rather than
-//! a few more assertions in `view.rs`:
-//!
-//! 1. Where the control is, derived from the row's own geometry.
-//! 2. That it clears every boundary's grab. `karakuri_console::input` has
-//!    said since it was written that its rule holds *"only while the gaps
-//!    stay empty"* — [`GRAB`] widens every boundary by six pixels either side,
-//!    and those twelve pixels are inside the bays, over whatever a bay draws at
-//!    its edge. This is the first control drawn near one, and this is the guard
-//!    that documentation has been asking for.
-//! 3. That the dot's state is read from the arrangement and not kept beside it.
-//! 4. That a press on it is the same fold the keyboard performs, and that the
-//!    round trip restores the arrangement exactly — ADR-0174's own claim,
-//!    reached from the control instead of from the layout.
-//!
-//! None of it needs a window or a device. It does need `egui`'s fonts, because
-//! the chip is as wide as the name in it — see `common::drawn_once`.
+//! Layout, boundary clearance, arrangement state reading, and folding round-trips
+//! for the Outputs row controls (ADR-0174).
 
 mod common;
 
@@ -35,14 +18,7 @@ use karakuri_operation::{Operation, Output};
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// The row's furniture is the row's rectangle and the mock's own boxes, and
-/// every number here is read off `style.css` rather than off the panel.
-///
-/// `.outputs { padding: 8px 11px; gap: 8px; align-items: center }` around a
-/// `.sink` of `padding: 1px 10px; gap: 6px` holding a 7px `.dot` — so the word
-/// starts one padding in, the chip starts one gap after the word, and the chip
-/// is 18.5 tall whatever the row is, which is the 18.5 the arrangement's 34 was
-/// written from (`lib.rs`).
+/// The row's geometry matches `style.css` padding and gap rules for `.outputs` and `.sink`.
 #[test]
 fn the_control_is_the_rows_own_geometry() {
     let (panel, ctx) = console(SMALLEST);
@@ -58,12 +34,7 @@ fn the_control_is_the_rows_own_geometry() {
     );
     assert!(near(sink.label.center().y, row.y + row.h * 0.5));
 
-    // **The class pill, between the word and the chip** — one `.outputs` gap
-    // after the word, which is where `docs/manual/console.html` draws it and
-    // why: this row has no bay head to put an indicator in, so it sits beside
-    // the word that stands in for one. Its own geometry and everything it does
-    // are `tests/mcp_pill.rs`; what is asserted here is that it is in this row
-    // and that the chip is measured from it. See `view::Outputs::mcp`.
+    // Class pill sits one `.outputs` gap after the label; see `view::Outputs::mcp`.
     assert!(
         near(sink.mcp.min.x, sink.label.max.x + size::OUTPUTS_GAP),
         "the class pill starts {} after the word and the gap is {}",
@@ -128,23 +99,7 @@ fn the_row_is_the_height_a_sink_needs() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// The control clears every boundary's grab, and this is the guard
-/// `karakuri_console::input` has been asking for since it was written.
-///
-/// Its documentation states the hazard exactly: `GRAB` widens every boundary by
-/// six pixels either side, *"and those twelve pixels are inside the bays, over
-/// whatever the bay draws at its edge. The first control placed near a bay's
-/// edge is under a boundary's grab, and then both do think they are dragging."*
-///
-/// The numbers say it clears: the row is 34, the chip is 18.5 and centred, so
-/// there is (34 - 18.5) / 2 = 7.75 above the chip and 7.75 below, against a
-/// grab of 6. The boundary above the row gives up 1.75 pixels short of the
-/// control.
-///
-/// So this fails if the control moves, if the row gets shorter, or if `GRAB`
-/// widens — and the last one is the point. Widening the grab to 8 makes the top
-/// of this chip undraggable *and* unclickable, and the fix then is not to nudge
-/// the control: it is to change the rule in `input`, deliberately.
+/// The control clears all boundary grab areas so dragging does not conflict with clicking.
 #[test]
 fn the_control_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -206,12 +161,7 @@ fn the_control_clears_every_boundarys_grab() {
     }
 }
 
-/// A press beside the control is `egui`'s, and one on it is the panel's.
-///
-/// The rule is *the boundary gets first refusal*, then the panel's own
-/// controls, then `egui`; so the interesting assertion is the one at the chip's
-/// edge — a pixel outside it is nothing the console draws, and it goes to
-/// `egui` exactly as the solo pill does.
+/// Presses on the control belong to the panel; presses outside fall through to egui.
 #[test]
 fn only_the_control_is_claimed_out_of_the_outputs_row() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -237,12 +187,7 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
         Claim::Panel,
         "the class pill in the Outputs row is not being claimed"
     );
-    // **The projector chip is a control and the two plugin chips are not**,
-    // which is where this test parts company with the one it used to be: the
-    // row drew one sink and this probe was *"past the right of the chip, where
-    // the mock draws three more sinks and this console draws none of them"*.
-    // It draws all four now (ADR-0324), so the empty half starts past the last
-    // of them.
+    // Projector chip is interactive; plugin chips are drawn but unclickable (ADR-0324).
     assert_eq!(
         claim(
             &mut panel,
@@ -312,14 +257,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 // The state behind the dot
 // ---------------------------------------------------------------------------
 
-/// The dot is `layout.visible(program-view)` in both directions, and there is
-/// no second copy of it.
-///
-/// The manual: *"The picture is a sink, listed in Outputs as program view, and
-/// it is on screen exactly when that sink is on."* So this drives the picture
-/// off and on by every route that reaches it — the node itself, the bay around
-/// it, a solo elsewhere — and asks the dot each time. A stored state would keep
-/// the last thing the *control* did and be wrong for all three.
+/// The indicator dot strictly mirrors `layout.visible(program-view)` without duplicate state.
 #[test]
 fn the_dot_follows_the_picture_and_stores_nothing() {
     let ctx = drawn_once();
@@ -405,12 +343,7 @@ fn a_fold_from_anywhere_else_shows_on_the_dot() {
 // What a press on it asks for
 // ---------------------------------------------------------------------------
 
-/// A press on the control asks for `Fold(program-view)`, and a press on it
-/// again asks for `Unfold(program-view)`.
-///
-/// Two operations and no third one: the toggle is the control choosing between
-/// them from the state it can see, and what it hands the model is a named
-/// operation either surface could have asked for.
+/// Clicking the control alternates between `Fold(program-view)` and `Unfold(program-view)`.
 #[test]
 fn the_dot_asks_for_a_fold_and_then_for_an_unfold() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -446,16 +379,7 @@ fn the_dot_asks_for_a_fold_and_then_for_an_unfold() {
     );
 }
 
-/// Off and on again through the control restores the arrangement exactly —
-/// every rectangle of it, not the picture's alone.
-///
-/// This is
-/// [ADR-0174](../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)'s
-/// own round trip, reached from the control instead of from the layout: the
-/// manual promises that turning the sink off *"gives its height to the
-/// inspector"*, and that it comes back because nothing was written down while
-/// it was away. A control that folded through some path of its own — a stored
-/// state, a second toggle — would be the way that stops being true.
+/// Toggling program visibility restores the layout rectangles exactly (ADR-0174).
 #[test]
 fn folding_through_the_dot_and_back_restores_the_arrangement() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -634,23 +558,7 @@ fn the_bay_folded_around_the_picture_comes_back_with_one_press() {
     assert!(near(rect_of(panel.layout(), "program").h, 395.0));
 }
 
-/// A solo that is hiding the picture is dropped by the dot, and one that is not
-/// is left alone.
-///
-/// Reachable from the control, and only one way: a solo on the outputs row
-/// itself leaves this row holding the window with its sink drawn and dark,
-/// because `Layout::solo` collapses everything off the solo's path. Every other
-/// solo either leaves the picture on screen or takes the outputs row off it,
-/// and a row that is not drawn has no control to press.
-///
-/// Dropping it is the honest operation and not a workaround. `Layout` has no
-/// invariant tying `soloed` to the collapsed flags — `check_structure` asks
-/// only that a recorded solo addresses a node — so expanding a path under a
-/// live solo is a state the layout accepts, solves and reloads. What it is not
-/// is a state anyone can reason about: `soloed` would name a region that is no
-/// longer the only one on screen, and `unsolo` restores the flags the solo
-/// replaced, which would silently throw away the expand the operator just asked
-/// for.
+/// Unsoloing a solo that hides the program view drops the solo before unfolding.
 #[test]
 fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -682,12 +590,7 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
             .on
     );
 
-    // **And the ordering, which is the case that decides it.** Fold the
-    // picture, *then* solo this row: `unsolo` restores the flags the solo
-    // replaced, and one of them is the fold the operator is now asking to
-    // undo. Undo the solo first and expand after, and the dot lights; expand
-    // first and undo the solo after, and the restore puts the fold straight
-    // back and the press did nothing at all.
+    // Undo the solo first and expand after to avoid state restoration overriding the unfold.
     let (mut panel, ctx) = console(PLAUSIBLE);
     let picture = panel.layout().find("program-view").expect("program-view");
     let row = panel.layout().find("outputs").expect("outputs");
@@ -730,15 +633,7 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
 // What a chip asks for
 // ---------------------------------------------------------------------------
 
-/// Every chip in the row asks for `RouteFrame` naming its own output, which is
-/// the panel column's `has` on *Choose where the frame goes* and is what
-/// `panel_column.rs` reads this crate's source for.
-///
-/// `on` is the state being asked for and not the state it is in. A press on a
-/// lit chip asks for it off and a press on a dark one asks for it on, which is
-/// P-0090 — an operation names a destination, never a toggle, so two surfaces
-/// switching one sink cannot disagree about where they are. The toggle is the
-/// chip.
+/// Each chip emits `RouteFrame` naming its output and the target state (P-0090).
 #[test]
 fn a_chip_asks_for_the_output_it_names() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -801,11 +696,7 @@ fn a_chip_asks_for_the_output_it_names() {
     }
 }
 
-/// `chip_at` answers for the whole row and for nothing beside it.
-///
-/// The claim rule and the press are one derivation ([`crate::input`]'s rule),
-/// so this is the question `input::claim` asks: a point on a chip names its
-/// output, and a point on the row's ground names nothing.
+/// `chip_at` identifies the output target under the point, returning None for empty space.
 #[test]
 fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -824,13 +715,7 @@ fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
     assert_eq!(row.chip_at(at(past)), None);
 }
 
-/// The chips are laid out left to right with one `.outputs` gap between them,
-/// and every one of them is inside the row.
-///
-/// The mock's `.outputs` is `display: flex; gap: 8px`, and a capsule is as wide
-/// as what is in it — so where the third chip starts depends on what the second
-/// says, which is the rule the class pill made this row take for its first chip
-/// and which now applies four times over.
+/// Chips are laid out horizontally with `.outputs` gaps and remain bounded by the row.
 #[test]
 fn the_four_chips_are_one_gap_apart_and_all_inside_the_row() {
     let (panel, ctx) = console(PLAUSIBLE);

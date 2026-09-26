@@ -1,15 +1,4 @@
-//! The deck preview caption: what is under a cell and what is not on it.
-//!
-//! A cell used to write its letter inside the image, at the bottom-left, over
-//! whatever the deck was making. `docs/manual/console.html` moved it out on
-//! 2026-09-02 — the letter, a word for what the cell is showing, and a badge
-//! for what the slot costs, in a row under the image — and the reason is the
-//! one the mock states beside the rule: a letter laid over the material is
-//! unreadable exactly when the deck is live and the material is bright, which
-//! is the one moment the row is read fastest.
-//!
-//! Each test below is named after the sentence it defends, and every one of
-//! them was run against the defect it exists for before it was written down.
+//! Deck preview caption layout, label positioning, and performance risk badges.
 
 mod common;
 
@@ -107,11 +96,7 @@ fn the_caption_is_outside_the_image() {
     }
 }
 
-/// The letter is not painted over the material.
-///
-/// Drawn with a picture behind every cell — which is the case the move was made
-/// for — nothing at all is written inside any of the four images, and the four
-/// letters are all written inside the four captions.
+/// The letter is painted inside the caption below rather than over the preview image.
 #[test]
 fn the_letter_is_not_painted_over_the_material() {
     let (mut panel, cells) = cells();
@@ -280,20 +265,7 @@ fn marks_in(
         .collect()
 }
 
-/// The band is read from the number, and the table is the console's.
-///
-/// `docs/manual/console.html`, *What a deck preview cell shows, and when*: four
-/// slots share one frame, so 16.7 ms at 60 Hz is about 4 ms each, and the five
-/// bands are green up to 4 ms, blue over it, yellow about 8, red about 12 and
-/// purple over 16.
-///
-/// This is the test M5.14 item 5 is for, and it is the console's half of
-/// `karakuri-engine`'s
-/// `a_governed_slot_now_has_a_number_a_band_can_be_predicted_from`: the engine
-/// asserts a number arrives that a band can be predicted from, and this asserts
-/// what the prediction is. The engine quotes the boundaries and does not share
-/// them, because a millisecond is the engine's and *how many of these at what
-/// rate* is this panel's.
+/// Maps slot processing times into risk bands (Green, Blue, Yellow, Red, Purple) per `console.html`.
 #[test]
 fn the_band_is_read_from_the_number() {
     // Inside each band, at a value an operator could actually see.
@@ -321,22 +293,7 @@ fn the_band_is_read_from_the_number() {
     assert_eq!(band_of(21.0 / 4.0), Band::Blue);
 }
 
-/// A value on a boundary rounds to the worse band.
-///
-/// The page says it in those words, and it is the one rule of the table that
-/// cannot be got right by accident: every comparison is `>=` and the
-/// fall-through is green, so 4.0 is blue rather than green and 16.0 stops a
-/// slot rather than nearly stopping one.
-///
-/// The direction is the same one the whole chain rounds in.
-/// `karakuri_engine::estimate` rounds toward refusing at every step —
-/// ADR-0293's correction is applied to the answer for exactly that reason — and
-/// a badge that read a boundary kindly would be the one place in the chain that
-/// did not.
-///
-/// The value just under each boundary is asserted beside it, because a table
-/// written with `>` instead of `>=` passes every test that only checks the
-/// interiors.
+/// Values on band boundaries round toward the higher risk band (ADR-0293).
 #[test]
 fn a_boundary_rounds_to_the_worse_band() {
     for (boundary, worse, better) in [
@@ -365,18 +322,7 @@ fn a_boundary_rounds_to_the_worse_band() {
     assert_eq!(band_of(12.0 * 4.0 / 3.0), Band::Purple);
 }
 
-/// The dot is drawn in its band's colour, at the far end of the caption.
-///
-/// `.risk` is `width: 6px; height: 6px; border-radius: 999px; margin-left:
-/// auto`, and the stylesheet's own comment says what the last of those is for:
-/// *"pushed to the far end of the caption so the four badges line up down the
-/// row and can be read as a column without reading a word"*. So the assertion
-/// is not only that a dot exists — it is that the four are one column, which is
-/// the whole reason the badge is worth drawing rather than printing.
-///
-/// Drawn in both rooms, because the five colours are five properties of the
-/// palette and a room that took the other room's would be a badge in the wrong
-/// five.
+/// Renders the risk dot using its band colour, right-aligned to align across cells.
 #[test]
 fn the_dot_is_drawn_in_its_bands_colour_at_the_far_end_of_the_caption() {
     let (mut panel, cells) = cells();
@@ -388,16 +334,7 @@ fn the_dot_is_drawn_in_its_bands_colour_at_the_far_end_of_the_caption() {
         view.room = room;
         view.costs = std::array::from_fn(|deck| estimated(at[deck]));
         let pal = room.palette();
-        // **The five colours are named here rather than asked of
-        // [`Band::colour`], and that is the point of the assertion.** A test
-        // that asked would compare the mapping with itself: point `Band::Red`
-        // at `pal.pink` and both sides move together and it passes — which is
-        // what the first draft of this test did, and it was run against
-        // exactly that defect and did not fail. What holds the *palette* to
-        // the stylesheet is `the_band_colours_are_the_rooms_own_five` in
-        // `tests/transcribed_constants_cite_the_mock.rs`, so the two together
-        // pin both halves: which room colour a band takes, and what that
-        // colour is.
+        // Explicitly verifies color mappings against room palettes to prevent self-referential tautologies.
         let ink = [pal.band_green, pal.band_blue, pal.band_red, pal.band_purple];
 
         let mut centres = Vec::new();
@@ -431,12 +368,7 @@ fn the_dot_is_drawn_in_its_bands_colour_at_the_far_end_of_the_caption() {
             centres.push((dot.center.y, caption.max.x - dot.center.x));
         }
 
-        // **The four are one reading**, which is what `margin-left: auto`
-        // buys and what the stylesheet's comment is for: the row is four cells
-        // side by side, so lining up means one height and one inset from each
-        // cell's own far edge — an eye running along the row lands on four
-        // dots at the same place in each caption and never on a dot that has
-        // moved because the word beside it got longer.
+        // Verifies dots across all cells share identical vertical and right-inset coordinates.
         assert!(
             centres
                 .windows(2)
@@ -475,17 +407,7 @@ fn a_slot_with_no_number_draws_no_dot() {
     }
 }
 
-/// A cell with no slot behind it draws no dot, whatever it was handed.
-///
-/// The mock's D cell and its tooltip: *"No slot is no cost, so there is no
-/// dot."* A dot beside `no slot` would be a cost for a thing that is not there,
-/// and it is the one way the two halves of a caption could contradict each
-/// other — so the picture gates the badge rather than the two being read
-/// independently.
-///
-/// Handed a number deliberately: the caller is the one that can be wrong here,
-/// and a console that trusted a stale `costs` entry against a cell whose slot
-/// has gone is exactly the frame this defends.
+/// Cells without an active slot omit the cost risk dot, ignoring any stale cost data.
 #[test]
 fn a_cell_with_no_slot_draws_no_dot_even_with_a_number() {
     let (mut panel, cells) = cells();
@@ -509,24 +431,7 @@ fn a_cell_with_no_slot_draws_no_dot_even_with_a_number() {
     }
 }
 
-/// An estimate and a measurement draw the same dot, and P-0095 crosses the seam
-/// anyway.
-///
-/// [`Budgeted::basis`] is `karakuri_engine::governor::Basis`, which says
-/// whether the number is the two-draw fit at this deck's own size or the single
-/// draw at the reference resolution. They are not the same statement — that is
-/// P-0095, and ADR-0296 §3 keeps both halves on the decision for it — and this
-/// asserts that the console today draws them identically.
-///
-/// That is a decision and this is where it is written down. The number is the
-/// one the governor spent, so a badge that appeared only for estimated slots
-/// would show a different quantity from the one the deck is governed on and
-/// would vanish wherever the estimator refuses to answer and the slot falls
-/// back to its measurement (ADR-0356).
-/// And the mock has five classes on `.risk` and no sixth mark: saying *which*
-/// is a page change, and the page moves first. If it moves, this test is what
-/// fails, which is the point of writing it as an assertion rather than as a
-/// comment.
+/// Both estimated and measured budgets render identical risk dots (P-0095, ADR-0296, ADR-0356).
 #[test]
 fn an_estimate_and_a_measurement_draw_the_same_dot() {
     let (mut panel, cells) = cells();

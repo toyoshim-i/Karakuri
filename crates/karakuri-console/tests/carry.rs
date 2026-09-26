@@ -1,31 +1,4 @@
-//! A Set carried from a Library row onto a mixer strip, end to end.
-//!
-//! `library.rs` is where the bay's rectangles are and which of them are
-//! controls; `fader.rs` is what a hand does to a knob. This is the third kind
-//! of drag: a row is picked up, nothing happens while it is carried, and the
-//! strip it is let go over is what names the deck.
-//!
-//! The whole of what it asserts is the difference from the fader. A fader knows
-//! its deck at the press, emits per changed value, cannot be cancelled and
-//! reports no value at the release. A carry knows only its Set at the press,
-//! emits nothing at all while it moves, is cancelled by being let go over
-//! anything that is not a strip, and asks for its one operation at the release.
-//! Every test here is one of those four sentences, and the fifth is that
-//! nothing in the gesture reads what a deck is doing — *"Nothing refuses it:
-//! what may be asked for is the instrument's to decide"*
-//! (`docs/manual/console.html`, *How a Set reaches a deck*).
-//!
-//! None of it needs a device. The strips are laid out with the type in them,
-//! which is the one thing here that needs `egui` — `mixer.rs`'s own opening.
-//!
-//! # Where this stops
-//!
-//! Everything here ends at the operation, exactly as `fader.rs` does. What
-//! carries the drop the rest of the way — the press handler that resolves the
-//! strip at the release and the deck that is re-pointed afterwards — is
-//! `crates/karakuri/src/main.rs`, and
-//! `a_drop_on_a_strip_loads_the_strip_it_was_let_go_over` there is the test
-//! that presses the gesture through the window loop's own routing.
+//! Drag-and-drop interactions carrying a Set from a Library row onto a mixer strip or deck preview cell.
 
 mod common;
 
@@ -62,13 +35,7 @@ fn sets() -> Vec<String> {
     .collect()
 }
 
-/// Four strips, so that *which deck a drop named* is a question with three
-/// wrong answers rather than none.
-///
-/// Their residencies are all different and one of them is live, which is what
-/// makes `a_drop_on_a_live_deck_still_asks_for_the_load` a test of something: a
-/// drop over deck A replaces what the room is watching, and this bay is the one
-/// drawing that fact.
+/// Helper creating four strips with distinct residencies, including one live deck.
 fn strips() -> Vec<Strip> {
     [Tally::Live, Tally::Priming, Tally::Allocated, Tally::Live]
         .into_iter()
@@ -138,14 +105,7 @@ fn strip_at(bay: &Mixer<'_>, deck: u8) -> Point {
 // What a press takes in hand
 // ---------------------------------------------------------------------------
 
-/// A press on a row takes that row's Set in hand, and nothing else does.
-///
-/// Every drawn row is asked at its own middle and answers its own name, so a
-/// walk that returned the cursor's row, the first row, or the row above has
-/// four wrong answers to give. The list's own ground under the last row is
-/// asked too: `.lib-list` runs to the foot and the rows stop where they stop,
-/// so what is below them is nobody's — which is `input.rs`'s *a control claims
-/// what it acts on and no more*.
+/// Clicking a library row selects its Set into hand; clicks below drawn rows claim nothing.
 #[test]
 fn a_press_on_a_row_takes_that_rows_set_in_hand() {
     let (view, panel, _ctx) = console();
@@ -183,12 +143,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
         "the list's own ground took a Set in hand"
     );
 
-    // **And the row that is not drawn, asked of a library taller than its
-    // list** — the mock's own `5 of 27`. Nothing scrolls, so the Sets past the
-    // last row that fits are out of reach: the stride runs on past the bottom
-    // of the list, the foot is drawn over where the next row would be, and a
-    // press there must reach neither. This is the half the listing's own
-    // length cannot answer, because there *is* a Set at that index.
+    // Undrawn rows past the bottom of the list and below the foot are unreachable.
     let long: Vec<String> = (0..80).map(|n| format!("set{n:02}")).collect();
     let tall = library(panel.layout(), &view.scopes, &long, None, None, 0.0)
         .expect("a bay with rows in it");
@@ -197,11 +152,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
         "the bay drew all {} rows, so there is no undrawn row to ask about",
         long.len()
     );
-    // **The first row whose whole box is below the list**, which is the one
-    // after the last drawn one where the rows fill the list exactly and the one
-    // after that where a cut row is drawn in the leftover. A cut row *is*
-    // pressable — `LibraryBay::drawn` includes it and the paint clips it — so
-    // the row this asks about is the first that is not drawn at all.
+    // The first row completely below the list is neither drawn nor pressable.
     let undrawn = point(
         (tall.rows..long.len())
             .map(|index| tall.row(index))
@@ -277,12 +228,7 @@ fn a_press_on_an_open_reading_takes_nothing_in_hand() {
     }
 }
 
-/// A carry is in hand, and it is not a fader.
-///
-/// `Panel::in_hand` is what a window loop asks to decide what a *move* meant,
-/// and answering `Fader` for a carry would make every move of it emit the last
-/// operation again. It is also what suppresses the resize cursor, which is the
-/// other half of `view::View::cursor`'s rule.
+/// Active carry gesture reports in-hand status without behaving as a fader or showing resize cursors.
 #[test]
 fn a_carry_is_in_hand_until_it_is_let_go() {
     use karakuri_console::panel::InHand;
@@ -311,13 +257,7 @@ fn a_carry_is_in_hand_until_it_is_let_go() {
 // What a move does, which is nothing
 // ---------------------------------------------------------------------------
 
-/// Nothing is emitted while a Set is being carried.
-///
-/// A fader emits per changed value, because the value is what it is moving. A
-/// carry moves nothing: a Set half-way to a strip has not been loaded anywhere,
-/// and an operation emitted on the way would name a deck the pointer was merely
-/// passing over. So every move answers `None` — across the library, over three
-/// strips in turn, and off the viewport.
+/// Carry motion emits no intermediate operations across library rows, strips, or viewport edges.
 #[test]
 fn a_carry_emits_nothing_until_it_is_let_go() {
     let (view, mut panel, ctx) = console();
@@ -354,14 +294,7 @@ fn a_carry_emits_nothing_until_it_is_let_go() {
 // What the drop asks for
 // ---------------------------------------------------------------------------
 
-/// The right Set, on the deck it was let go over.
-///
-/// Four strips and five rows, so a drop that named the selection, the strip the
-/// press was over, or the first deck fails at once. The destination is asked of
-/// the bay at the release point and never at the press: the whole of what this
-/// route buys over the key is that the drop names the deck, and a press in the
-/// Library bay is over no strip at all — which is asserted here, because it is
-/// what makes resolving at the press impossible rather than merely wrong.
+/// Releasing a carry over a mixer strip emits an operation loading that Set onto the targeted deck.
 #[test]
 fn a_drop_on_a_strip_asks_to_load_that_strips_deck() {
     let (view, mut panel, ctx) = console();
@@ -398,14 +331,7 @@ fn a_drop_on_a_strip_asks_to_load_that_strips_deck() {
     }
 }
 
-/// A drop on nothing asks for nothing, and that is the outcome a fader does not
-/// have.
-///
-/// A boundary dragged off its track still lands somewhere legal and a fader
-/// dragged past its end is still at its end; a row let go over the transport
-/// row, over the Library bay it came from, or off the viewport has nowhere to
-/// land. The nearest strip is not the answer, because a load aimed at it would
-/// be a deck nobody pointed at.
+/// Releasing a carry outside valid drop targets cancels the gesture without emitting operations.
 #[test]
 fn a_drop_on_nothing_asks_for_nothing() {
     let (view, mut panel, ctx) = console();
@@ -488,14 +414,7 @@ fn a_drop_on_a_live_deck_still_asks_for_the_load() {
 // The claim, and the mark on the row
 // ---------------------------------------------------------------------------
 
-/// A press on a row is the panel's, and it keeps the pointer while the hand
-/// crosses the console — `input`'s rule 1 covering the third kind of drag
-/// without a word being added to it.
-///
-/// The row is claimed on the way down, the carry keeps every event while the
-/// pointer runs across two bays and off the viewport, and the same point is
-/// `egui`'s again the moment the button comes up. That last is what says the
-/// claim was the *gesture's* and not the position's.
+/// Pressing a library row captures pointer events across boundaries until released.
 #[test]
 fn a_carry_keeps_its_claim_while_the_pointer_leaves_the_bay() {
     let (view, mut panel, ctx) = console();
@@ -536,19 +455,7 @@ fn a_carry_keeps_its_claim_while_the_pointer_leaves_the_bay() {
     );
 }
 
-/// The row a hand takes is the row the cursor marks.
-///
-/// The mock draws no ghost under a pointer and no lit strip, and it does draw
-/// `.lib-row.cursor` — so the mark on the row is the whole of what a carry can
-/// show, and the press is what moves it. It outlives the gesture on purpose:
-/// the cursor is the operand `l` reads, so a drop that landed and a carry let
-/// go over nothing both leave the keyboard aimed at the Set the hand last
-/// touched.
-///
-/// A row past the listing is refused rather than clamped, which is
-/// `View::select`'s rule and not `View::walk`'s: a press names a row outright,
-/// and answering it with the nearest one would move the load somewhere nobody
-/// pointed.
+/// Taking a row updates the library cursor mark, which persists across release.
 #[test]
 fn the_row_a_hand_takes_is_the_row_the_cursor_marks() {
     let (mut view, panel, _ctx) = console();
@@ -590,13 +497,7 @@ fn the_row_a_hand_takes_is_the_row_the_cursor_marks() {
 // The other set of rectangles a drop can land on
 // ---------------------------------------------------------------------------
 
-/// A console with a store, a deck of `strips.len()` slots, and the Program bay
-/// arranged so its four cells have places.
-///
-/// [`console`] does not rearrange, because nothing it tests reads the Program
-/// bay; every rectangle in that bay is read from the bit `view::rearrange`
-/// writes, so a cell asked for without it is a cell read out of one of the two
-/// arrangements only.
+/// Helper creating a console with store, strips, and arranged Program bay cells.
 fn with_cells(strips: &[Strip]) -> (View, Panel, egui::Context) {
     let mut view = showing(strips);
     view.library = sets();
@@ -616,15 +517,7 @@ fn cell_at(bay: &ProgramBay, deck: u8) -> Point {
     point(bay.cells.expect("the preview row is on screen")[usize::from(deck)].center())
 }
 
-/// A drop on a deck preview cell asks to load that cell's deck, which is the
-/// same command a release on that deck's strip asks for.
-///
-/// Four cells and five rows, so a drop that named the selection, the row's
-/// index or the first deck has three wrong answers to give. The strips are
-/// asked at every cell too, and answer `None` at all four: that is what makes
-/// this a second set of rectangles rather than a second reading of the first,
-/// and it is what *at most one rectangle is marked* rests on — a point inside
-/// one set is outside the other, so nothing has to arbitrate.
+/// Dropping onto a deck preview cell loads the Set into that cell's deck.
 #[test]
 fn a_drop_on_a_preview_cell_asks_to_load_that_cells_deck() {
     let (view, mut panel, ctx) = with_cells(&strips());
@@ -656,19 +549,7 @@ fn a_drop_on_a_preview_cell_asks_to_load_that_cells_deck() {
     }
 }
 
-/// A cell whose letter names no slot takes no drop, and it is the only
-/// rectangle in either set that is drawn and is not a target.
-///
-/// The mixer draws one strip per slot, so a three-slot deck has three strips
-/// and a fourth cell with nothing behind the letter on it — the mock's own deck
-/// D. A release there has no deck to load into and asks for nothing, which is
-/// the refusal `3` already gets from the keyboard and the same reading behind
-/// it: `View::select` off `View::mixer`'s length.
-///
-/// The three cells beside it still answer, which is what makes this a reading
-/// of the slot count rather than a bay that stopped taking drops; and the mixer
-/// is asked at the fourth cell too, so a `None` there cannot be the strips
-/// answering for it.
+/// Preview cells corresponding to nonexistent deck slots decline drops.
 #[test]
 fn a_cell_whose_letter_names_no_slot_takes_no_drop() {
     let three: Vec<Strip> = strips().into_iter().take(3).collect();
@@ -721,14 +602,7 @@ fn a_cell_whose_letter_names_no_slot_takes_no_drop() {
 // What the carry is drawn as
 // ---------------------------------------------------------------------------
 
-/// Every drop mark the console paints on one frame, as the rectangle it is
-/// round.
-///
-/// Recognised by the ink and the side of the edge it is on, which is what
-/// `style.css` gives it and nothing else on this panel has: `--c-text` is the
-/// one colour the four states do not use, and `.strip.focus`'s lavender ring is
-/// inset where this is an `outline`. So a mark counted here cannot be the
-/// selection, a hairline, or a pill's border.
+/// Collects painted drop indicator rectangles styled with `--c-text` outlines.
 fn drop_marks(view: &mut View, panel: &mut Panel) -> Vec<egui::Rect> {
     let ink = view.room.palette().text;
     let ctx = drawn_once();
@@ -757,16 +631,7 @@ fn cursor(view: &mut View, panel: &mut Panel) -> egui::CursorIcon {
     out.platform_output.cursor_icon
 }
 
-/// At most one rectangle is marked, and it is the one the release would name.
-///
-/// The pointer is in one place, so this is a fact about where the hand is
-/// rather than a rule either bay keeps — and it is asserted over both sets of
-/// rectangles and over the ground between them. Four strips and four cells, so
-/// a mark drawn round the wrong one of the eight has seven wrong answers to
-/// give.
-///
-/// Nothing is marked with nothing in hand, which is what separates this from a
-/// hover: the same points are drawn with no carry and carry no ring.
+/// At most one drop target rectangle is highlighted, matching the hovered strip or cell.
 #[test]
 fn one_rectangle_is_marked_and_it_is_the_one_the_release_names() {
     let (mut view, mut panel, ctx) = with_cells(&strips());
@@ -814,19 +679,7 @@ fn one_rectangle_is_marked_and_it_is_the_one_the_release_names() {
     assert_eq!(asked, 8, "not every rectangle was asked");
 }
 
-/// Over anything that is not a target, nothing is marked.
-///
-/// The alley between two strips is the case the rule was written for:
-/// `.mixer-strips` has a `gap: 4px` and it is a real place to let go, so a mark
-/// that snapped to the nearest strip would name a deck nobody pointed at and
-/// the release after it would load one. The bay head above the strips, the
-/// transition row under them, the Library bay the Set came out of and a point
-/// off the viewport are the other four.
-///
-/// The fourth cell of a three-slot deck is the fifth, and it is the one that is
-/// a rectangle rather than ground: a release there loads nothing
-/// (`a_cell_whose_letter_names_no_slot_takes_no_drop`), so a ring on it would
-/// be the mark promising a landing the release does not make.
+/// Hovering over gaps, bay heads, or non-target regions produces no drop highlight.
 #[test]
 fn nothing_is_marked_where_a_release_would_load_nothing() {
     let three: Vec<Strip> = strips().into_iter().take(3).collect();
@@ -874,17 +727,7 @@ fn nothing_is_marked_where_a_release_would_load_nothing() {
     assert_eq!(asked, 6, "not every point was asked");
 }
 
-/// The pointer is a grab for as long as the Set is in hand, wherever it is —
-/// the one thing that says a gesture is still running while the hand is over
-/// nothing at all.
-///
-/// Asserted over a boundary above all. A carry crosses every divider between
-/// the Library bay and the mixer, and the arm this replaces answered `None`
-/// there and fell through to the hit test — so a resize cursor flicked on over
-/// each of them, for a gesture that was not happening. The boundary is asked
-/// here with nothing in hand as well, where it is still a resize: that is what
-/// makes this the *carry* suppressing it rather than the hit test having
-/// stopped working.
+/// Pointer retains a grab cursor during carry, suppressing boundary resize cursors.
 #[test]
 fn the_pointer_is_a_grab_while_a_set_is_in_hand() {
     let (mut view, mut panel, ctx) = with_cells(&strips());

@@ -1,36 +1,5 @@
-//! The pulldown on an Inspector pane's head: *point this pane at another deck*
-//! —
-//! [ADR-0338](../../../docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md),
-//! decision 5.
-//!
-//! The mock has drawn the `▾` between `deck A · drift_night` and the count
-//! since the Inspector was drawn, and
-//! [ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)
-//! reserved its rectangle without painting it. This is that rectangle made
-//! live.
-//!
-//! Nine things:
-//!
-//! 1. Where the mark is: one `.half-head` gap after the run, at the same
-//!    measure every other `▾` on this console is drawn at — and that the
-//!    run now stops short of it rather than over it.
-//! 2. That the card offers the decks the mixer is drawing strips for and no
-//!    others, which is `View::select`'s refusal read a fourth time rather
-//!    than a fourth rule.
-//! 3. That a pick emits `PointPane` naming that pane and the deck the row
-//!    was on.
-//! 4. That the pick moves that pane and no other pointer — not the deck
-//!    selection, not the pane next door, not the Library bay's load target.
-//!    That is the whole of what this mark is for.
-//! 5. That a deck the mixer draws no strip for is refused rather than
-//!    clamped.
-//! 6. That one card is down at a time, and that a pick puts it away.
-//! 7. That a console which has not drawn has no mark.
-//!
-//! What is not here and cannot be: that `input::claim` gives the panel a press
-//! on the mark and every press while the card is down, and that the window
-//! re-reads the pane the pick moved. Those are `input::PROBES`' row, `claim`'s
-//! rule 2 and `crates/karakuri/src/main.rs`'s `pointed_pane`.
+//! The pulldown on an Inspector pane head to repoint the pane at another deck (ADR-0338, ADR-0292).
+//! Validates dropdown positioning, available decks, `PointPane` emission, and single card state.
 
 mod common;
 
@@ -114,13 +83,7 @@ fn room(panel: &Panel) -> egui::Rect {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// One `.half-head` gap after the run, and the run stops short of it.
-///
-/// The second half is what changed when the mark became a control: the run was
-/// clipped to whatever was next along the row, so its rectangle and the
-/// chevron's could overlap the count in a narrow head. The chevron's room now
-/// comes off the run's limit, which is `.half-head`'s own order — `showing`,
-/// the run, `▾`, `.sep`, the count, `keep`.
+/// The pulldown chevron is placed one `.half-head` gap after the run, constraining the run's width.
 #[test]
 fn the_mark_sits_one_gap_after_the_run() {
     let (panel, ctx, view) = console(4);

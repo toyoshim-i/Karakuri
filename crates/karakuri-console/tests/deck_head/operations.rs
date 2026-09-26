@@ -224,19 +224,7 @@ fn a_press_is_one_control_or_none() {
 // The route a window loop takes
 // ---------------------------------------------------------------------------
 
-/// The fold names the layering the deck is not in, and never a step.
-///
-/// Two panes, one compositing and one overdrawing, and the same chip on each:
-/// what leaves is `SetCompositing` carrying the destination, computed from the
-/// state the frame that laid the row out drew — which is
-/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-/// and `Mixer::blend`'s division. Nothing in the vocabulary says *toggle*, and
-/// a control that could only step would leave two surfaces disagreeing about
-/// where the deck is.
-///
-/// It does not claim reachability: whether the press re-aims the slot is
-/// `crates/karakuri/src/main.rs`'s, which this crate cannot depend on
-/// (ADR-0156). ADR-0314 is the record.
+/// Asserts fold emits `SetCompositing` with destination state rather than a relative toggle (P-0090, ADR-0156, ADR-0314).
 #[test]
 fn the_fold_asks_for_the_layering_the_deck_is_not_in() {
     for composite in [false, true] {
@@ -272,14 +260,7 @@ fn the_fold_asks_for_the_layering_the_deck_is_not_in() {
     }
 }
 
-/// The capacity chip steps the powers of two inside the declared range, once
-/// each, and wraps through the bottom — and what leaves is the number it
-/// arrived at rather than a step, which is what a second surface would need to
-/// agree with it (P-0090).
-///
-/// The whole ladder is walked rather than one press asserted, because a cycle
-/// that had lost a rung, repeated one or stopped at the top would all pass a
-/// single-press test.
+/// Asserts capacity chip cycles ascending powers of two and wraps to minimum (P-0090).
 #[test]
 fn the_capacity_chip_steps_every_rung_once_and_wraps() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -321,12 +302,7 @@ fn the_capacity_chip_steps_every_rung_once_and_wraps() {
     );
 }
 
-/// A slot running at a number that is not on the ladder steps *up*, not back to
-/// the bottom. `examples/beat_strands.kir` declares `capacity [4096, 1048576] =
-/// 81920`, and a Set file may record anything the range allows, so this is an
-/// ordinary state rather than a corner: a press that read as *one step* and
-/// dropped the slot from 81920 to 4096 would be a control that reallocated
-/// every element buffer in the wrong direction.
+/// Asserts capacity values not currently on the power-of-two ladder advance upward to the next power.
 #[test]
 fn a_capacity_off_the_ladder_steps_up() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -381,12 +357,7 @@ fn a_capacity_with_no_shared_range_is_drawn_and_claims_nothing() {
     );
 }
 
-/// The `re-salt` capsule asks for the salt it was handed, and that is the whole
-/// assertion: a console that derived one would be producing a picture a later
-/// run could reproduce only by accident
-/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
-/// The number here is arbitrary on purpose — nothing in this crate can compute
-/// it, so nothing in this crate can agree with a computation by luck.
+/// Asserts `re-salt` emits `SetAim` preserving the provided seed salt without local alteration (P-0092).
 #[test]
 fn the_re_salt_capsule_asks_for_the_salt_it_was_handed() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -406,12 +377,7 @@ fn the_re_salt_capsule_asks_for_the_salt_it_was_handed() {
     assert_eq!(head.compositing(at(aim.salt.center())), None);
 }
 
-/// The whole route, as the window loop drives it: `claim` first, then the pane
-/// and the head derived a second time, then the operation.
-///
-/// It does not claim reachability. Whether a claimed press becomes one of these
-/// operations is `crates/karakuri/src/main.rs`'s, which this crate cannot
-/// depend on (ADR-0156).
+/// Verifies end-to-end operation dispatch from pointer claim through hit-testing (ADR-0156).
 #[test]
 fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
     let pane = mock();

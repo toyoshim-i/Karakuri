@@ -6,13 +6,7 @@ use super::grammar_common::*;
 // The table
 // ---------------------------------------------------------------------------
 
-/// Which keys act in which bay is derived from what the bay is made of, not
-/// listed beside it — so this is the derivation held against the nine bays the
-/// record walks.
-///
-/// The fold is one route and not nine. `space` at bay level works wherever
-/// focus is, so it is declared under `focus::ANY` rather than nine times over —
-/// which is what lets *Fold a bay away* carry one badge saying `in any bay`.
+/// Verifies valid key routes per bay, checking universal fold bindings (`focus::ANY`) and bay contents.
 #[test]
 fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
     let reaches = focus::reaches();
@@ -67,31 +61,7 @@ fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
     );
 }
 
-/// ADR-0259's *no bay uses all six keys* is no longer true, and this is
-/// where that is written down.
-///
-/// The record found it of the panel as it stood: *"`space` reaches nothing in
-/// Staging and nothing in Library below its head, and `enter` reaches nothing
-/// in Mixer, Outputs, Master or Program — so no bay uses all six keys, and a
-/// legend implying otherwise would be lying."* Two of those four clauses have
-/// since stopped holding, and neither by anything this grammar decided:
-///
-/// - The Library gained a star, drawn after ADR-0259 was written, and a
-///   star is a state — so `space` reaches a row after all.
-/// - The Mixer's `go` capsule is its head's, which is where ADR-0343 puts
-///   the transition row — so `enter` reaches a row of that bay.
-/// - The Sequencer's `+ lane` chooser is a rung of the address, which is where
-///   ADR-0351 puts it — so `enter` reaches a row of that bay too.
-/// - The Transport's audio-in pill and arrangement pill are two more of those,
-///   which is where ADR-0350 puts them — so `enter` reaches three rows of that
-///   bay.
-/// - The Master bay draws the chain as a list, whose slots carry a `−` and
-///   whose `+ add` opens a chooser, which is where ADR-0352 puts them — so
-///   `enter` reaches two rows of that bay.
-///
-/// So six bays use all four of the keys that act, and three still do not.
-/// The list is asserted rather than the claim, so a sixth bay joining them is
-/// a failure that says which rather than a sentence quietly going false.
+/// Asserts which bays use all active navigation keys vs partial sets (ADR-0259, ADR-0343, ADR-0350-0352).
 #[test]
 fn six_bays_use_all_four_of_the_keys_that_act_and_three_do_not() {
     let all: Vec<&str> = focus::BUILT
@@ -277,13 +247,7 @@ fn the_arrows_walk_a_bays_items_along_the_axis_it_draws_them_on() {
     );
 }
 
-/// The one bay that uses both axes, which is the check ADR-0333 left with
-/// nothing holding it: *"which arrow pair a badge names is not checked … the
-/// axis is `Built::across` and nothing holds the page against it"*.
-///
-/// The Sequencer's lanes are a column and a lane's cells are a row, so `↑↓`
-/// walk the lanes and `←→` are refused there, while a cell says the opposite —
-/// and the sentence each refusal carries names the axis that does work.
+/// Verifies dual-axis arrow navigation in Sequencer (vertical lanes vs horizontal cells) (ADR-0333).
 #[test]
 fn the_sequencers_lanes_are_a_column_and_its_cells_are_a_row() {
     let sequencer = focus::built("sequencer").expect("the sequencer's grammar");

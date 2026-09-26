@@ -1,45 +1,8 @@
 #![allow(unused_imports, dead_code)]
 
-//! The six keys inside a bay: what a digit names, what the arrows walk, what
-//! `space` cycles and what `enter` performs.
+//! Shared test harnesses for console keyboard navigation grammar (ADR-0259, ADR-0333, ADR-0343).
 //!
-//!
-//! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-//! designed the grammar,
-//! [ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md)
-//! built it in two bays and
-//! [ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)
-//! in the other seven. This holds the console's half: the address a press moves
-//! and what it says the press landed on. That the window loop then names the
-//! right operation is `crates/karakuri/src/main.rs`'s `key_column`, and that a
-//! press on a running panel moves a deck is `mod gpu`'s.
-//!
-//! Eight claims:
-//!
-//! 1. A digit names the nth thing one level below the address and `0` the
-//!    head, counting what the bay drew from one.
-//! 2. Naming a strip is the deck selection, which is why that row keeps a
-//!    key badge rather than losing one — and it goes through
-//!    `View::select`, so a deck the mixer draws no strip for is refused and
-//!    the address does not descend.
-//! 3. The arrows take the neighbour along the axis the bay draws its items
-//!    on, and the next value of a level along the other. The Sequencer is
-//!    where both axes are used at once — its lanes are a column and a
-//!    lane's cells are a row — and that is the axis check ADR-0333 left
-//!    with nothing holding it.
-//! 4. `space` is the addressed thing's next state, and it is the same cycle
-//!    the chip walks — asked of the same functions rather than restated.
-//! 5. `space` on a bay is the fold, in every one of the nine, and a folded
-//!    bay answers it and nothing else.
-//! 6. `enter` is the act the addressed thing is for, and it declines in a
-//!    bay whose items perform nothing.
-//! 7. The address is a path, which the Inspector is what proves: three
-//!    rungs, and the third is reached by a digit through a rung that is not
-//!    a control.
-//! 8. A refusal says why. A key that declines and a key that is not bound
-//!    are the same experience, so every `Nothing` carries a sentence.
-//!
-//! No device and no `egui` pass. A press is a walk of a path.
+//! Verifies hierarchical addressing, arrow navigation, space/enter dispatch, and refusal reasons.
 
 pub use super::common::*;
 pub use karakuri_console::focus::{self, Arrow, Asked, Control, Grammar, Level, Press, Step, HEAD};

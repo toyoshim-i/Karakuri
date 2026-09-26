@@ -149,15 +149,7 @@ fn the_solo_and_mute_buttons_show_state_in_strip() {
     }
 }
 
-/// The blend mini says the mode it was given, in the vocabulary's own
-/// lower-case word.
-///
-/// The list is now closed and that is the change: this used to be handed
-/// arbitrary strings — `screen` and `multiply` among them — because the field
-/// was the engine's `&'static str` and the console had nothing to do with the
-/// list but draw it. The chip is a control now (ADR-0187), so it carries a
-/// `BlendMode` and the three this walks are every mode there is. A fourth would
-/// fail to compile in `BlendMode::name` before it reached here.
+/// Verifies the blend mini displays the lowercase name for every `BlendMode` (ADR-0187).
 #[test]
 fn the_blend_mini_shows_the_mode_it_is_given() {
     for blend in BlendMode::ALL {
@@ -251,11 +243,8 @@ fn a_strip_with_no_reading_draws_an_empty_meter() {
         }],
         0,
     );
-    // **The two things a reading puts in the well**, named rather than
-    // counted: the mean's column, which is the one `Mesh` in a strip's meter,
-    // and the peak's mark, which is the only `--c-pink` thing in it. A meter
-    // handed a zero where it was handed nothing draws a mark on the floor,
-    // which counts as a shape and is a reading of zero that nobody took.
+    // The reading draws the mean column (`Mesh`) and peak mark (`pink`);
+    // a meter with no reading must not draw these shapes.
     let pink = Room::Day.palette().pink;
     let marks = |(at, shapes): &(StripBox, Vec<egui::Shape>)| {
         let inside = |shape: &egui::Shape| at.meter.contains_rect(shape.visual_bounding_rect());

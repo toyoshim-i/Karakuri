@@ -18,24 +18,8 @@ pub(crate) const SRC: &str = "crates/karakuri-console/src";
 /// neither.
 pub(crate) const ROW: &str = r#"<div class="op-head">"#;
 
-/// The one section of the page whose panel badges are not this file's, and the
-/// heading is what identifies it because a section is an `<h2>` here as it is
-/// everywhere else on the page.
-///
-/// *Arranging the console* is the console's own shape, and every route into it
-/// is [`karakuri_console::panel::Op`] or a gesture on
-/// `karakuri_console::panel::Panel` — never a `karakuri_operation::Operation`,
-/// which is what this file scans for. So a `has` badge in that section is a
-/// claim this file cannot judge and would judge wrongly: *Move a boundary* is a
-/// drag rather than an operation, the vocabulary carries it as `Undecided`, and
-/// nothing in [`SRC`] will ever construct it. That was the header's last bullet
-/// said as prose; this is it said as code, because the bullet was true of the
-/// first assertion below and not of the second, which went on demanding an
-/// `Operation` for every badge in the column.
-///
-/// Those badges are checked, and `tests/vocabulary.rs` is where. It reads this
-/// section and asks a running `Panel` what a hand on it reaches, both ways
-/// round — the same pair as here, against the type the console performs.
+/// Identifies the section whose badges map to console gestures/Ops rather than
+/// `karakuri_operation::Operation`, which are verified in `tests/vocabulary.rs`.
 pub(crate) const ELSEWHERE: &str = "<h2>Arranging the console</h2>";
 
 /// The badge text of a route that names nowhere. A `plan` badge is allowed to

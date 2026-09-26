@@ -4,23 +4,7 @@ use super::staging_common::*;
 // The bay has no body
 // ---------------------------------------------------------------------------
 
-/// The Staging lane draws what a bay with no body draws, and the Sequencer bay
-/// is what that is.
-///
-/// Not a count of shapes — `egui` is free to tessellate a card differently
-/// tomorrow — but two bays held against each other. The Sequencer is the lane's
-/// exact twin in the console's own furniture: a title, no pill, no grip, and
-/// nothing in its body at all. `library.rs` holds the Library against the
-/// Master for the same reason and picks a different twin because the Library
-/// has a grip and the Master has one; a Staging bay held against the Master
-/// would be six grip dots short and the assertion would be about the grip.
-///
-/// So the two draw the same shapes, or Staging is drawing something a lane with
-/// no candidate does not have: a `.cand` row, a placeholder, or the head's `2
-/// waiting` where there is nothing to count.
-///
-/// Asked at both windows, because a bay that started drawing a body would be
-/// most likely to do it at the taller one.
+/// Asserts that an empty Staging bay renders identical furniture shapes to the bodiless Sequencer bay.
 #[test]
 fn the_staging_lane_draws_no_body() {
     let mut asked = 0;
@@ -49,15 +33,7 @@ fn the_staging_lane_draws_no_body() {
     assert_eq!(asked, 2, "not every window was asked");
 }
 
-/// Nothing the console is handed *except its own field* reaches the lane.
-///
-/// The four things a caller writes onto a `View` that this bay might have been
-/// reading are the Library's names, the mixer's strips, the Inspector's panes
-/// and the canvas; a fifth, the picture, takes a device and is `None` in every
-/// test in this crate. A console with all four filled is the fullest this crate
-/// can make one, and the lane is the same bay it was empty — which is what says
-/// a row comes from `View::staging` and from nothing else. That field is the
-/// one thing deliberately left alone here; the tests below are what fill it.
+/// Verifies that changes to other `View` fields do not alter the rendered shapes in an empty Staging bay.
 #[test]
 fn a_full_console_stages_nothing() {
     let mut panel = console(PLAUSIBLE);
@@ -101,21 +77,7 @@ fn a_full_console_stages_nothing() {
     );
 }
 
-/// The lane's head is the Sequencer's head, with the lane full and with it
-/// empty.
-///
-/// The mock's Staging head reads `2 waiting` and this one reads nothing, for
-/// the reason `view::staging` gives: a bay head's pills are the mock's
-/// *controls* — every readout in a head is undrawn, `previews 3 of 4` included
-/// — and the number would say what the rows already say, this lane having no
-/// truncation to report where the Library's foot has.
-///
-/// Asked with three candidates in the lane, which is the state a count would be
-/// drawn in and is the reason this is a paint-level assertion rather than the
-/// table read it used to be: the lane is `Kind::Staging` now, so the pills it
-/// does not draw are not in the table to be counted. The head strip is the top
-/// [`HEAD_H`] of each bay, and the Sequencer's is the same head over an empty
-/// bay — so the two are equal, or this one has grown a pill.
+/// Verifies that the Staging bay head does not draw waiting count pills regardless of candidate count.
 #[test]
 fn the_lane_head_counts_nothing() {
     let mut panel = console(PLAUSIBLE);
@@ -130,11 +92,7 @@ fn the_lane_head_counts_nothing() {
 
     let mut view = View::new(Room::Day);
     let bare = shapes_inside(&mut view, &mut panel, head(twin));
-    // A guard, so this cannot pass by both heads being empty. It is one shape
-    // and not two: the word is wholly inside the strip and the rule under it
-    // is a hairline centred on the strip's own bottom edge, so half of it
-    // hangs below and containment does not count it — which is
-    // `shapes_inside`'s rule and is why this is a floor rather than a figure.
+    // Guard against both heads being empty; header title text contributes at least one contained shape.
     assert!(
         bare >= 1,
         "the Sequencer's head drew {bare} shapes, which is not even the word in it"
@@ -167,17 +125,7 @@ fn the_lane_head_counts_nothing() {
 // A candidate draws a row
 // ---------------------------------------------------------------------------
 
-/// A candidate is a row, and the rows are where `.stage-list` and `.cand` put
-/// them.
-///
-/// The whole box, term for term: the list is the bay under its head, inset by
-/// `.stage-list`'s `padding: 6px 9px 8px` — which is the one padding in this
-/// console that is not the same top and bottom — and a row is [`CAND_H`] tall
-/// with [`STAGE_GAP`] between one and the next and none above the first.
-///
-/// Asked at both windows, though the bay is the same 218 x 125 at each:
-/// `lib.rs` pins it, and a lane that started deriving its own height would say
-/// so here first.
+/// Verifies `.stage-list` padding, row heights, and inter-row gaps against stylesheet dimensions.
 #[test]
 fn a_candidate_is_a_row_where_the_mock_puts_it() {
     use karakuri_console::room::size;
@@ -234,19 +182,7 @@ fn a_candidate_is_a_row_where_the_mock_puts_it() {
     assert_eq!(asked, 2, "not every window was asked");
 }
 
-/// The lane holds the mock's three and counts the fourth, which is the only
-/// piece of boundary arithmetic in this bay.
-///
-/// `lib.rs` pins the lane at 125 and writes that number from the mock — *"27 of
-/// bay head, 6 + 8 of `.stage-list` padding, three `.cand` rows at 4 + 16.5 +
-/// 4, and two 5px gaps"* — so the list is 125 - 27 - 6 - 8 = 84 and `(84 + 5) /
-/// (24.5 + 5)` is 3.01. Three rows, and the extra hundredth is the half-pixel
-/// the arrangement rounded up (124.5 to 125), which is less than a gap and so
-/// buys nothing.
-///
-/// A fourth candidate is counted and not drawn, which is why `total` is carried
-/// beside `rows`: a lane fuller than its height is a fact, and it is the one
-/// the mock's `2 waiting` would be about.
+/// Asserts that the Staging lane fits at most 3 visible rows within its fixed height while tracking total count.
 #[test]
 fn the_lane_has_room_for_the_mocks_three() {
     let panel = console(PLAUSIBLE);
@@ -302,29 +238,8 @@ fn each_candidate_adds_shapes_and_the_fourth_adds_none() {
     );
 }
 
-/// A row is a well and four things in it: the deck it landed on, the node's
-/// address, what that node's procedure calls itself, and the verdict.
-///
-/// The deck is what tells two rows apart in the program this panel is drawn by:
-/// it plays one pair of files in four slots, each from its own copy, so one
-/// save produces four builds whose names are the same string. (This said *both
-/// its slots* until 2026-09-08, from a two-slot deck that is long gone.) The
-/// address is what tells two rows of one build apart, and it arrived with
-/// ADR-0326.
-///
-/// Counted rather than read, because a galley's text is not something a shape
-/// carries: a row that names a node is five shapes wholly inside its own
-/// rectangle — `.cand`'s well, which is exactly the row, and one galley each —
-/// and the two subtractions below are what say which shape is which. A row
-/// handed an empty name is four, and a row that names no node is four with the
-/// name back, so a row that stopped drawing either would be caught by the count
-/// it did not fall to.
-///
-/// The `back` capsule is two of the seven, a stroked capsule and the word in
-/// it, and it is drawn on every row that names a node and has room — which at
-/// `PLAUSIBLE`'s width is both of the rows below. What it is *not* drawn on is
-/// the row that names none, which is the third subtraction here and the one
-/// that says the capsule follows `Candidate::at` rather than the verdict.
+/// Checks that candidate rows render expected shape counts for well, deck letter, address,
+/// name, verdict, and the two-shape `back` capsule (ADR-0326).
 #[test]
 fn a_row_is_a_well_and_four_things_in_it() {
     let mut panel = console(PLAUSIBLE);
@@ -376,11 +291,7 @@ fn a_row_is_a_well_and_four_things_in_it() {
         "a row with no name draws {bare} shapes, so the name is not the one shape that went"
     );
 
-    // **And a row that names no node loses three of the seven**: the address,
-    // and the capsule's two. It is what says both follow `Candidate::at` — the
-    // address is drawn from `Candidate::addr` rather than off the deck letter
-    // beside it, and the capsule is offered by the node rather than by the
-    // verdict.
+    // Unaddressed rows omit the address text and the 2-shape `back` capsule.
     view.staging = vec![slot_row(0, "drift_shell + soft_points", Stage::Refused)];
     let unaddressed = shapes_inside(&mut view, &mut panel, lane.row(0));
     assert_eq!(
@@ -390,21 +301,7 @@ fn a_row_is_a_well_and_four_things_in_it() {
     );
 }
 
-/// A row the checker turned down draws what it said, and says how many more
-/// there are.
-///
-/// The three verdicts above this one are about a build an operator can see the
-/// result of; this one has produced nothing to look at, so the word alone says
-/// that a save did not take and nothing whatever about why — and *a refusal
-/// carries what the next attempt needs*
-/// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
-///
-/// Read off the frame rather than counted, unlike the row test above: what is
-/// being checked is that a particular sentence is painted, and a version that
-/// laid the diagnostic out and drew a blank galley would satisfy any count. The
-/// count is asserted beside it, because *one* diagnostic and *four* are the
-/// same row otherwise, and the second is the one where a repair takes more than
-/// one edit.
+/// Verifies that compiler refusal rows render their primary diagnostic text and an overflow counter (P-0083).
 #[test]
 fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest() {
     let mut panel = console(PLAUSIBLE);
@@ -487,19 +384,7 @@ fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest(
     );
 }
 
-/// The four words a row can end in are the manual's own, which is ADR-0159
-/// asked of this bay: the console's words are the manual's.
-///
-/// `console.html` says what a row's third thing is — *"whether it is on screen:
-/// landed, overloaded for costing more than one frame may, refused, or did not
-/// compile"* — and the transport's health capsule names the same four answers
-/// in the same words. A word invented here would be the specification written
-/// backwards.
-///
-/// The fourth is the one this most needs to hold. *Refused* is a build that
-/// failed and *did not compile* is a source the checker turned down, and the
-/// two are one keystroke away from being spelled the same on this side and
-/// argued as different on the page (ADR-0310).
+/// Verifies stage verdict strings against the specification in `console.html` (ADR-0159, ADR-0310).
 #[test]
 fn the_verdicts_are_the_manuals_words() {
     let page = std::fs::read_to_string(

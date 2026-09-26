@@ -46,14 +46,7 @@ fn middle(r: egui::Rect) -> Point {
 // Where it is
 // ---------------------------------------------------------------------------
 
-/// The pill ends the row, and everything after the `.sep` is laid out backwards
-/// from it.
-///
-/// The mock's order at that end is `landed`, then `● rec`, hard against
-/// `.transport`'s own padding. Until this control existed the capsule took that
-/// padding and `transport.rs` asserts that it does where there is no pill; this
-/// is the same assertion one item further right, and the two together are what
-/// says the right-hand end has one derivation rather than two.
+/// The rec pill anchors the right end of the transport row, positioned against padding.
 #[test]
 fn the_rec_pill_takes_the_rows_right_padding_and_everything_else_backs_away_from_it() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -120,14 +113,7 @@ fn the_rec_pill_takes_the_rows_right_padding_and_everything_else_backs_away_from
     }
 }
 
-/// The pill is the same width at both ends of the toggle, so it does not move
-/// under the hand that is pressing it.
-///
-/// The mock writes one mark and one word and changes only the treatment between
-/// the two states, so this is a fact about the derivation rather than a
-/// coincidence of two strings — and a pill that grew when a recording started
-/// would take the health capsule and the frame readout with it, on the frame
-/// after the press.
+/// Pill width remains constant across recording states so controls do not shift under presses.
 #[test]
 fn the_pill_does_not_move_when_the_recording_starts() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -152,13 +138,7 @@ fn the_pill_does_not_move_when_the_recording_starts() {
     assert_eq!(idle.frame, running.frame);
 }
 
-/// A console nobody has told about recording draws no pill, and the row it
-/// draws is the row it drew before this control existed.
-///
-/// `None` is *nobody said* rather than *not recording* — `View::audio`'s
-/// distinction one group along — and the whole of what it buys is here: the
-/// health capsule has the right padding back, which is exactly what
-/// `tests/transport.rs` asserts of a console with no program behind it.
+/// When recording state is None, the rec pill is omitted and health capsule takes right padding.
 #[test]
 fn a_console_nobody_told_draws_no_pill_and_the_capsule_has_the_padding_back() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -200,15 +180,7 @@ fn a_console_nobody_told_draws_no_pill_and_the_capsule_has_the_padding_back() {
 // The grab, and the claim
 // ---------------------------------------------------------------------------
 
-/// The pill clears every boundary's grab, which is `input.rs`'s rule 4 and the
-/// debt every control on this console owes.
-///
-/// The row is 48 and a pill is 16.5, centred, so there is (48 − 16.5) / 2 =
-/// 15.75 of row above the capsule and 15.75 below, against a [`GRAB`] of 6.
-/// That is the tap capsule's own arithmetic one group along, and it is measured
-/// here rather than inherited: this pill is at the *other* end of the row, so
-/// what it also has to clear is the right-hand edge of the console — and it is
-/// [`size::TRANSPORT_PAD_X`]'s 12 in from it, which is twice the grab.
+/// The pill clears all boundary grab zones both vertically and from the right console edge.
 #[test]
 fn the_pill_clears_every_boundarys_grab() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -239,12 +211,7 @@ fn the_pill_clears_every_boundarys_grab() {
     );
 }
 
-/// A press beside the pill is `egui`'s, which is what says the claim is the
-/// pill's rectangle and not the row's.
-///
-/// The point is one gap to the left of the capsule, which is the space the
-/// `.sep` leaves between it and the health capsule — panel ground with nothing
-/// drawn on it.
+/// Presses adjacent to the pill fall through to egui, ensuring strict hit boundaries.
 #[test]
 fn a_press_in_the_gap_before_the_pill_is_not_the_pills() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -290,14 +257,7 @@ fn a_console_nobody_told_claims_no_press_where_the_pill_would_be() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// A press asks for the other end of the toggle, and the payload is read off
-/// the state the pill was drawn from.
-///
-/// This is the whole of the decision the control is: one capsule, two
-/// operations, and which one a press is is a fact about what the operator can
-/// already see. A `Start` that could be pressed while something was recording,
-/// or a `Stop` while nothing was, would be a control whose picture and whose
-/// effect are two different statements.
+/// Clicking the pill toggles between `StartRecording` and `StopRecording` based on current state.
 #[test]
 fn a_press_starts_a_recording_and_a_press_stops_the_one_running() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -336,13 +296,7 @@ fn a_press_starts_a_recording_and_a_press_stops_the_one_running() {
     );
 }
 
-/// A start names no id, which is what makes every press a fresh recording
-/// rather than a second head in a stream that already exists.
-///
-/// `Store::append_session` appends and `session::split` sets `started` at the
-/// first tick and never clears it, so an id typed twice is a stream read back
-/// as edits. A capsule types no name and the payload says so — ADR-0289, and
-/// the `keep` capsule's own arrangement one bay over.
+/// Starting a recording provides `id: None` to create a fresh session without reuse (ADR-0289).
 #[test]
 fn a_start_files_under_no_id_so_every_press_is_a_fresh_recording() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -385,16 +339,7 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
         .collect()
 }
 
-/// The pill is painted, and in the mock's two treatments.
-///
-/// A rectangle is not a drawing: the row would satisfy every geometric
-/// assertion above with a `transport_into` that laid the capsule out and never
-/// painted it. So this reads the frame — the word, the mark beside it, and
-/// which of `.pill` and `.pill.on` the capsule is wearing.
-///
-/// `rect_filled` against `rect_stroke` is the difference, exactly as the health
-/// capsule's own test reads it: the `on` treatment fills the capsule with a
-/// wash of the pink and the plain one draws a hairline round nothing.
+/// Validates rendered shapes and colors for default outline and active filled styles.
 #[test]
 fn the_pill_is_drawn_and_says_which_state_it_is_in() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -446,12 +391,7 @@ fn the_pill_is_drawn_and_says_which_state_it_is_in() {
 // The route a window loop takes
 // ---------------------------------------------------------------------------
 
-/// `claim`, then the derivation, then the operation — the three steps
-/// `crates/karakuri/src/main.rs` takes on a press, in that order.
-///
-/// The seam this stands under is the one `mod press_handler` in that file is
-/// about: a control drawn and claimed here has to be *asked* there, and this is
-/// the half of it that can be checked without a window.
+/// Verifies the input claim, derivation, and operation sequence for press handling.
 #[test]
 fn the_route_a_window_takes_reaches_the_operation() {
     let (mut panel, ctx) = console(PLAUSIBLE);

@@ -1,11 +1,4 @@
-//! The arrangement survives being written down and read back.
-//!
-//! Saving an operator's panel is `serde` on the whole `Layout`, so the question
-//! this answers is about *this* arrangement rather than about the format: every
-//! number in it has to be one the wire can carry. An unbounded maximum is the
-//! interesting case, and this arrangement is full of them — six regions say "no
-//! maximum" on purpose, because ADR-0157 makes a maximum something a solo would
-//! be held to.
+//! Layout serialization and round-trip restoration (ADR-0157).
 
 mod common;
 
@@ -60,20 +53,7 @@ fn a_solo_survives_the_round_trip_and_still_undoes() {
     assert_eq!(rects(&after), rects(&solved(PLAUSIBLE)));
 }
 
-/// A saved arrangement comes back into the window you are looking at, not the
-/// one it was saved in.
-///
-/// This is the panel's half of putting a saved arrangement back, and the whole
-/// of what it decides: `Panel::restore` is `Op::Reset`'s arm with the
-/// arrangement handed in, so the folds and the solo are the file's and the
-/// viewport is the running window's. A restore that took the file's viewport
-/// too would open a console arranged on a 1920x1080 desktop at that size inside
-/// a smaller window — every rectangle laid out past the edge, and the solve
-/// never asked to fit them.
-///
-/// Read as a pair with `crates/karakuri/src/main.rs`, which is where the name
-/// becomes these bytes: this crate has no store and never sees the name
-/// (ADR-0156, ADR-0221).
+/// Verifies saved layout dimensions and tree structure round-trip through serialization (ADR-0156, ADR-0221).
 #[test]
 fn a_restored_arrangement_keeps_its_folds_and_takes_the_window_it_arrives_in() {
     use karakuri_console::panel::{Op, Outcome, Panel};

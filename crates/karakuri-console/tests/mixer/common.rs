@@ -10,12 +10,7 @@ pub use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, StripBox, Tal
 pub use karakuri_layout::{Point, Rect};
 pub use karakuri_operation::{BlendMode, Operation};
 
-/// The mock's own first strip, as values: `drift_night` live, a trim at 0.72,
-/// the fader at 1.00, `add` over no mask, and a meter reading.
-///
-/// The numbers are the mock's percentages read as the values behind them —
-/// `.trim`'s `width: 72%`, `.strip-num`'s `1.00`, `.vmeter b`'s `74%` and
-/// `.vmeter u`'s `82%`.
+/// Returns the mock's first strip configuration matching `console.html`.
 pub fn mock() -> Strip {
     Strip {
         name: "drift_night".to_owned(),
@@ -114,15 +109,7 @@ pub fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Ve
         .collect()
 }
 
-/// How many `.strip` wells were painted inside `rect`: a filled rectangle a
-/// strip's own size.
-///
-/// Filled and unstroked, which the prose above always said and the filter did
-/// not. The deck selection's ring is `.strip.focus`'s `box-shadow: inset 0 0 0
-/// 2px` and is drawn at exactly the strip's rectangle, so a scan that took any
-/// rect of that size counted the selected strip twice and read a one-slot deck
-/// as two. This is the reach corrected and not the claim: one well per strip is
-/// still the whole assertion.
+/// Counts filled, unstroked `.strip` well rectangles of the given strip width.
 pub fn wells(shapes: &[egui::Shape], width: f32) -> usize {
     shapes
         .iter()

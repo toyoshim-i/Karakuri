@@ -113,11 +113,7 @@ fn knob(at: &InspectorPane, pane: &Pane, group: usize, index: usize) -> egui::Po
 // 1. Nothing to scroll through
 // ---------------------------------------------------------------------------
 
-/// A pane taller than its content draws it unscrolled and offers no scroll.
-///
-/// The position in force is zero whatever is stored, every group is drawn and
-/// every group is counted, and the first group starts at the top of the body —
-/// which is the state every test in this crate that never turns a wheel is in.
+/// A pane taller than its content draws without scrolling and clamps scroll position to zero.
 #[test]
 fn a_pane_taller_than_its_content_draws_it_unscrolled() {
     let pane = pane_of(3, 3);
@@ -162,11 +158,7 @@ fn a_pane_taller_than_its_content_draws_it_unscrolled() {
 // 2. The end of the list
 // ---------------------------------------------------------------------------
 
-/// A short pane scrolled to the end draws the last group and not the first.
-///
-/// The end is where the last group's bottom edge meets the body's, and it is
-/// what the clamp against `content - body` *means*: one more notch of the wheel
-/// moves nothing, because there is nothing past the last row to show.
+/// Scrolling to the end displays the final group and clamps against `content - body`.
 #[test]
 fn a_short_pane_scrolled_to_the_end_draws_the_last_group_and_not_the_first() {
     let pane = pane_of(3, 3);
@@ -216,15 +208,7 @@ fn a_short_pane_scrolled_to_the_end_draws_the_last_group_and_not_the_first() {
 // 3. What a press lands on
 // ---------------------------------------------------------------------------
 
-/// A press lands on the row that is under it now, and a row scrolled up under
-/// the two heads takes no press at all.
-///
-/// Two halves, and the second is the one that fails silently: `group` answers a
-/// rectangle for every index whether or not the body reaches it, so a knob
-/// scrolled under the deck head still has one — and a press resolved against it
-/// would be a hand moving a control that is not on screen, under a control that
-/// is. `InspectorPane::grip`'s `body.contains` is what refuses it, and it is
-/// the same rectangle `inspector_into` clips the paint to.
+/// Presses land on currently visible rows; scrolled-off rows under the head are non-interactive.
 #[test]
 fn a_press_after_scrolling_lands_on_the_row_now_under_it() {
     let pane = pane_of(3, 3);
@@ -294,15 +278,7 @@ fn a_press_after_scrolling_lands_on_the_row_now_under_it() {
 // 4. What a resize does to it, which is nothing
 // ---------------------------------------------------------------------------
 
-/// A scroll position survives the pane growing and shrinking, and neither
-/// rewrites it.
-///
-/// The pane is solved short, then tall enough to hold everything, then short
-/// again, and the stored number is compared with itself across all three —
-/// P-0082's *looking never writes back*, and ADR-0250's rejected *clamp the
-/// stored size during the solve* one region in. What each solve answers is the
-/// position clamped for that pane, and the tall one answers zero without taking
-/// the position with it.
+/// Scroll position persists through pane resize without being rewritten or clamped into storage (P-0082, ADR-0250).
 #[test]
 fn a_position_survives_the_pane_growing_and_shrinking() {
     let pane = pane_of(3, 3);
@@ -355,11 +331,7 @@ fn a_position_survives_the_pane_growing_and_shrinking() {
 // 5. Saying how much
 // ---------------------------------------------------------------------------
 
-/// The head says how much is not shown, which is rule 04: *"A list that showed
-/// you part of itself says so and says how much."*
-///
-/// It counts what is whole, so `m of m` cannot be read off a pane with a group
-/// hanging over an edge — which is what makes the number worth anything.
+/// Head counts indicate partially shown content by tracking whole visible groups (rule 04).
 #[test]
 fn the_head_says_how_many_groups_are_not_shown() {
     let ctx = drawn_once();

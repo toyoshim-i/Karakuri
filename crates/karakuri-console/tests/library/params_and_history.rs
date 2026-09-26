@@ -11,20 +11,7 @@ fn showing_reading() -> (View, Panel) {
     (view, panel)
 }
 
-/// What a press on the `params` chip asks for is the Set under the cursor,
-/// which is the operand the pill beside it already uses.
-///
-/// `console.html`'s note: *"Its operand is the cursor, which is the same
-/// operand the pill beside it already uses — so the route costs one chip in the
-/// foot and nothing else."* So the id in the operation follows the cursor, and
-/// this walks it rather than asserting one row: a chip that named the first row
-/// whatever was under the cursor would pass half of this.
-///
-/// And a second press closes rather than asking again. That is `view::Read`'s
-/// own division — closing changes which rows this bay draws, which is the
-/// console's own state and is no more an operation than a fold is — and it is
-/// asserted here because it is the half a chip that emitted `ReadSet` twice
-/// would get wrong in silence.
+/// Asserts `params` chip emits `ReadSet` for the active cursor row and toggles reading expansion closed on second click.
 #[test]
 fn the_params_chip_asks_for_the_set_under_the_cursor() {
     let (mut view, panel) = showing_mock();
@@ -114,15 +101,7 @@ fn the_params_chip_asks_for_the_set_under_the_cursor() {
     );
 }
 
-/// The reading opens under the cursor's row, and the rest of the listing moves
-/// down by exactly what it takes.
-///
-/// `console.html`: *"a reading opens under the cursor row inside `.lib-list`,
-/// one row at a time, following the cursor"*, and *"the height it costs lands
-/// on the bay in this column that absorbs"*. So the rows above it do not move,
-/// the rows below it start under the block's own margin, and the count in the
-/// foot falls by however many no longer fit — which is the same `n of m` a
-/// library taller than its list already says.
+/// Asserts reading expands under cursor row, shifting lower rows down and adjusting foot count accordingly.
 #[test]
 fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
     let (view, panel) = showing_reading();
@@ -257,13 +236,7 @@ fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
     );
 }
 
-/// A reading is drawn under the row it is a reading of, and under no other.
-///
-/// The listing under an open reading can be rewritten by any press on a scope
-/// chip or a filter field, and the cursor is a position in it. So the two are
-/// put together in one place — `View::opened` — and what it answers where they
-/// have come apart is *nothing open*, which is the list going back to being a
-/// list rather than one Set described under another's name.
+/// Asserts reading displays only under matching set and automatically closes if list is filtered or rewritten.
 #[test]
 fn a_reading_is_drawn_only_under_the_row_it_is_a_reading_of() {
     let (mut view, panel) = showing_reading();
@@ -306,16 +279,7 @@ fn a_reading_is_drawn_only_under_the_row_it_is_a_reading_of() {
     assert!(view.opened().is_none());
 }
 
-/// The `params` chip clears every boundary but the one under the bay, and the
-/// number is the same 4.75 the two capsules beside it stand at.
-///
-/// `input.rs`'s rule 3 gives a boundary first refusal, so what this measures is
-/// what that costs here: a `.lib-foot` is 26 tall and a `.pill` is 16.5,
-/// centred, so the capsule's own rim is 4.75 off the foot's — and the foot's
-/// bottom edge is the bay's, which is a boundary with a `GRAB` of 6. The rim is
-/// the price and the chip is not: everything from its middle upwards is the
-/// panel's, which is the same arrangement the `solo` capsule and the deck
-/// preview cells are already in.
+/// Asserts `params` chip clears top/left/right boundaries while its bottom rim touches footer boundary grab.
 #[test]
 fn the_params_chip_clears_every_boundary_but_the_one_under_the_bay() {
     let (view, mut panel) = showing_mock();
@@ -369,20 +333,7 @@ fn the_params_chip_clears_every_boundary_but_the_one_under_the_bay() {
     );
 }
 
-/// What a reading draws: a line per declaration, and a word for what it could
-/// not read.
-///
-/// Asserted by drawing a frame and reading the galleys inside the block,
-/// because *what is in the box* is a claim about the paint pass. The three
-/// blocks the mock draws are the three here — the knobs, the capacity and the
-/// emitted attributes — and the element-storage figure the MCP tool volunteers
-/// is deliberately not among them: sizing it fetches every source in the Set
-/// and compiles it, which is exactly the cost the row's tip says a reading does
-/// not pay.
-///
-/// The foot counts the nodes and says how many declared nothing, which is the
-/// one thing that keeps a knob missing for want of a card from being a knob
-/// missing in silence.
+/// Asserts reading renders declaration lines, unread markers, and node counts accurately.
 #[test]
 fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
     let (mut view, mut panel) = showing_reading();
@@ -468,14 +419,7 @@ fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
     );
 }
 
-/// A reading with nothing in it is an answer, and it is drawn as one: the head
-/// says `0 knobs` and the rows that would have nothing after them are not drawn
-/// at all.
-///
-/// A blank row is the one thing the mock's own tip refuses — *"a knob missing
-/// from the list without a word is the one thing that would make this lie"* —
-/// so a Set with no geometry in it draws no capacity line rather than a line
-/// with nothing beside it.
+/// Empty readings display `0 knobs` and suppress empty declaration rows.
 #[test]
 fn a_reading_with_nothing_to_declare_says_so_rather_than_drawing_blanks() {
     let (mut view, mut panel) = showing_mock();
@@ -573,15 +517,7 @@ const PARAMS_WORD: &str = "params";
 // The `history` scope: the fifth chip, its rows, and the landing
 // ---------------------------------------------------------------------------
 
-/// Three versions as the host would hand them in, newest first, in
-/// [`version_row`]'s spelling — `crates/karakuri`'s, which is
-/// `history::Version`'s own fields joined with the separators
-/// `Snapshots::record` writes.
-///
-/// They are literals here rather than built from anything, for the reason the
-/// mock's names are: this crate reads no store and what crosses the seam is a
-/// row of words (ADR-0156). What matters about them here is the order, which is
-/// the listing's and not this bay's (ADR-0263 read on a history).
+/// Three versions in newest-first host order (ADR-0156, ADR-0263).
 fn versions() -> Vec<String> {
     [
         "20260908-143052-271_slot0_L4_beat_strokes",
@@ -593,16 +529,7 @@ fn versions() -> Vec<String> {
     .collect()
 }
 
-/// The fifth chip is `history`, and a press on it asks for the walk rather than
-/// for a scope.
-///
-/// Three claims, and the third is the one ADR-0308 took. The chip is last in
-/// `Scope::ALL`, which is the order the row is drawn in and the order a step
-/// goes round. A press marks it, exactly as a press on any of the four beside
-/// it does. And what a press asks for is `Operation::WalkHistory` — because
-/// `SelectScope`'s payload cannot say which chip, so a `SelectScope` emitted
-/// here would be indistinguishable from a press on `all`: a record saying a
-/// library was chosen for a press that asked for an edit history.
+/// Verifies the fifth chip is `history` and pressing it requests `Operation::WalkHistory` (ADR-0308).
 #[test]
 fn the_history_chip_is_the_fifth_and_a_press_on_it_asks_for_the_walk() {
     assert_eq!(
@@ -662,19 +589,7 @@ fn the_history_chip_is_the_fifth_and_a_press_on_it_asks_for_the_walk() {
     );
 }
 
-/// A `history` listing is the rows the host handed in, in the order it handed
-/// them, and the foot says how many were not drawn.
-///
-/// The order is the operation's and not this surface's, which is ADR-0263's
-/// argument met on a second listing: `history::list` answers most recent first,
-/// and a bay that sorted what it was given would be a second answer to the
-/// question that listing already answers. So this asserts that the words the
-/// list paints are the words that went in, in that sequence — and never that
-/// they are sorted, because sorting them here is exactly the defect.
-///
-/// The foot is the same `n of m` a library's is, counted on versions: a history
-/// taller than the bay says so in the one place the mock puts it, and this bay
-/// does not scroll.
+/// Verifies `history` preserves host order (ADR-0263) and foot counts rows correctly.
 #[test]
 fn a_history_listing_is_the_rows_the_host_handed_in_and_the_foot_counts_them() {
     let mut view = View::new(Room::Day);
@@ -717,19 +632,7 @@ fn a_history_listing_is_the_rows_the_host_handed_in_and_the_foot_counts_them() {
     assert_eq!(tall.count(), format!("{} of {}", tall.rows, many.len()));
 }
 
-/// A press on a `history` row lands that version on the pulldown's deck.
-///
-/// The operation is `Operation::RestoreProcedure` carrying the row's own word
-/// and the deck the load pulldown names — which is ADR-0308's whole seam, and
-/// the two marks are pulled apart before the press for
-/// [`a_press_on_load_asks_for_the_deck_the_pulldown_names`]'s reason: a console
-/// where the keys and the load agree cannot tell the two readings apart.
-///
-/// And the carry on the same rectangle answers nothing, which is the other
-/// half: one press means two things and which of them it is decided by which
-/// listing goes in with the point. `View::sets` is empty under this scope, so
-/// `take` cannot pick a Set up; `View::versions` is empty under every other, so
-/// `land` cannot put one back off a library row.
+/// Verifies pressing a history row restores that version to the target deck (ADR-0308).
 #[test]
 fn a_press_on_a_history_row_lands_that_version_on_the_pulldowns_deck() {
     let mut view = View::new(Room::Day);
@@ -780,18 +683,7 @@ fn a_press_on_a_history_row_lands_that_version_on_the_pulldowns_deck() {
     );
 }
 
-/// A deck running no Set draws no rows, and nothing in the list answers a
-/// press.
-///
-/// The host hands in an empty listing, because a version written where there
-/// was no Set is filed under *none* and a narrowing to a Set matches no such
-/// row — ADR-0276's own consequence, and the one thing this scope had to get
-/// right. What the bay does with it is what it does with any scope that lists
-/// nothing: it draws the chips, no rows, and `0 of 0`.
-///
-/// The words are the host's, which is why this asserts an empty list rather
-/// than a sentence: `why_nothing` is where the sentence is, and it is checked
-/// in `crates/karakuri`.
+/// Verifies an empty history draws no rows and ignores presses (ADR-0276).
 #[test]
 fn a_deck_running_no_set_draws_no_history_rows() {
     let mut view = View::new(Room::Day);

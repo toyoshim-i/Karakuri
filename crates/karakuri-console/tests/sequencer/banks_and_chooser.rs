@@ -4,12 +4,7 @@ use super::sequencer_common::*;
 // The bay head's bank pills
 // ---------------------------------------------------------------------------
 
-/// Four pills in the bay head, and the armed one is marked.
-///
-/// Four rather than the mock's `seq 1 · seq 2 · +`: with four fixed banks the
-/// `+` is `SelectPattern` landing on an empty bank, which is what a press on
-/// `seq 3` already is (ADR-0320, ADR-0327). The marking is `HeadWords::armed`,
-/// which is the head machinery's half of this and is `tests/head_words.rs`'s.
+/// Verifies the four fixed bank pills in the bay head and their layout bounds (ADR-0320, ADR-0327).
 #[test]
 fn the_head_draws_four_bank_pills_and_they_are_inside_it() {
     let ctx = drawn_once();
@@ -48,11 +43,7 @@ fn the_head_draws_four_bank_pills_and_they_are_inside_it() {
     );
 }
 
-/// A press on a bank pill asks for that bank, and it is a state.
-///
-/// Never *the next one* and never a cycle: a map with a button per bank has to
-/// be able to say *this bank* and mean it, which is the cell's own rule one
-/// control down.
+/// Verifies that pressing a bank pill explicitly selects that bank index rather than cycling.
 #[test]
 fn a_bank_press_names_the_bank_it_landed_on() {
     let ctx = drawn_once();
@@ -326,11 +317,7 @@ fn the_card_offers_the_targets_and_a_pick_points_the_lane() {
         ),
         "a press anywhere else while the card is down is the dismissal"
     );
-    // **Including a press on a cell**, which is the one that matters: the card
-    // hangs over this bay's own rows, so a hand mid-choice reaching a cell is
-    // dismissing the card rather than setting a step — and this answering
-    // `Some` is what lets the window ask this control *before* `press` while
-    // the card is down.
+    // A press on a cell while the card is open dismisses the chooser rather than toggling a step.
     let cell = bay.rows[0].cells[3].center();
     let on_cell = Point {
         x: cell.x,

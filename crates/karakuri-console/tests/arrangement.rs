@@ -34,13 +34,8 @@ fn at_a_plausible_window_the_arrangement_is_sane() {
     ));
 }
 
-/// The manual's *Program, sized by height*, as an assertion: *"A 16:9 view
-/// filling a wide centre column would be 763 pixels tall and eat the inspector
-/// whole. So you drag its height."*
-///
-/// A window nearly twice as wide as the narrowest one gives the program not one
-/// pixel of extra height. Everything the width buys goes to the picture, which
-/// letterboxes into it — and the inspector keeps the height it had.
+/// Sizing Program bay by height: window width expansion letterboxes the view
+/// without changing inspector height.
 #[test]
 fn the_program_does_not_grow_when_the_window_widens() {
     let narrow = solved(SMALLEST);
@@ -85,30 +80,11 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
         SMALLEST.h
     );
 
-    // The width is not the tree's sum. That sum is
-    // `karakuri_console::MINIMUM_VIEWPORT.0` — the width below which the solve
-    // stops honouring what the three tracks declare — and it is 777 against
-    // this window's 1244. The floor under the solve holds every declared
-    // minimum and no more; this window holds the *content* claim on top of
-    // them, which is the mock's own centre of 484 and the 237.5 panes that come
-    // with it. So this window is the wider of the two and the assertion is that
-    // they are in that order. **The gap between them used to be a defect as
-    // well as a claim** — at a centre of 340 a pane was 165.5 against the 207 a
-    // parameter row's fixed tracks want — and ADR-0279 closed that, so what is
-    // left between the two numbers is room rather than a hole.
+    // Viewport width exceeds minimum solve tree floor, providing room for content claims (ADR-0279).
     assert!(implied_min(&layout, root, Axis::Row) <= SMALLEST.w);
 }
 
-/// `MINIMUM_VIEWPORT` is the tree's own sum on both axes, recomputed here
-/// rather than trusted — the same guard the body row's 556.5 is under, for the
-/// same reason: the constant is written by hand because the model does not
-/// derive a split's minimum from its children's, so nothing but this stops the
-/// two drifting apart the next time a minimum moves.
-///
-/// It was watched to fail: with the width term written as the 846 this file's
-/// comment used to claim, the recomputation answered the 692 the tree said at
-/// the time and the assertion named both numbers. The tree says 777 today
-/// (ADR-0279); what the test asserts is that the two agree, whatever they are.
+/// Verifies `MINIMUM_VIEWPORT` matches the tree's recomputed axis sum across both dimensions (ADR-0279).
 #[test]
 fn the_minimum_viewport_is_the_sum_of_the_declared_minima() {
     let layout = solved(PLAUSIBLE);
@@ -237,16 +213,7 @@ fn at_the_minimum_an_inspector_pane_draws_a_parameter_fader() {
     panes(&wide, "with the centre starved by a drag");
 }
 
-/// The Program bay is two regions, and the split is the bay's own 395 read out
-/// loud.
-///
-/// *"The bay is two regions and they fold apart."* — `console.html`. The way
-/// the number is derived has not changed: bay head 27, padding 9 + 9, picture
-/// 262, gap 8, previews 80. The previews term is the one that moved — a cell is
-/// its 63 of image, `.cell`'s 4px gap and `.caption`'s 13px under it — and
-/// `lib.rs` is where growing the row rather than shrinking the cells is argued.
-/// Three of those terms are one region, one is the divider, and two are the
-/// other, so this asserts the sum term by term rather than asserting 395 twice.
+/// The Program bay split recomputes to 395px across picture, gap, previews, head, and padding.
 #[test]
 fn the_program_bay_is_a_picture_over_a_preview_row() {
     let layout = solved(SMALLEST);
@@ -288,15 +255,7 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
     assert!(near(rect_of(&wider, "program-view").h, was + 205.0));
 }
 
-/// Both parts are addressable, and they fold independently — which is the whole
-/// reason the bay is a split rather than a leaf with two rectangles drawn
-/// inside it.
-///
-/// *"The picture is a sink ... and it is on screen exactly when that sink is on
-/// — so there is no state where it is hidden and still costing a pass. The deck
-/// previews under it are auditions of their own, so they stay when it goes."*
-/// Turning the sink off is a fold by name; the previews staying is that fold
-/// not reaching them.
+/// Both Program picture and previews fold independently by name without affecting each other.
 #[test]
 fn the_picture_and_the_previews_fold_apart() {
     // Folding the picture leaves the preview row intact at its own height.
@@ -330,17 +289,7 @@ fn the_picture_and_the_previews_fold_apart() {
     assert!(near(rect_of(&layout, "deck-previews").h, 89.0));
 }
 
-/// The sink's own sentence, as an assertion.
-///
-/// *"The picture is a sink, listed in Outputs as program view ... Turn it off
-/// and that picture goes, giving its height to the inspector."* —
-/// `console.html`. The bay is `Fixed(395)` and the solve is top-down, so for as
-/// long as the bay claimed its stored size whatever was left inside it, the
-/// height went to the preview row instead and the manual's sentence was a
-/// sentence about nothing. What makes it true is the bay claiming what its
-/// visible content can use: with the picture folded that is the preview row's
-/// 89, and the flexible child of the same column — the inspector — takes the
-/// 306 the bay gave up.
+/// Folding the Program picture sink reclaims its height for the flexible inspector below.
 #[test]
 fn folding_the_picture_gives_the_bays_height_to_the_inspector() {
     for viewport in [SMALLEST, PLAUSIBLE] {

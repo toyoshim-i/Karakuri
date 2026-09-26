@@ -1,42 +1,5 @@
-//! A residency request that has not landed, and what the strip does about it.
-//!
-//! `Deck::residency` is what a slot is doing and `Deck::requested_residency` is
-//! what it was asked to do, and the mixer's tally is the first control on this
-//! panel whose readback can disagree with what was asked for. What it has to
-//! say then is
-//! [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)'s
-//! — where it is, where it is going, and that it has not arrived — and the
-//! presentation is
-//! [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)'s:
-//! the word rolls part of the way toward the one that was asked for, once a
-//! second, and never lands.
-//!
-//! Seven claims, and each one is a thing that could quietly not be true:
-//!
-//! 1. The chip is as wide as the widest residency word, whichever it is
-//!    showing — a capsule sized to the current word resizes when the deck
-//!    moves, and would resize under a word rolling through it. *This one
-//!    failed before the change that added the rest of this file.*
-//! 2. A strip whose two halves agree is still, draws one word, and asks for
-//!    no repaint at all. ADR-0164's still-panel clause is the one thing an
-//!    animation is most likely to cost by accident.
-//! 3. The roll is a function of the phase it was handed — asserted at
-//!    phases this file chose, which is the whole reason the phase is a
-//!    value written by the harness rather than a clock read in `src/`.
-//! 4. The rolling word never leaves the chip. The clip is new here; nothing
-//!    called `with_clip_rect` on a tally before.
-//! 5. The two words never meet, whatever the displacement: a blank band of
-//!    the chip's own slack separates them, and at 9px two words with
-//!    nothing between them are mud.
-//! 6. The panel asks for a deadline while a slot is parked and for `Never`
-//!    when none is — the declaration end of P-0091, from the view, which is
-//!    what knows the rate.
-//! 7. And for `Never` while the bay the chip is in is out of the layout,
-//!    however parked the slot behind it is. A declaration answered off the
-//!    deck alone bought a 30 Hz deadline for a chip nobody could see, which
-//!    is P-0091's *what must be live* read as *what is pending*.
-//!
-//! None of it needs a window, a device or a clock.
+//! Parked tally roll animation when requested and effective residencies diverge (ADR-0190, ADR-0164, ADR-0189, P-0091).
+//! Validates capsule sizing, phase-driven displacement, clipping bounds, and repaint deadlines.
 
 mod common;
 
@@ -113,14 +76,7 @@ fn box_of(strips: &[Strip]) -> StripBox {
         .strip(0)
 }
 
-/// Every word painted in the first strip's tally, with the clip it was painted
-/// under.
-///
-/// `mixer.rs`'s `shapes_inside` drops the clip — it maps each `ClippedShape` to
-/// its shape — and the clip is half of what this file asserts, so the whole
-/// `ClippedShape` is kept here. Filtered by the galley's *position* rather than
-/// by its bounds, because a word halfway out of the chip is exactly what this
-/// is looking for.
+/// Collects galleys painted in the first strip's tally along with their active clipping rectangles.
 fn words_at(strips: Vec<Strip>, phase: Phase) -> (StripBox, Vec<(String, egui::Rect, egui::Rect)>) {
     let at = box_of(&strips);
     let pal = Room::Day.palette();
@@ -159,21 +115,7 @@ fn lifted(bounds: egui::Rect, at: &StripBox) -> f32 {
 // 1. The chip's width
 // ---------------------------------------------------------------------------
 
-/// The tally's capsule is the widest residency word's, whatever residency it is
-/// showing.
-///
-/// It was the current word's, and that was a defect rather than a
-/// simplification: `LIVE` is 34.06 wide, `PRIM` 37.59 and `ALLOC` 44.53 (galley
-/// plus two `TALLY_PAD_X`), so a slot going from allocated to live shrank its
-/// own capsule by ten and a half pixels while the strip around it stood still.
-/// A word rolling through a box that resizes as it rolls would be the same
-/// defect in motion.
-///
-/// The word does not move when the box grows, and that is asserted here too:
-/// the capsule is centred in the strip and the word is centred in the capsule,
-/// so widening it grows the capsule symmetrically around type that was already
-/// on the strip's centre line. It is why fixing this changed the chip and
-/// nothing inside it.
+/// Sizing the tally capsule to the widest residency word prevents geometry changes during rolls.
 #[test]
 fn the_chip_is_the_widest_words_width_whatever_it_shows() {
     let ctx = drawn_once();
@@ -222,16 +164,7 @@ fn the_chip_is_the_widest_words_width_whatever_it_shows() {
 // 2. A settled strip
 // ---------------------------------------------------------------------------
 
-/// A strip whose request and effective residency agree draws one word, at rest,
-/// and asks for nothing.
-///
-/// Both halves matter and they fail differently. A chip that painted the second
-/// word unconditionally would draw it clipped away and cost a galley a frame
-/// for nothing — invisible, and the kind of thing that is discovered by a
-/// profiler years later. A panel that declared a staleness unconditionally
-/// would end the still panel outright: ADR-0164's still-panel clause is *a
-/// panel with nothing changing on it is paid for once and not again*, and the
-/// whole console is on the other side of it.
+/// When residency states match, the strip renders a single word and declares no repaint (ADR-0164).
 #[test]
 fn a_settled_strip_is_still_and_asks_for_nothing() {
     for tally in Tally::ALL {
@@ -286,25 +219,7 @@ fn a_settled_strip_is_still_and_asks_for_nothing() {
 // 3. The roll is the phase's
 // ---------------------------------------------------------------------------
 
-/// The displacement is a function of the phase the view was handed, and
-/// this asserts it at phases chosen here.
-///
-/// That is the point of the phase being a value rather than a clock: a test
-/// *chooses* the phase it asserts at and never catches one, which is
-/// [ADR-0189](../../../docs/adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md)'s
-/// own argument. There is no sampling here and no tolerance for one.
-///
-/// Two phases, and each is a different thing about the curve:
-///
-/// - 100 ms is a quarter of the way through the 400 ms travel, where the
-///   raised cosine is at `ROLL_REACH * 0.5 * (1 - cos(τ/4))` — half its reach.
-/// - 200 ms is the top of the travel, and it is `ROLL_REACH` exactly:
-///   the furthest the word ever gets, and it is not 1.0, because landing is
-///   what arrival looks like.
-///
-/// And two more that are about the shape rather than a value: 700 ms is in
-/// the 600 ms the word rests for, and one whole period later is the same
-/// answer, which is what makes it a phase.
+/// Displacement is verified against explicit phases (ADR-0189) using the raised-cosine roll curve.
 #[test]
 fn the_roll_is_a_function_of_the_phase_it_was_handed() {
     let quarter = Phase::since(Duration::from_millis(100));
@@ -370,20 +285,7 @@ fn the_roll_is_a_function_of_the_phase_it_was_handed() {
 // 4. The clip
 // ---------------------------------------------------------------------------
 
-/// Nothing the roll paints leaves the capsule.
-///
-/// The destination word is a whole box height below the settled one and the
-/// roll never brings it more than [`ROLL_REACH`] of the way up, so most of it
-/// is outside the chip on every frame it is drawn — and directly over the trim
-/// row underneath, which is 5px away. Without the clip a parked strip paints
-/// `PRIM` across its own `g` and fader.
-///
-/// The clip is asserted on the `ClippedShape` rather than by looking at where
-/// the ink lands, because that is the mechanism: `epaint` clips at tessellation
-/// and the shape's own bounds are unchanged by it. Vertically, and not
-/// horizontally: the capsule is the widest word's, so nothing ever needs
-/// clipping sideways, and asserting a bound that is never approached would be
-/// asserting the wrong thing.
+/// Verifies the rolling word is clipped to the capsule rectangle to prevent bleed into adjacent controls.
 #[test]
 fn the_rolling_words_never_leave_the_chip() {
     for millis in [0, 50, 100, 150, 200, 250, 300, 350, 399, 500, 999] {
@@ -419,19 +321,7 @@ fn the_rolling_words_never_leave_the_chip() {
 // 5. The band between the two words
 // ---------------------------------------------------------------------------
 
-/// The two words never touch, at any displacement.
-///
-/// The pitch is the travel's rather than the geometry's, and it is at least the
-/// box height: at the natural 10.0 row pitch the two words are both partly
-/// visible with nothing between them, and at 9px that is mud rather than two
-/// words. One box height apart leaves a blank band of exactly the slack the
-/// chip already has — [`size::TALLY_H`]'s 13.5 less a 10.0 ink row is 3.5 — and
-/// it is the same band at every displacement, because it is the difference of
-/// two constants rather than a function of how far the roll has got.
-///
-/// It costs the chip nothing, which is the other half of why it is a property
-/// of the travel: the second word is a whole box below the first at rest, which
-/// is outside the capsule, which is clipped away.
+/// Ensures the active and target words maintain visual separation throughout the entire roll travel.
 #[test]
 fn the_two_words_never_meet() {
     for millis in (0..400).step_by(5) {
@@ -460,18 +350,7 @@ fn the_two_words_never_meet() {
 // 6. What the panel asks for
 // ---------------------------------------------------------------------------
 
-/// A parked slot ends the still panel, and nothing else does.
-///
-/// The declaration is the view's — it is what knows the rate — and
-/// `Change::Animating` is where it becomes a deadline. A deadline and not a
-/// frame: `Repaint::After` names *draw then, and not before*, and a
-/// once-a-second animation that asked for a frame instead would become a spin
-/// at whatever rate the loop can manage.
-///
-/// The other direction is the one worth having a test for at all. A panel with
-/// no parked slot must cost exactly what it cost before any of this existed —
-/// `Repaint::Never`, and a window that sleeps — and an animation is the most
-/// likely thing to take that away by accident.
+/// A parked slot schedules `Repaint::After` deadlines; an idle panel stays at `Repaint::Never`.
 #[test]
 fn the_panel_asks_for_a_deadline_only_while_something_is_parked() {
     let panel = arrangement();

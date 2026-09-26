@@ -4,27 +4,14 @@ use super::library_common::*;
 // Where the rows and the foot are
 // ---------------------------------------------------------------------------
 
-/// The bay's furniture is the bay's rectangle and the mock's own boxes, and
-/// every number here is read off `style.css` rather than off the panel.
-///
-/// `.lib-foot { padding: 5px 10px; font-size: 10px; border-top: 1px }` is a
-/// 26-tall row along the bottom; `.scopes { padding: 7px 9px; border-bottom:
-/// 1px }` is a 31.5-tall row under the bay head; `.lib-list { padding: 3px }`
-/// is what is left between the two; and `.lib-row { padding: 3px 7px }` around
-/// type at the console's 11px and `line-height: 1.5` is 22.5 each, stacked with
-/// no gap because `.lib-list` states none.
+/// Asserts library bay geometry constants match stylesheet padding, borders, and row metrics from `style.css`.
 #[test]
 fn the_rows_and_the_foot_are_the_bays_own_geometry() {
     let panel = console(PLAUSIBLE);
     let region = to_egui(rect_of(panel.layout(), "library"));
     let bay = bay(&panel);
 
-    // **The transcription itself, against the stylesheet.** Everything below
-    // is a *relation* — the list starts one padding under the head — and every
-    // one of them holds just as well with a padding transcribed wrong, so the
-    // numbers the relations are stated in are asserted here as the literals
-    // `style.css` has. This is the half of the bay that is checked against the
-    // mock rather than against itself.
+    // Direct literal validation of metrics transcribed from `style.css`.
     assert!(
         near(size::LIB_LIST_PAD, 3.0),
         "`.lib-list` is `padding: 3px`"
@@ -319,17 +306,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
 // No store behind the console
 // ---------------------------------------------------------------------------
 
-/// With no store behind the console the bay is a card and a head, and that is
-/// asserted by drawing it.
-///
-/// `View::library` is empty in every test in this crate and in the whole of
-/// `cargo test -p karakuri-console`, which is a console with no library opened.
-/// What it draws then is the card, the head and the head's rule — not an empty
-/// list with `0 of 0` under it, which is a reading of a library nobody opened,
-/// and not a row of dashes, which is the same invention with a different glyph.
-///
-/// So this counts what lands inside the bay on a frame drawn each way, and the
-/// difference is the whole claim.
+/// Asserts an unopened library renders only its card, head, and rule without empty list placeholders.
 #[test]
 fn a_console_with_no_store_lists_nothing() {
     let mut panel = console(PLAUSIBLE);
@@ -343,22 +320,7 @@ fn a_console_with_no_store_lists_nothing() {
     let empty = shapes_inside(&mut view, &mut panel, region);
     let bare = empty.len();
 
-    // **And *bare* is a bay with no body**, which is asserted rather than
-    // taken as whatever this bay happened to draw: the Master bay is the other
-    // bay in the mock with a title, no pill and a grip, and it has nothing in
-    // its body at all. The two draw the same shapes or the Library is drawing
-    // something a library nobody opened does not have — an empty list, or a
-    // rule and a `0 of 0` under one.
-    //
-    // **The Master bay draws one thing the Library does not, and it is
-    // counted rather than the comparison being given up.** It carries the
-    // class pill that opens the master effects to a model and the Library
-    // carries none, because the Library is one of the four bays with no class
-    // of its own — ADR-0235 leaves *"whether a bay that carries no class draws
-    // the indicator at all"* open and the console draws nothing there. So the
-    // pill's own shapes are counted where they are and taken off: a number
-    // written down here instead would be this test's claim quietly becoming a
-    // claim about how `egui` tessellates a capsule.
+    // Compares bare library against master bay body shapes, subtracting the master class pill (ADR-0235).
     let master = to_egui(rect_of(panel.layout(), "master"));
     let capsule = mcp_pill(
         &drawn_once(),
@@ -403,17 +365,7 @@ fn a_console_with_no_store_lists_nothing() {
     );
 }
 
-/// Nothing said about any library, no bay, asked of the derivation rather than
-/// of the paint pass — the same rule `mixer` follows, stated where a caller can
-/// reach it.
-///
-/// And the two ways of saying nothing are not one way. A console handed no
-/// scopes and no rows has been told nothing at all, and the bay is its card and
-/// its head. A console handed the four chips and no rows has been asked a
-/// question whose answer is *nothing*, and the chips are drawn over an empty
-/// list — which is `console.html`'s *"An empty tier is a library nobody has
-/// filled rather than something gone wrong"* and is the whole of what the scope
-/// row bought.
+/// Derivation yields no bay when unconfigured, vs empty list when scopes are provided without rows.
 #[test]
 fn nothing_said_about_any_library_is_no_listing() {
     let panel = console(PLAUSIBLE);
@@ -469,15 +421,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     layout.solve();
     assert!(library(&layout, SCOPES, &names, None, None, 0.0).is_some());
 
-    // **And a bay with no room for the foot and one row lists nothing**, which
-    // is the same answer and not a special case.
-    //
-    // It takes a window under the arrangement's own minimum to reach: the
-    // library declares a minimum of 158 and the solve honours it, so at every
-    // window this console is claimed to work at there is room for three rows.
-    // Below 632 the solve stops honouring minima and scales everything down
-    // together (`common::SMALLEST` says so), and that is where a bay too short
-    // for a row exists at all.
+    // Bay lists nothing if space is insufficient for both foot and at least one row.
     let chrome = size::HEAD_H
         + size::SCOPES_H
         + size::LIB_FILTERS_H
@@ -499,12 +443,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         "a bay with no room for one row listed some"
     );
 
-    // Two hundred and fifteen pixels of window taller is one row, which is
-    // what says the answer above is the room and not the window. It was a
-    // hundred and twenty-five until the kind row landed: that band is one more
-    // thing between the head and the list, and the bay is held at its declared
-    // minimum until the window is tall enough to give it more, so the window
-    // with room for exactly one row is that much taller again (ADR-0338).
+    // Increasing window height provides space for exactly one row above kind band and foot (ADR-0338).
     let barely = solved(Rect {
         h: 375.0,
         ..SMALLEST

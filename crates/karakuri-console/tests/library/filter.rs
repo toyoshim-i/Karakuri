@@ -212,14 +212,7 @@ fn a_procedure_row_has_no_star_and_loads_one_layer() {
 // The filter field and the six kind chips
 // ---------------------------------------------------------------------------
 
-/// The six chips are the five kinds a procedure declares and the Sets, each
-/// spelled once, which is what makes a badge and the chip that filters by it
-/// read the same word.
-///
-/// The match is the enforcement rather than the assertion under it: a variant
-/// added to `karakuri_operation::Layer` does not compile here until somebody
-/// has decided what this row calls it and where in it the chip goes. `L5` is
-/// ADR-0340's own pass and is deliberately not on this row yet.
+/// Asserts the six filter chips match declared procedure material kinds and sets (ADR-0340).
 #[test]
 fn the_kind_chips_are_the_five_kinds_and_the_sets() {
     use karakuri_operation::Layer;
@@ -257,14 +250,7 @@ fn the_kind_chips_are_the_five_kinds_and_the_sets() {
     assert_eq!(KindChip::Sets.word(), "SET");
 }
 
-/// A press on a kind chip names all six, which is what makes the row a
-/// destination rather than six statements two hands can disagree about
-/// (ADR-0338).
-///
-/// The whole row, one chip at a time: each press turns its own chip on and says
-/// what every other chip is, and a second press on the same chip turns it off
-/// again — so none-on, which shows everything, is a state a press can always
-/// get back to.
+/// Kind chip presses emit the entire 6-chip filter state, toggling the clicked chip and updating all others (ADR-0338).
 #[test]
 fn a_press_on_a_kind_chip_names_all_six_and_turns_that_one_over() {
     use karakuri_operation::{LibraryKinds, Operation};
@@ -366,15 +352,7 @@ fn the_kind_rows_own_ground_is_nobodys() {
     );
 }
 
-/// A press on a field steps it, and the operation names where it arrived.
-///
-/// The whole cycle of each field, both ways round the wrap, because the state a
-/// step cannot reach is the one a control quietly loses: `layer` from `FIELD`
-/// back to unset, and `holds` from the last candidate back to unset.
-///
-/// `Operation::ListSets` carries both halves, so a press on one field says what
-/// the *other* one is as well — which is what makes the pair a filter rather
-/// than two. That is asserted here by setting one and pressing the other.
+/// Asserts clicking a filter field advances its cycle through unset and emits full `ListSets` filter state.
 #[test]
 fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
     let panel = console(PLAUSIBLE);
@@ -447,12 +425,7 @@ fn a_holds_field_with_nothing_to_step_to_asks_the_listing_again() {
     );
 }
 
-/// The two fields answer a press and the row around them does not.
-///
-/// The padding either side and the gap between them are bare card, exactly as
-/// the gaps between the scope chips are — and `claim` is asked as well as the
-/// offer, because a control that acts on a press `egui` was given is a control
-/// nobody can reach.
+/// Asserts filter fields claim input while padding and inter-field gaps fall through.
 #[test]
 fn the_filter_fields_answer_a_press_and_the_row_around_them_does_not() {
     let mut panel = console(PLAUSIBLE);
@@ -553,13 +526,7 @@ fn the_filter_fields_clear_every_boundary() {
     );
 }
 
-/// What the fields read, and what `View::narrow` does with an answer.
-///
-/// Three things the bay could get wrong and one of them is the reason
-/// `holds_at` is a position: a host that rewrites the candidates leaves the
-/// position pointing past the end, and what that has to read as is unset rather
-/// than the last candidate there is — a listing narrowed by something nobody
-/// chose is the failure this avoids.
+/// Asserts filter state roundtrips through view and out-of-bounds candidate indices fallback to unset.
 #[test]
 fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
     use karakuri_operation::LibraryKinds;

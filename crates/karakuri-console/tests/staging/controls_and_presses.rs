@@ -4,20 +4,7 @@ use super::staging_common::*;
 // What in it is a control, and what is not
 // ---------------------------------------------------------------------------
 
-/// The Staging bay's own ground takes no press, with the lane full as well as
-/// empty, stated rather than inferred from the absence of a hit test.
-///
-/// `library.rs`'s test one bay up, and the inset is its inset for its reason: a
-/// boundary is claimed for a drag from `GRAB` either side of it, and that is
-/// the panel taking a *divider* rather than anything in the bay.
-///
-/// The rows here are `Stage::Overloaded` on purpose, and that is the half of
-/// this test that is about the lane rather than about the card: an overloaded
-/// row offers no keep — a slot that has stopped is not a candidate anyone is
-/// choosing between (ADR-0316) — so a press on one is `egui`'s, and this is
-/// where that is held. The row that *does* take a press is
-/// `a_press_on_a_candidate_row_asks_to_keep_it`, and the capsule inside it is
-/// `the_back_capsule_is_the_smaller_box_inside_the_row`.
+/// Verifies that empty ground and unpressable rows in the Staging bay yield pointer claims to `egui`.
 #[test]
 fn the_staging_bays_ground_is_not_a_control() {
     let mut panel = console(PLAUSIBLE);
@@ -56,11 +43,7 @@ fn the_staging_bays_ground_is_not_a_control() {
     }
     // A guard, so this cannot pass by testing nothing.
     assert_eq!(asked, points.len(), "not every point was asked");
-    // **And the rows themselves**, which the five points above do not cover:
-    // four of them are in the corners of the bay and the fifth is its centre,
-    // so a control drawn *on a row* could sit under none of them. Each row is
-    // asked at both ends and in the middle — the three places the mock's
-    // `.cand` puts something.
+    // Tests row bounds (both ends and center) to ensure non-interactive rows don't claim input.
     let lane = staging(panel.layout(), &full().staging).expect("three candidates and a lane");
     let mut rows = 0;
     for index in 0..lane.rows {
@@ -82,16 +65,7 @@ fn the_staging_bays_ground_is_not_a_control() {
     // A guard, so this cannot pass by there being no rows to ask about.
     assert_eq!(rows, 3, "the lane drew {rows} rows and was handed three");
 
-    // **The negative control.** It was written when there was nothing in this
-    // bay to break, which made the assertions above the trivially-passing kind
-    // `docs/contributing.md` §3, *A test is watched to fail before it is kept*,
-    // is about; a lane with rows in it has a defect to be run against, and the
-    // rows above were — `claim` given a candidate row to answer `Panel` for
-    // fails at the bay's centre. This stays all the same, because it is the
-    // half that says `claim` is not answering `Egui` for every point it is
-    // asked: the one point around here it does *not* answer `Egui` for is the
-    // boundary the lane shares with the Library above it, which the panel
-    // takes for a drag.
+    // Boundary grab test confirming `claim` detects panel divider hits rather than always returning `Egui`.
     let above = region.min.y - karakuri_console::panel::GRAB * 0.5;
     assert_eq!(
         claim(
@@ -110,20 +84,7 @@ fn the_staging_bays_ground_is_not_a_control() {
 // The two presses a row offers
 // ---------------------------------------------------------------------------
 
-/// A press on a candidate row asks to keep that candidate, addressed by the
-/// node the row is for.
-///
-/// The row *is* the control — `console.html`'s *The control is the row itself*
-/// — which is the Library bay's list one bay up read the other way round: there
-/// a row press takes a Set in hand and names no operation, and here it names
-/// one outright. What decided that this act is the large target is what it
-/// costs: keeping moves nothing, writes nothing, and takes a line off a list
-/// (ADR-0326).
-///
-/// Both halves are asserted, because they fail differently: `claim` says the
-/// console took the press at all, and `StagingBay::keep` says what it asked
-/// for. A row that was claimed and handed back the wrong node would pass the
-/// first alone.
+/// Verifies that pressing a candidate row claims input and emits a `KeepCandidate` operation (ADR-0326).
 #[test]
 fn a_press_on_a_candidate_row_asks_to_keep_it() {
     let mut panel = console(PLAUSIBLE);
@@ -180,11 +141,7 @@ fn a_press_on_a_candidate_row_asks_to_keep_it() {
     }
     assert_eq!(asked, 2, "not every row was asked");
 
-    // **The negative control, and it is the division the page draws.** A row
-    // on `overloaded` is a slot that has stopped rather than a candidate
-    // anyone is choosing between, and a row that names no node has nothing to
-    // settle — neither takes this press, and a `keep` that answered off the
-    // rectangle alone would hand back an operation for both.
+    // Overloaded rows and nodeless rows do not offer keep actions or claim clicks.
     let mut view = showing(&strips);
     view.staging = vec![
         at_node(
@@ -213,20 +170,7 @@ fn a_press_on_a_candidate_row_asks_to_keep_it() {
     }
 }
 
-/// The `back` capsule is the smaller box inside the row, and it asks for the
-/// node's previous version.
-///
-/// It is the Library bay's star and its row: the capsule is asked before the
-/// row it sits in, so a press on it reaches the capsule and not the keep
-/// underneath — `input::claim`'s rule 4, *a control claims what it acts on and
-/// no more*. The act that writes a file is the small target and the act that
-/// writes nothing is the large one, which is the whole of why they are this way
-/// round (ADR-0326).
-///
-/// The overloaded row is the one that matters, and it is why the capsule is
-/// offered on more rows than the keep is: landing an earlier version is one of
-/// the three ways out of a stopped slot, and it is the only one of the three
-/// this bay can offer.
+/// Verifies that the `back` capsule claims input over the parent row and emits `RestoreProcedure` (ADR-0326).
 #[test]
 fn the_back_capsule_is_the_smaller_box_inside_the_row() {
     let mut panel = console(PLAUSIBLE);

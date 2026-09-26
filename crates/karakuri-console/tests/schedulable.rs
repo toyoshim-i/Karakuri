@@ -1,63 +1,5 @@
-//! ADR-0164's two schedulability conditions, asserted over what this console
-//! declares.
-//!
-//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
-//! states them and states what is done with them in the same breath:
-//!
-//! ```text
-//! Σ (cost / staleness)  ≤  budget / frame interval
-//! max(cost)             ≤  a small part of the budget
-//! ```
-//!
-//! > A panel is schedulable only if both hold. They are sums over the named
-//! > regions, so a test asserts them rather than a stage discovering them.
-//!
-//! This is that test. It is the whole of the arithmetic in this repository:
-//! nothing in `src/` takes either sum, because a panel that discovered it was
-//! over budget at runtime would be discovering it during a performance.
-//!
-//! The first says there is enough capacity on average. The second is the
-//! one ADR-0164 says gets forgotten: an update is not divisible, so a region
-//! costing most of the budget is a traffic jam of one — every frame it runs,
-//! nothing else can, and the readouts that had to be live miss their
-//! deadlines.
-//!
-//! # What is summed, and it is what declares rather than what is named
-//!
-//! [`View::declares`] answers with the regions that are declaring *on this
-//! frame*, which is where
-//! [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
-//! lands in the arithmetic: a region the operator has folded away is in
-//! neither sum, because it is not showing anything and so cannot be showing
-//! anything out of date. The worst case this file asserts against is therefore
-//! *everything pending, with every region laid out* — the most a console with
-//! this arrangement can ever declare.
-//!
-//! # Two regions, and that is counted rather than assumed
-//!
-//! The transport row declares whenever the beat grid is drawn: the light
-//! travels the grid once a bar, it is the panel's continuous motion, and
-//! [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-//! says that is how a stopped panel announces itself — so it declares whether
-//! or not anything is pending, which is what separates it from the other one
-//! ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
-//! The mixer bay declares while something in it is outstanding: three
-//! presentations at one rate, in one region, which is one term and not three.
-//!
-//! `docs/roadmap.md` has read *four* — the picture, the beat grid, the mixer's
-//! readouts and whatever is pending — and two of the four still declare
-//! nothing and are not this principle's business at all: the picture is the
-//! engine's output and *"counting it here would count it twice"*, and the
-//! mixer's readouts change when a hand changes them, which ADR-0210 does not
-//! budget. `a_declaration_names_a_region_of_this_arrangement` holds the count
-//! where the next person will see it move.
-//!
-//! This is the first time either sum has had two terms, which is the
-//! moment ADR-0164 wrote the arithmetic for: `Σ (cost / staleness)` reads
-//! 0.0889 and `max(cost)` is still one number, because both regions
-//! declare the same whole panel pass (ADR-0210).
-//!
-//! Nothing here needs a window, a device or a clock.
+//! Schedulability verification for rendering budget conditions (ADR-0164, ADR-0193, ADR-0210, ADR-0212, P-0094).
+//! Validates `Σ (cost / staleness) ≤ budget / interval` and `max(cost) ≤ max_budget` under maximum load.
 
 mod common;
 
@@ -118,12 +60,7 @@ fn settled() -> Strip {
     }
 }
 
-/// A strip with everything the panel can have outstanding on it at once: a
-/// residency request the governor has not granted, and a fade armed on each of
-/// the two faders.
-///
-/// Three presentations, and ADR-0190 has them move together off one phase — so
-/// this is what makes the point that they are one declaration and not three.
+/// Creates a mixer strip with all pending animations armed under a single declaration (ADR-0190).
 fn pending() -> Strip {
     Strip {
         tally: Tally::Allocated,
@@ -134,15 +71,7 @@ fn pending() -> Strip {
     }
 }
 
-/// The mock's own transport, which is a console with an engine behind it:
-/// `128.0` BPM, the first beat of bar 37, and a frame that cost 12.4 of 16.6
-/// ms. `tests/transport.rs` writes the same six numbers and says where each of
-/// them is in the mock.
-///
-/// It is here because the beat declares off the row being drawn, and the row is
-/// drawn when there are values behind it — so a `View` with this unset is a
-/// console with no engine, which is what every other test in this crate is and
-/// what makes the still-panel assertions below reachable at all.
+/// Configures mock transport values representing an active, live engine state.
 fn running() -> Transport {
     Transport {
         bpm: 128.0,
@@ -161,13 +90,7 @@ fn running() -> Transport {
     }
 }
 
-/// The most this console can ever declare: an engine behind it with the beat
-/// moving, every strip a deck can hold pending in all three ways, and the whole
-/// arrangement laid out.
-///
-/// The worst case rather than a plausible one, because a schedulability
-/// condition that only held for the panel somebody happened to be looking at
-/// would be a condition about that panel.
+/// Configures the worst-case console load: active engine, fully pending strips, and all regions visible.
 fn worst_case() -> View {
     let mut view = View::new(Room::Day);
     view.transport = Some(running());
@@ -184,13 +107,7 @@ fn declared(view: &View, panel: &Panel) -> Vec<Declared> {
 // The two conditions
 // ---------------------------------------------------------------------------
 
-/// `Σ (cost / staleness)` — what the live regions ask for on average, as a
-/// fraction of a frame.
-///
-/// Dimensionless: a cost is a time and a staleness is a time, and the ratio is
-/// *how much of every millisecond this region needs*. In `f64` because a term
-/// is a small ratio of two small durations and the sum is compared against
-/// another one.
+/// Computes `Σ (cost / staleness)` as the fractional frame budget demanded across active regions.
 fn load(declared: &[Declared]) -> f64 {
     declared
         .iter()
@@ -198,11 +115,7 @@ fn load(declared: &[Declared]) -> f64 {
         .sum()
 }
 
-/// `max(cost)` — the largest single update, which is the one that cannot be
-/// divided.
-///
-/// Zero for a panel that declares nothing, which is the right answer and not a
-/// missing one: nothing is going to run, so nothing is going to block.
+/// Computes `max(cost)` representing the largest indivisible update cost across declared regions.
 fn peak(declared: &[Declared]) -> Duration {
     declared
         .iter()
@@ -221,23 +134,7 @@ fn small_part() -> Duration {
     BUDGET.mul_f32(SMALL_PART)
 }
 
-/// Both conditions hold for this console, at the most it can ever declare.
-///
-/// This is the assertion ADR-0164 asks for, and the numbers it comes out at are
-/// in the messages so that a failure says how far out it is rather than that it
-/// is out.
-///
-/// Raising a declared cost past what the budget allows fails it, which is the
-/// defect this was run against: `PANEL_PASS` at 5 ms breaks the second
-/// condition alone, and at 40 ms it breaks both — the second is the binding one
-/// on this console by a factor of eight, which is ADR-0164's own point about
-/// which of the two gets forgotten.
-///
-/// With two regions declaring, the first sum is two terms: 1.26 ms every 24.671
-/// and 1.26 every 33.333, which is 0.0510 + 0.0378 = 0.0889 against 1.0. The
-/// second is still one number, because both of them declare one whole panel
-/// pass (ADR-0210) — and the day a region declares a cost of its own is the day
-/// `max` starts choosing.
+/// Verifies both ADR-0164 schedulability conditions hold under maximum declared console load.
 #[test]
 fn both_conditions_hold_at_the_most_this_console_declares() {
     let panel = arrangement();
@@ -272,26 +169,7 @@ fn both_conditions_hold_at_the_most_this_console_declares() {
     );
 }
 
-/// A region that is not laid out is in neither sum, and putting it back puts it
-/// back into both.
-///
-///
-/// [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
-/// decided this at the declaration rather than downstream of it, and the
-/// arithmetic is why the record gives as its second reason: *"Discarding it is
-/// not arbitration."* The two sums are about capacity — which of several true
-/// deadlines fit in a frame — and a term dropped because the thing is invisible
-/// is not that computation.
-///
-/// Both ways in, because they are one question: `f` over the bay folds the
-/// mixer itself, `g` over it folds the split that encloses it and the whole
-/// right pane goes with it. Asking `is_collapsed` on the bay alone passes the
-/// first and fails the second, silently — and that is one of the defects this
-/// was run against, along with dropping the visibility term altogether.
-///
-/// The fold is not a latch: the declaration is re-derived from the arrangement
-/// as it now is, so unfolding declares again while the same request is still
-/// outstanding.
+/// Folded or invisible regions omit declarations and contribute nothing to budget sums (ADR-0193).
 #[test]
 fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
     for enclosing in [false, true] {
@@ -346,22 +224,7 @@ fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
     }
 }
 
-/// A still panel declares nothing, and both sums are zero.
-///
-/// ADR-0164's still-panel clause in the arithmetic: a panel with nothing
-/// changing on it is paid for once and not again, so there is nothing to
-/// schedule and nothing to be over budget with. It is the direction worth
-/// having a test for — an animation is the most likely thing to take it away by
-/// accident.
-///
-/// A still panel is a narrower thing than it was, and this test says which one
-/// it is: a console with no engine behind it, so the transport row draws no
-/// grid and there is no beat to move
-/// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
-/// That is every test in this crate. Put an engine behind it and the beat
-/// declares whether or not anything is pending, which is
-/// `the_beat_declares_while_the_console_is_live_and_nothing_is_pending` below
-/// and is P-0094 rather than a regression here.
+/// An idle panel without an engine declares no regions, yielding zero for both sums (ADR-0164).
 #[test]
 fn a_still_panel_is_zero_in_both_sums() {
     let panel = arrangement();
@@ -389,24 +252,7 @@ fn a_still_panel_is_zero_in_both_sums() {
 // The beat, which declares for a different reason from everything else here
 // ---------------------------------------------------------------------------
 
-/// The beat declares while the console is live, and it does not ask whether
-/// anything is pending.
-///
-///
-/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)'s
-/// forced clause is that *something is moving continuously while the console is
-/// live, and a scheduler may not stop it*. A beat that declared only while a
-/// slot was parked or a fade was armed would be the panel's liveness signal
-/// going quiet exactly when there is nothing else to say the panel is alive —
-/// which is the state that rule exists to make visible as a fault.
-///
-/// So this is asked of the emptiest live console there is: an engine behind it,
-/// no deck at all, and nothing anywhere that could be described as pending.
-///
-/// Run against its defect: `transport_declares` made to ask
-/// `self.mixer.iter().any(|strip| strip.pending().is_some())` as well fails
-/// with *"a live console with nothing pending declared [], so nothing on this
-/// panel is moving and a stopped panel looks exactly like this one"*.
+/// Live engine transport beat grids declare unconditionally to signal liveness (P-0094, ADR-0212).
 #[test]
 fn the_beat_declares_while_the_console_is_live_and_nothing_is_pending() {
     let panel = arrangement();
@@ -448,30 +294,7 @@ fn the_beat_declares_while_the_console_is_live_and_nothing_is_pending() {
     );
 }
 
-/// A folded transport row declares nothing, and the transport is a *row* rather
-/// than a bay.
-///
-///
-/// [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
-/// is asked of the layout and not of the region's own kind, so this is the same
-/// question `a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back` asks
-/// of the mixer bay, put to something with a different shape: a row of four
-/// readouts, `Fixed(48)` with its minimum equal to its maximum, and a direct
-/// child of the unnamed root rather than of a pane. `Layout::visible` answers
-/// for it the same way, which is the whole of what is being checked — a fold is
-/// a fold.
-///
-/// There is no enclosing case to try beside it: the transport's only ancestor
-/// is the root, and folding the root is the whole panel going away (ADR-0204).
-///
-/// The fold is not a latch: unfolding declares again off the same values,
-/// because the declaration is re-derived from the arrangement as it now is.
-///
-/// Run against its defect: dropping the `layout.visible` term from
-/// `transport_declares` — so it answers off `self.transport.is_some()` alone —
-/// fails with *"a folded transport row declared [Declared { region:
-/// \"transport\", .. }], so the panel is asking for frames to move a beat grid
-/// that is not on screen"*.
+/// Folding the transport row stops its frame declarations (ADR-0193, ADR-0204).
 #[test]
 fn a_folded_transport_row_declares_nothing_and_unfolding_puts_it_back() {
     let mut panel = arrangement();
@@ -538,18 +361,7 @@ fn every_declared_cost_is_one_whole_panel_pass() {
     }
 }
 
-/// A declaration names a region of this arrangement, and there is exactly one
-/// of them.
-///
-/// ADR-0210's unit of deferral is a region and never a slice of time, so a
-/// declaration has to be answerable by the layout — which is what makes
-/// ADR-0193's *is this laid out* a question with an answer, and what a
-/// scheduler would need to know which rectangle it was spending on.
-///
-/// The count is asserted so that the second live region is a line somebody
-/// changes on purpose: it is the moment `max(cost)` stops being one number, the
-/// moment `Σ` stops being one term, and the moment ADR-0164's deterministic
-/// tie-break has anything to break.
+/// Verifies each declaration targets an identifiable layout region (ADR-0210).
 #[test]
 fn a_declaration_names_a_region_of_this_arrangement() {
     let panel = arrangement();
@@ -606,28 +418,7 @@ fn a_declaration_names_a_region_of_this_arrangement() {
 // The frame moves one of the three numbers, and only in one direction
 // ---------------------------------------------------------------------------
 
-/// No declaration ever asks for a frame sooner than the staleness it declared,
-/// at any phase of the panel's one clock.
-///
-///
-/// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
-/// gives a region a third number — `moves_in`, *when this region's picture is
-/// next different from the one on screen* — and lets the window wait on that
-/// rather than on the staleness. The whole safety argument for it is the
-/// direction, and this is that direction asserted: change detection may take a
-/// frame away and may never bring one forward, so a region cannot use it to
-/// reach a rate the two conditions above never admitted.
-///
-/// It is [`karakuri_console::repaint::Repaint::soonest`]'s own argument one
-/// level up — *this can only bring a frame forward, never push one back, so
-/// combining the two cannot lose either* — read on the other side of the seam,
-/// where the risk runs the other way.
-///
-/// And the two sums do not move with the phase, which is the other half of
-/// keeping them assertable at all: a `Σ (cost / staleness)` that fell while the
-/// roll rested would be an arithmetic about the moment somebody sampled it
-/// (ADR-0212 refused the same thing for the tempo). The worst case is summed
-/// over the constants, and the constants are constant.
+/// Change detection may delay but never accelerates frames beyond declared staleness (ADR-0283).
 #[test]
 fn a_declaration_never_asks_for_a_frame_sooner_than_the_staleness_it_declared() {
     let panel = arrangement();

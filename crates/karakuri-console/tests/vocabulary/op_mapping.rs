@@ -79,27 +79,7 @@ fn the_variants_with_no_row_are_the_ones_written_down() {
     );
 }
 
-/// Two regions the vocabulary cannot say, and the pointer can.
-///
-/// `Operation` names a region by `String`, and `Layout::name` answers `None`
-/// for a split the arrangement left unnamed. There are exactly two of those —
-/// the root column and the body row — and both are handed to a caller as
-/// `Hit::Divider { split, .. }`, which `crates/karakuri/src/main.rs` turns into
-/// `Op::Fold` of the split. So this is the cost of `Op` becoming `Operation`,
-/// counted: it is two, and they are these.
-///
-/// The decision was taken rather than left pending (ADR-0204): the two stay
-/// unnamed, so `Op` stays `Op`, and this assertion is the standing price rather
-/// than a note that somebody still has to choose. Naming either of them is what
-/// fails here, and it should: it would be asserting that folding the whole
-/// panel away, or folding the row of three panes, is an operation an operator
-/// asks for — and the page says the opposite twice, once by having no row for
-/// either and once by reaching the outcome an operator does want through *Solo
-/// a region*.
-///
-/// The count is asserted rather than the list alone, because a third unnamed
-/// split would be a third region only a mouse could fold, arriving without
-/// anybody deciding it should.
+/// Asserts that exactly two unnamed splits exist (root column and body row), which cannot be targeted by name (ADR-0204).
 #[test]
 fn exactly_two_splits_have_no_name_for_an_operation_to_use() {
     let p = panel();

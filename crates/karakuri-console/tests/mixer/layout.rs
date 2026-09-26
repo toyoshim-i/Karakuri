@@ -2,11 +2,7 @@ use super::mixer_common::*;
 
 #[test]
 fn a_strip_is_the_mocks_own_boxes() {
-    // **The transcription itself, against the stylesheet.** Everything after
-    // this is a *relation* — this box is one gap under that one — and every
-    // one of them holds just as well with a gap transcribed wrong, so the
-    // numbers the relations are stated in are asserted here as the literals
-    // `style.css` has. ADR-0177 records the pass where that trap was found.
+    // Asserts literal stylesheet dimensions against `style.css` before relations (ADR-0177).
     assert!(
         near(size::STRIPS_PAD, 6.0),
         "`.mixer-strips` is `padding: 6px`"
@@ -83,24 +79,8 @@ fn a_strip_is_the_mocks_own_boxes() {
         size::STRIP_H
     );
 
-    // **What is left under the strips, said in the terms it is made of.**
-    // `lib.rs` reserved 61 for `.xfade` and derived it as *"1px rule, 8 + 10
-    // padding, a 16.5 row, a 7px gap and an 18.5 row"* — of which the 16.5
-    // row and the 7px gap were the crossfader's and the mock no longer draws
-    // either. So the leftover is the transition row this console does draw
-    // (`size::XFADE_H`, the other four terms), plus those two, plus the half
-    // pixel the bay's own 27 + 227.5 + 61 was rounded up by.
-    //
-    // **This is a stronger statement than the 61.5 below it**, and both are
-    // asserted: the subtraction says the bay has room, and this says what the
-    // room is for. A change to `.xfade`'s padding, to the rule above it or to
-    // the pill in it moves `XFADE_H` and fails here, where the subtraction
-    // would go on passing against a bay height nobody re-derived.
-    //
-    // The crossfader's own row is a literal and not a constant: the mock
-    // stopped drawing it, so the stylesheet states no height for it and
-    // `lib.rs`'s sentence is the only place the 16.5 survives. Its **gap** is
-    // still `.xfade`'s own and is `size::XFADE_GAP`.
+    // Asserts remaining vertical space under strips accounts for transition row (`XFADE_H`),
+    // the retired crossfader row (`CROSSFADER_ROW`), and gaps against total bay height (316).
     const CROSSFADER_ROW: f32 = 16.5;
     let leftover = 316.0 - size::HEAD_H - size::STRIPS_PAD * 2.0 - size::STRIP_H;
     assert!(
@@ -302,14 +282,7 @@ fn the_strips_tile_their_row_and_never_overlap() {
 // As many strips as the deck has
 // ---------------------------------------------------------------------------
 
-/// A page is four tracks wide whatever the deck holds, so a strip does not get
-/// wider because there are fewer of them — and there are exactly as many strips
-/// as there are values.
-///
-/// The one-slot deck is this example's, and the number that would change is a
-/// strip's *width*: tracks that followed the count would make one strip four
-/// times as wide, which is the alternative `view::mixer` writes down and
-/// rejects.
+/// Verifies strip count matches deck values while track width remains fixed at 1/4 row width.
 #[test]
 fn the_strips_are_the_decks_count_and_a_track_is_a_quarter_either_way() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -355,14 +328,7 @@ fn a_strip_the_deck_has_not_got_is_not_a_rectangle() {
 // No deck behind the console
 // ---------------------------------------------------------------------------
 
-/// Every shape the console paints wholly inside `rect`, on one frame.
-///
-/// `transport.rs`'s own helper, and it is written again here for the reason
-/// that one gives: a whole frame through `Context::run_ui`, containment rather
-/// than intersection so the bay's card and its head are not counted as things
-/// drawn in the body, and the texture delta cleared because `epaint` panics on
-/// one dropped unapplied.
-
+/// Verifies a console with no deck behind it paints nothing in the mixer bay.
 #[test]
 fn a_console_with_no_deck_draws_nothing_in_the_bay() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -452,20 +418,7 @@ fn a_folded_or_soloed_or_narrow_mixer_draws_nothing() {
 }
 
 // ---------------------------------------------------------------------------
-/// The bay's last strip and `MINIMUM_VIEWPORT`'s width are one number, and
-/// under it the pointer loses the deck selection while the keys keep it.
-///
-/// This is the concrete thing a window minimum buys, so it is asserted as the
-/// pair rather than as the threshold alone. At
-/// `karakuri_console::MINIMUM_VIEWPORT.0` the right pane is exactly 172, a
-/// track is exactly 37, and the fader column is exactly 29 inside 4 + 4 of
-/// padding — `strip_box`'s own condition, met with nothing to spare. A tenth of
-/// a pixel narrower and every strip is `None`, so `Mixer::select` answers for
-/// nowhere on the bay; and the four preview cells beside it are still drawn,
-/// because they ask only for positive area. `0`..`3` on the keyboard go on
-/// selecting a deck in that state, which is the asymmetry
-/// [ADR-0272](../../../docs/adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)
-/// closes by refusing the window.
+/// Verifies mixer draws no strips below minimum viewport width while previews remain (ADR-0272).
 #[test]
 fn under_the_minimum_viewport_the_bay_draws_no_strips_and_the_previews_remain() {
     let (w, h) = karakuri_console::MINIMUM_VIEWPORT;

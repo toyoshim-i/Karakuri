@@ -1,30 +1,7 @@
-//! The `keep` capsule on a node group's head, which writes one node's source
-//! into the operator's own library —
-//! [ADR-0338](../../../docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md),
-//! decision 4.
+//! Layout and hit-testing for the `keep` capsule on a node group head (ADR-0338, decision 4).
 //!
-//! Eight things:
-//!
-//! 1. Where the capsule goes: hard against the head's right-hand padding,
-//!    at `.mini`'s own box, which is the mock's `<span
-//!    class="mini">keep</span>` after the `.auth` chips.
-//! 2. That the three authority chips are laid out inside what it leaves, so
-//!    neither control is drawn where the other is pressed. That is the one
-//!    thing about this row that could go wrong silently: the chips were
-//!    right-aligned on the head before the capsule existed.
-//! 3. That a press on it emits `KeepProcedure` naming that node, with `id:
-//!    None` — the press that types nothing takes a stamp (ADR-0128).
-//! 4. That the two heads which carry no capsule are not targets: a head
-//!    standing over several nodes, and the built-in camera. Both are
-//!    `Node::keep` being `None`, and the mock draws both absences.
-//! 5. That a press on the chips is still the chips' and a press on the
-//!    capsule is not a chip's.
-//! 6. That a console which has not drawn has no capsule — every measured
-//!    control's guard.
-//!
-//! What is not here and cannot be: that `input::claim` gives the panel a press
-//! on the capsule, and that the window writes the file. Those are
-//! `input::PROBES`' row and `crates/karakuri/src/main.rs`'s press arm.
+//! Validates capsule placement, authority chip spacing, event emissions (ADR-0128),
+//! and target exclusion for heads without a capsule.
 
 mod common;
 
@@ -157,13 +134,8 @@ fn the_capsule_sits_inside_the_heads_right_hand_padding() {
     );
 }
 
-/// The three authority chips are laid out inside what the capsule leaves, one
-/// `.node-head` gap clear of it.
-///
-/// This is the assertion the pass exists to make: the chips were right-aligned
-/// on the head's own padding before the capsule was drawn, so a capsule added
-/// without moving them would sit on top of the `auto` chip — a control painted
-/// where a hand presses another one.
+/// The three authority chips are laid out inside what the capsule leaves,
+/// clearing it by a `.node-head` gap.
 #[test]
 fn the_authority_chips_clear_the_capsule() {
     let (panel, ctx) = console(PLAUSIBLE);
