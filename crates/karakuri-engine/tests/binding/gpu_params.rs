@@ -3,26 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// **An attachment made through the deck rides, and taking it back leaves
-    /// the parameter at its own value** — the two writers *Attach a signal to
-    /// a parameter* and *Take a parameter back* land on, both reaching the
-    /// live `Set` by `Deck::write_param`'s road
-    /// (`docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`).
-    ///
-    /// **Asserted at the texel**, on `a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes`'s
-    /// terms and for its reason: a binding table that is right and a slot
-    /// still writing what it was built with are indistinguishable anywhere
-    /// else. Three decks, each stepped the same number of frames from cold, so
-    /// the pictures are comparable — a bound one, a taken-back one, and one
-    /// that was never bound at all.
-    ///
-    /// **The take-back is asserted as *the manual picture* and not as an empty
-    /// table.** That is the whole of the decision: there is no suspended state
-    /// for a binding to be in, so what *not driving this parameter* means is
-    /// the parameter's own value, exactly — the same arithmetic the blend
-    /// already does at confidence 0.0 (P-0084) rather than a case added for
-    /// it. A `retain` that left the last written value behind would pass an
-    /// assertion about the table and fail this one.
+    /// Verifies that an attachment made through the deck drives parameters, and unbinding restores manual values.
     #[test]
     fn an_attachment_through_the_deck_rides_and_a_take_back_returns_the_manual_value() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -103,13 +84,7 @@ mod gpu {
         );
     }
 
-    /// **An authority set through the deck is the level the node is under**,
-    /// which is the writer ADR-0211 said the engine owed.
-    ///
-    /// It changes nothing on screen and is not meant to: nothing writes a
-    /// parameter on an agent's behalf, so what is asserted is that the level
-    /// lands at the node it names and that a node this Set has not got is said
-    /// rather than silently taken.
+    /// Verifies that authority levels set through the deck are correctly routed to the targeted node.
     #[test]
     fn an_authority_set_through_the_deck_lands_on_the_node_it_names() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -210,20 +185,7 @@ mod gpu {
         let expected = blend(2.5, 1.0 + 4.0 * beat.value, 1.0);
         assert_eq!(*values.last().expect("frames were rendered"), expected);
     }
-    /// **What a binding writes reaches the shader**, and reaches it by the same
-    /// path a `--param` override takes.
-    ///
-    /// Every other test here reads the value a binding resolved to, which is one
-    /// step short of the claim: a `prepare` that resolved bindings correctly and
-    /// then packed the manual values into the uniform would pass all of them.
-    /// So this one compares rendered pixels, in both directions and in both
-    /// uniform buffers — L1's `radius` and L4's `hue`:
-    ///
-    /// - a Set with a param bound to a constant renders **bit for bit** the same
-    ///   as a Set with that param simply set to the same number, which is what
-    ///   "the same path a `--param` takes" means;
-    /// - and both differ from the same Set left at its manual value, which is
-    ///   what stops the first comparison from passing on two identical blanks.
+    /// Verifies that bound parameter values reach shader uniforms identically to explicit parameter overrides.
     #[test]
     fn a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -290,11 +252,7 @@ mod gpu {
             );
         }
     }
-    /// `spawn_rate` has a **second** consumer — the spawn accumulator, which is
-    /// not a uniform — and a binding has to reach that one too. A `spawn_rate`
-    /// whose uniform took the bound value while its accumulator took the manual
-    /// one would be the same param meaning two things in one frame, and it is the
-    /// exact case `docs/ir-spec.md`'s Spawn timing rests on.
+    /// Verifies that bindings on spawn_rate reach both shader uniforms and spawn accumulators.
     #[test]
     fn a_binding_reaches_the_spawn_accumulator_and_not_only_the_uniform() {
         let gpu = Gpu::headless().expect("no GPU");

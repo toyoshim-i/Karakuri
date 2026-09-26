@@ -78,13 +78,7 @@ pub fn image(
     (texture, view)
 }
 
-/// Measure one image, once, and wait for the answer.
-///
-/// The `poll(Wait)` here is the test harness's, not the meter's: this half is
-/// about what the reduction computes, and waiting is how a test gets a
-/// deterministic answer out of an asynchronous thing. That the frame path
-/// itself never waits is the *other* half's claim, and it is asserted there
-/// with no `Wait` anywhere in it.
+/// Measures a single texture view synchronously for test assertions.
 pub fn measure(gpu: &Gpu, view: &wgpu::TextureView) -> Level {
     let mut meters = Meters::new(&gpu.device, &[view]);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -143,12 +137,7 @@ proc soft_points {
 }
 "#;
 
-/// The same shape, rendering a NaN — a `sqrt` of a negative, which parses,
-/// type-checks, costs, compiles and runs. A generated L4 reaches this by
-/// dividing by a parameter that got to zero as easily as by writing it, and
-/// that is the point: this is what an ordinary shader accident looks like
-/// arriving through a real fragment block and a real additive blend, rather
-/// than a NaN a test wrote into a texture by hand.
+/// L4 procedure generating NaNs via square root of a negative value to test meter NaN handling.
 pub const L4_NAN: &str = r#"
 proc nan_points {
   kind  L4

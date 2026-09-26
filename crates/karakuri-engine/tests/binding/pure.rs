@@ -1,15 +1,6 @@
 use super::common::*;
 
-/// **The signal path reads no clock, and now part of it lives here.**
-///
-/// `karakuri-signal` has a standing scan of its own source for exactly this
-/// (`tests/no_clock_access.rs`), because "rendering reads only the local
-/// oscillator" is an invariant a doc comment cannot hold. This change moved a
-/// piece of that path into `karakuri-engine`: `binding.rs` owns the session
-/// oscillator and is what a future edit would reach for if it wanted to smooth
-/// a binding over real time. The scan cannot cover the whole crate — `swap.rs`
-/// measures frame intervals on purpose, and must — so it covers the one file
-/// whose whole claim is that it does not.
+/// Verifies via AST/source scanning that binding resolution contains no wall-clock access.
 #[test]
 fn the_binding_path_never_reads_a_clock() {
     const FORBIDDEN: &[&str] = &[
@@ -41,14 +32,7 @@ fn the_binding_path_never_reads_a_clock() {
 
 // -- measured signals ------------------------------------------------------
 
-/// **The property this whole slice exists for.** One binding, one name, two
-/// providers: measured, it decides the parameter outright; invented, it moves
-/// it a tenth as far — and not one line of the binding changed to make that
-/// true, because the only thing that differs is the confidence that came back
-/// from `sample`.
-///
-/// No GPU: this is the arithmetic, and the tests above already show the same
-/// arithmetic reaching a uniform.
+/// Verifies that measured signals drive parameters at full confidence while synthetic signals scale with low confidence.
 #[test]
 fn a_measured_signal_moves_a_param_fully_where_the_invented_one_moves_a_tenth() {
     let mut signals = Signals::new(BPM, u64::from(SEED));

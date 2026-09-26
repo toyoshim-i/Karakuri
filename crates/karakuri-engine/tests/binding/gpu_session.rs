@@ -39,14 +39,7 @@ mod gpu {
             );
         }
 
-        // And an off-air slot goes on reading the same phase, because it goes on
-        // stepping: every slot takes the frame's steps whatever its residency
-        // (ADR-0269), so a slot that came up with the deck is never behind and
-        // `Set::prepare_warming` hands it the session's oscillator itself. This
-        // used to assert the opposite — that a parked slot stopped resolving —
-        // and it was the parked slot's cell that made that wrong: a bound
-        // parameter frozen at the value it had when the fader came down is a
-        // cell showing a still.
+        // Off-air slots continue reading phase and stepping alongside live slots.
         deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         let off_air_at = value_of(&deck, 1, "radius");
         let mut moved = false;
@@ -73,15 +66,7 @@ mod gpu {
             "a slot brought back on air did not rejoin the session's phase"
         );
     }
-    /// The session clock advances by exactly what the material does, on the two
-    /// frames where "exactly" is not "whatever was passed in".
-    ///
-    /// `Set::prepare` clamps `steps` to `MAX_STEPS` — past that the simulation is
-    /// allowed to fall behind rather than catch up — so the oscillator has to clamp
-    /// identically or a loaded frame moves the beat further than the elements it is
-    /// supposed to be in time with. And a zero-step frame must move neither. Both
-    /// are silent when wrong: the picture keeps updating and the drift only shows
-    /// up as a beat landing in the wrong place after a load spike.
+    /// Verifies that the session clock advances by the same clamped simulation steps as the slots.
     #[test]
     fn the_session_clock_advances_by_the_same_clamped_steps_the_slots_do() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -138,27 +123,7 @@ mod gpu {
             );
         }
     }
-    /// **`Binding::layer` is only as real as the map it indexes**, and now the map
-    /// is indexed by it.
-    ///
-    /// `Set::params` used to be one flat `name -> value` map across both
-    /// procedures, built by chaining L1's params and L4's into one collection. A
-    /// name both layers declared was therefore one value: the second declaration's
-    /// default silently overwrote the first's, and a binding on either one blended
-    /// from a base the *other* procedure declared. A binding could not fix that from
-    /// where it sits, so the collision was refused at build time — which was the
-    /// right call while the map was flat, and which also forbade several renderers
-    /// over one geometry, since every L4 in `examples/` declares `exposure`.
-    ///
-    /// There is a map per node now, so this asserts what the refusal was standing
-    /// in for. `sparks` declares `radius = 2.5` and `soft_points` declares
-    /// `radius = 7.5`, and the pair has to keep both.
-    ///
-    /// **The bindings are what make it a real claim rather than a bookkeeping one.**
-    /// Both are attached to a signal nothing provides, which comes back with
-    /// confidence 0.0, and step 4 of the binding path then writes the param's own
-    /// value unchanged — so each binding resolves to exactly the default of the node
-    /// it names. One shared map would give both the same number.
+    /// Verifies that parameters sharing identical names across multiple nodes maintain distinct values per node.
     #[test]
     fn a_param_name_two_nodes_declare_is_two_values_one_per_node() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -180,11 +145,7 @@ mod gpu {
         declared.sort_by_key(|(layer, _)| format!("{layer:?}"));
         assert_eq!(
             declared,
-            // **Three, because the built-in camera declares a `radius` too**
-            // since ADR-0318 — at `Orbit::default().radius`, which no write
-            // here touches: a bare name does not reach it
-            // (`Set::addressed_only`), which the count below is the other half
-            // of.
+            // Camera declares a radius as well, but unaddressed names do not modify it.
             vec![(Kind::L1, 2.5), (Kind::L3, 8.0), (Kind::L4, 7.5)],
             "the two declarations of `radius` did not survive as two values"
         );
@@ -343,32 +304,7 @@ mod gpu {
         );
     }
 
-    /// **An attachment made on a live slot is still driving after the rebuild
-    /// that follows it** — the whole of *the panel's picture answers to the
-    /// room*, asserted across the one moment it used to stop.
-    ///
-    /// # Why a rebuild is the moment, and why this is a picture assertion
-    ///
-    /// A binding that arrives *with* a Set — a Set file's `bind`, a `--bind`,
-    /// a rebuild's `Request` — is restated by every later request, so it
-    /// cannot be lost. One made **on a live slot** through [`Deck::bind`] is
-    /// not in any request: `swap::Request::bindings` is restated from a
-    /// watcher, which only a re-point writes. So until this test existed, an
-    /// operator attaching `energy` to a parameter got a picture that answered
-    /// to the room until the next save of any `.kir` in that slot, and then
-    /// one that silently did not — see
-    /// `docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md`.
-    ///
-    /// **The two frames are stepped from the swap and not from the run's
-    /// start**, because a swapped-in Set arrives cold: the build lands on
-    /// whatever frame the worker finished on, so the only instant both runs
-    /// share is `t = 0` on the incoming Set. Four steps from there is the same
-    /// four steps in both.
-    ///
-    /// **Asserted at the texel as well as at the value**, on
-    /// `a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes`'s
-    /// terms: a binding table that is right and a slot writing what it was
-    /// rebuilt with are indistinguishable anywhere else.
+    /// Verifies that live slot attachments persist and continue driving parameters across rebuilds.
     #[test]
     fn an_attachment_made_live_is_still_driving_after_the_next_rebuild() {
         use karakuri_engine::swap::{Event, Request, RequestNames};
