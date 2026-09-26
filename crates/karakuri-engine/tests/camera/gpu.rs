@@ -129,9 +129,15 @@ fn a_cameras_parameters_are_addressed_as_a_nodes() {
         declared,
         vec![
             (0, "dist", 5.0),
+            (1, "bob", 0.0),
+            (1, "dolly", 0.0),
+            (1, "fov_y", std::f32::consts::FRAC_PI_3),
             (1, "height", 0.0),
             (1, "radius", 5.0),
+            (1, "roll", 0.0),
             (1, "speed", 0.0),
+            (1, "target_y", 0.0),
+            (1, "yaw", 0.0),
         ],
         "the cameras' params are not reported as each camera's own"
     );
@@ -421,9 +427,15 @@ fn the_built_in_camera_takes_a_slot_without_moving_the_renderers() {
     assert_eq!(
         declared,
         vec![
+            (karakuri_ir::Kind::L3, 0, "bob"),
+            (karakuri_ir::Kind::L3, 0, "dolly"),
+            (karakuri_ir::Kind::L3, 0, "fov_y"),
             (karakuri_ir::Kind::L3, 0, "height"),
             (karakuri_ir::Kind::L3, 0, "radius"),
+            (karakuri_ir::Kind::L3, 0, "roll"),
             (karakuri_ir::Kind::L3, 0, "speed"),
+            (karakuri_ir::Kind::L3, 0, "target_y"),
+            (karakuri_ir::Kind::L3, 0, "yaw"),
             (karakuri_ir::Kind::L4, 0, "gain"),
         ],
         "the renderer's params are reported at the renderer's address"
@@ -457,11 +469,11 @@ fn the_built_in_camera_takes_a_slot_without_moving_the_renderers() {
     );
 }
 
-// Built-in camera placement parameters (radius, speed, height) as parameter rows (ADR-0318).
+// Built-in camera placement parameters (radius, speed, height, fov_y, yaw, target_y, roll, bob, dolly) as parameter rows.
 
-/// Verifies that the built-in camera exposes radius, speed, and height parameter rows.
+/// Verifies that the built-in camera exposes placement parameter rows.
 #[test]
-fn the_built_in_camera_declares_its_three_placement_numbers() {
+fn the_built_in_camera_declares_its_placement_numbers() {
     let gpu = Gpu::headless().expect("no GPU available");
     let set = with_camera(&gpu, None, GAIN_DOT, 32, 32);
 
@@ -473,7 +485,17 @@ fn the_built_in_camera_declares_its_three_placement_numbers() {
     declared.sort_by_key(|(_, key, _)| *key);
     assert_eq!(
         declared,
-        vec![(0, "height", 0.0), (0, "radius", 5.0), (0, "speed", 0.0),],
+        vec![
+            (0, "bob", 0.0),
+            (0, "dolly", 0.0),
+            (0, "fov_y", std::f32::consts::FRAC_PI_3),
+            (0, "height", 0.0),
+            (0, "radius", 5.0),
+            (0, "roll", 0.0),
+            (0, "speed", 0.0),
+            (0, "target_y", 0.0),
+            (0, "yaw", 0.0),
+        ],
         "the built-in camera's parameter map is not the orbit it was aimed with"
     );
 }
@@ -505,6 +527,18 @@ fn the_cameras_three_publish_addressed_and_in_order() {
             ("radius".to_owned(), [1.0, 40.0]),
             ("speed".to_owned(), [0.0, 2.0]),
             ("height".to_owned(), [-40.0, 40.0]),
+            ("fov_y".to_owned(), [0.2, 2.5]),
+            (
+                "yaw".to_owned(),
+                [-std::f32::consts::PI, std::f32::consts::PI]
+            ),
+            ("target_y".to_owned(), [-20.0, 20.0]),
+            (
+                "roll".to_owned(),
+                [-std::f32::consts::PI, std::f32::consts::PI]
+            ),
+            ("bob".to_owned(), [0.0, 10.0]),
+            ("dolly".to_owned(), [-20.0, 20.0]),
         ],
         "the camera's rows are not the three the engine declares, in order"
     );

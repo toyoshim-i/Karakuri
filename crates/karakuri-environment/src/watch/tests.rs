@@ -287,6 +287,7 @@ fn a_rebuild_restates_the_camera_the_slot_is_aimed_with() {
         fov_y: 0.9,
         near: 0.25,
         far: 250.0,
+        ..karakuri_engine::camera::Orbit::default()
     };
     let mut watch = Watch::new(
         0,

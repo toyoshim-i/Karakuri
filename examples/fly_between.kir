@@ -1,0 +1,63 @@
+// An L3 camera procedure that navigates back and forth through the corridor
+// between the world origin and an orbiting subject centroid.
+//
+// Because the camera is constrained to the line segment connecting the two centers,
+// it never flies off into empty space, repeatedly swooping past the geometry in
+// dynamic close-up fly-bys.
+
+proc fly_between {
+  kind L3
+
+  // Distance of the subject center from the origin.
+  param span      : float [2.0, 30.0]   = 12.0
+  // Speed of the fly-through traversal in cycles per second.
+  param speed     : float [0.0, 2.0]    = 0.1
+  // Orbit rate of the corridor axis in revolutions per second.
+  param revolve   : float [-1.0, 1.0]   = 0.05
+  // Lateral corkscrew sway amplitude off the axis.
+  param sway      : float [0.0, 10.0]   = 2.5
+  // Base lens field of view in radians.
+  param lens      : float [0.3, 2.5]    = 1.15
+  // Breathing FOV expansion during close pass.
+  param breathe   : float [0.0, 1.0]    = 0.35
+
+  camera {
+    let t_rev = t * revolve * 6.2831853;
+    let t_fly = t * speed * 6.2831853;
+
+    // Corridor end points: Origin (0,0,0) and orbiting Centroid
+    let origin_pt = vec3(0.0, 0.0, 0.0);
+    let subject_pt = vec3(cos(t_rev) * span, sin(t * 0.4) * 2.0, sin(t_rev) * span);
+
+    // Harmonic position along the corridor: -1.0 to +1.0
+    let pos = sin(t_fly);
+    let interp = pos * 0.5 + 0.5; // 0.0 to 1.0
+
+    // Linear point between origin and subject
+    let mid_pt = origin_pt + (subject_pt - origin_pt) * interp;
+
+    // Corkscrew sway around the flight vector
+    let fwd_dir = normalize(subject_pt - origin_pt);
+    let up_hint = vec3(0.0, 1.0, 0.0);
+    let rgt_dir = normalize(cross(fwd_dir, up_hint));
+    let nrm_dir = cross(rgt_dir, fwd_dir);
+
+    let offset = rgt_dir * (cos(t_fly * 2.0) * sway) + nrm_dir * (sin(t_fly * 2.0) * sway * 0.6);
+    let eye_pt = mid_pt + offset;
+
+    // Target looks ahead towards the destination endpoint
+    let target_pt = origin_pt + (subject_pt - origin_pt) * step(0.0, pos);
+
+    eye    = eye_pt;
+    target = target_pt;
+    // FOV expands during the close pass near the midpoint
+    let proximity = 1.0 - abs(pos);
+    fov_y  = lens + proximity * breathe;
+
+    let fwd     = normalize(target_pt - eye_pt);
+    let rgt     = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let base_up = cross(rgt, fwd);
+    let roll_a  = sin(t_fly) * 0.4;
+    up = base_up * cos(roll_a) + rgt * sin(roll_a);
+  }
+}

@@ -128,6 +128,7 @@ fn a_save_after_a_rebuild_records_the_camera_the_slot_was_loaded_with() {
         fov_y: 0.9,
         near: 0.25,
         far: 250.0,
+        ..karakuri_engine::camera::Orbit::default()
     };
     let capacity = 8192;
     let salts = [11];

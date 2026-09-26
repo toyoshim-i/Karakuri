@@ -18,7 +18,7 @@ pub struct State {
 }
 
 /// Orbital camera trajectory controller.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Orbit {
     pub radius: f32,
     /// Revolutions per second of simulation time.
@@ -27,6 +27,16 @@ pub struct Orbit {
     pub fov_y: f32,
     pub near: f32,
     pub far: f32,
+    /// Horizontal azimuth angle offset (turntable angle, in radians).
+    pub yaw: f32,
+    /// Vertical target look-at offset.
+    pub target_y: f32,
+    /// Camera roll angle around the forward look-at axis (Dutch angle, in radians).
+    pub roll: f32,
+    /// Vertical harmonic oscillation amplitude (bobbing).
+    pub bob: f32,
+    /// Distance modulation offset from radius (breathing / zoom pulse).
+    pub dolly: f32,
 }
 
 impl Default for Orbit {
@@ -38,6 +48,11 @@ impl Default for Orbit {
             fov_y: std::f32::consts::FRAC_PI_3,
             near: 0.1,
             far: 100.0,
+            yaw: 0.0,
+            target_y: 0.0,
+            roll: 0.0,
+            bob: 0.0,
+            dolly: 0.0,
         }
     }
 }
@@ -52,11 +67,17 @@ pub struct Basis {
 }
 
 impl Orbit {
-    /// Placement parameter definitions and valid ranges (`radius`, `speed`, `height`).
-    pub const PLACEMENT: [(&'static str, [f32; 2]); 3] = [
+    /// Placement parameter definitions and valid ranges.
+    pub const PLACEMENT: [(&'static str, [f32; 2]); 9] = [
         ("radius", [1.0, 40.0]),
         ("speed", [0.0, 2.0]),
         ("height", [-40.0, 40.0]),
+        ("fov_y", [0.2, 2.5]),
+        ("yaw", [-std::f32::consts::PI, std::f32::consts::PI]),
+        ("target_y", [-20.0, 20.0]),
+        ("roll", [-std::f32::consts::PI, std::f32::consts::PI]),
+        ("bob", [0.0, 10.0]),
+        ("dolly", [-20.0, 20.0]),
     ];
 
     /// Returns the parameter value for the given placement key, or `None`.
@@ -65,6 +86,12 @@ impl Orbit {
             "radius" => Some(self.radius),
             "speed" => Some(self.speed),
             "height" => Some(self.height),
+            "fov_y" => Some(self.fov_y),
+            "yaw" => Some(self.yaw),
+            "target_y" => Some(self.target_y),
+            "roll" => Some(self.roll),
+            "bob" => Some(self.bob),
+            "dolly" => Some(self.dolly),
             _ => None,
         }
     }
@@ -75,6 +102,12 @@ impl Orbit {
             "radius" => self.radius = value,
             "speed" => self.speed = value,
             "height" => self.height = value,
+            "fov_y" => self.fov_y = value,
+            "yaw" => self.yaw = value,
+            "target_y" => self.target_y = value,
+            "roll" => self.roll = value,
+            "bob" => self.bob = value,
+            "dolly" => self.dolly = value,
             _ => return false,
         }
         true
@@ -109,11 +142,35 @@ impl Orbit {
 
     /// Computes camera state at simulation time `t` (in seconds).
     pub fn state(&self, t: f32) -> State {
-        let a = t * self.speed * std::f32::consts::TAU;
+        let a = t * self.speed * std::f32::consts::TAU + self.yaw;
+        let r = (self.radius + self.dolly).max(0.1);
+        let h = self.height
+            + if self.bob.abs() > 1e-5 {
+                (t * self.speed.max(0.05) * std::f32::consts::TAU * 2.0).sin() * self.bob
+            } else {
+                0.0
+            };
+        let eye = [r * a.cos(), h, r * a.sin()];
+        let target = [0.0, self.target_y, 0.0];
+        let fwd = normalize(sub(target, eye));
+        let world_up = [0.0, 1.0, 0.0];
+        let right = if fwd[0].abs() < 1e-4 && fwd[2].abs() < 1e-4 {
+            [1.0, 0.0, 0.0]
+        } else {
+            normalize(cross(fwd, world_up))
+        };
+        let base_up = cross(right, fwd);
+        let up = if self.roll.abs() > 1e-5 {
+            let cos_r = self.roll.cos();
+            let sin_r = self.roll.sin();
+            add(scale(base_up, cos_r), scale(right, sin_r))
+        } else {
+            base_up
+        };
         State {
-            eye: [self.radius * a.cos(), self.height, self.radius * a.sin()],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
+            eye,
+            target,
+            up,
             fov_y: self.fov_y,
             near: self.near,
             far: self.far,
@@ -199,6 +256,10 @@ fn mul(a: Mat4, b: Mat4) -> Mat4 {
         }
     }
     out
+}
+
+fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 }
 
 fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {

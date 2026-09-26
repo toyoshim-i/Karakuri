@@ -1,0 +1,7 @@
+{"t":"set","id":"fly_between","v":1}
+{"t":"part","layer":"L1","path":"orbit_motes.kir"}
+{"t":"part","layer":"L3","path":"fly_between.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}
+{"t":"param","layer":"L3","key":"speed","value":0.3}
+{"t":"param","layer":"L3","key":"corridor_width","value":2.5}
+{"t":"param","layer":"L4","key":"point_scale","value":0.03}

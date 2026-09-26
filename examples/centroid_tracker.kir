@@ -1,0 +1,57 @@
+// An L3 camera procedure that dynamically interpolates camera eye and target
+// between the world origin and an animated/tracked subject centroid.
+//
+// Supports 4 distinct camera paradigms via anchor blending:
+// - Tracking camera: Eye near origin, Target locked to centroid (eye_anchor=0, target_anchor=1)
+// - Passenger / POV camera: Eye at centroid, Target looking back at origin (eye_anchor=1, target_anchor=0)
+// - Centroid Orbit: Eye and Target orbiting centroid (eye_anchor=1, target_anchor=1)
+// - World Orbit: Eye and Target orbiting world origin (eye_anchor=0, target_anchor=0)
+
+proc centroid_tracker {
+  kind L3
+
+  // Distance from the anchor point, in world units.
+  param radius        : float [1.0, 40.0]   = 9.0
+  // Orbital speed in revolutions per second.
+  param speed         : float [-2.0, 2.0]   = 0.12
+  // Camera height offset above the anchor.
+  param height        : float [-30.0, 30.0] = 3.0
+  // Eye position anchor blend: 0.0 = World Origin, 1.0 = Centroid.
+  param eye_anchor    : float [0.0, 1.0]    = 0.0
+  // Look-at target anchor blend: 0.0 = World Origin, 1.0 = Centroid.
+  param target_anchor : float [0.0, 1.0]    = 1.0
+  // Vertical field of view in radians.
+  param lens          : float [0.3, 2.5]    = 1.047
+  // Camera roll angle (Dutch angle) in radians.
+  param roll          : float [-3.14, 3.14] = 0.0
+  // Centroid excursion radius from origin.
+  param drift         : float [0.0, 15.0]   = 5.0
+
+  camera {
+    let a = t * speed * 6.2831853;
+    // Dynamic procedural subject centroid trajectory
+    let centroid = vec3(
+      sin(t * 0.35) * drift,
+      cos(t * 0.5) * (drift * 0.4),
+      sin(t * 0.25) * drift
+    );
+
+    let eye_world = vec3(cos(a) * radius, height, sin(a) * radius);
+    let eye_local = centroid + vec3(cos(a) * (radius * 0.6), height * 0.6, sin(a) * (radius * 0.6));
+
+    let target_world = vec3(0.0, 0.0, 0.0);
+    let target_local = centroid;
+
+    let final_eye    = eye_world + (eye_local - eye_world) * eye_anchor;
+    let final_target = target_world + (target_local - target_world) * target_anchor;
+
+    eye    = final_eye;
+    target = final_target;
+    fov_y  = lens;
+
+    let fwd     = normalize(final_target - final_eye);
+    let rgt     = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let base_up = cross(rgt, fwd);
+    up = base_up * cos(roll) + rgt * sin(roll);
+  }
+}

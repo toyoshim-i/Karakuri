@@ -173,19 +173,23 @@ proc mixed {
         assert_eq!(
             names,
             vec![
-                "radius", "speed", "height", "wash.x", "wash.y", "depth", "glow.x", "glow.y",
-                "glow.z"
+                "radius", "speed", "height", "fov_y", "yaw", "target_y", "roll", "bob", "dolly",
+                "wash.x", "wash.y", "depth", "glow.x", "glow.y", "glow.z"
             ],
             "the published order is what a knob is learned against"
         );
         // And each component carries the declaration's own range, which is what
-        // a fader's ends are — the camera's three from `Orbit::PLACEMENT`,
+        // a fader's ends are — the camera's placement from `Orbit::PLACEMENT`,
         // `MIXED`'s own from its declarations above.
         for control in set.published() {
             let want = match control.name.as_str() {
                 "radius" => [1.0, 40.0],
                 "speed" => [0.0, 2.0],
                 "height" => [-40.0, 40.0],
+                "fov_y" => [0.2, 2.5],
+                "yaw" | "roll" => [-std::f32::consts::PI, std::f32::consts::PI],
+                "target_y" | "dolly" => [-20.0, 20.0],
+                "bob" => [0.0, 10.0],
                 name if name.starts_with("glow") => [0.0, 4.0],
                 _ => [0.0, 1.0],
             };
