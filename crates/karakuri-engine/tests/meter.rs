@@ -1,17 +1,7 @@
-//! Per-slot level metering.
+//! Integration tests for per-slot audio/visual level metering.
 //!
-//! Two halves, deliberately. The first drives [`Meters`] over textures written
-//! from the host, texel by texel, so that what a reading *is* can be asserted
-//! exactly rather than approximately — the Rec.709 weights, a mean over the
-//! whole frame including its black, a peak that is one texel's, and a black
-//! frame reading exactly zero. None of those can be pinned down against a Set:
-//! a rendered frame's true mean is only knowable by computing the thing under
-//! test.
-//!
-//! The second half drives a real `Deck` of real Sets, where what matters is
-//! the properties an operator relies on: a brighter Set reads higher than a
-//! dimmer one, an off-air slot reads nothing at all, and the whole thing works
-//! without a `poll(Wait)` anywhere in the frame path.
+//! Asserts Rec.709 luminance weighting, mean/peak reduction, black frame floors,
+//! and non-blocking polling across synthetic textures and live Deck Sets.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -33,15 +23,7 @@ mod gpu {
     use karakuri_engine::swap::{Event, HotSwap, Request};
     use karakuri_engine::{Gpu, Present};
 
-    /// **A black frame measures zero, and a brighter frame measures higher.**
-    ///
-    /// Exactly zero, both numbers: a mean that came back as a small positive value
-    /// would mean the reduction is summing something the image does not contain,
-    /// and a peak floored anywhere above zero would hide a dark Set entirely.
-    ///
-    /// The three levels are a constant wash each, so the expected mean and peak
-    /// are the same number and both are known in closed form — the only assertion
-    /// available that does not compute the answer with the code under test.
+    /// Verifies that black frames measure exactly zero and brightness scales monotonically.
 
     #[test]
     fn a_black_frame_measures_zero_and_a_brighter_frame_measures_higher() {
@@ -68,19 +50,7 @@ mod gpu {
         assert!(bright.mean > dim.mean && dim.mean > black.mean);
     }
 
-    /// **One texel that is not a number does not cost a slot its reading.**
-    ///
-    /// A shader dividing by a value that reaches zero is one of the most ordinary
-    /// things a shader does, and what it usually produces is a blown-out pixel
-    /// nobody notices. What it used to also produce was `mean = NaN` for the whole
-    /// slot, because one NaN admitted to a sum makes the sum a NaN — so a routine
-    /// artifact took away the number an operator sets faders by.
-    ///
-    /// The frame here is a known wash with a few texels replaced, so the expected
-    /// mean is in closed form: the bad texels contribute nothing and divide in as
-    /// zero, exactly as black does. Every spelling of "not a finite number" is
-    /// tried, because they arrive by different routes and `NaN` is the only one a
-    /// comparison-based test would catch by accident.
+    /// Verifies that non-finite texels (NaN, Inf) are counted in bad_texels and excluded from mean/peak.
     #[test]
     fn a_texel_that_is_not_a_number_is_counted_and_left_out_rather_than_spreading() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -140,22 +110,7 @@ mod gpu {
         );
     }
 
-    /// **A frame with no light in it at all reports no peak, not the sentinel.**
-    ///
-    /// `peak` starts below anything a target can hold, and now that only finite
-    /// texels are `max`ed into it, a frame where none of them was finite leaves
-    /// that starting value untouched. Reporting it hands a caller `-3.4e38`, which
-    /// the CLI status line formats as **41 characters** and which pushes every
-    /// column after it off a line whose whole design is fixed-width and read at a
-    /// glance in the dark. That is the failure this change exists to prevent,
-    /// arriving through the other number.
-    ///
-    /// What it reports instead is 0.0 — the same thing the mean says about the same
-    /// frame — and `bad_texels` is what distinguishes it from black, in the only
-    /// terms available that are not a judgement: every texel of it. A frame that is
-    /// genuinely dark *below* zero still reports its negative peak, since the
-    /// fallback is keyed on nothing having been seen rather than on the value being
-    /// low; `a_negative_frame_reports_a_negative_peak` is that case.
+    /// Verifies that frames containing solely non-finite texels report a zero peak rather than the initialization sentinel.
     #[test]
     fn a_frame_with_no_finite_texel_reports_no_peak_rather_than_the_sentinel() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -179,14 +134,7 @@ mod gpu {
         );
     }
 
-    /// **Peak and mean move independently.**
-    ///
-    /// A small very bright core and a large dim wash, constructed to have the
-    /// *same* mean — one 64th of the frame at 64 times the luminance — so that the
-    /// only thing separating them is the peak, which differs by that same factor
-    /// of 64. A meter reporting one number could not tell these apart, and the one
-    /// it would miss is the one that matters on stage: the bright core dominates
-    /// the mix wherever it lands, at a mean the fader says is matched.
+    /// Verifies that peak and mean luminance metrics vary independently across high-contrast and diffuse patterns.
     #[test]
     fn peak_and_mean_move_independently() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -226,14 +174,7 @@ mod gpu {
         );
     }
 
-    /// **The luminance weights are the ones claimed: linear Rec.709.**
-    ///
-    /// Pure green and pure blue at the same RGB magnitude. Under the weights this
-    /// pipeline's primaries actually imply, green carries very nearly ten times the
-    /// luminance blue does; under the average-the-channels shortcut they would
-    /// measure identically. An operator matching faders on the second number would
-    /// be matching the wrong thing, and this is the assertion that says which one
-    /// is being reported.
+    /// Verifies that RGB channels are weighted according to linear Rec.709 primaries.
     #[test]
     fn the_luminance_weights_are_rec_709() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -266,20 +207,7 @@ mod gpu {
         );
     }
 
-    /// **The reduction covers the whole image, including the part the workgroups
-    /// do not divide evenly.**
-    ///
-    /// The first pass dispatches a fixed 64 workgroups of 64 threads and walks the
-    /// image in strides of 4096, so every image whose texel count is not a multiple
-    /// of 4096 has a tail that only some threads reach and some workgroups miss
-    /// entirely. Three ways that can go wrong and all three are checked here: a
-    /// mean divided by the padded thread count rather than the texel count, a
-    /// partial that covered no texels dragging a mean down, and a peak that never
-    /// looks at the tail — which is why the brightest texel is deliberately the
-    /// very last one in every case.
-    ///
-    /// Every other test in this file uses a power-of-two square, and 32x32, 64x64
-    /// and 256x256 are all exactly divided. This is the one that is not.
+    /// Verifies that compute reduction correctly handles ragged image tails not evenly divided by workgroup size.
     #[test]
     fn the_reduction_covers_the_tail_the_workgroups_do_not_divide() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -320,16 +248,7 @@ mod gpu {
         }
     }
 
-    /// **A frame that is negative everywhere reports a negative peak.**
-    ///
-    /// Nothing in the pipeline rejects a negative colour: a generated L4 that
-    /// subtracts, or takes a `1.0 - x` of something larger than one, compiles and
-    /// runs and writes it. `shaders/meter.wgsl` starts its peak at the lowest
-    /// finite `f32` rather than at zero for exactly this, and the difference is
-    /// invisible on every other frame in this file. A peak floored at zero would
-    /// report this frame as having a peak it does not have — the one number an
-    /// operator reads as "this Set is not clipping" would be the one number that
-    /// was invented.
+    /// Verifies that frames with all-negative color values report a negative peak without artificial zero-clamping.
     #[test]
     fn a_negative_frame_reports_a_negative_peak() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -350,18 +269,7 @@ mod gpu {
         );
     }
 
-    /// **A brighter Set measures higher than a dimmer one, and a Set drawing
-    /// nothing measures zero.**
-    ///
-    /// Three slots of identical geometry at three exposures, so the only thing
-    /// separating their targets is how much light each puts out — which is the
-    /// question a fader is set to answer, and the one an operator has until now
-    /// been answering by eye.
-    ///
-    /// The dark slot is not a black texture: it is a Set that runs, draws every
-    /// element, and multiplies its colour by zero. Its target is written every
-    /// frame and reads exactly zero, which is a stronger statement than a cleared
-    /// texture reading zero.
+    /// Verifies that Deck slot exposure scales measured levels monotonically and zero exposure reads exactly zero.
     #[test]
     fn a_brighter_set_measures_higher_than_a_dimmer_one() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -398,18 +306,7 @@ mod gpu {
         assert_eq!(dark.peak, 0.0, "a Set drawing black has a peak");
     }
 
-    /// **A NaN out of a real fragment block does not cost the slot its reading.**
-    ///
-    /// The host-written-texture half of this file pins what the reduction computes;
-    /// this pins that the thing it is protecting against actually arrives that way.
-    /// [`L4_NAN`] is a `sqrt` of a negative — the shape a generated procedure
-    /// reaches by dividing by a parameter that got to zero — so the NaN travels a
-    /// real fragment block, a real additive blend and a real `Rgba16Float` target
-    /// before the meter sees it.
-    ///
-    /// Slot 1 is ordinary material, and it is here to say the two slots are metered
-    /// independently: a NaN is contained by *which target was measured*, which is
-    /// the property the module doc claims and which no single-slot test can see.
+    /// Verifies that non-finite fragment outputs are contained to their slot's meter without poisoning adjacent slots.
     #[test]
     fn a_nan_from_a_real_l4_is_counted_and_leaves_the_mean_a_number() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -456,17 +353,7 @@ mod gpu {
         );
     }
 
-    /// **An Allocated slot reads nothing — `None`, not its last frame.**
-    ///
-    /// Its target still holds whatever it last drew, so there is a number
-    /// available; reporting it would be presenting a stale reading as a live one,
-    /// which is the failure this codebase keeps finding. Going off air retires the
-    /// meter, including the measurements still in flight, so a result recorded
-    /// while the slot was Live cannot arrive two frames later and resurrect a
-    /// level for a slot that is not producing one.
-    ///
-    /// The second half is what stops the first from passing on a meter that had
-    /// simply stopped working: back on air, a level must return.
+    /// Verifies that slots transitioned to Allocated residency clear their meter readings without stale resurrection.
     #[test]
     fn an_allocated_slot_reports_no_level() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -513,23 +400,7 @@ mod gpu {
         );
     }
 
-    /// **A build landing on a slot retires its meter.**
-    ///
-    /// A swap replaces the material outright: the incoming Set is cold, `t` back at
-    /// zero, nothing primed. Whatever is in flight for that slot measured the Set
-    /// that was there, and installing it afterwards reports the outgoing Set's
-    /// level as the incoming one's — which is the same stale-number-as-a-live-one
-    /// failure that going off air and a resize are retired for, arriving through
-    /// the one door in this engine that opens by itself. `--watch` opens it on
-    /// every save, and a rollback opens it again from the other side.
-    ///
-    /// Constructed so the wrong answer is unmistakable rather than a shade off: a
-    /// Set at exposure 1.0 is swapped for one at exposure 0.0, which draws every
-    /// element and multiplies its colour by zero. A meter that kept the old reading
-    /// reports a mean around 1.0 for a target that is exactly black.
-    ///
-    /// The second half is what stops the first from passing on a meter that simply
-    /// stopped: the fresh reading has to arrive, and it has to be the black Set's.
+    /// Verifies that hot-swapping a Set on a slot retires in-flight measurements and reports fresh state.
     #[test]
     fn a_build_landing_on_a_slot_retires_its_meter() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -612,38 +483,7 @@ mod gpu {
         );
     }
 
-    /// **The measurement does not block the frame path, and a result arrives
-    /// anyway.**
-    ///
-    /// There is no `poll(Wait)` in this test at all — not in the frame, not after
-    /// it, nowhere — so anything that waited for the GPU would have to be inside
-    /// `Deck::begin_frame` or `Frame::render`. The frames complete and the levels
-    /// come back regardless, which is what "reduce, copy, `map_async`, never wait"
-    /// buys.
-    ///
-    /// [`Level::frames_behind`] is the sharper half of the claim: it can only be
-    /// zero if a reading was taken of the frame being recorded, which is impossible
-    /// without a stall. Every reading here must be at least one frame old.
-    ///
-    /// **That alone does not catch a stall, and the assertion at the bottom is what
-    /// does.** A `collect` that waited for the GPU would pace this loop itself, and
-    /// a paced loop still produces readings one frame old — it would satisfy every
-    /// check above while being exactly the thing this test is named for. What
-    /// separates the two is how far ahead the loop gets: with nothing waiting, the
-    /// CPU encodes frames as fast as it can and runs dozens ahead of the GPU, so
-    /// readings come back tens of frames old and most frames find the ring still
-    /// busy and skip. With a wait anywhere in the frame path, neither can happen:
-    /// the ring is drained every frame, so the lag is pinned at one and the skip
-    /// count at zero. So the run must show *one* of a reading older than one frame
-    /// or a skipped measurement, and this is the same shape as "three
-    /// to five frames were rendered between the request going out and the swap
-    /// landing", which is what *does not block* means operationally.
-    ///
-    /// What this loop is *not* is a measurement of the lag: running dozens of
-    /// frames ahead of the GPU is what an unpaced headless loop does, not what a
-    /// display-paced one does. The ring correctly declines to grow to cover it. The
-    /// lag is measured in [`the_lag_and_the_ring_are_measured_under_pacing`], which
-    /// has the pacing; the numbers printed here are the module doc's second row.
+    /// Verifies that metering readbacks execute asynchronously without blocking the main render loop.
     #[test]
     fn the_meter_never_blocks_the_frame_path() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -698,19 +538,7 @@ mod gpu {
         );
     }
 
-    /// **The lag, measured: how many frames behind a reading is, and whether the
-    /// ring is deep enough to keep producing one every frame.**
-    ///
-    /// Paced by the harness's `poll(Wait)` per frame, which is what
-    /// `tests/deck.rs` and `tests/hot_swap.rs` use in place of the vsync a headless
-    /// run does not get. That pacing is the point rather than an inconvenience: the
-    /// lag is a function of how far ahead of the GPU the frame loop is allowed to
-    /// run, so a number taken from an unpaced loop would be a number about the test
-    /// harness. The wait is outside the frame, exactly as it is there.
-    ///
-    /// Printed as well as asserted — run with `--nocapture`. The assertions are
-    /// deliberately loose, because the tight number belongs in the module doc where
-    /// it can be read, not in a bound that fails on someone else's driver.
+    /// Verifies meter lag and ring buffer depth under simulated display pacing.
     #[test]
     fn the_lag_and_the_ring_are_measured_under_pacing() {
         const FRAMES: usize = 120;

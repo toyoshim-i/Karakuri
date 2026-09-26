@@ -1,18 +1,7 @@
-//! `topology lines`, asserted in pixels.
+//! Pixel-level integration tests for line topology expansion.
 //!
-//! Everything here draws **one** element, whose two clip-space endpoints the
-//! `vertex` block writes as literals rather than deriving through `camera`.
-//! That is the whole point of the fixture: a segment placed by the camera can
-//! only be checked for looking plausible, and a segment placed at NDC
-//! (-0.5, 0) to (0.5, 0) has a bounding box arithmetic can predict to the
-//! texel. Every assertion below is an exact pixel count or an exact
-//! rectangle — the class of claim that survives someone changing the
-//! expansion and keeping it "roughly right".
-//!
-//! The alpha is 1.0 everywhere and the blend is `SrcAlpha, One`, so what lands
-//! in the target is the fragment's colour unmultiplied. That lets the channels
-//! carry information: red says a texel was drawn at all, green carries
-//! `point_coord.x` (along the segment) and blue `point_coord.y` (across it).
+//! Asserts exact bounding boxes, pixel counts, and vertex attribute interpolation
+//! across various depths, projections, and line rate settings.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -43,20 +32,7 @@ proc one_element {
 }
 "#;
 
-    /// A segment from `(x0, y)` to `(x1, y)` in NDC, `width_px` pixels across,
-    /// with each endpoint scaled by its own `w` so the same picture can be asked
-    /// for at more than one clip-space depth — and so one end can be put behind
-    /// the eye while the other stays in front of it.
-    ///
-    /// Dividing by `w` is what makes the projected position independent of it:
-    /// every `w` here describes the *same* NDC segment, which is what lets a depth
-    /// be varied without varying anything else.
-    ///
-    /// **The width is given here in pixels and divided by [`H`] on the way in**,
-    /// because `point_rate` is a fraction of the target's height and every claim
-    /// below is about texels. The division belongs at this one boundary rather
-    /// than at each of the eight call sites, and it is what lets those call sites
-    /// keep saying "eight pixels" where "eight pixels" is the assertion.
+    /// Returns an L4 renderer emitting a horizontal line segment with given NDC coordinates and pixel width.
     fn segment_l4(x0: f32, x1: f32, y: f32, width_px: f32, w: f32, w_b: f32) -> String {
         segment_rate_l4(x0, x1, y, width_px / H as f32, w, w_b)
     }
@@ -95,13 +71,7 @@ proc segment {{
         sprite_rate_l4(x0, y, width_px / H as f32)
     }
 
-    /// The same, given the rate itself rather than a pixel count.
-    ///
-    /// The three claims about what a rate *is* — that it is a share of the
-    /// height, that the share survives a resize, and that widening the frame
-    /// does not widen the sprite — are all about drawing one number at more than
-    /// one target size, so none of them can go through a helper that divides by
-    /// a fixed [`H`].
+    /// Returns an L4 renderer emitting a point sprite with given rate.
     fn sprite_rate_l4(x0: f32, y: f32, width: f32) -> String {
         format!(
             r#"
@@ -130,12 +100,7 @@ proc sprite {{
         draw_at(gpu, l1, l4, W, H)
     }
 
-    /// The same, at a target size the caller picks.
-    ///
-    /// Separate from [`draw`] because two claims here are about what changes
-    /// when the target does — that a sprite keeps its share of the frame's
-    /// height, and that a wider frame does not widen it — and neither can be
-    /// asked at one size.
+    /// Renders the L1/L4 pair at the specified target dimensions and reads back RGBA f32 pixels.
     fn draw_at(gpu: &Gpu, l1: &str, l4: &str, w: u32, h: u32) -> Vec<[f32; 4]> {
         let l1 = compile(l1);
         let l4 = compile(l4);
@@ -227,14 +192,7 @@ proc sprite {{
         )
     }
 
-    /// The load-bearing claim: a segment covers the rectangle its endpoints and
-    /// its `point_rate` say it covers, to the texel. `point_rate` is a fraction
-    /// of the target's height, so eight pixels on a 256-row target is `8 / 256`.
-    ///
-    /// NDC -0.5 and 0.5 are pixel columns 64 and 192 on a 256-wide target, and a
-    /// pixel is covered when its *centre* is, so the columns run 64..=191 — 128 of
-    /// them. Eight pixels of width centred on row 128 covers rows 124..=131. That
-    /// is 1024 texels and no others.
+    /// Verifies that a segment rasterizes to the exact bounding box and pixel count predicted by endpoints and width.
     #[test]
     fn a_segment_covers_exactly_the_rectangle_its_endpoints_and_width_describe() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -249,13 +207,7 @@ proc sprite {{
         assert_eq!(cells.len(), 128 * 8, "the rectangle has holes or spills");
     }
 
-    /// `point_rate` is a width across the segment and nothing along it, and the
-    /// number means what it says: the paired run at twice the width covers twice
-    /// the rows and exactly the same columns.
-    ///
-    /// The pairing is the point. A single run cannot distinguish "a thirty-second
-    /// of the height" from "a width the expansion happened to produce"; two runs
-    /// whose only difference is the number pin the scale as well as the value.
+    /// Verifies that point_rate scales width perpendicularly without affecting segment length.
     #[test]
     fn width_is_across_the_segment_and_nothing_along_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -283,12 +235,7 @@ proc sprite {{
         );
     }
 
-    /// `point_coord.x` runs from `clip` to `clip_b`, not the other way and not
-    /// across.
-    ///
-    /// Read at the two ends of the same stroke, on its centre row. Without a
-    /// direction the two would agree; with the wrong one they would swap, which is
-    /// why both ends are asserted rather than the difference between them.
+    /// Verifies that point_coord.x interpolates monotonically from clip to clip_b along the segment.
     #[test]
     fn point_coord_runs_along_the_segment_from_clip_to_clip_b() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -349,20 +296,7 @@ proc sprite {{
         );
     }
 
-    /// A segment that **straddles** the eye is dropped rather than drawn through
-    /// the camera — the deliberate limitation named in `SEGMENT_EXPANSION`.
-    ///
-    /// Straddling, and not simply behind, and the difference is the whole test.
-    /// With *both* endpoints behind the eye the rasterizer discards the triangles
-    /// on its own, so the first version of this passed with the guard deleted: it
-    /// asserted the hardware's behaviour and called it the guard's. One end in
-    /// front and one behind is the case the guard exists for — the manual divide
-    /// puts the far end at a plausible-looking pixel position, `w` crosses zero
-    /// along the quad, and the corners where it is still positive rasterize into a
-    /// wedge that has nothing to do with the geometry.
-    ///
-    /// Paired with the identical segment wholly in front, because "nothing was
-    /// drawn" is what a broken fixture also produces.
+    /// Verifies that segments straddling the eye plane are culled rather than producing clipped artifacts.
     #[test]
     fn a_segment_straddling_the_eye_is_dropped_and_the_same_one_in_front_is_not() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -396,22 +330,7 @@ proc sprite {{
         assert_eq!(cells.len(), 8 * 8, "the sprite is not solid");
     }
 
-    /// **A sprite covers the same fraction of the frame's height at any target
-    /// size.** That is what `point_rate` means, and it is the whole reason the
-    /// output stopped being a pixel count.
-    ///
-    /// One rate, 1/8, drawn at 256x256 and at 128x128. Thirty-two rows against
-    /// sixteen: half the target, half the pixels, the same eighth of the frame.
-    /// The bounds are exact rather than approximate because the quad's edges
-    /// land on texel boundaries at both sizes — a sprite centred on NDC zero
-    /// with a half-extent of 1/16 of the frame covers rows 112..=143 of 256 and
-    /// 56..=71 of 128.
-    ///
-    /// **Both axes are asserted**, because the horizontal one is the axis that
-    /// carries the aspect term and is therefore the one an arithmetic slip
-    /// would break. The target is square here, so square in pixels and square
-    /// in NDC agree; `a_wider_frame_does_not_widen_a_sprite` is what separates
-    /// them.
+    /// Verifies that point_rate maintains a constant fraction of viewport height across resolutions.
     #[test]
     fn a_sprite_is_the_same_fraction_of_the_frames_height_at_any_target_size() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -435,14 +354,7 @@ proc sprite {{
         );
     }
 
-    /// **A wider frame does not widen a sprite.** The rate is a fraction of the
-    /// *height*, and that choice is exactly what this asserts: 256x256 against
-    /// 512x256 puts the same 32x32 sprite in the middle of a frame that is twice
-    /// as wide.
-    ///
-    /// Against the width instead, the same file at 21:9 would draw fatter
-    /// material than at 16:9 — a second, unasked-for change to the picture every
-    /// time somebody changed the canvas shape.
+    /// Verifies that widening the frame aspect ratio does not distort or widen point sprite geometry.
     #[test]
     fn a_wider_frame_does_not_widen_a_sprite() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -463,14 +375,7 @@ proc sprite {{
         );
     }
 
-    /// **A stroke's width is the same fraction of the frame's height at any
-    /// target size**, which is the same claim as the sprite's and a different
-    /// piece of arithmetic: the segment expansion works in pixels and multiplies
-    /// the rate by the target's height to get there.
-    ///
-    /// The length is asserted alongside the width so that a change to the one
-    /// cannot be read as a change to the other: the segment runs NDC -0.5 to
-    /// 0.5, which is half the frame's width whatever the frame is.
+    /// Verifies that stroke width maintains a constant fraction of viewport height across target sizes.
     #[test]
     fn a_strokes_width_is_the_same_fraction_of_the_frames_height_at_any_target_size() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -491,39 +396,7 @@ proc sprite {{
         );
     }
 
-    /// **A sprite smaller than a texel is drawn at one texel and dimmed to
-    /// compensate.** This is the sub-pixel rule where it reaches pixels.
-    ///
-    /// This is a quad pair and not a GL point, so no hardware minimum point size
-    /// applies, and without MSAA a fragment exists only where the quad covers a
-    /// pixel *centre*. `examples/soft_points.kir`'s default rate is 4/720; at
-    /// 1280x720 that is the four-pixel sprite it was authored as, and at a tenth
-    /// of that it is 0.4 pixels across.
-    ///
-    /// **This test asserted the absence, and the absence was the defect.** It
-    /// read the empty cell as the rasterizer behaving and concluded that a
-    /// preview cell has to be filled by downsampling — see `tests/deck.rs`,
-    /// where that conclusion was cited. What the two numbers actually said is
-    /// that a low-resolution *output* loses the same material, which no
-    /// downsample rescues. The quad is now floored at one pixel and the
-    /// fragment's alpha carries `s²`, the coverage the floor took.
-    ///
-    /// **128x72 rather than the console's own 112x63 cell**, because a readback
-    /// needs its row length to be a multiple of 256 bytes and 112 texels at
-    /// eight bytes is 896. Same tenth-scale, same conclusion, and the cell is
-    /// smaller still.
-    ///
-    /// **Red carries the factor and alpha must not.** This file's fixture writes
-    /// `color = vec4(1.0, …, 1.0)` into a `SrcAlpha, One` colour blend and a
-    /// `One, OneMinusSrcAlpha` alpha blend, so red comes out as the compensated
-    /// colour and alpha comes out as the coverage the sprite claimed. 0.4 across
-    /// is 0.16 of a texel's area, and the coverage stays 1.0 — the compensation
-    /// is paid in the light and not in the channel the mix's `over` hides
-    /// behind. That is the whole of ADR-0245 in two numbers off one texel.
-    ///
-    /// **Both halves are the claim.** Sixteen texels at full brightness on the
-    /// canvas says the mechanism is inert at or above a pixel; one dimmed texel
-    /// in the cell says it is not inert below one.
+    /// Verifies that sub-pixel point sprites clamp to one texel and dim by area coverage (s²).
     #[test]
     fn a_sprite_below_a_texel_is_drawn_at_one_texel_and_dimmed_to_compensate() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -569,17 +442,7 @@ proc sprite {{
         );
     }
 
-    /// **A stroke thinner than a texel is compensated by its width and not by
-    /// the square of it** — the one place the two topologies part company under
-    /// the floor. A segment is short of coverage across its width and along none
-    /// of its length, so squaring the factor would dim a thin stroke twice.
-    ///
-    /// The same rate and the same target as its sprite counterpart above, so the
-    /// two numbers can be read against each other: 0.4 here, 0.16 there.
-    ///
-    /// The row count is asserted alongside the value, because a factor of 0.4
-    /// applied to a stroke two rows tall would put the same light on screen and
-    /// mean something else entirely.
+    /// Verifies that sub-pixel line strokes clamp to one texel and dim linearly by width rather than area.
     #[test]
     fn a_stroke_thinner_than_a_texel_is_compensated_by_its_width_rather_than_its_square() {
         let gpu = Gpu::headless().expect("no GPU available");

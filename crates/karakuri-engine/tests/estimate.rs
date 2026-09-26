@@ -1,26 +1,7 @@
-//! The two small draws, end to end on a device: that they are taken at
-//! [`rungs`]'s two sizes, that they leave the Set as it was found, and that a
-//! Set whose floor is not knowable is drawn under the loosened reading with the
-//! share it can hide on the record (ADR-0293). `mod corpus` at the end is the
-//! same question asked of `examples/` and needs no device.
+//! Integration tests for GPU cost estimation across dual-rung probe measurements.
 //!
-//! **What is asserted here and what is not.** The arithmetic of the fit is
-//! unit-tested in `src/estimate.rs` against synthetic rungs built from a known
-//! `a` and `b`, and needs no adapter. What needs one is everything a caller
-//! would discover the hard way: a probe left pointing at the wrong size, a Set
-//! left at a rung's size so its first on-air frame draws the wrong aspect
-//! ratio, a Set left stepped so the slot arrives warm when the design says it
-//! arrives cold. Each of those is silent, and each is one line in
-//! `estimate_above_floor`.
-//!
-//! **No timing is asserted.** `docs/contributing.md` §1 is why: this machine's
-//! GPU timestamps demote to a host clock, the figure is biased high by
-//! submission and synchronization, and a threshold on it would be a test that
-//! passes for the wrong reason on a faster machine. What *is* asserted about
-//! the numbers is their structure — that the terms sum to the answer, and that
-//! either a fit or a named refusal comes back. The measurements the rule was
-//! chosen against are in `examples/small_draw.rs` and quoted in the module doc
-//! with the instrument that took them.
+//! Asserts that measurements restore initial Set state, handle bounded and unbounded
+//! primitive rates, and correctly apply floored sub-pixel corrections.
 
 mod common;
 
@@ -284,11 +265,8 @@ proc scaled_dots {
         assert_eq!(e.topologies, vec![Topology::Points]);
         assert_eq!(e.floor, Some(floor()));
 
-        // The fit may legitimately fail on this machine — a quarter of a
-        // million primitives is not what this Set is, but thermal drift and a
-        // host clock's noise can still put the slope below zero, and that is a
-        // refusal by design rather than a fault. What must hold either way is
-        // that the answer is the two terms and nothing else.
+        // Thermal drift and host clock noise can put the slope below zero,
+        // which triggers refusal by design. The terms must sum to the total ms.
         match e.fit {
             Ok(f) => {
                 eprintln!(
@@ -319,13 +297,7 @@ proc scaled_dots {
         }
     }
 
-    /// **The Set is left exactly as it was found**, which is the whole of what
-    /// makes this safe to call on a slot that is about to go on air: the
-    /// caller's viewport back (the camera derives its aspect ratio from it, so
-    /// a Set left at a rung's size draws a different picture on its first
-    /// frame), and `t` back to zero (the design says a primed Set arrives cold,
-    /// and `Set::rewind` is what puts it there). **Two draws rather than one
-    /// doubles the number of places that can leak.**
+    /// Verifies that probe estimation restores the original viewport and time of the target Set.
     #[test]
     fn the_set_is_left_at_its_own_size_and_cold() {
         let gpu = gpu();
@@ -342,12 +314,7 @@ proc scaled_dots {
         assert_eq!(set.time(), 0.0, "the Set was left stepped");
     }
 
-    /// **One probe, resized rather than replaced.** `Probe::run` demotes itself
-    /// to a host clock for life on the first implausible sample, so a second
-    /// probe can answer on a different scale and the two rungs would then be
-    /// two numbers the fit subtracts. `estimate` therefore moves the one it is
-    /// given and leaves it at the **upper** rung, which is the larger of the
-    /// two and the cheaper end to alternate from.
+    /// Verifies that probe resolution is reused and retained at the upper measurement rung.
     #[test]
     fn the_probe_is_moved_to_the_upper_rung_and_left_there() {
         let gpu = gpu();
@@ -373,14 +340,7 @@ proc scaled_dots {
         assert_eq!(second.method(), first.method());
     }
 
-    /// **A per-element Set states its own floor now, and `estimate` draws.**
-    /// `point_rate` is still a vertex-stage expression nothing on this side
-    /// evaluates; what changed is that `karakuri_ir::rate` *bounds* it, and
-    /// `plain_dots` writes a literal, so the bound is the literal and the floor
-    /// is the 250 rows it implies.
-    ///
-    /// This is the case that answered `Unfit::FloorUnknown` before ADR-0285 —
-    /// with the same Set, the same probe and the same call.
+    /// Verifies that bounded per-element procedures state an analysed floor and draw both rungs.
     #[test]
     fn a_per_element_set_states_its_own_floor_and_is_drawn() {
         let gpu = gpu();
@@ -416,18 +376,7 @@ proc scaled_dots {
         assert_eq!(set.time(), 0.0);
     }
 
-    /// **A rate nothing can bound is drawn now, and says so.** `size` is an
-    /// attribute — whatever the simulation left in it — so there is no
-    /// declaration to read and no height at which every primitive is a pixel
-    /// across. `hard_dots` ships this exact expression, and this answered
-    /// `Unfit::FloorUnknown` without drawing until ADR-0293.
-    ///
-    /// **A floor that is not known is the greatest floor there is**, which is
-    /// a rung placement rather than a refusal: the share ADR-0245's flooring
-    /// can hide does not depend on the rates at all, so an unbounded one is
-    /// covered by the same arithmetic as a bounded one. What the estimate owes
-    /// in exchange is to say it — `floor` is [`None`], `floored` carries the
-    /// share and the correction, and the working is still on `floor_from`.
+    /// Verifies that unbounded primitive rates are drawn under loosened floor rules with floored share correction.
     #[test]
     fn a_rate_nothing_can_bound_is_drawn_under_the_loosened_floor() {
         let gpu = gpu();
@@ -479,17 +428,7 @@ proc scaled_dots {
         assert_eq!(set.time(), 0.0);
     }
 
-    /// **A held value outside its declaration falsifies the bound taken over
-    /// it, so the floor becomes unknown — and an unknown floor is placed
-    /// under, not refused.**
-    ///
-    /// `Set::rate_bounds` is over the *declared* range, and **nothing in this
-    /// engine clamps a write to one** — a `--param` below the minimum is
-    /// accepted and reaches the uniform. A floor computed from a declaration
-    /// the run is not honouring would be wrong in the one direction ADR-0245
-    /// forbids, so it is still not used. What changed with ADR-0293 is what
-    /// happens next: the estimate places the accurate pair and pays the
-    /// correction, rather than handing back no number at all.
+    /// Verifies that parameter writes below declared range mark the floor unknown and trigger floored share handling.
     #[test]
     fn a_param_written_below_its_declaration_makes_the_floor_unknown() {
         let gpu = gpu();
@@ -533,11 +472,7 @@ proc scaled_dots {
         }
     }
 
-    /// **A fullscreen Set has no primitive, so `estimate` answers it.** The
-    /// topology is not the fit's discriminator — the module doc says why — but
-    /// it is what decides whether there is a sub-pixel floor at all, and a
-    /// procedure with no `vertex` block emits no `point_rate` to fall under
-    /// one.
+    /// Verifies that fullscreen Sets have no sub-pixel floor and execute both measurement rungs.
     #[test]
     fn a_fullscreen_set_has_no_floor_so_both_rungs_are_drawn() {
         let gpu = gpu();
@@ -560,25 +495,7 @@ proc scaled_dots {
     }
 }
 
-/// **What the floor does to the material this instrument ships**, which is the
-/// only place the loosening's worth can be settled.
-///
-/// `crates/karakuri-ir/tests/rate.rs` asks what each renderer's rate *bounds*
-/// to. This asks the question above it: with that bound in hand, does
-/// [`rungs`] place a pair at the reference target, and how much can the
-/// flooring hide from the fit that follows. The answers are written out one
-/// procedure at a time rather than counted, because a count that moved would
-/// say nothing about which way.
-///
-/// **Both readings, side by side.** ADR-0282 settled which state a number
-/// about a Set is taken over — a declared value is the value in the untouched
-/// state, and where somebody moved one the held value *is* the value — and
-/// `Set::rate_bounds` does not follow it yet: it is computed once at build
-/// over the whole declared range. So each row carries both, and the gap
-/// between the two columns is exactly what following ADR-0282 here would buy.
-/// ADR-0293 says what it would take.
-///
-/// No device: this is [`rungs`] and [`floored_share`], which are arithmetic.
+/// Corpus evaluation of floor placements and floored share corrections across examples library.
 mod corpus {
     use std::collections::{BTreeMap, HashMap};
     use std::path::{Path, PathBuf};
@@ -663,11 +580,7 @@ mod corpus {
         found
     }
 
-    /// **The state as it stands, for a Set nobody has touched.** Every param at
-    /// its declared default, which is what `Set::params` is holding the moment
-    /// `Set::build` returns — ADR-0282's *a declared value is the value in the
-    /// untouched state*. A vector param has no scalar default and is left to
-    /// its declared range, which `point_rate_bound_at` documents.
+    /// Collects declared scalar parameter defaults for an untouched procedure state.
     fn as_it_stands(proc: &Checked) -> HashMap<String, f32> {
         proc.params
             .iter()
@@ -675,11 +588,7 @@ mod corpus {
             .collect()
     }
 
-    /// **Every shipped renderer, both readings, written out.**
-    ///
-    /// Under ADR-0285 the last two columns would have read `Refused` for
-    /// twelve of these fifteen — eight `NoRoomBelowTheTarget` and four
-    /// `FloorUnknown` — and `Clear` for the three that draw no primitive.
+    /// Verifies floor placements for all shipped renderers under declared and held parameter readings.
     #[test]
     fn every_shipped_renderer_is_placed_under_both_readings() {
         // (procedure, floor over the declared range, floor over the state as
@@ -755,25 +664,7 @@ mod corpus {
         }
     }
 
-    /// **The coverage figure, stated as a figure**, because *how much does it
-    /// answer for* is the question ADR-0293 was written to move and a reader
-    /// should not have to count the table above.
-    ///
-    /// - **Before, under ADR-0285:** 3 answered and 12 refused, whichever way
-    ///   the bound was read. Every per-element procedure in `examples/` was
-    ///   `NoRoomBelowTheTarget` or `FloorUnknown`.
-    /// - **After, over the declared range:** 15 answered — 3 clear, 12 floored
-    ///   at 0.2492 and corrected by 1.3319.
-    /// - **After, over the state as it stands:** 15 answered — 7 clear, 8
-    ///   floored, of which `soft_points` and `second_eye` hide only 0.1618 and
-    ///   are corrected by 1.1930, their 514-row floor sitting between the two
-    ///   rungs where the worst case cannot be reached.
-    ///
-    /// So the narrower reading is worth **four procedures' worth of
-    /// exactness** and a third of the probe's fragment work on each of them.
-    /// It is no longer worth an *answer*, which is the difference ADR-0293
-    /// makes to ADR-0285's *three of the eight would place rungs at 720 rows
-    /// instead of none*.
+    /// Verifies that all shipped renderers produce valid placements under loosened floor rules.
     #[test]
     fn the_loosened_floor_answers_for_all_fifteen_either_way() {
         let renderers = renderers();
@@ -808,11 +699,7 @@ mod corpus {
         );
     }
 
-    /// **What the correction costs the two procedures a narrower bound helps
-    /// most**, spelled out rather than left in the tally above. A floor
-    /// between the rungs cannot reach the peak of `u(x)/x²`, so
-    /// [`floored_share`] answers less than the worst case — which is what
-    /// makes the bound tight rather than merely sound.
+    /// Verifies that floors between rungs receive smaller corrections than the worst-case bound.
     #[test]
     fn a_floor_between_the_rungs_is_corrected_by_less_than_the_worst_case() {
         let worst = match placed(u32::MAX) {
