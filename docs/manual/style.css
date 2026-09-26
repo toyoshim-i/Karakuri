@@ -458,6 +458,9 @@
   .cand { display: flex; align-items: center; gap: 6px; padding: 4px 7px; border-radius: 8px; background: var(--c-well); color: var(--c-dim); }
   .cand .who { color: var(--c-faint); font-size: 10px; }
 
+  /* prompt */
+  .prompt-body { padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; color: var(--c-faint); display: flex; flex-direction: column; gap: 5px; }
+
   /* program */
   .program-body { padding: 9px; display: flex; flex-direction: column; gap: 8px; }
   .program-view {

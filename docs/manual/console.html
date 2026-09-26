@@ -159,6 +159,21 @@
                 <div class="cand" style="justify-content:center;color:var(--c-faint)">a rejected candidate costs nothing</div>
               </div>
             </div>
+
+            <div class="bay">
+              <div class="bay-head">
+                <span>Prompt</span>
+                <span style="display:flex;gap:5px;align-items:center">
+                  <span class="pill" data-tip="Select active agent CLI session or custom command. Unavailable CLIs are struck through. Click to toggle selection menu. &#8853; MIDI: unassigned.">prompt &#9662;</span>
+                  <span class="grip">&#8942;&#8942;</span>
+                </span>
+              </div>
+              <div class="prompt-body">
+                <div>karakuri agent terminal (m9)</div>
+                <div>select an agent cli to start</div>
+                <div style="color:var(--c-text)">&gt; _</div>
+              </div>
+            </div>
           </div>
 
           <!-- CENTRE: program over inspector -->
@@ -3580,6 +3595,42 @@
           an operator picked. There is no third operation, and the cursor moving
           through these rows asks for nothing, exactly as it asks for nothing in
           a library.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Prompt, and the agent terminal</h3>
+        <p>
+          An interactive agent terminal directly under Staging in the left pane.
+          Generating shaders, tweaking procedures, or inspecting session states
+          with autonomous models happens right beside the live performance
+          surface, talking to Karakuri through local MCP.
+        </p>
+        <p>
+          <strong>Eighteen presets and a custom shell, in alphabetical order.</strong>
+          The selector pill in the bay head opens a modal menu of known agent
+          and LLM CLIs: <code>agy</code>, <code>aider</code>, <code>claude</code>,
+          <code>cline</code>, <code>codex</code>, <code>copilot</code>,
+          <code>deepseek</code>, <code>grok</code>, <code>hermes</code>,
+          <code>kimi</code>, <code>mimo</code>, <code>minimax</code>,
+          <code>mistral</code>, <code>muse</code>, <code>ollama</code>,
+          <code>opencode</code>, <code>pi</code>, <code>qwen</code>, and
+          <code>custom...</code> pinned at the foot. A binary not found on the
+          system <code>PATH</code> is drawn struck through and disabled; a
+          running session carries a pink indicator dot.
+        </p>
+        <p>
+          <strong>Switching sessions terminates nothing.</strong> Each running CLI
+          lives in a detached background PTY process with its own scrollback
+          buffer, so an operator can switch between agents without killing
+          in-flight tasks.
+        </p>
+        <p>
+          <strong>Japanese and multilingual input anchors at the cursor.</strong>
+          A borderless input editor attaches dynamically to the terminal's
+          cursor coordinates, allowing native OS IME composition, candidate
+          menus, and rich multiline drafting before forwarding commands to PTY
+          standard input.
         </p>
       </div>
 
