@@ -120,10 +120,10 @@ impl CliSelection {
     /// Label to display on the header selector pill.
     pub fn pill_label(&self) -> String {
         match self {
-            Self::Unselected => "prompt ▾".to_owned(),
-            Self::Preset(preset) => format!("{} ▾", preset.display_name()),
-            Self::Custom(cmd) if cmd.trim().is_empty() => "custom... ▾".to_owned(),
-            Self::Custom(cmd) => format!("{} ▾", cmd.trim()),
+            Self::Unselected => "prompt".to_owned(),
+            Self::Preset(preset) => preset.display_name().to_owned(),
+            Self::Custom(cmd) if cmd.trim().is_empty() => "custom...".to_owned(),
+            Self::Custom(cmd) => cmd.trim().to_owned(),
         }
     }
 }

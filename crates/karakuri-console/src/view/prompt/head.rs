@@ -7,6 +7,7 @@ use super::cli::{CliPreset, CliSelection};
 use super::state::PromptState;
 use crate::room::size;
 use crate::view::widgets::fold_grip::GRIP_W;
+use crate::view::widgets::glyph::CHEVRON_W;
 use crate::view::widgets::head::head_box;
 use crate::view::widgets::pills::pill_width;
 
@@ -58,7 +59,8 @@ pub enum PromptAsk {
 pub fn prompt_pill(ctx: &egui::Context, bay_rect: Rect, selection: &CliSelection) -> Rect {
     let head = head_box(bay_rect);
     let label = selection.pill_label();
-    let w = pill_width(ctx, &label);
+    let text_w = pill_width(ctx, &label);
+    let w = text_w + size::SINK_GAP + CHEVRON_W;
     let right = head.max.x - size::HEAD_PAD_X - (GRIP_W + size::PILL_GAP);
     let mid = head.center().y;
     Rect::from_min_size(

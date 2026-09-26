@@ -15,15 +15,26 @@ use crate::room::{size, Palette};
 use crate::view::to_egui;
 use crate::view::widgets::card::popup_card;
 use crate::view::widgets::fader::tint;
+use crate::view::widgets::glyph::{chevron_down, CHEVRON_H, CHEVRON_W};
 use crate::view::widgets::head::head_box;
 use crate::view::widgets::pills::pill_into;
 
-/// Paints the Prompt bay header selector pill.
+/// Paints the Prompt bay header selector pill with vector chevron mark.
 pub fn prompt_head_into(ui: &Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) {
     let pill = prompt_pill(ui.ctx(), bay_rect, &state.selection);
     let label = state.selection.pill_label();
     let armed = state.menu_open || !state.selection.is_unselected();
     pill_into(ui, pal, pill, &label, armed);
+
+    let chevron_rect = Rect::from_center_size(
+        Pos2::new(
+            pill.max.x - size::PILL_PAD_X - CHEVRON_W * 0.5,
+            pill.center().y,
+        ),
+        egui::vec2(CHEVRON_W, CHEVRON_H),
+    );
+    let chevron_color = if armed { pal.mint } else { pal.dim };
+    chevron_down(ui.painter(), chevron_rect, chevron_color);
 }
 
 /// Paints the floating CLI preset dropdown menu (Rule 2 modal overlay).
