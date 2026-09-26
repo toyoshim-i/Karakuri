@@ -1,47 +1,7 @@
-//! The Inspector's parameter fader: the first control this console has inside a
-//! pane's body, and the first whose target is one of however many rows a Set
-//! happened to publish.
+//! Layout, hit-testing, and value-mapping for parameter fader controls (ADR-0286).
 //!
-//! Nine things, and the first three are why this is its own file rather than a
-//! few more assertions in `deck_head.rs`:
-//!
-//! 1. Where a row is — `.node-group`'s head, the renderer row where there
-//!    is one, and `.param`'s own height from there — measured off the group
-//!    rectangle `InspectorPane::group` answers rather than off the
-//!    derivation that draws it.
-//! 2. Where the fader is across that row: `.param`'s `grid-template-
-//!    columns: 15px 88px 1fr 58px`, and the fader is the `1fr`.
-//! 3. That the knob a hand takes hold of is the knob a frame painted, which
-//!    is the whole reason the row's arithmetic was lifted out of
-//!    `node_into`: two copies of where a knob is is a knob drawn where
-//!    nothing can grab it.
-//! 4. That the knob is the target and the track is not — `Mixer::grab`'s
-//!    rule, met one bay along on a row the mock gives no tooltip to.
-//! 5. That every row is its own control, and that a press names the row it
-//!    landed on rather than the first one drawn.
-//! 6. That a wildcard row writes the wildcard, and not the node whose group
-//!    it was drawn in —
-//!    [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
-//! 7. That the position and the value are one map read both ways, over a
-//!    published range that is not `[0, 1]`.
-//! 8. That a range of no width is drawn and not taken hold of, which is
-//!    `Grab::new`'s refusal read on the value axis.
-//! 9. That a group the pane had no room for is not reachable by a press
-//!    either, and that each pane names its own deck.
-//!
-//! None of it needs a window, a device or a disk. It needs `egui`'s fonts only
-//! where a whole frame is painted — `common::drawn_once` — because the pane
-//! asks the shaper for nothing: every box in it is the width of the pane or a
-//! track of the mock's own grid.
-//!
-//! # Where this stops
-//!
-//! Everything here ends at the grip: which deck, which control, and the track
-//! it took hold of. Turning that into a `Grab` is `crate::panel::Knob`'s, and
-//! turning the `Grab` into `Operation::WriteParam` and applying it to a deck is
-//! `crates/karakuri/src/main.rs`'s — see `ParamGrip`, which carries the one
-//! line that closes it. What is asserted here is the half that has to be right
-//! before any of that means anything.
+//! Validates knob placement, track geometry, grab targets, row-specific event dispatch,
+//! and wildcard row parameter attribution.
 
 mod common;
 
@@ -285,11 +245,7 @@ fn the_fader_is_the_track_left_between_the_name_and_the_figure() {
     assert!(near(grip.fader.travel, track.width()));
 }
 
-/// The knob a hand takes hold of is the knob a frame painted.
-///
-/// The row's arithmetic used to be a running sum inside the derivation that
-/// paints it, so a press had nothing to ask. This paints a whole frame and
-/// looks for the grabbed rectangle among what landed in the row.
+/// Verifies the grabbed knob rectangle matches the rendered knob painted in the frame.
 #[test]
 fn the_knob_that_is_grabbed_is_the_knob_that_is_painted() {
     let pane = mock();
@@ -317,11 +273,7 @@ fn the_knob_that_is_grabbed_is_the_knob_that_is_painted() {
 // The knob, and not the track
 // ---------------------------------------------------------------------------
 
-/// A press on the knob takes it; a press on the track does nothing.
-///
-/// `Mixer::grab`'s rule, met one bay along: a parameter at 0.6 whose track was
-/// clicked would jump to the far end of its published range, on stage, because
-/// a hand landed three pixels off a handle.
+/// Presses target the knob specifically; clicking the track does not move the fader.
 #[test]
 fn the_knob_is_grabbed_and_the_track_is_not() {
     let pane = mock();
@@ -577,12 +529,7 @@ fn a_row_the_body_does_not_reach_is_not_reachable() {
     );
 }
 
-/// A pane too narrow for a fader claims no press at all.
-///
-/// `.param`'s four tracks are three stated widths and a `1fr`, and a pane
-/// narrow enough that the three meet has no track left — which is ADR-0279's
-/// own measurement (*"the fader is the `1fr` track and is drawn only where what
-/// is left over is positive"*) asked as a control.
+/// A pane narrower than the fixed columns has no remaining space for the fader track (ADR-0279).
 #[test]
 fn a_pane_with_no_room_for_a_track_claims_nothing() {
     let pane = mock();

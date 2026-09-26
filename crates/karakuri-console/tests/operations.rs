@@ -5,16 +5,8 @@ mod common;
 
 use common::{assert_sane, assert_within_bounds, id_of, near, rect_of, rects, solved, PLAUSIBLE};
 
-/// *"Fold the left pane away"* — the operation `karakuri-layout` names — and
-/// the region that grows is the centre, because the centre is the only flexible
-/// track in `.body-grid` (`minmax(340px, 1fr)`) and the mock's two side tracks
-/// are fixed pixel widths.
-///
-/// The centre takes the pane's width and not the divider beside it, which is
-/// what ADR-0300 changed and what it buys: a pane keeps its edge when it folds,
-/// so the gap stays where the pane was, at the window's own edge, and a hand
-/// can take hold of it and pull the pane back in. A fold that took the divider
-/// too would leave nothing there at all, and `z` would be the only way back.
+/// Folding the left pane gives its width to the centre track while keeping
+/// the divider at the window edge so it can be dragged back (ADR-0300).
 #[test]
 fn folding_the_left_pane_gives_its_width_to_the_centre() {
     let mut layout = solved(PLAUSIBLE);
@@ -60,14 +52,7 @@ fn folding_the_right_pane_gives_its_width_to_the_centre() {
     assert!(near(rect_of(&layout, "left-pane").w, left.w));
 }
 
-/// *"Solo the program view: the panel folds away and only the picture is left,
-/// which is also how you capture this window."*
-///
-/// So the program's rectangle is the window's, exactly. ADR-0157 says what
-/// would spoil it: a maximum is honoured and the leftover is trailing space, so
-/// a maximum anywhere on the path — on `program`, on `centre`, or on the body
-/// row — would leave a margin the operator cannot get rid of, in a window they
-/// are about to record.
+/// Soloing the program view expands it to fill the entire window without margins (ADR-0157).
 #[test]
 fn solo_on_the_program_leaves_the_program_holding_the_window() {
     let mut layout = solved(PLAUSIBLE);
@@ -125,11 +110,8 @@ fn the_program_height_drags_from_small_to_large() {
     assert!(rect_of(&layout, "program").h > 800.0);
 }
 
-/// A drag out and a drag back reproduce the arrangement — every rectangle of
-/// it, not just the pair that moved. Two dividers, because the two sides of
-/// each pair store their size differently: `left-pane` is fixed beside a
-/// flexible centre, and `program` is fixed beside a flexible inspector, so a
-/// drag writes a size on one side and a weight on the other.
+/// Moving dividers out and back restores exact layout dimensions across both
+/// fixed and flexible tracks.
 #[test]
 fn dragging_a_divider_and_dragging_it_back_reproduces_the_arrangement() {
     let mut layout = solved(PLAUSIBLE);

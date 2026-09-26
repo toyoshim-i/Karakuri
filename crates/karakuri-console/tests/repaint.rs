@@ -1,18 +1,6 @@
-//! Whether a frame is owed, asserted without a window.
+//! Frame repaint eligibility assertions without requiring a window or event loop (ADR-0164).
 //!
-//!
-//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
-//! still-panel clause has two halves and the second one is the dangerous half.
-//! *A still panel costs nothing* is easy to get right and easy to see when it
-//! is wrong — a window that spins shows up on any clock. *And everything else
-//! still costs what it costs* is the half that fails silently: one path that
-//! changes the model and reaches no repaint leaves a control on screen showing
-//! a value that is not true any more, with nothing anywhere saying so.
-//!
-//! Neither half can be asserted in the window loop, because a `winit` handler
-//! is not something a test can call and a stale pixel is not an error. So the
-//! decision came out into [`karakuri_console::repaint`], and this is what asks
-//! it: the still case, and every case that is not still, one at a time.
+//! Validates `Repaint::Never` for idle panels and guarantees repaints for model mutations.
 
 mod common;
 
@@ -45,12 +33,7 @@ fn on_a_boundary(panel: &mut Panel) -> Point {
     Point::new(gap.x + gap.w * 0.5, gap.y + gap.h * 0.5)
 }
 
-/// Do an operation and hand back what it did.
-///
-/// It used to take a point, because an operation meant *whatever is under the
-/// pointer* and the pointer was how a test aimed one. An operation names its
-/// target now (`panel::Op`), so the aiming is `node` and this is what is left
-/// of the helper.
+/// Executes a named operation on the panel and returns its outcome.
 fn did(panel: &mut Panel, op: Op) -> Outcome {
     panel.op(op)
 }
@@ -65,34 +48,13 @@ fn node(panel: &mut Panel, name: &str) -> karakuri_layout::NodeId {
 // The still half
 // ---------------------------------------------------------------------------
 
-/// A still panel asks for no repaint, and neither does anything that reaches
-/// the model and moves nothing.
-///
-/// The first clause is not *draw less often*; it is *do no per-frame work at
-/// all when nothing has changed*, so the assertion is [`Repaint::Never`] and
-/// not a smaller number. Every case here is one an operator produces without
-/// meaning to — a key pressed over an empty part of the panel, `z` with nothing
-/// folded, a wheel while a boundary is in hand, a pointer `egui` is already
-/// answering for — and each one is a frame that used to be drawn.
-///
-/// `egui`'s side of it is here too: `Duration::MAX` is what its context is left
-/// holding by a pass that asked for nothing, which is every pass on a panel
-/// with nothing on it.
+/// An idle panel or a no-op operation emits `Repaint::Never` and leaves egui duration at max.
 #[test]
 fn a_still_panel_asks_for_no_repaint() {
     let mut panel = panel();
     let root = panel.layout().root();
 
-    // **An operation with nothing to act on.** Two of the cases that used to
-    // be here — a fold with nothing under the pointer, and a fold with the
-    // pointer on a divider — could only be written while an operation *was*
-    // the pointer: the model resolved the cursor itself and answered
-    // `Outcome::Nothing` or `Outcome::OnDivider` when the resolution failed.
-    // The resolution is the caller's now (`Panel::under`), so those two keys
-    // emit no operation at all and reach no `Change` to ask about — stiller
-    // than they were, and asserted where they now happen, in
-    // `crates/karakuri/src/main.rs`. What is left is the case that is about the
-    // arrangement and not about a hand: the root has no split enclosing it.
+    // Verifies no repaint occurs when attempting operations on nodes without an enclosing split.
     assert_eq!(
         Change::Operated(&did(&mut panel, Op::FoldEnclosing(root))).repaint(),
         Repaint::Never,
@@ -117,13 +79,7 @@ fn a_still_panel_asks_for_no_repaint() {
         "a report printed and moved nothing"
     );
 
-    // **The Program bay, asked whether it rearranged itself and answering
-    // no.** This is the arm the clause is most exposed to, because it is the
-    // only one a caller raises on *every* frame rather than on a gesture: the
-    // bit is re-derived from the geometry each time, so an arm that answered
-    // `Now` regardless would be a window that never sleeps. It is asked of
-    // `rearrange` rather than written by hand, so it is the console's answer
-    // and not this file's.
+    // The Program bay returns no repaint when rearrangement check yields no geometry change.
     let mut still = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     rearrange(&mut still, CANVAS);
     assert!(
@@ -179,16 +135,7 @@ fn a_still_panel_asks_for_no_repaint() {
 // The half that fails silently
 // ---------------------------------------------------------------------------
 
-/// Every path that changes what is on screen reaches a repaint.
-///
-/// This is the list from the other direction, and it is the substance of the
-/// clause rather than a footnote: a panel that under-repaints is far worse than
-/// one that over-repaints, because a stale control looks exactly like a live
-/// one.
-///
-/// Each case is driven through the model and the decision is asked of what the
-/// model returned, so a case that stops changing anything stops being asserted
-/// here for the right reason.
+/// Every operation modifying layout, room, or viewport state triggers a repaint request.
 #[test]
 fn everything_that_changes_the_console_asks_for_a_frame() {
     let mut panel = panel();
@@ -285,14 +232,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
         "the release that let the boundary go"
     );
 
-    // The room, which no `Outcome` reports because it is the view's and not
-    // the model's: every colour changes and nothing in the arrangement moves.
-    // **The Program bay rearranging itself**, driven through the console the
-    // way every case in this test is driven through the model: a window past
-    // the crossover, and the answer is what `rearrange` returned rather than
-    // what this file asked for. Every rectangle in the bay is a new one — the
-    // picture's and all four cells' — so a frame is owed exactly as it is for
-    // a resize, and the row's node went out of the layout besides.
+    // Program bay rearrangement changes cell rectangles and triggers a repaint.
     let mut wide = Panel::new(1588.0, PLAUSIBLE.h);
     assert!(
         rearrange(&mut wide, CANVAS),
@@ -328,19 +268,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     assert_eq!(Repaint::asked(Duration::ZERO), Repaint::Now);
 }
 
-/// A boundary that moved less than a pixel still asks for a frame, and this is
-/// the trap the decision is written to avoid rather than a curiosity.
-///
-/// `Panel::moved` returns `None` for a move too small to be *worth saying* —
-/// `WORTH_SAYING`, half a pixel, a threshold about how much a readout should
-/// print at sixty asks a second. Reading that `None` as *nothing changed* is
-/// the shortest route to a silent under-repaint: half a logical pixel is a
-/// whole physical one on a 2x display, so the boundary is drawn where it no
-/// longer is, in the middle of the one gesture an operator is watching closely.
-///
-/// So the assertion is a pair. The model reports nothing, and the frame is owed
-/// anyway, because the decision is taken from who claimed the event and never
-/// from what the drag returned.
+/// Sub-pixel boundary drags still trigger repaints even if below the readout reporting threshold.
 #[test]
 fn a_drag_too_small_to_report_still_asks_for_a_frame() {
     let mut panel = panel();
@@ -384,21 +312,7 @@ fn a_drag_too_small_to_report_still_asks_for_a_frame() {
 // egui's own requests
 // ---------------------------------------------------------------------------
 
-/// `egui`'s repaint request is honoured with the delay it named, rather than
-/// collapsed into "draw now".
-///
-/// `egui` animates, blinks a text cursor and fades a tooltip in, and it says so
-/// by asking to be repainted *after* a duration. Answering a 250 ms request
-/// with an immediate frame does not make the animation smoother — the loop then
-/// draws, `egui` asks again for what is left of the delay, and the animation
-/// becomes a spin at whatever rate the machine can manage. That is the exact
-/// cost this whole change exists to stop paying, reached from the one direction
-/// that looks like obeying the rule.
-///
-/// [`Repaint::soonest`] is asserted for the same reason: it may only bring a
-/// frame forward, so combining the panel's answer with `egui`'s can lose
-/// neither — but it must not turn a deadline into an immediate frame on its
-/// own.
+/// Preserves `egui` delayed repaint durations without prematurely collapsing them into immediate frames.
 #[test]
 fn eguis_repaint_delay_is_honoured_rather_than_collapsed_to_now() {
     let quarter = Duration::from_millis(250);

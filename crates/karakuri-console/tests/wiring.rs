@@ -1,32 +1,7 @@
-//! A node's declared input, and the mark that publishes a parameter row — the
-//! two controls ADR-0329 gave the Inspector, and the two rows that were the
-//! last entries of *Rows the manual has not given a home*.
+//! Node input wiring (`uses` line) and parameter publish mark controls (ADR-0329).
 //!
-//! Eight things:
-//!
-//! 1. Where a `uses` line sits — under the node head and above that node's
-//!    rows, which is the offset every row below it has to carry.
-//! 2. That the capsule is claimed and the card is not down until it is
-//!    pressed.
-//! 3. That a pick names the deck, the node, the procedure's own word for
-//!    the input, and the node that was picked.
-//! 4. That a line with nothing to offer opens no card, which is the inert
-//!    scrub's arrangement two rows up: a deck holding one node of the kind
-//!    an input takes has no candidate, because the node already wired is
-//!    not in its own list.
-//! 5. That the publish mark is the row's leftmost cell in both of its
-//!    states.
-//! 6. That a press on a published row asks for the interface less that
-//!    control, in interface order — the order being the point, since a
-//!    wildcard row is drawn in one group and numbered somewhere else
-//!    entirely.
-//! 7. That a press on an unpublished row asks for the interface with it on
-//!    the end.
-//! 8. That an unpublished row draws no fader, which is what publishing
-//!    decides: the row is a mark and a name.
-//!
-//! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
-//! because a `uses` capsule is as wide as the node name in it.
+//! Validates `uses` line positioning, dropdown card interactions, candidate filtering,
+//! publish toggle states, and preservation of interface order across operations.
 
 mod common;
 
@@ -73,17 +48,7 @@ fn control(name: &str, at: Option<(Layer, u32)>) -> Control {
     }
 }
 
-/// A deck with an input to wire and an interface somebody has narrowed.
-///
-/// `swirl_warp` declares `uses far : Geometry` and is wired to `sphere_shell`,
-/// which is ADR-0152's own example. Two geometries and two candidates, so the
-/// card has exactly one row: the node already wired is not offered.
-///
-/// The numbers are deliberately not the order the rows are drawn in. The
-/// wildcard `exposure` is numbered 1 and drawn last, and `amount` is numbered 3
-/// and drawn first — because a press has to rebuild the list in *interface*
-/// order, and a pane whose two orders agreed could not tell the two walks
-/// apart.
+/// Configures a mock deck with declared input wiring and non-sequential interface parameter ordering (ADR-0152).
 fn mock() -> Pane {
     Pane {
         deck: 0,
@@ -198,12 +163,7 @@ fn a_uses_line_sits_between_the_head_and_the_rows() {
         line.row.max.y
     );
 
-    // **And the group is as tall as what is in it**, which is `group_h`'s half
-    // of the same fact and is asserted against the group's own rectangle rather
-    // than against the group after it: a height short by one line still leaves
-    // two groups clear of each other while the node head is taller than a line,
-    // so *the groups do not overlap* is a consequence that survives the defect
-    // and this is the property.
+    // Verifies the node group height precisely encloses its head, uses line, and rows.
     let group = laid.group(&pane.nodes, 0);
     let last = laid
         .publish_mark(&pane, 0, 1)
@@ -321,13 +281,7 @@ fn a_line_with_no_candidate_offers_no_card() {
 // The publish mark
 // ---------------------------------------------------------------------------
 
-/// A press on a published row's number asks for the interface without it, in
-/// interface order.
-///
-/// The order is the assertion. `exposure` is numbered 1 and drawn last and
-/// `amount` is numbered 3 and drawn first, so a list built by walking the pane
-/// would come out `amount, detail, exposure` — which renumbers every knob on
-/// the deck on a press that was about one row.
+/// Unpublishing a parameter removes it while strictly preserving interface numbering order.
 #[test]
 fn taking_a_control_off_names_the_rest_in_interface_order() {
     let pane = mock();

@@ -1,44 +1,7 @@
-//! The sensitivity row and the node head's three words: the Inspector's other
-//! two controls, and the ones that say who is holding a knob and let a hand
-//! take it back.
+//! Layout and hit-testing for sensitivity rows and authority chips in Inspector node groups.
 //!
-//! Eight things:
-//!
-//! 1. That a bound row grows a row under it, and that every row below moves
-//!    down by exactly a `.sens` — the arithmetic `group_h`, `param_rect`
-//!    and `sens_rect` all have to agree about, and the one a stride instead
-//!    of a walk gets wrong.
-//! 2. That the chips are laid out where `.sens`'s own two tracks put them,
-//!    each as wide as the word in it, and that the boxes a press is
-//!    resolved against are the boxes a frame painted.
-//! 3. That the curve chip restates the attachment: the same signal, the
-//!    same range, the same address, and the *next* of the four shapes — so
-//!    a press for a different curve cannot re-map the signal.
-//! 4. That `take back` names the attachment's own address, which is the
-//!    binding's `(layer, index, key)` and not the group the row was drawn
-//!    in.
-//! 5. That the source and the range are drawn and claimed by nothing — two
-//!    of the four chips are readouts, and a press on one asks for nothing
-//!    rather than falling through to the row behind it.
-//! 6. That a bound row's knob is not taken hold of, which is *Take a
-//!    parameter back*'s answer to the question ADR-0286 left open, and that
-//!    the row is still drawn.
-//! 7. That every one of the three authority chips is claimed and names the
-//!    level it lands on — a destination and never a step (P-0090) — the lit
-//!    one included.
-//! 8. That a head standing over more than one node claims nothing, which is
-//!    authority being per node rather than per group.
-//!
-//! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
-//! because a chip is as wide as the word in it — see `common::drawn_once`.
-//!
-//! # Where this stops
-//!
-//! Everything here ends at the operation. Turning one into a record is
-//! `karakuri-operation-record`'s and applying it to a deck is
-//! `crates/karakuri/src/main.rs`'s; that a press reaches this crate at all is a
-//! row in `input::PROBES` and is asserted where the two halves of that seam
-//! meet.
+//! Validates row expansions, chip positioning, curve cycling, take-back addressing,
+//! readout pass-through, knob disabling on bound rows, and authority chip levels (P-0090).
 
 mod common;
 
@@ -69,13 +32,7 @@ fn row(ord: usize, name: &str, index: u32, range: [f32; 2], value: f32) -> Param
     }
 }
 
-/// The attachment the mock draws: `energy` through `pow2` onto `[0.10, 2.40]`,
-/// addressed at one node of the L1.
-///
-/// Its range is deliberately not the row's published range below, because the
-/// two are two facts: a fader rides what the control was published over and a
-/// signal is mapped onto what the `bind` said. A test that gave them one value
-/// could not tell which of them the chip and the operation read.
+/// Configures a mock attachment (`energy` via `pow2`) with a range independent of fader range.
 fn attachment() -> Source {
     Source {
         signal: "energy".to_owned(),
@@ -89,12 +46,7 @@ fn attachment() -> Source {
     }
 }
 
-/// A second attachment, on the row below the sensitivity row — `beat` through
-/// `lin`, so nothing about it is the first one's.
-///
-/// It is what makes the *walk* testable: a sensitivity row under the third row
-/// is only in the right place if the two rows above it were counted at their
-/// own heights, where a stride of `PARAM_H` puts it a whole `.sens` too high.
+/// Second mock attachment on an adjacent row to verify layout walking across multiple sensitivity rows.
 fn second() -> Source {
     Source {
         signal: "beat".to_owned(),
@@ -182,11 +134,7 @@ fn pane_at(panel: &karakuri_console::panel::Panel, pane: &Pane) -> InspectorPane
     inspector(panel.layout(), 0, pane, 0.0).expect("a pane with room in it")
 }
 
-/// Where the `index`th row of the first group goes, worked out here from the
-/// stylesheet's own numbers — a walk over what is above it rather than a
-/// stride, which is the whole of what the sensitivity row changes about a
-/// group. Asking `view.rs` for the answer could not tell a right one from a
-/// moved one.
+/// Calculates expected group row position using a layout walk rather than a fixed stride.
 fn row_rect(at_pane: &InspectorPane, pane: &Pane, index: usize) -> egui::Rect {
     let group = at_pane.group(&pane.nodes, 0);
     let mut top = group.min.y + size::NODE_HEAD_H;
@@ -219,12 +167,7 @@ const TALL: Rect = Rect {
     h: PLAUSIBLE.h,
 };
 
-/// A bound row grows a row under it, and everything below moves.
-///
-/// The group is one `.sens` taller than the three rows alone, and the third row
-/// starts one `.sens` further down than a stride of `PARAM_H` would put it —
-/// which is the defect a stride makes and the one that would draw the last row
-/// over the chips.
+/// Binding a row adds a sensitivity row underneath, shifting subsequent rows downward by its height.
 #[test]
 fn a_bound_row_grows_a_sensitivity_row_and_moves_the_rows_under_it() {
     let (panel, _ctx) = console(TALL);
@@ -264,12 +207,7 @@ fn a_bound_row_grows_a_sensitivity_row_and_moves_the_rows_under_it() {
     );
 }
 
-/// The chips are laid out where `.sens` puts them, and a press finds them
-/// there.
-///
-/// One derivation, asked twice: the boxes `sens_chips` answers are inside the
-/// row `sens_rect` answers, they are in the mock's order, and each is as wide
-/// as the word in it plus a pill's padding.
+/// Chips are laid out inside the sensitivity row with expected order and pill padding.
 #[test]
 fn the_chips_sit_in_the_sensitivity_rows_own_tracks() {
     let (panel, ctx) = console(TALL);
@@ -347,11 +285,7 @@ fn the_curve_chip_attaches_the_same_signal_through_the_next_shape() {
     );
 }
 
-/// `take back` names the attachment's own address.
-///
-/// The row is drawn in `L1:0`'s group and the attachment is addressed there
-/// too, so the assertion that carries the weight is the *key*: it is the
-/// binding's, carried over, and not the row's published name.
+/// Take-back operations target the exact attachment address and binding key.
 #[test]
 fn take_back_removes_the_attachment_the_row_was_drawn_from() {
     let (panel, ctx) = console(TALL);
@@ -373,11 +307,7 @@ fn take_back_removes_the_attachment_the_row_was_drawn_from() {
         }
     );
 
-    // **And the sensitivity row under a row that already grew one**, which is
-    // where a stride instead of a walk puts the chips a whole `.sens` above
-    // the press. Its attachment is a **wildcard** — the layer's, every node of
-    // it declaring the key — which is the address a take-back has to carry
-    // over rather than narrow to the group the row was drawn in.
+    // Verifies wildcard attachment take-back operations preserve wildcard scope over multiple rows.
     let below = second();
     let row = sens_of(&at_pane, &pane, 2);
     let (_, chip) = sens_chips(&ctx, row, &below)

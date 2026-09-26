@@ -339,14 +339,7 @@ fn esc_takes_the_add_chooser_away_and_leaves_the_address_on_add_effect() {
 // A card that is not on the address's path
 // ---------------------------------------------------------------------------
 
-/// `esc` goes up one level of the focused bay's address
-/// ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
-/// so a card that is down but is not on that path is not the key's: the pointer
-/// put it there and the pointer takes it away. One test per card, because each
-/// is a different control on a different rung.
-///
-/// `Tab` is the key that takes a card away wherever it is, so each of these puts
-/// the card down after focus has moved — which is the pointer's own order.
+/// `esc` climbs the focused bay hierarchy and only dismisses cards along that path (ADR-0332).
 #[test]
 fn esc_in_another_bay_leaves_the_lane_chooser_alone() {
     let (panel, mut view) = console();

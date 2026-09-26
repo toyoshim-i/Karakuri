@@ -1,20 +1,6 @@
 use super::mixer_common::*;
 
-/// Every point inside a strip is the panel's, and the alley between two of them
-/// is `egui`'s.
-///
-/// The console's rule has three claims before `egui`'s: a drag in hand, a
-/// pending modal, and a probe that names a control (ADR-0176). The five
-/// controls here are all probes; what is claimed beside them is the ground,
-/// because every pixel of a strip is a drop target for the Library bay and a
-/// press on it has to reach the drag and drop handler.
-///
-/// Asserted at `Claim::Panel` and not by calling `operate`: `claim` is what
-/// decides whether the mouse goes to egui, and `operate` is what happens next.
-///
-/// The alleys are `Claim::None` because they are not strips, not because
-/// anything draws in them. An operator clicking between two strips wants the
-/// background, not the strip they missed.
+/// Verifies strip areas are claimed for panel interaction/drops while alleys yield to egui (ADR-0176).
 #[test]
 fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -144,12 +130,7 @@ fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
 // The values are the harness's
 // ---------------------------------------------------------------------------
 
-/// Every value in the bay came in through the argument, and the console keeps
-/// none of them.
-///
-/// The bay is a function of what it was handed and of the arrangement, and of
-/// nothing else — the seam `View::picture` is on, and the reason this crate can
-/// be asked about a live console with no device anywhere near it.
+/// Verifies mixer bay state derives purely from arguments with no internal state persistence.
 #[test]
 fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -187,17 +168,7 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     assert!(view.mixer.is_empty());
 }
 
-/// The selection is a ring round exactly one strip, and it is the strip it
-/// names.
-///
-/// `console.html`'s *Two focuses, and they do not look alike*: the deck
-/// selection is a solid ring and keyboard focus is a dashed one, and nothing
-/// here takes keyboard focus — so one ring, solid, and never two.
-///
-/// It is asserted by drawing, because *the ring is round this strip* is a claim
-/// about the paint pass: `Mixer::selected` answering the right rectangle and
-/// `View::draw` painting it round another would pass an assertion about the
-/// derivation alone.
+/// Verifies deck selection draws a single solid ring surrounding the selected strip.
 #[test]
 fn the_selection_is_one_ring_and_it_is_round_the_strip_it_names() {
     let (mut panel, _ctx) = console(PLAUSIBLE);
@@ -253,14 +224,7 @@ fn a_deck_with_no_strip_cannot_be_selected() {
     }
 }
 
-/// A press on a strip selects that deck, and a press on one of its controls
-/// does not.
-///
-/// The strip's rectangle contains the trim, the fader, the two chips and the
-/// mask mini, so this is the ordering stated as an assertion rather than left
-/// to whoever routes a press: `select` is asked *after* the four that name
-/// something inside the column, and what it answers for is what is left over.
-/// The name at the top of the strip is that leftover in the mock's own layout.
+/// Verifies pressing strip body selects the deck while control clicks do not trigger selection.
 #[test]
 fn a_press_on_a_strip_selects_that_deck() {
     let (panel, ctx) = console(PLAUSIBLE);

@@ -4,70 +4,7 @@ use super::library_common::*;
 // Which of this bay's parts answer a press, and nothing is stored
 // ---------------------------------------------------------------------------
 
-/// The scope chips answer a press, and so do the two filter fields, the three
-/// capsules in the foot and the rows of the list — and nothing else in this bay
-/// does.
-///
-/// The mock draws four scope chips, two filter fields, a `+`, a row cursor, and
-/// the foot's `read`, `load`, `→` and `A ▾`. The chips are the first of them
-/// that is a control here, and the reason is the page rather than the code:
-/// `console.html` puts the affordance on each chip — *"Click to show it; click
-/// another scope to leave it"* — and `docs/manual/operations.html` names the
-/// row as *Choose which scope the library shows*'s home.
-///
-/// The two filter fields one row down are the bay's other control, and their
-/// own presses are asserted in
-/// [`the_filter_fields_answer_a_press_and_the_row_around_them_does_not`]. What
-/// this test adds about them is the same thing it adds about the chips: the
-/// ground around them is nobody's, so the row's padding and the gap between the
-/// two are swept here with everything else that is not a control.
-///
-/// The `params` chip in the foot is the third, and it is the one control in
-/// this bay that is not in its head: the chips say which library and the fields
-/// narrow it, where this reads the row the cursor is on. `console.html`'s note
-/// *Reading a Set before you spend a load on it* is what puts it there — *"a
-/// `params` chip sits in the foot between the count and `load → A`"* — and what
-/// a press on it asks is
-/// [`the_params_chip_asks_for_the_set_under_the_cursor`]'s. What this test adds
-/// is that the foot's *ground* is still nobody's: the count, the space either
-/// side of it and the gap between the two capsules take no press.
-///
-/// The rows are the fourth, and they are the newest. A press on one takes that
-/// Set in hand — `LibraryBay::take`, and `crate::panel::Panel::carry` — which
-/// is the drag *How a Set reaches a deck* specifies: *"Dragging a row onto a
-/// strip is a second route to the same command, and never the first."* What a
-/// row press asks for is `carry.rs`'s; what this test adds is that the list's
-/// own ground under the last row is still nobody's.
-///
-/// The `load` button and the deck pulldown beside it are the fifth and the
-/// sixth, and they were one readout until 2026-09-08: `load → A` said where the
-/// *key* would land and answered no pointer at all. ADR-0305 split it, so what
-/// this test says about them is what it says about the `params` chip — and what
-/// is left in the foot that is *not* a control is the `→` between them, which
-/// is swept with the ground. Where each of the two lands is
-/// [`a_press_on_load_asks_for_the_deck_the_pulldown_names`]'s and
-/// [`a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing`]'s; the label's
-/// own silence is
-/// [`the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag_begins`]'s.
-///
-/// # The bay's corners do not reach the foot's capsules, and the two numbers
-/// say why
-///
-/// The bay's own rectangle inset past [`GRAB`](karakuri_console::panel::GRAB)
-/// is where the sweep used to stop, and it is two pixels short of the box the
-/// pill is drawn in. A `.lib-foot` is `padding: 5px 10px`
-/// ([`size::LIB_FOOT_PAD_X`]) and a flex row whose `.sep { flex: 1 }` pushes
-/// the pill to the far end of it, so the pill's right edge is 10 in from the
-/// bay's — where an inset of `GRAB + 2` is 8. 10 against 6 is the pill clearing
-/// the boundary's grab, which is what makes it drawable at all and is
-/// `input.rs`'s measurement one bay along; 8 is in the gap between the two, and
-/// a pill that claimed presses would have gone unasked.
-///
-/// So the points are taken off [`LibraryBay`]'s own boxes rather than off the
-/// bay's corners — and the view handed to `claim` is one that has been told
-/// what libraries there are, which the sweep this replaces was not: a console
-/// with no scopes has no chip row at all, and asking it whether a chip takes a
-/// press is asking about a control nobody drew.
+/// Asserts that scope chips, filter fields, foot capsules, and list rows claim pointer input, while surrounding bay ground claims nothing (ADR-0305).
 #[test]
 fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_nothing_else_is() {
     let (view, mut panel) = showing_mock();
@@ -113,12 +50,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         );
     }
 
-    // **And every other point of the bay is `egui`'s**: the four corners
-    // inside it and its middle, the ground of the scope row itself, the foot's
-    // content box across its middle, and each drawn row.
-    //
-    // **Inset past `GRAB`**, because a boundary is claimed for a drag from six
-    // pixels either side of it and three of this bay's four edges are one.
+    // Surrounding bay ground and non-interactive areas fall through to egui, inset beyond GRAB zones.
     let inset = GRAB + 2.0;
     let mut points = vec![
         egui::pos2(region.min.x + inset, region.min.y + inset),
@@ -164,13 +96,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         right - left > 0.0,
         "the foot's content box is {left} to {right}, which is no box to sweep"
     );
-    // **The three capsules at the far end of the row are stepped over**, and
-    // all three are controls: the `params` chip and the `load` button are asked
-    // about below, and the pulldown is
-    // [`the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag_begins`]'s.
-    // What is left is the foot's ground — the count, the gap between it and
-    // them, and the `→` label between the two capsules, which is the one thing
-    // in this row that is drawn and is not a control.
+    // Foot capsules are verified separately; checks foot ground, count, and inert arrow label.
     let chip = bay.params_chip(&ctx, AIMED);
     let load = bay.load(&ctx, AIMED);
     let mut swept = 0;
@@ -232,12 +158,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         }
     }
 
-    // **And the three capsules in the foot are the panel's**, each asked at
-    // the same two pixels in from its own left edge the chips above are —
-    // their right-hand ends are the gaps between them and their bottom rims
-    // are under the boundary's grab, which is
-    // [`the_params_chip_clears_every_boundary_but_the_one_under_the_bay`]'s
-    // subject and not this test's.
+    // Foot capsules claim panel input when hit slightly inset from their left edges.
     for (what, capsule) in [("read", chip), ("load", load.button), ("deck", load.deck)] {
         let probe = egui::pos2(capsule.min.x + 2.0, capsule.center().y);
         assert_eq!(
@@ -260,33 +181,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
     );
 }
 
-/// The label between the two capsules takes no press, and a row is where the
-/// drag begins.
-///
-/// This test's premise moved on 2026-09-08 and the half that is gone is named
-/// here rather than deleted, because a reader meeting it will otherwise
-/// re-propose what it used to say. It was *the load pill takes no press*: `load
-/// → A` was a readout, the *key*'s route was *"a cursor and a key with no
-/// pointer anywhere in it"*, and a press on the capsule would have added a
-/// pointer to the one gesture both pages described as having none. ADR-0305
-/// split the readout into a button, a label and a pulldown, so two of those
-/// three now take a press and are asserted in
-/// [`the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_nothing_else_is`].
-///
-/// What is left of the first half is the label, and it is the same sentence
-/// about a smaller thing: the `→` is punctuation on the foot's own ground,
-/// untipped in the mock like the `5 of 27` at the other end of the row, and a
-/// press on it belongs to neither capsule beside it.
-///
-/// The second half is unchanged. The panel's own route into *Load material into
-/// a deck* was and is the drag — `console.html` calls it *"a third route to the
-/// same command, and never the first"* — so the row a hand presses is the
-/// panel's, and what a row press asks for is `carry.rs`'s.
-///
-/// The label's own box is asked rather than the foot's middle, because the box
-/// is where a press would land: it is measured off the same derivation the
-/// paint lays out, so the rectangle asserted here and the mark drawn are one
-/// statement.
+/// The foot arrow label (`→`) takes no press, while list rows initiate drag operations (ADR-0305).
 #[test]
 fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag_begins() {
     let (mut view, mut panel) = showing_mock();
@@ -310,12 +205,7 @@ fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag
         );
     }
 
-    // **Across the label at the foot's own centre line**, and not its top and
-    // bottom edges: `.lib-foot` is 26 tall and a `.pill` is 16.5, so a
-    // capsule's edges are 4.75 off the foot's — and the foot's bottom edge is
-    // the bay's, which is a boundary. 4.75 against a `GRAB` of 6 means a
-    // boundary would take a press on a capsule's own rim, which is
-    // `input.rs`'s rule 3 and is the price every capsule in this foot pays.
+    // Tests across label centerline; capsule top/bottom edges lie within boundary grab zones (GRAB 6).
     let points: Vec<egui::Pos2> = (0..=4)
         .map(|step| {
             let t = step as f32 / 4.0;
@@ -364,25 +254,7 @@ fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag
     );
 }
 
-/// The star is inside its row, clear of every boundary, and it names the state
-/// the row is not in.
-///
-/// Three claims about one control because they are the three a new one owes
-/// (`input.rs`'s rule 4): where it is, that a hand can reach it, and what a
-/// press on it asks for.
-///
-/// Inside the row, because a star that overhung the row above or the list's own
-/// padding would be a mark drawn on somebody else's ground. Clear of the grab,
-/// because the list's left edge is the bay's and the bay's is a boundary:
-/// `.lib-row` is `padding: 3px 7px` inside a `.lib-list` of `3`, which is 10 in
-/// from the bay against a [`GRAB`] of 6 — the same measurement the two filter
-/// fields clear the same edge by.
-///
-/// And it names the state the row is not in, which is ADR-0299's *not a toggle*
-/// met at the control: the operation carries the state, so what reads the
-/// present mark is the surface. A star that always asked for `true` would pass
-/// every assertion about the first press and never take one off, so both
-/// directions are asked of one bay in one state.
+/// Star icon is positioned within the row, clears divider grab zones, and toggles row state (ADR-0299).
 #[test]
 fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
     let (view, mut panel) = showing_mock();
@@ -474,22 +346,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
     );
 }
 
-/// A press names the chip it landed on, and never the next one.
-///
-/// This is the whole of what the pointer adds and it is `e`'s opposite:
-/// `docs/manual/operations.html` binds the key to *step to the next scope and
-/// wrap* because *"a bare press cannot type a name"*, and a pointer press can —
-/// it lands on one capsule and on no other. So the chip that was pressed is the
-/// chip that is asked for, which is
-/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)'s
-/// division met by two surfaces rather than an inconsistency between them.
-///
-/// The operation beside it still carries `Undecided`, and that is asserted
-/// rather than left implied: the press knows which chip and the *vocabulary*
-/// does not, because a payload naming one of four would assert that the list of
-/// scopes can be finished. Settling that is a decision about the operations
-/// page and `karakuri-operation`, and this test is what fails the day somebody
-/// takes it — deliberately, so that it is taken on purpose.
+/// Scope chip presses emit `SelectScope` naming the targeted chip directly rather than relative stepping (P-0090).
 #[test]
 fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
     let (mut view, panel) = showing_mock();
@@ -514,11 +371,7 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
             scope.name(),
             chosen.scope.name()
         );
-        // **Four chips ask one row and the fifth asks another**, which is
-        // `view::Chosen`'s own section: `history` is not a library of Sets and
-        // *Walk the edit history* is the row that describes what a press on it
-        // asked for. A `SelectScope` there would be indistinguishable from a
-        // press on `all`, because that payload cannot say which.
+        // History chip triggers history navigation rather than set scope selection.
         assert_eq!(
             chosen.asked(Some("night01")),
             match scope {
@@ -557,31 +410,7 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
     );
 }
 
-/// A chip is pressed only where it is drawn.
-///
-/// `.scopes` carries a wrapping flex and this console draws one row of it and
-/// clips, so a pane narrower than the four words leaves the last chip starting
-/// inside the bay and finishing outside. What is not drawn is not a target: the
-/// point is held to the row before any chip is asked about, so the tail hanging
-/// over the centre column belongs to whatever is drawn there and not to a
-/// capsule the operator cannot see.
-///
-/// The pane is narrower than the mock's own 218 now, and that is ADR-0299
-/// rather than a number tuned to make a test pass: the first chip was
-/// `favourites` and is `all`, which is seven characters shorter, so the four
-/// words fit at the width they used to overrun. The clip is still the
-/// derivation's rule and an operator still reaches it with a divider, so this
-/// asks the same question of a pane that has been dragged in.
-///
-/// The overrun is asserted rather than assumed, because a pane wide enough to
-/// hold every chip would make the rest of this test measure nothing.
-///
-/// The clipped chip is looked for rather than assumed to be the last one, which
-/// is ADR-0308's fifth chip arriving: `history` starts past the row's own right
-/// edge at this width and is not drawn at all, so the capsule this test is
-/// about — the one that starts inside and finishes outside — is `folder`.
-/// Asking for the straddling chip is the property; asking for the last one was
-/// an arithmetic that happened to name it.
+/// Scope chips clipped at bay boundaries respond to input only within visible areas (ADR-0299, ADR-0308).
 #[test]
 fn a_chip_is_pressed_only_where_it_is_drawn() {
     let mut layout = solved(PLAUSIBLE);
@@ -676,21 +505,7 @@ fn the_capsule_a_press_lands_on_is_the_capsule_the_wash_is_drawn_in() {
     }
 }
 
-/// The chips clear every boundary, and the row's own clip is what costs the
-/// last one its tail.
-///
-/// `input.rs`'s rule 3 gives a boundary first refusal, so a control inside a
-/// grab is dead there — which is why every control on this console owes this
-/// measurement off its own rectangle rather than inheriting one. The scope
-/// row's is a sum and not a centring: `.scopes` is drawn under the bay head, so
-/// what holds the chips off the boundary above is `HEAD_H` plus `SCOPES_PAD_Y`
-/// — 27 + 7 = 34 — and down the left it is `SCOPES_PAD_X`'s 9 off an edge that
-/// is the viewport's rather than a divider's.
-///
-/// The last chip is the exception and it is the ordinary price, the same one
-/// the `solo` capsule and a preview cell pay: the row clips at the pane's edge,
-/// the last six pixels of what is drawn are the pane divider's, and what brings
-/// the whole capsule in is widening the pane.
+/// Scope chips clear top/left boundary grab zones, with any overrunning trailing edge clipped at the divider.
 #[test]
 fn the_chips_clear_every_boundary_but_the_one_the_row_is_clipped_by() {
     let panel = console(PLAUSIBLE);
@@ -755,11 +570,7 @@ fn the_chips_clear_every_boundary_but_the_one_the_row_is_clipped_by() {
     );
 }
 
-/// The names are the harness's and the console keeps no copy.
-///
-/// The bay is derived from the slice it is handed on the frame it is handed it,
-/// so a listing that changed between two frames is two different bays and never
-/// one bay remembering the first.
+/// Bay representation is dynamically derived each frame rather than cached.
 #[test]
 fn the_names_are_the_harnesss_and_are_stored_nowhere() {
     let panel = console(PLAUSIBLE);

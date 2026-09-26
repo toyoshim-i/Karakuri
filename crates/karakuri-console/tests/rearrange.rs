@@ -1,27 +1,5 @@
-//! The Program bay rearranging itself, and the one bit that follows from it.
-//!
-//! `view::program_body` answers where the picture and the four cells go for a
-//! body rectangle and `tests/program_body.rs` holds that arithmetic against the
-//! mock. This is the other half: the console asking it of the bay it solved to,
-//! setting `deck-previews` aside where the cells went down the sides, and
-//! putting it back where they did not — `view::rearrange`, which is what a
-//! frame does before it reads a rectangle.
-//!
-//! None of it needs a window or a device. What it needs is a [`Panel`], because
-//! the bit is written through one, and the whole of what is asserted is
-//! rectangles and two flags.
-//!
-//! # The crossover in windows rather than in bodies
-//!
-//! ADR-0182's flip is at a body 1064 wide. The body is the window less 524: the
-//! left pane's 218, the right pane's 268, the two 10px dividers between the
-//! three tracks — which is the 990 - 218 - 268 - 20 = 484 the narrowest console
-//! is derived from, read at any width — and `.program-body`'s 9px of padding
-//! either side, which is 18. So the last window with the cells in a row is 1587
-//! and the first with them down the sides is 1588. Both are asserted rather
-//! than assumed, here and in `tests/view.rs`: a crossover that moved is a test
-//! that fails rather than a test that quietly starts asserting one arrangement
-//! twice.
+//! Program bay rearrangement between row and column cell layouts at the crossover width
+//! (ADR-0182, ADR-0183).
 
 mod common;
 
@@ -73,15 +51,7 @@ fn set_aside(panel: &Panel) -> bool {
 // The crossover
 // ---------------------------------------------------------------------------
 
-/// The bay rearranges itself at the crossover, and the row goes with it.
-///
-/// Three things have to happen together and each fails on its own: the cells
-/// move, the row's node stops taking height, and the picture takes what the row
-/// gave up. The defect this exists for is any one of the three without the
-/// others — cells drawn down the sides with the row still 89 tall underneath
-/// them is a bay with a strip of ground where a row used to be and four
-/// thumbnails over the picture, and nothing in `program_body` can see it,
-/// because `program_body` is not told what the layout did with its answer.
+/// Crossing width boundaries shifts cell layout and transfers row height to the program view.
 #[test]
 fn the_bay_rearranges_at_the_crossover() {
     // **Below**, and the row is where the arrangement put it.
@@ -132,12 +102,7 @@ fn the_bay_rearranges_at_the_crossover() {
     assert_sane(panel.layout());
     assert_within_bounds(panel.layout());
 
-    // **And the picture took what the row gave up**, which is the whole of why
-    // the arrangement exists. At the crossover itself it is one pixel of
-    // height — ADR-0182's own arithmetic: 466 x 262 is 122,092 texels and
-    // 466 x 263 is 122,558, and *the larger picture wins* is decided by that
-    // 466. **A crossover is a hair either way and that is the point**: the
-    // flip an operator sees while dragging is a pixel and not a jump.
+    // The program view gains released row space at crossover, ensuring smooth visual transition.
     let below = picture_rect(at(BELOW).layout(), CANVAS).expect("on screen");
     let beside = picture_rect(at(BESIDE).layout(), CANVAS).expect("on screen");
     assert!(
@@ -182,20 +147,7 @@ fn the_bay_rearranges_at_the_crossover() {
     }
 }
 
-/// Out past the crossover and back, and every rectangle returns.
-///
-/// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md) reached
-/// through the rearrangement: the bit is a function of the geometry and nothing
-/// is stored, so a window dragged wide and back comes back to the arrangement
-/// it left rather than near it. It is
-/// [ADR-0174](../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)'s
-/// round trip with a second bit in it, and the failure it is written against is
-/// hysteresis: a stored mode, a remembered placement, a `set_aside` cleared
-/// somewhere other than where it was written, and the panel comes back with the
-/// row 89 tall inside a bay that no longer has room for it.
-///
-/// Every rectangle in the arena, not the two the bay draws: a bit that was left
-/// set on the way back moves the inspector under it as well.
+/// Resizing past the crossover and back restores original layout rectangles without hysteresis (P-0082, ADR-0174).
 #[test]
 fn a_window_dragged_out_and_back_comes_back_to_the_same_rectangles() {
     let mut panel = at(SMALLEST.w);
@@ -235,15 +187,7 @@ fn a_window_dragged_out_and_back_comes_back_to_the_same_rectangles() {
     assert_eq!(preview_rects(panel.layout(), CANVAS), Some(cells));
 }
 
-/// Asking twice changes nothing, which is the whole of *nothing re-enters the
-/// solve*.
-///
-/// The bit is derived from the bay's rectangle and the bay's rectangle does not
-/// depend on the bit — `program` is `Fixed(395)` over a flexible
-/// `program-view`, so what it can use is unbounded either way. That makes one
-/// write a fixed point rather than the first step of a chase, and the failure
-/// if it were not is a panel that alternates between two arrangements for as
-/// long as anything asks it to draw.
+/// Rearrangement operations reach a stable fixed point without re-entering layout solves.
 #[test]
 fn the_second_ask_finds_nothing_to_do() {
     for width in [SMALLEST.w, BELOW, BESIDE, 2400.0, PLAUSIBLE.w] {
@@ -263,19 +207,7 @@ fn the_second_ask_finds_nothing_to_do() {
 // The guard rule
 // ---------------------------------------------------------------------------
 
-/// With the picture folded the row is below, whatever the window is doing.
-///
-/// The rule is the console's and `karakuri-layout` deliberately does not hold
-/// it: a split can use nothing when none of its children is laid out, so a row
-/// set aside under a folded picture leaves the Program bay claiming zero — the
-/// bay, its head and both its regions gone from the panel, and the inspector
-/// swelling into the space. And the manual promises the opposite in as many
-/// words: the deck previews *"are auditions of their own, so they stay when it
-/// goes"*.
-///
-/// So this asserts the bay is still there, still 89 tall, and still drawing
-/// four cells — at widths either side of the crossover, because the defect is a
-/// rule that only bites past it.
+/// With program view folded, preview cells remain visible in a horizontal row regardless of width.
 #[test]
 fn a_folded_picture_keeps_the_row_below_it_at_every_width() {
     for width in [SMALLEST.w, BELOW, BESIDE, 2400.0, 3440.0] {
@@ -330,14 +262,7 @@ fn a_folded_picture_keeps_the_row_below_it_at_every_width() {
     }
 }
 
-/// The picture folded while the cells are beside it, which is the guard rule as
-/// a gesture rather than as a width.
-///
-/// The other order, and the one an operator reaches: the bay is already
-/// rearranged, the four cells are down the sides, and then the picture goes.
-/// Everything has to come back — the row into the layout, the cells into the
-/// row — on the frame the fold happened, because the frame after it is drawn
-/// from a bay that claims nothing.
+/// Folding the program view while cells are arranged vertically restores the row immediately.
 #[test]
 fn folding_the_picture_beside_the_cells_brings_the_row_back() {
     let mut panel = at(PLAUSIBLE.w);
@@ -375,17 +300,7 @@ fn folding_the_picture_beside_the_cells_brings_the_row_back() {
 // The operator's own fold, which is the other bit
 // ---------------------------------------------------------------------------
 
-/// Folding the row works in both arrangements, and unfolding brings it back to
-/// the right one.
-///
-/// Two bits and they are independent in both directions
-/// ([ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)):
-/// the operator's fold takes the cells off the panel wherever they are, and the
-/// rearrangement decides where they come back to. The defect is one bit for
-/// both, and it shows here in whichever direction it is written: an unfold that
-/// clears the console's bit puts an empty row back under a picture that is
-/// using the height, and a rearrangement that clears the operator's fold
-/// unfolds a row nobody asked for the moment the window is dragged.
+/// User-driven folding and layout-driven rearrangement operate via independent state bits (ADR-0183).
 #[test]
 fn folding_the_row_works_in_both_arrangements() {
     for (width, want) in [
@@ -443,22 +358,7 @@ fn folding_the_row_works_in_both_arrangements() {
 // A frame on which nothing moved
 // ---------------------------------------------------------------------------
 
-/// A frame on which nothing moved marks nothing dirty and asks for nothing.
-///
-/// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
-/// still-panel clause, at the one place in the console that writes to the arrangement
-/// on every frame. Two halves, and the second is the one the injection is
-/// about:
-///
-/// - The answer is `false`, so `Change::Rearranged` asks for no frame — a
-///   `rearrange` that reported what the caller asked rather than what changed
-///   would ask for one on every frame, for ever, and the still window would
-///   never sleep.
-/// - The write itself does not dirty the layout. `Layout::rect` refuses to
-///   answer from a dirty solve, so the rectangle read below with no `solve`
-///   between it and the write is what says so: an unconditional
-///   `set_aside` panics here with *rect() read a stale solve*, which is the
-///   same assertion ADR-0183 records from the other side of the seam.
+/// Idempotent rearrangement does not dirty layout or request extra repaints (ADR-0164, ADR-0183).
 #[test]
 fn a_frame_where_nothing_moved_writes_nothing() {
     for width in [SMALLEST.w, PLAUSIBLE.w] {
@@ -482,21 +382,7 @@ fn a_frame_where_nothing_moved_writes_nothing() {
     }
 }
 
-/// Solo the row while it is beside the picture, and the console is what says it
-/// is not beside the picture any more.
-///
-///
-/// [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
-/// leaves this here on purpose: a solo saves and restores the operator's fold
-/// and nothing else, so a node that is set aside stays set aside through a
-/// solo, the soloed node included — left holding the whole viewport and still
-/// not laid out, *"until whoever set it aside says otherwise"*. This is the
-/// console saying otherwise, and it happens before a rectangle is read because
-/// `rearrange` is the first thing a frame does.
-///
-/// Without it the panel is empty: the row holds the viewport with no height in
-/// it and everything else is folded away, which is a black window and a key
-/// that appeared to do nothing.
+/// Soloing the preview cells when arranged vertically clears their set-aside bit (ADR-0183).
 #[test]
 fn a_solo_on_a_row_that_was_beside_the_picture_lays_it_out_again() {
     let mut panel = at(PLAUSIBLE.w);

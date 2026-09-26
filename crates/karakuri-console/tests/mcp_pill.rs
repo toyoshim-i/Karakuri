@@ -29,13 +29,7 @@ fn pills(ctx: &egui::Context, layout: &Layout, open: Open) -> Vec<karakuri_conso
 // Where each of the four is
 // ---------------------------------------------------------------------------
 
-/// The region a class opens is the bay its refusal names, in both directions.
-///
-/// `karakuri_operation::gate::Class::bay` is what a refused model is told —
-/// *"the operator opens it at the head of the Mixer bay"* — and this console is
-/// what has to draw a pill there. A refusal naming a place with no pill in it
-/// is worse than one naming none, because the model repeats it to the person
-/// sitting there and sends them looking.
+/// Returns the bay region associated with an opened MCP class.
 #[test]
 fn the_region_a_class_opens_is_the_bay_its_refusal_names() {
     for class in Class::ALL {
@@ -124,15 +118,7 @@ fn each_class_draws_a_capsule_in_its_own_region() {
     }
 }
 
-/// The Program bay's pill sits beside `solo` and to the right of it, which is
-/// where the page draws it: `1920×1080`, `solo`, `mcp · shut`, `previews 2 of
-/// 4`.
-///
-/// And `solo` moves when this one does. The two words are not the same width,
-/// so a head laid out for one state and hit-tested against the other would put
-/// a press on `solo` a few pixels off the capsule an operator sees. One
-/// derivation answers for both — `view::head_capsule` — and this is the
-/// assertion that says so.
+/// Program bay MCP pill placement: positioned alongside `solo` and preview count.
 #[test]
 fn the_program_bays_pill_sits_beside_solo_and_moves_it() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -175,15 +161,7 @@ fn the_program_bays_pill_sits_beside_solo_and_moves_it() {
     );
 }
 
-/// The Outputs row's pill sits beside the word that stands in for a head, which
-/// is the placement this console had no precedent for.
-///
-/// The page says it outright: *"This row has no bay head to put an indicator in
-/// — it is headless, like the transport — so the pill sits beside the word that
-/// stands in for one."* So it is laid out in `.outputs`'s own flex row, one gap
-/// after the label and one before the sink, and it is a `.pill` rather than a
-/// `.sink` — a control that looked like a sink here would read as a fifth
-/// output.
+/// Outputs row MCP pill placement: positioned beside label and before sink.
 #[test]
 fn the_outputs_rows_pill_sits_beside_the_word_that_stands_in_for_a_head() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -235,13 +213,7 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
         .collect()
 }
 
-/// Each of the four is actually painted, in the capsule the hit test uses.
-///
-/// *Nothing is drawn there* is a claim about the paint pass and not about a
-/// rectangle, so it is asserted by drawing a frame and counting what landed
-/// inside each capsule — `library.rs`'s method, one control along. A pill
-/// derived and never painted would pass every other test in this file and be a
-/// control an operator cannot see.
+/// Verifies each of the four MCP pills renders painted shapes within its capsule bounds.
 #[test]
 fn each_pill_is_painted_in_the_capsule_a_press_lands_on() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -257,16 +229,7 @@ fn each_pill_is_painted_in_the_capsule_a_press_lands_on() {
         );
     }
 
-    // And an opened class is painted differently from a shut one — the word
-    // and the treatment both, which is `.pill.armed`'s own argument on the
-    // audio-in pill: a capsule that was only lit would leave *which* class
-    // unanswered, and one that only carried a name would make an open class
-    // and a shut one look alike at the distance a panel is read from.
-    //
-    // **The two are counted over the union of the two capsules**, because they
-    // are not the same width: a box measured for one of them would answer for
-    // half the other, and the `.armed` treatment's own glow is wider than the
-    // capsule and is excluded from both by containment.
+    // Open class renders with distinct text and armed highlight styling (`.pill.armed`).
     let opened = Open::CLOSED.with(Class::MixFaders, true);
     let shut = mcp_pill(&ctx, panel.layout(), Class::MixFaders, Open::CLOSED).expect("a pill");
     let open = mcp_pill(&ctx, panel.layout(), Class::MixFaders, opened).expect("a pill");
@@ -328,13 +291,7 @@ fn each_pill_is_claimed_and_nothing_beside_it_is() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// A press opens exactly one class and leaves the other three shut.
-///
-/// The property over all four, because this is the assertion nothing else can
-/// make for it: `Open`'s fields are private and `Open::with` names one class,
-/// so the only way three classes could be opened by a press on the fourth is
-/// here — in the value this control composes. `McpPill::next` takes the whole
-/// opening and writes it back for exactly that reason.
+/// Clicking an MCP pill toggles that specific class without affecting others.
 #[test]
 fn a_press_opens_exactly_one_class_and_leaves_the_other_three_shut() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -386,12 +343,7 @@ fn a_second_press_shuts_it_and_leaves_the_rest_alone() {
     }
 }
 
-/// The word says which state the class is in, and the capsule is measured for
-/// the word it holds.
-///
-/// The two are one assertion on purpose: a control whose word changed and whose
-/// box did not would be one an operator could press on the half of it that is
-/// not there.
+/// Pill text indicates class state, with capsule width matching the displayed label.
 #[test]
 fn the_word_says_the_state_and_the_capsule_is_measured_for_it() {
     assert_eq!(mcp_word(false), "mcp · off");
@@ -491,11 +443,7 @@ fn a_console_that_has_never_drawn_has_no_pill() {
     }
 }
 
-/// Opening a class moves nothing on the console, which is the whole of *refused
-/// rather than hidden* seen from the operator's side: the manual's note on the
-/// Mixer's pill says *"Nothing here is ever refused to a hand"*, and a pill
-/// that folded, greyed or disabled anything would be this surface taking
-/// something away from the person who just granted it.
+/// Opening an MCP class retains all console layout positions without hiding or moving elements.
 #[test]
 fn opening_a_class_moves_nothing_in_the_arrangement() {
     let (mut panel, ctx) = console(PLAUSIBLE);

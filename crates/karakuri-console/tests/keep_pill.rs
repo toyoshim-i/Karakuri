@@ -59,11 +59,7 @@ fn word(ctx: &egui::Context) -> f32 {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// `.sep`'s `flex: 1` puts it hard against the head's right-hand padding, and
-/// `align-items: center` puts it in the middle of the head's *content* box —
-/// which is one `.half-head` padding down from the top, not the row's own
-/// middle: the `border-bottom` is inside the row, so the two differ by half a
-/// pixel and the scope row one bay along already says which is right.
+/// Capsule positioning: right-aligned via flex spacer and vertically centered in the half-head content box.
 #[test]
 fn the_capsule_is_hard_against_the_heads_right_hand_padding() {
     let pane = mock();
@@ -108,13 +104,7 @@ fn the_capsule_is_hard_against_the_heads_right_hand_padding() {
     }
 }
 
-/// A head with no room for the capsule draws none, which is `deck_head`'s rule
-/// one row down: a control that does not fit in the row it is drawn in is no
-/// control at all, rather than half of one.
-///
-/// The narrow head is built here rather than solved for, because the panel's
-/// own minimum is far wider than this — the same reason `deck_head.rs` builds
-/// its narrow row by hand.
+/// A pane head with insufficient width omits the keep capsule rather than clipping it.
 #[test]
 fn a_head_too_narrow_for_the_capsule_draws_none() {
     let pane = mock();
@@ -294,13 +284,7 @@ fn a_press_off_the_capsule_asks_for_nothing() {
 // The wash
 // ---------------------------------------------------------------------------
 
-/// Every shape the console paints wholly inside `rect`, on one frame.
-///
-/// `transport.rs`'s helper, written again here for the reason that one gives:
-/// `egui` tessellates on the CPU and the device only ever sees the result, so a
-/// whole frame through `Context::run_ui` is all a treatment takes to read.
-/// Containment rather than intersection, so the card behind the pane is not
-/// counted as a thing drawn in the capsule.
+/// Collects all painted shapes contained within the specified rectangle.
 fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<egui::Shape> {
     let ctx = drawn_once();
     let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));
@@ -344,19 +328,7 @@ fn showing_two(tallies: [Tally; 2]) -> View {
     view
 }
 
-/// The wash is the deck's residency and not the pane's position, which is what
-/// `docs/manual/console.html` says it reads: *the deck this pane is showing is
-/// on air, in the same pink a tally on air is drawn in*.
-///
-/// Asserted by painting, because the treatment is the whole of the claim: a
-/// `.pill.on` is `--c-pink` over a pink wash with a halo, and a plain `.pill`
-/// has neither. Counted as *is any shape in the capsule filled `--c-pink`* —
-/// the word's galley is pink in one treatment and `--c-dim` in the other, and
-/// the wash behind it is a pink mix in one and nothing in the other.
-///
-/// Both directions, and the second is the one that would catch a console
-/// lighting the first pane because it is first: deck 1 live and deck 0 parked
-/// puts the wash on the *second* capsule.
+/// The wash highlight indicates deck on-air residency rather than pane position (`.pill.on`).
 #[test]
 fn the_wash_follows_the_deck_on_air_and_not_the_pane() {
     let pal = Room::Day.palette();
@@ -382,13 +354,7 @@ fn the_wash_follows_the_deck_on_air_and_not_the_pane() {
             let lit = shapes_inside(&mut view, &mut panel, pill)
                 .iter()
                 .any(|shape| match shape {
-                    // **The word, and not the wash.** `on_pill_at`'s halo is
-                    // blurred wider than the capsule and would be filtered out
-                    // by `contains_rect`, and its ground is a `--c-pink` mix
-                    // rather than the colour itself. The word is `--c-pink` in
-                    // one treatment and `--c-dim` in the other, it is inside
-                    // the capsule by construction, and it is the one thing a
-                    // reader actually sees change.
+                    // Inspects text galley color (`--c-pink` vs `--c-dim`) inside the capsule.
                     egui::Shape::Text(text) => {
                         text.galley.job.text == KEEP_WORD && text.fallback_color == pal.pink
                     }

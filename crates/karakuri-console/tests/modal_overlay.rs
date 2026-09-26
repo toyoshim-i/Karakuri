@@ -129,12 +129,7 @@ fn paint(ctx: &egui::Context, hover: &mut Hover, panel: &Panel, view: &View, now
     out.textures_delta.clear();
 }
 
-/// A tip on screen, and a card put down by a key or by a press that moved the
-/// pointer nowhere: the tip goes on the frame the card is drawn on, and the layer
-/// asks for no frame of its own afterwards.
-///
-/// `resolve` alone does not answer this. It is asked on a move, and there is no
-/// move here.
+/// Active tooltips are dismissed when a modal card is opened, requesting no redundant frames.
 #[test]
 fn a_card_that_comes_down_over_a_tip_takes_it_off_the_next_frame() {
     let (panel, ctx) = console();

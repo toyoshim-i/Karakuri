@@ -31,12 +31,7 @@ fn luma(c: egui::Color32) -> f32 {
     (0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32) / 255.0
 }
 
-/// The palette answers for both rooms, and answers differently in each.
-///
-/// The failure worth catching is a colour transcribed once and left: the two
-/// blocks in `style.css` are fifteen near-identical lines each, and one line
-/// copied from the wrong block is invisible until somebody switches rooms in a
-/// dark hall.
+/// Asserts that theme colors are distinct and properly transcribed across Day and Night rooms.
 #[test]
 fn the_palette_answers_for_both_rooms() {
     let day = Room::Day.palette();
@@ -98,15 +93,7 @@ fn a_pointer_on_a_boundary_is_the_panels() {
     );
 }
 
-/// A pointer off a boundary and off every control is `egui`'s — and the `solo`
-/// pill is the case that says which of the two rules answered.
-///
-/// The pill used to be in the first half of that sentence: it was the one thing
-/// the panel drew that a hand would reach for, and a press on it was `egui`'s
-/// because nothing here answered it. It is a control now, so it is the panel's
-/// under rule 4 — not under rule 3, which is the distinction this test is for,
-/// and the point is far enough from the boundary above the bay that only rule 4
-/// can be giving it away.
+/// Verifies that pointers off boundaries and controls are delegated to egui, with control clicks claimed.
 #[test]
 fn a_pointer_off_a_boundary_is_eguis() {
     let ctx = drawn_once();
@@ -140,22 +127,7 @@ fn a_pointer_off_a_boundary_is_eguis() {
     );
 }
 
-/// A drag in hand keeps its claim, wherever the pointer wanders.
-///
-/// This is the one that is a bug waiting to happen. A claim re-decided from the
-/// pointer on every event hands the middle of a drag to `egui` the moment the
-/// pointer leaves the six pixels either side of the boundary — which it does
-/// immediately, because a drag is how a boundary gets anywhere — and then two
-/// things think they are dragging. The release matters just as much: asked
-/// after `released`, the claim sees no drag and hands `egui` a button-up it
-/// never saw the button-down for.
-///
-/// The `solo` pill is in the wander now rather than in the before and after,
-/// because it stopped being an elsewhere-point the day it became a control:
-/// rule 1 has to beat rule 4 as well as rule 3, and a point that is the panel's
-/// either way cannot say whether the drag kept its claim. What carries that
-/// half is the library's middle, which is on no control and on no boundary, and
-/// it goes `egui` -> panel -> `egui` across the gesture.
+/// Asserts that an active boundary drag retains its pointer claim across boundaries and other controls.
 #[test]
 fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     let ctx = drawn_once();

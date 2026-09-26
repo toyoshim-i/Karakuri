@@ -8,11 +8,7 @@ use karakuri_console::view::{Band, BAND_BLUE_MS, BAND_PURPLE_MS, BAND_RED_MS, BA
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The transcriptions under test, each paired with the text its constants start
-/// after. A pair rather than a bare path because `room.rs` also holds
-/// `Palette::DAY` and `Palette::NIGHT`, which are constants and are not
-/// transcribed sizes, and because a marker that drifts fails loudly here rather
-/// than quietly shrinking the scan.
+/// The source files under test, paired with the start marker for transcribed constants.
 const SOURCES: &[(&str, &str)] = &[
     (
         "crates/karakuri-console/src/room/size/base.rs",
@@ -505,22 +501,7 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
         }
     }
 
-    // Floors, not counts: three of them because they fail apart. A moved
-    // marker gives no constants at all; a broken CSS parse gives constants but
-    // resolves no selector; and a stylesheet that has quietly lost its rules
-    // gives both but nothing to resolve against. They read 76, 63 and 67 when
-    // `lib.rs` was added to the scan and 85, 70 and 77 when the Library bay's
-    // eight landed, and are meant to be raised, never lowered to fit a smaller
-    // one. The margin under each reading is the same two or three it was set
-    // with: a floor at the reading itself fails on any deletion at all, which
-    // is a different question from the one this guards.
-    //
-    // **They had not been raised since, and the numbers say by how much**: the
-    // scan reads 160, 127 and 118 on 2026-09-05, where the floors still stood
-    // at 85's margin. A floor two thirds under the reading is not a floor —
-    // seventy constants could have gone before it said anything — so they are
-    // set from that reading here, with the same margin, when the Library
-    // filter row's six moved into `room::size` and came under this guard.
+    // Minimum floor thresholds to ensure the mock citations scan encounters expected volumes of constants.
     assert_eq!(
         total,
         transcribed + derived + own,
@@ -549,34 +530,13 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
 // ---------------------------------------------------------------------------
 // The risk badge's five bands
 // ---------------------------------------------------------------------------
-//
-// **A number transcribed out of `console.html`'s prose rather than out of a
-// declaration, which is why it is checked here and not above.** The scan above
-// resolves a citation of the form `` `selector` `` and `` `property: value` ``,
-// and the band boundaries are written as English — *"Green, up to 4 ms: four
-// of these at 60 Hz."* They are exactly the kind of number this file exists
-// for, and none of them can be reached by that machinery, so they get a reader
-// of their own.
-//
-// The direction that matters is still the other one: **the page is the
-// specification and it is the one that moves**, and nothing about rewriting a
-// sentence in it tells you that a Rust constant was reading it.
+// Parses risk band boundaries transcribed from prose in `console.html`.
 
 /// The page the bands are specified on: *What a deck preview cell shows, and
 /// when*, and deck A's caption tooltip.
 const PAGE: &str = "docs/manual/console.html";
 
-/// Every reading of one band's boundary in the page.
-///
-/// A band's name, as a whole word, with a figure in milliseconds after it and
-/// nothing but the qualifier — *up to*, *over*, *about* — in between. An
-/// occurrence with no `ms` after it inside the window is prose about a colour
-/// rather than a statement of the scale (*"drawn green by default"*), and a
-/// window is what tells the two apart without this file having to hold a copy
-/// of the sentences.
-///
-/// Whole word, because `red` is inside `coloured`, `prepared` and `required`,
-/// all three of which are on this page.
+/// Extracts all occurrences of risk band boundary values (in milliseconds) from manual text.
 fn boundaries_in(page: &str, word: &str) -> Vec<f64> {
     /// Far enough to clear `</strong>, up to ` and no further: the next sentence's
     /// own figures must not be in reach.
@@ -607,26 +567,7 @@ fn boundaries_in(page: &str, word: &str) -> Vec<f64> {
     out
 }
 
-/// The five bands' boundaries are the ones `docs/manual/console.html` states,
-/// and they are stated there twice.
-///
-/// `view::BAND_BLUE_MS` and its three siblings are the console's own table —
-/// `karakuri-engine` produces a number of milliseconds and has no opinion about
-/// how many of a thing an operator can mix — and they are a transcription out
-/// of the page like every constant above.
-///
-/// Two readings per band, and they must agree. The scale is written on deck A's
-/// caption tooltip and again in the body under *What a deck preview cell shows,
-/// and when*, which is the duplication the manual's own rule warns about: *"the
-/// same prose sits in three places … and duplication produces gaps and
-/// contradictions"*. So this asserts every reading of a band rather than the
-/// first, and a page that moved a boundary in one passage and not the other
-/// fails here rather than shipping two scales.
-///
-/// Green and blue are one boundary read from both ends — *"Green, up to 4 ms"*
-/// and *"Blue, over 4 ms"* — which is the four-boundary table stated as five
-/// bands, and is why [`BAND_BLUE_MS`] is named for the band it lets you into
-/// rather than the one it leaves.
+/// Validates transcribed band constants against both mentions in `docs/manual/console.html`.
 #[test]
 fn the_band_boundaries_are_the_ones_the_console_page_states() {
     let page = fs::read_to_string(workspace().join(PAGE)).expect("the console page");

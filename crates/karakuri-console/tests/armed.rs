@@ -1,42 +1,7 @@
-//! A scheduled move on a fader, and what the strip does about it.
+//! Scheduled move presentation on a fader (P-0087, ADR-0206).
 //!
-//! A transition is armed on the grid — `Deck::schedule`, and
-//! `Deck::transitions_on` is what a surface asks — so with the default quantum
-//! a fade is due up to a bar after the key that asked for it, and until it
-//! lands the control has a value and a destination that disagree. That is
-//! [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
-//! exactly, one control along from the residency chip, and the presentation is
-//! [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)'s:
-//! the knob and the fill go on saying where the control is, a hairline mark
-//! says where it is going, and the fill keeps setting off toward the mark and
-//! falling back.
-//!
-//! Six claims, and each one is a thing that could quietly not be true:
-//!
-//! 1. An armed move draws its destination and a settled fader draws nothing
-//!    — the mark is where the knob would be if the move had landed, and a
-//!    fader nothing is moving costs what it always cost.
-//! 2. The value drawn is still the deck's own. The first of P-0087's three:
-//!    a pending move never overwrites the truth with a wish, and here the
-//!    truth does not so much as shift — the knob, the fill and the number
-//!    are identical to the same strip with nothing armed, at every phase.
-//! 3. The destination is identifiable from the surface, off the track and
-//!    in the same reading the knob's own position is, rather than from a
-//!    word or a tooltip. This console draws no tooltips at all, and this
-//!    asserts it did not grow one here: an armed strip paints exactly the
-//!    type a settled one paints.
-//! 4. The reach never covers the gap, in either direction, and rests at
-//!    nothing. Covering it is what arrival looks like.
-//! 5. Both faders and the chip above them move off one phase. ADR-0190 asks
-//!    for that outright, and it is what stops a strip with two fades on it
-//!    reading as two things going wrong.
-//! 6. The panel declares a staleness while something is armed and none when
-//!    nothing is — including for the one move this track cannot draw, a
-//!    gain between 1.5 and 2.0, where declaring would buy 30 Hz for a
-//!    picture that does not change.
-//!
-//! None of it needs a window, a device or a clock: the displacement is a
-//! function of a [`Phase`] this file chooses, exactly as `parked.rs`'s is.
+//! An armed transition draws a hairline destination mark and an animating fill
+//! reaching toward it without altering current deck values or moving off-phase.
 
 mod common;
 
@@ -110,13 +75,7 @@ fn box_of(strips: &[Strip]) -> StripBox {
         .strip(0)
 }
 
-/// What a whole frame painted inside one strip: every filled rectangle, and how
-/// many runs of type there were.
-///
-/// The rectangles are what this file is about — a mark is one, a band is one,
-/// and so are the knob and the fill it must not have moved — and the count of
-/// galleys is claim 3's other half: a destination delivered as a *word* would
-/// show up there and nowhere else.
+/// Painted rectangles and text galley count inside one strip.
 fn painted(strips: Vec<Strip>, phase: Phase) -> (StripBox, Vec<egui::Rect>, usize) {
     let at = box_of(&strips);
     let mut panel = arrangement();
@@ -163,12 +122,7 @@ fn marks(rects: &[egui::Rect]) -> Vec<egui::Rect> {
         .collect()
 }
 
-/// The value a mark is standing on, worked back out of where it is rather than
-/// asked of the crate — so that a mark drawn in the wrong place is two numbers
-/// disagreeing rather than one derivation agreeing with itself.
-///
-/// The tall fader fills from the bottom and its fill sits
-/// [`size::VFADER_INSET`] inside the well, which is `.vfader b`.
+/// Derives the value under a mark from its vertical position within fader travel.
 fn value_under(at: &StripBox, mark: egui::Rect) -> f32 {
     let travel = at.fader.height() - size::VFADER_INSET * 2.0;
     (at.fader.max.y - size::VFADER_INSET - mark.center().y) / travel
@@ -186,18 +140,7 @@ fn length(reach: Reach, vertical: bool) -> f32 {
 // 1. The destination is drawn, and only where there is one
 // ---------------------------------------------------------------------------
 
-/// A fader with a move scheduled on it marks where the move is taking it, and
-/// one with nothing scheduled marks nothing.
-///
-/// The mark is at the position the knob would be at if the fade had already run
-/// — the same derivation asked a second question ([`StripBox::fader_reach`]),
-/// so a mark and a knob cannot end up with two ideas of what 0.8 looks like.
-///
-/// The other direction is the one worth having a test for at all. Every strip
-/// on every panel that has nothing scheduled on it must paint exactly what it
-/// painted before this existed, and an extra rectangle per fader per frame is
-/// the kind of thing that is found by a profiler years later rather than by
-/// anyone looking.
+/// An armed fader marks its destination at [`StripBox::fader_reach`], while a settled fader draws no mark.
 #[test]
 fn an_armed_fader_marks_its_destination_and_a_settled_one_marks_nothing() {
     for to in [0.8, 0.0] {
@@ -239,18 +182,7 @@ fn an_armed_fader_marks_its_destination_and_a_settled_one_marks_nothing() {
 // 2. The truth is not moved
 // ---------------------------------------------------------------------------
 
-/// The value drawn is the deck's own, and the mark does not move it.
-///
-/// The first of P-0087's three is that a pending transition never overwrites
-/// the truth with a wish, and on a fader the wrong answer is easy to write and
-/// looks plausible: draw the fill at the destination, or slide the knob toward
-/// it, and the strip is showing a value the deck is not at. The operator is
-/// about to reach for that knob.
-///
-/// So this asserts the strongest form of it available: every rectangle a
-/// settled strip paints is still painted, unchanged, by the same strip with a
-/// fade armed on it — at four phases, including the top of the travel where
-/// everything that moves has moved as far as it goes.
+/// Verifies the drawn value matches the deck's own across phases without being shifted by the mark (P-0087).
 #[test]
 fn the_value_drawn_is_the_decks_own_at_every_phase() {
     let (_, settled_rects, _) = painted(vec![settled()], Phase::ZERO);
@@ -301,18 +233,7 @@ fn the_destination_is_read_off_the_track_rather_than_out_of_a_word() {
 // 4. The reach never lands
 // ---------------------------------------------------------------------------
 
-/// The band sets off toward the mark, never covers the gap, and comes back to
-/// nothing.
-///
-/// Landing is what arrival looks like: a band that reached the mark would say
-/// once a second that a fade scheduled for the next bar had already run.
-/// [`ROLL_REACH`] is 0.4 of the gap at the top of the travel, and the rest of
-/// the period the band has no area at all — which is also why an armed strip
-/// costs nothing while it rests.
-///
-/// Both directions, because a fade down is not a fade up with a sign changed as
-/// far as a rectangle is concerned: the band grows out of the same edge either
-/// way and lies on the other side of it.
+/// The reach band animates toward the destination up to [`ROLL_REACH`] without landing, resting at zero.
 #[test]
 fn the_reach_never_covers_the_gap_and_rests_at_nothing() {
     let at = box_of(&[settled()]);
@@ -365,18 +286,7 @@ fn the_reach_never_covers_the_gap_and_rests_at_nothing() {
 // 5. One phase, panel-wide
 // ---------------------------------------------------------------------------
 
-/// Both faders and the chip above them are the same curve at the same rate, off
-/// the phase the view was handed.
-///
-/// ADR-0190 asks for it outright — *"two controls moving out of step looks
-/// broken rather than informative"* — and a strip can have a fade on each fader
-/// at once, which is what makes this a claim about this bay rather than about
-/// the panel in general. A period of its own on either one would be invisible
-/// on a still frame and unmistakable on a moving panel.
-///
-/// It is asserted as a *fraction of each control's own gap*, because the two
-/// faders are different lengths: the trim's travel is 36.84 and the tall one's
-/// is 98, so equal displacements would be the thing that was wrong.
+/// Both faders and the chip reach off the same phase as a fraction of their travel (ADR-0190).
 #[test]
 fn both_faders_reach_off_the_one_phase() {
     let at = box_of(&[settled()]);
@@ -433,27 +343,7 @@ fn both_faders_reach_off_the_one_phase() {
 // 6. What the panel asks for
 // ---------------------------------------------------------------------------
 
-/// An armed fade ends the still panel, and nothing else does.
-///
-/// The declaration is the view's — it is what knows the rate — and
-/// `Change::Animating` is where it becomes a `Repaint::After` deadline. The
-/// direction worth having a test for is the other one: a panel with nothing
-/// armed and nothing parked must cost exactly what it cost before any of this
-/// existed, and an animation is the most likely thing to take that away by
-/// accident.
-///
-/// Three ways of having nothing to say, and they fail differently:
-///
-/// - nothing scheduled at all;
-/// - a fade scheduled to where the control already is, which is a move with no
-///   picture;
-/// - a move the track cannot draw — gain runs `[0, 1]` on a mix that is HDR,
-///   so 1.5 to 2.0 is two values in one position ([`StripBox::trim_at`]).
-///   Declaring there buys 30 Hz for a picture that does not change, which is
-///   ADR-0193's argument arriving through the other door.
-///
-/// And a folded bay declares nothing however much is armed behind it, which is
-/// ADR-0193 itself.
+/// An armed fade requests frame deadlines only while armed and drawable, and nothing when folded or unmoving (ADR-0193).
 #[test]
 fn the_panel_asks_for_a_deadline_only_while_a_move_is_armed_and_drawable() {
     let mut panel = arrangement();

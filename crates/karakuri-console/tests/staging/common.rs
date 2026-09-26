@@ -38,11 +38,7 @@ pub(crate) fn strip(name: &str) -> Strip {
     }
 }
 
-/// One candidate: a node one build changed on a deck slot, not yet ruled on.
-///
-/// `L1:0` on every one of them unless a test says otherwise — which node it is
-/// only matters where the operation a press asks for is being read, and those
-/// tests build their own.
+/// Creates a candidate for a changed node on a deck slot, defaulting to `L1:0`.
 pub(crate) fn candidate(deck: usize, name: &str, stage: Stage) -> Candidate {
     at_node(deck, karakuri_operation::Layer::L1, 0, name, stage)
 }
@@ -82,13 +78,7 @@ pub(crate) fn slot_row(deck: usize, name: &str, stage: Stage) -> Candidate {
     }
 }
 
-/// The mock's `.addr` spelling, which the host writes and this file restates
-/// because it is building the value the host would hand in.
-///
-/// Kept in step with `karakuri/src/main.rs`'s `layer_word` by hand, which is
-/// what a fixture that restates a host's spelling costs: the two are one
-/// spelling in two places, and a row addressed by one and drawn by the other
-/// would be a row an operator cannot press back.
+/// Returns the layer abbreviation matching the host's `.addr` spelling in `karakuri/src/main.rs`.
 pub(crate) fn layer_word(layer: karakuri_operation::Layer) -> &'static str {
     match layer {
         karakuri_operation::Layer::L1 => "L1",
@@ -96,30 +86,12 @@ pub(crate) fn layer_word(layer: karakuri_operation::Layer) -> &'static str {
         karakuri_operation::Layer::L3 => "L3",
         karakuri_operation::Layer::L4 => "L4",
         karakuri_operation::Layer::Field => "F",
-        // **Answered here and reached by nothing today.** A candidate is a node
-        // of a *Set* that a build produced, and a Set holds no L5 node: a frame
-        // effect runs in the master chain, which is one level out from every
-        // Set, and the chain is still three fixed passes. So no Staging row is
-        // ever addressed `L5:0` and this arm builds a value nothing asks for.
-        //
-        // **Named rather than left to a wildcard anyway**, on the terms the
-        // match itself exists for: what this fixture is checking is that an
-        // address a row is drawn with is an address a press can type back, and
-        // a catch-all is how the fifth layer went wrong one kind ago
-        // (`setfile::layer_from_ordinal`). `L5` and not a bare letter, matching
-        // the host's own spelling above.
+        // Explicit arm matching host spelling; Sets currently have no L5 candidate nodes.
         karakuri_operation::Layer::L5 => "L5",
     }
 }
 
-/// One candidate the checker turned down, with what it said.
-///
-/// It names no node and cannot: nothing was built, so there is no list of nodes
-/// to hold against the one before it (`view::Candidate::at`).
-///
-/// `karakuri_engine::swap::Refusal` carries one line per diagnostic, formatted
-/// on the build worker; these are the shape those lines have — where, which
-/// stage, and what.
+/// Creates a rejected candidate (`Stage::NotCompiled`) with diagnostic messages.
 pub(crate) fn refused_candidate(deck: usize, name: &str, said: &[&str]) -> Candidate {
     Candidate {
         deck,
@@ -131,11 +103,7 @@ pub(crate) fn refused_candidate(deck: usize, name: &str, said: &[&str]) -> Candi
     }
 }
 
-/// Every shape the console paints wholly inside `rect`, on one frame.
-///
-/// `library.rs`'s helper, and `transport.rs` is where the reasoning is written
-/// out: containment rather than intersection, so the panel's ground and the
-/// card's drop shadow are not counted as things drawn in the bay.
+/// Counts shapes painted wholly contained inside `rect` on one frame.
 pub(crate) fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> usize {
     let ctx = drawn_once();
     let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));

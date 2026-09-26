@@ -4,22 +4,10 @@ use super::view_common::*;
 // What is drawn
 // ---------------------------------------------------------------------------
 
-/// Every leaf of the arrangement is asked to be drawn, and none is skipped.
-///
-/// The failure this exists for is silent: a region left out of the table leaves
-/// a hole in the panel with nothing anywhere saying so, and the hole is the
-/// ground showing through, which is what a divider looks like. So this asks the
-/// arrangement rather than the table — every visible leaf has to be in the plan
-/// — and then asks the other way, so a region invented in the table that the
-/// arrangement does not have is caught too.
+/// Asserts that every visible layout leaf and split bay is scheduled for drawing.
 #[test]
 fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
-    // **The narrowest console the mock draws**, where the Program bay's body
-    // is the mock's own arrangement and every one of the thirteen regions is
-    // in the plan. `PLAUSIBLE` is the other case and it is below, because
-    // there the deck previews are beside the picture and the row they used to
-    // be in is set aside — a region out of the plan for a reason that is not
-    // the operator's.
+    // Verify planned regions at minimum console dimensions where all regions are visible.
     let mut panel = Panel::new(SMALLEST.w, SMALLEST.h);
     let placed = planned(&mut panel);
     let layout = panel.layout();
@@ -76,13 +64,7 @@ fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
     assert!(at("program") < at("program-view"));
     assert!(at("program-view") < at("deck-previews"));
 
-    // **And at a window past the crossover, one region is missing on
-    // purpose.** The four cells went beside the picture, so `deck-previews` is
-    // set aside and is not a rectangle to draw — the cells are drawn from
-    // `View::draw`'s one site off `program_bay`, and the leaf loop above is
-    // satisfied because a region that is not `visible` is not asked for.
-    // `tests/rearrange.rs` is where that arrangement is held; what this says
-    // is that the *table* is still complete, one row shorter.
+    // Beyond the crossover width, deck-previews is set aside beside the picture.
     let mut wide = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     let placed = planned(&mut wide);
     let layout = wide.layout();
@@ -107,11 +89,7 @@ fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
     );
 }
 
-/// A bay gets a head and a row does not.
-///
-/// Seven bays, two rows and two panes, and the title of each bay is the mock's
-/// own word for it — so a bay renamed in the manual and not here shows the old
-/// word on the face of the panel, which is exactly what ADR-0159 is about.
+/// Asserts that bay titles match their arrangement names and row regions carry no headings (ADR-0159).
 #[test]
 fn a_bay_gets_a_head_and_a_row_does_not() {
     for name in BAYS {
@@ -124,11 +102,7 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
                 *name,
                 "the bay head says {title} and the arrangement calls it {name}"
             ),
-            // The mixer is a bay and takes the same head, and it is a kind of
-            // its own because `View::draw` has to know which bay the strips
-            // go in — the title is `view::MIXER_TITLE` and is asserted
-            // against the arrangement's name in `tests/mixer.rs`, where the
-            // rest of that bay is.
+            // Custom bay kinds with specialized drawing requirements.
             Kind::Mixer => assert_eq!(*name, "mixer"),
             // And the library is the second bay that is a kind of its own,
             // for the same reason: `View::draw` has to know which bay the
@@ -246,24 +220,7 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
     );
 }
 
-/// The picture's rectangle comes off its own region, and at the width the mock
-/// draws it is the mock's own picture.
-///
-/// This is the rectangle a caller sizes a texture from, so getting it from
-/// anything but `program-view` is a texture the wrong size — and the wrong size
-/// in a way nothing on screen shows, because the picture fills whatever
-/// rectangle it is given either way. At `SMALLEST` the bay's own derivation
-/// says exactly what it should be: the centre track is 484, `.program-body`'s
-/// 9px padding leaves 466, and 466 at 16:9 is 262. Those are the two numbers
-/// the arrangement's 378 was built from, arrived at from the other end.
-///
-/// The region and the canvas agree here to a quarter of a pixel and not
-/// exactly, which is the whole reason `picture_rect` rounds: `.program-view` at
-/// 466 wide is 262.125 tall and the arrangement transcribed 262, so the box is
-/// 1.778626 where the canvas is 1.777778. A strict fit would hand back 465.7778
-/// and a caller's `physical` would round it back to a 466-texel texture — the
-/// same texture, drawn softened into a box a quarter of a pixel narrower than
-/// itself.
+/// Verifies the picture rectangle dimensions and aspect ratio match the mock layout.
 #[test]
 fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     let layout = solved(SMALLEST);
@@ -271,11 +228,7 @@ fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
 
     assert!(near(rect.width(), 466.0), "{} wide", rect.width());
     assert!(near(rect.height(), 262.0), "{} tall", rect.height());
-    // **The tolerance is 0.01 and every other assertion in this file uses
-    // `near` at 1e-3, and that is not a slack anybody forgot to tighten**: 466
-    // x 262 is 1.778626 and 16:9 is 1.777778, so this is the one comparison in
-    // the file that cannot be exact. It is the mock's rounding, and the
-    // paragraph above is where it comes from.
+    // Allow 0.01 tolerance due to pixel-rounding discrepancy (466x262 vs exact 16:9).
     assert!(
         (rect.width() / rect.height() - 16.0 / 9.0).abs() < 0.01,
         "the mock's own picture is 16:9 and this is {}:{}",

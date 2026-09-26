@@ -13,13 +13,7 @@ fn arranging() -> String {
     rest[..end].to_owned()
 }
 
-/// Every row of the section with its panel badge: the title, the badge's class
-/// — `has`, `plan` or `gap` — and the text it names the control's home with.
-///
-/// Read verbatim and never decoded, which is `mcp.rs`'s rule and
-/// `panel_column.rs`'s after it: a badge that names nowhere says `&mdash;`, and
-/// a home that needed decoding to match would be a home nobody could find on
-/// the console page.
+/// Extracts every row with its panel badge class (`has`, `plan`, `gap`) and control home verbatim.
 fn panel_badges() -> Vec<(String, String, String)> {
     let mut found = Vec::new();
     for part in arranging().split(ROW).skip(1) {
@@ -107,56 +101,8 @@ fn dragged_to(axis: Axis, at: Point) -> Point {
     }
 }
 
-/// Every row of this section a hand on the panel reaches, demonstrated on a
-/// running [`Panel`] rather than listed here — see the header.
-///
-/// Three passes. The first presses every boundary the arrangement has and drags
-/// it, and reads the region beside it back either side: that is *Move a
-/// boundary*, and it is in the answer only if a boundary actually moved. The
-/// second presses, drags and releases at every point of a [`STEP`] grid over
-/// the whole console and compares [`shape`] against what it was. The third is
-/// [`reached_through_a_painted_control`], which is a different route and not a
-/// finer grid.
-///
-/// # What the grid still asserts, now that a drag *can* fold a pane
-///
-/// This sentence has moved and the assertion has not, which is worth saying
-/// plainly because the two used to be the same thing. It read *nothing
-/// reachable through [`Panel::press`] folds, unfolds or solos*, and as a claim
-/// about the code that is no longer true: a boundary beside a pane that keeps
-/// its edge, dragged `panel::GRAB` past that pane's own minimum, closes it —
-/// `Panel::press`, `moved`, `released`, and a fold at the end of it (ADR-0300).
-/// `tests/fold_grip.rs` is where that is demonstrated.
-///
-/// What holds the assertion up now is the grid's own reach, and it is stated
-/// here rather than left to be rediscovered. The sweep drags [`DRAG`] = 24
-/// pixels in one direction only — right along a row, down a column — and every
-/// boundary it can take hold of has at least that much room to give that way at
-/// this viewport, so no drag it makes reaches a pane's minimum, let alone
-/// `GRAB` past it. It is a narrower guarantee than it was: *the grid never asks
-/// for a fold*, rather than *no press can produce one*.
-///
-/// So a failure here now has three readings and not two. A control nobody
-/// accounted for, reached by a route nobody meant to open, which is what it
-/// always was; *or* the pull that closes a pane has come within the grid's
-/// reach, in which case what the sweep has found is Fold a pane away and that
-/// row's panel badge is owed — it is `plan` on `docs/manual/operations.html`
-/// and this file is what would have to insert the row here for it to be `has`;
-/// *or* a region that keeps its edge has been added where the grid does have
-/// room. It panics naming where the press was rather than guessing which, which
-/// is the same reason it never guessed a row before.
-///
-/// The row is not inserted here today, and that is deliberate rather than an
-/// oversight: the badge and the demonstration move together
-/// ([`every_arrangement_operation_the_pointer_reaches_is_marked_built`] fails
-/// in one direction and
-/// [`every_arrangement_row_marked_built_is_reached_by_the_pointer`] in the
-/// other), and flipping a badge on `docs/manual/operations.html` is not this
-/// crate's.
-///
-/// So the two passes are not two grids of different resolution. A control this
-/// crate paints is invisible to any grid driven through `Panel::press`, which
-/// is exactly why the third pass drives the other route by hand.
+/// Demonstrates every operation reachable via pointer interactions: boundary drag, grid sweep,
+/// painted controls, and bay grips (ADR-0300).
 fn reached_by_the_pointer() -> BTreeSet<&'static str> {
     let mut reached = BTreeSet::new();
 
@@ -230,13 +176,7 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
         }
         y += STEP;
     }
-    // **The floor that says the grid found the console rather than missed
-    // it.** A sweep whose points all landed outside the viewport, or whose
-    // step had grown past a divider's grab width, would compare `shape`
-    // against itself and report every row unreached — which passes one
-    // direction and fails nothing. Every boundary above is a run of points a
-    // press takes hold at, so a grid that covers the panel grabs many more
-    // than there are boundaries.
+    // Verify sweep density grabs boundaries at least 5 times across the viewport.
     assert!(
         grabs >= 5,
         "the sweep pressed the whole viewport and took hold of a boundary {grabs} times — a \
@@ -249,25 +189,7 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
     reached
 }
 
-/// The fifth pass: the grip in a bay head, driven the way the fourth pass
-/// drives the `solo` pill beside it.
-///
-/// A grip is a painted control in the third pass's sense — [`claim`] says the
-/// press is the panel's, the derivation that drew it says what the press asks
-/// for, and the caller performs it — so the sweep above is blind to it by
-/// construction, exactly as it is to `solo`.
-///
-/// A pane is not here and needs no pass. It folds by its own boundary being
-/// pulled past the narrowest it goes
-/// ([ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)),
-/// which is `Panel::press` and `Panel::moved` — the first pass's route. That
-/// pass does not reach it either, and its own doc says why: the sweep drags
-/// `DRAG` pixels in one direction, and no boundary it can grab has a pane's
-/// minimum within that reach. So both fold rows arrive here through the grip,
-/// which is what `rows_of(Op::Fold)` answering both of them means.
-///
-/// A fresh panel per bay, because a folded bay has no rectangle: a second
-/// derivation would be asked about a console the first press changed.
+/// Verifies fold operations reachable via bay head grips (ADR-0300).
 fn reached_through_the_grip_in_a_bay_head() -> BTreeSet<&'static str> {
     let mut reached = BTreeSet::new();
     let ctx = drawn_once();
@@ -308,11 +230,7 @@ fn reached_through_the_grip_in_a_bay_head() -> BTreeSet<&'static str> {
         reached.extend(rows_of(op));
     }
 
-    // **The floor that says the walk found the grips rather than missed
-    // them.** `bay_grip` answers `None` for a head that declares no grip, so a
-    // rename that made it answer `None` for every head would insert nothing
-    // and report both fold rows unreached — which fails the assertion above
-    // with a message about the page rather than about this walk.
+    // Assert all expected bay grips were discovered.
     assert_eq!(
         found, BAY_GRIPS,
         "the walk found {found} grips and `BAY_GRIPS` says {BAY_GRIPS} — this pass has stopped \
@@ -322,97 +240,11 @@ fn reached_through_the_grip_in_a_bay_head() -> BTreeSet<&'static str> {
     reached
 }
 
-/// The third pass: the rows a *painted control* reaches, driven the way the
-/// window loop drives one.
-///
-/// The two passes above go through [`Panel::press`], and that is the whole of
-/// what they can see. A control this crate paints is reached by a different
-/// route with three steps in it — [`claim`] says the press is the panel's, the
-/// derivation that drew the control says what the press asks for, and the
-/// caller performs whatever that turns out to be — and not one of the
-/// three is `Panel::press`. So the sweep is blind to a painted control whether
-/// or not it exists, which is not a gap in the sweep: it is what
-/// `crates/karakuri/src/main.rs` does with an event, written down in the one
-/// place this crate can run it.
-///
-/// This demonstrates rather than declares, exactly as the sweep does. It
-/// lays the arrangement pill out at the size the panel is really solved at,
-/// asks [`claim`] who a press on it belongs to, asks the pill what that press
-/// asks for, opens the menu with the answer, and then asks every row of the
-/// open menu the same question. A list here saying *the pill reaches the
-/// reset* would be the second copy of something nothing states
-/// (`docs/contributing.md` §4), and
-/// it would go on being true after the arm was deleted.
-///
-/// # Three rows come out of one menu, and they are not all reached the same way
-///
-/// - *Start a new one* is an [`Op`], so it is performed here and read back:
-///   the console is folded about first, the `Op` the row asks for is put
-///   through [`Panel::op`], and [`shape`] has to come back to what a fresh
-///   panel's was. A reset that reset nothing would be a row demonstrated and
-///   not reached.
-/// - *Save* and a filed name are `karakuri_operation::Operation`s, and
-///   [`NO_OP`] is where the reason is: their payload is a file under a store
-///   this crate cannot reach (ADR-0156). So what is demonstrated for those
-///   two is the whole of what this crate has — that a press on a row of a
-///   drawn menu comes back as that operation, named — and who performs it is
-///   `crates/karakuri`'s, which is the same split the header states for *Move
-///   a boundary*: this file checks the necessary half and never the
-///   sufficient one.
-///
-/// The row's title comes from the operation rather than from this file —
-/// [`rows_of`] for an `Op` and `Operation::title` for an `Operation`, which is
-/// the same call `panel_column.rs` makes. A menu that reordered itself is
-/// still measured, and a row whose ask changed is not silently read as the one
-/// it used to be.
-///
-/// # The store's answer is handed in, and that is the seam rather than a prop
-///
-/// The pill is asked with an arrangement in use and one name filed,
-/// because that is what decides two of the three asks: with nothing in use
-/// *save* asks for letters instead of naming a file, and with nothing filed
-/// there is no name to pick. Neither of those is the console being coy — a
-/// name and a listing are a file and a directory, and `src/` has no disk, so
-/// they arrive per frame from whoever does, exactly as
-/// [`karakuri_console::view::View::transport`] does. Handing them in here is
-/// this test standing where `crates/karakuri` stands.
-///
-/// What that leaves uncovered is named rather than implied: on a console
-/// with *no* arrangement in use, *save* answers `Ask::Name` and the operation
-/// arrives only after a name is typed and committed — which is a keyboard, and
-/// this crate has none. That half is `crates/karakuri`'s
-/// `a_finished_name_is_the_save_the_menu_would_have_asked_for`.
-///
-/// # Which failure is loud and which one is quiet, and why they differ
-///
-/// Everything that would mean the demonstration is not running panics, and
-/// the message names what stopped being checked: no pill laid out, a press
-/// [`claim`] does not give the panel, a pill that will not open, an open menu
-/// with no rows in it, folds that changed nothing to forget, or a picked `Op`
-/// that said it reset and did not.
-///
-/// The one thing that does not panic is the answer itself. If a row stops
-/// asking for what it asked for, nothing is inserted for it and
-/// [`every_arrangement_row_marked_built_is_reached_by_the_pointer`] is what
-/// fails — naming the row, and offering the two readings it always offers:
-/// *either the control went and the badge is `plan` again, or it was never on
-/// the panel*. That is the direction this pass exists to serve, so it is left
-/// to the assertion written for it rather than pre-empted here.
+/// Demonstrates operations reachable via painted controls (arrangement pill and menu; ADR-0156).
 fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
     let mut reached = BTreeSet::new();
 
-    // **Something to forget.** A reset on a console that is already the
-    // default changes nothing, so a pass that started there could not tell a
-    // reset from a press that did nothing at all.
-    //
-    // **Two folds and no solo, and that is a fact about the control rather
-    // than a convenience.** `Layout::solo` collapses everything off the solo's
-    // path, so any solo but one on the transport row itself takes that row off
-    // the screen — and a row that is not drawn has no pill in it. The reset
-    // forgets a solo as well as a fold, but a hand cannot ask *this* control
-    // for it while one is in force; that is the Outputs row's situation one
-    // row up (`tests/outputs.rs`), and it belongs to the arrangement rather
-    // than to this pass.
+    // Fold bays to ensure non-default state so reset operation is measurable.
     let mut p = panel();
     let default = shape(&mut p);
     for bay in ["staging", "sequencer"] {
@@ -430,11 +262,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
          performed below would be indistinguishable from a press that did nothing"
     );
 
-    // The pill is as wide as the name in it and sits one gap after the bar, so
-    // it needs `egui`'s fonts and it needs a console with an engine behind it
-    // — see `common::running`, and `view::arrangement` for why a row that is
-    // not drawn has no control in it. The name and the listing are the store's
-    // answer, handed in.
+    // Render arrangement pill with simulated store state.
     let ctx = drawn_once();
     let mut view = running();
     view.arrangement.name = Some(IN_USE.to_owned());
@@ -662,12 +490,7 @@ fn every_arrangement_row_marked_built_is_reached_by_the_pointer() {
     }
 }
 
-/// A control reaching past the page.
-///
-/// The other direction, and it fails apart from the test above because it is
-/// the other failure: that one says the specification promises a player a
-/// control nothing draws, and this one says a hand on the panel already
-/// performs something the page still calls designed.
+/// Asserts that any operation reachable via pointer gestures is marked as built (`has`) in the manual.
 #[test]
 fn every_arrangement_operation_the_pointer_reaches_is_marked_built() {
     let badges = panel_badges();

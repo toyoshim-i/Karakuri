@@ -4,15 +4,7 @@ use super::transport_common::*;
 // Where the readouts are
 // ---------------------------------------------------------------------------
 
-/// The row's furniture is the row's rectangle and the mock's own boxes, and
-/// every number here is read off `style.css` rather than off the panel.
-///
-/// `.transport { display: flex; align-items: center; gap: 14px; padding: 9px
-/// 12px }` around a `.bpm` of `font-size: 20px` — 30 tall at the console's
-/// `line-height: 1.5`, which is the 30 in the arrangement's `9 + 30 + 9` — and
-/// a `.beat-grid` of 15x6 dots with `gap: 4px` between them. So the number
-/// starts one padding in, everything after it starts one gap after the thing
-/// before it, and every box is centred in the row whatever its own height is.
+/// Verifies transport row layout geometry, padding, and readout centering against `style.css`.
 #[test]
 fn the_readouts_are_the_rows_own_geometry() {
     let (panel, ctx) = console(SMALLEST);
@@ -20,12 +12,7 @@ fn the_readouts_are_the_rows_own_geometry() {
     let row = row(&panel, &ctx);
     let mid = strip.y + strip.h * 0.5;
 
-    // **The transcription itself, against the stylesheet.** Everything below
-    // is a *relation* — this box is one gap after that one — and every one of
-    // them holds just as well with a gap transcribed wrong, so the numbers the
-    // relations are stated in are asserted here as the literals `style.css`
-    // has. This is the half of the row that is checked against the mock rather
-    // than against itself.
+    // Literal dimensions checked directly against `style.css` before relation checks.
     assert!(
         near(size::TRANSPORT_PAD_X, 12.0),
         "`.transport` is `padding: 9px 12px`"
@@ -219,20 +206,7 @@ fn the_readouts_follow_the_row() {
 // No engine behind the console
 // ---------------------------------------------------------------------------
 
-/// With no engine behind the console the row is empty, and that is asserted by
-/// drawing it.
-///
-/// `View::transport` is `None` in every test in this crate and in the whole of
-/// `cargo test -p karakuri-console`, which is a console with nothing running
-/// behind it. What it draws then is the card and nothing else — not a row of
-/// zeroes, which would be a tempo nothing is running at and a frame time
-/// nothing measured, and not a row of dashes, which is the same invention with
-/// a different glyph.
-///
-/// So this counts what lands inside the row on a frame drawn each way. One
-/// shape with nothing behind it, which is the card; more than one with the
-/// mock's values, which is the five readouts — and the difference is the whole
-/// claim.
+/// Asserts that a console with no active engine (`View::transport == None`) draws only the card background.
 #[test]
 fn a_console_with_no_engine_draws_nothing_in_the_row() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -362,21 +336,7 @@ fn a_folded_or_soloed_or_narrow_row_draws_nothing() {
 // What the last write did
 // ---------------------------------------------------------------------------
 
-/// The capsule draws the verdict it was handed, in the three words the page
-/// uses, and draws nothing at all where there is none.
-///
-/// The four states are asserted through the paint pass rather than off
-/// [`TransportRow::health`], because a rectangle is not a drawing: the
-/// rectangle was there before this pill was painted into it, and a version of
-/// [`view::transport_into`] that laid the capsule out and never painted it
-/// would satisfy every geometric assertion in this file. So this reads the
-/// words off the frame, which is `a_missing_rate_or_budget_drops_its_own_words`
-/// one item along and the same reason.
-///
-/// `None` is the state worth the most here. A run in which nobody has rewritten
-/// a procedure is most of most runs, and the failure it guards against is an
-/// `armed` capsule reading `landed` about a build nobody made — the panel
-/// asserting on startup that a write it never saw is on screen.
+/// Verifies that the health capsule paints the verbatim stage verdict text, or nothing when `None`.
 #[test]
 fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -447,15 +407,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
     );
 }
 
-/// `.pill.armed` is spent on the one verdict that means the build is on screen,
-/// and the other two take the plain `.pill`.
-///
-/// The mock draws this capsule `armed` and draws it on `landed`, and armed is
-/// this console's *live in the good sense* — the wash the audio-in pill wears
-/// with an input open. A rollback wearing it would say the opposite of what it
-/// means, and nothing about the *word* would be wrong, which is why this is
-/// asserted on the fill and not on the text: `landed` and `overloaded` are both
-/// spelled correctly by a version that washes both.
+/// Asserts that the health capsule receives an armed wash only for `Stage::Landed`.
 #[test]
 fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -505,33 +457,7 @@ fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
 // Nothing here is a control
 // ---------------------------------------------------------------------------
 
-/// Every readout in this row is `egui`'s, unless a boundary has it.
-///
-/// The console's rule has four claims before `egui`'s: a drag in hand, an open
-/// menu, a boundary within `GRAB`, and a control the console draws (ADR-0176).
-///
-/// This test said *nothing in this row is a control* until the arrangement pill
-/// landed, and the sentence has been narrowed twice rather than deleted. It was
-/// never an argument that a control could not go here — it was the statement
-/// that none had, made where a future control added without a decision about
-/// the pointer would fail it. That is exactly what happened, and it failed: the
-/// pill is a control in this row, it has a decision about the pointer, and
-/// `tests/arrangement_pill.rs` is that decision written down — the clearance it
-/// keeps, the boundary band it does not sit in, and the rule an open menu
-/// changes.
-///
-/// The tempo left the list on 2026-09-08 for the same reason, and the decision
-/// behind it is `tests/tempo_figure.rs`: the figure is the track, a press along
-/// it names a tempo outright, and the band around what the grid is running at
-/// is what a press has to land in. What is left here is a beat, a bar, a frame
-/// time and what the last write did — four things a press does not act on — and
-/// every *other* control the mock draws in this row is one of the things
-/// `view::transport` names and does not draw.
-///
-/// The pill is asked for from the same view, so this is not the old assertion
-/// passing because the pill has gone missing: a console with an engine and an
-/// arrangement behind it draws the pill, and every probe below is still
-/// `egui`'s.
+/// Verifies that non-control readouts in the transport row delegate pointer events to `egui` (ADR-0176).
 #[test]
 fn the_readouts_in_the_transport_row_are_not_controls() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -558,11 +484,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
     );
 
     let probes = [
-        // **The tempo is not in this list and left it on 2026-09-08**, which
-        // is the same narrowing the pill made and the reason the sentence
-        // above is written the way it is: the figure is a control now, a press
-        // on it names a tempo, and what it claims is
-        // `tests/tempo_figure.rs`'s whole subject.
+        // The interactive tempo figure is tested separately in `tests/tempo_figure.rs`.
         (row.label.center(), "the BPM label"),
         (row.grid.center(), "the beat grid"),
         (row.dot(0).center(), "the dot the light is on"),
@@ -609,16 +531,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
 // The values are the harness's
 // ---------------------------------------------------------------------------
 
-/// Every number on the row came in through the argument, and the console keeps
-/// none of them.
-///
-/// The row is a function of what it was handed and of the arrangement, and of
-/// nothing else — which is the seam `View::picture` is on, and the reason this
-/// crate can be asked about a live console with no device anywhere near it. So
-/// this asks the same panel twice with two different transports and gets two
-/// different rows, and asks again with the first and gets the first answer
-/// back: a console that had kept anything would answer the third call with the
-/// second call's tempo.
+/// Verifies that transport row rendering is purely stateless with respect to input parameters.
 #[test]
 fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     let (panel, ctx) = console(PLAUSIBLE);

@@ -10,11 +10,7 @@ pub(crate) use karakuri_console::view::{
 pub(crate) use karakuri_layout::Point;
 pub(crate) use karakuri_operation::{Operation, Sync};
 
-/// The mock's own deck B: beat-synced, engaged at 128 BPM and sitting a quarter
-/// beat ahead of the room, with nothing its material refuses. It is deck B
-/// rather than deck A because that is the pane the mock draws every part of
-/// this row live on — a tempo-synced deck's arrows are `.scrub.idle`, which is
-/// its own test below.
+/// Mock deck B configuration: beat-synced and engaged at 128 BPM with active scrub arrows.
 pub(crate) fn mock() -> Pane {
     Pane {
         deck: 1,
@@ -29,21 +25,9 @@ pub(crate) fn mock() -> Pane {
     }
 }
 
-/// The mock deck B's build chips, and every number in it is the mock's own:
-/// `lattice_veil`'s geometry is `examples/lattice_shell.kir`, which declares
-/// `capacity [4096, 262144] = 32768`, and the mock draws that default unlit
-/// because nobody has asked this deck for another number.
+/// Mock build chips for deck B based on `examples/lattice_shell.kir`.
 ///
-/// The ladder is the powers of two inside the declared range, ascending, which
-/// is the list a host reads off the material rather than a list this console
-/// owns — so it is written out here as data rather than generated, exactly as
-/// the mock writes it.
-///
-/// The salt is any number and the test is that it is *this* one: what a press
-/// asks for is a value the host handed over, so a console that computed one
-/// would be reproducible only by accident. `NEXT_SALT` is what
-/// `karakuri_engine::set::derived_salt(0, 1)` is, which makes it a plausible
-/// one to be handed.
+/// Includes power-of-two capacity ladder within [4096, 262144] and sample salt.
 pub(crate) fn aimed() -> Aimed {
     Aimed {
         capacity: 32768,

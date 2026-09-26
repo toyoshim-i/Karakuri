@@ -1,35 +1,4 @@
-//! Focus: the ring `Tab` walks, the level `esc` leaves, and the one field the
-//! console's three pointers now are.
-//!
-//!
-//! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-//! decided the keyboard and built none of it;
-//! [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)
-//! is the first slice, and this is what holds it. Five claims:
-//!
-//! 1. The ring is the arrangement's own walk — down a column, then across —
-//!    and it holds every bay and only the bays. `view::REGIONS` is what it
-//!    is checked against rather than what it is derived from, which is the
-//!    record's own instruction, so this file is where the constant does the
-//!    checking.
-//! 2. `Tab` walks it forward and wraps; `shift-Tab` is that walk run
-//!    backwards and nothing else. The two have to agree about where they
-//!    are, which is what a round trip asserts and what a *second rule* for
-//!    the backward direction would have cost.
-//! 3. A folded bay is visited. It is in the ring so that there is something
-//!    to press to open it, not so that it can be operated — the narrow
-//!    reason, and the one that decides this test.
-//! 4. `esc` leaves a level and stops at the bay. There is no unfocused
-//!    state to fall out into, so the key acts on nothing there and says so.
-//!    That it does not quit is the window loop's half and is
-//!    `karakuri/src/main.rs`'s `focus_keys`.
-//! 5. The deck selection, the library cursor and the marked scope are three
-//!    readings of one field. The test that says so moves one of them
-//!    through the shared path — `Focus`, not `View::select` — and reads it
-//!    back off the method that is supposed to be a reading of it.
-//!
-//! No device and no `egui` pass, which is the whole of this crate: the ring is
-//! a walk of a tree and the mark is a rectangle.
+//! Focus ring traversal and hierarchical navigation across console bays (ADR-0259, ADR-0332).
 
 mod common;
 
@@ -40,15 +9,7 @@ use karakuri_console::room::{size, Room};
 use karakuri_console::view::{region, Mask, Scope, Strip, Tally, View, REGIONS};
 use karakuri_operation::BlendMode;
 
-/// The nine bays, in the order the arrangement's own walk reaches them — the
-/// transport, then the left pane down, then the centre's, then the right
-/// pane's, then the outputs row.
-///
-/// Written out rather than derived, because deriving it is what is under test.
-/// It is the same order `REGIONS` is written in less the four regions that are
-/// not bays, which is what `every_bay_and_only_the_bays_are_in_the_ring`
-/// asserts separately — so a reordering of the arrangement fails here with the
-/// order it now has, and a region that stopped being a bay fails there.
+/// Ordered list of nine bays visited during focus ring traversal across arrangement regions.
 const WALK: &[&str] = &[
     "transport",
     "library",
@@ -207,13 +168,7 @@ fn a_tab_and_a_shift_tab_come_back_to_the_same_bay() {
     }
 }
 
-/// A folded bay stays in the ring.
-///
-/// The Master bay is the one `console.html` draws the folded mark on, so it is
-/// the one folded here. It is in the ring so that there is something to press
-/// to open it — not so that it can be operated, which is the narrow reading
-/// ADR-0259 took and the one that keeps this test from being about a bay's
-/// contents.
+/// Folded bays remain in the focus ring to permit keyboard reopening (ADR-0259).
 #[test]
 fn a_folded_bay_is_still_in_the_ring() {
     let mut panel = panel();
@@ -232,11 +187,7 @@ fn a_folded_bay_is_still_in_the_ring() {
          can only be unfolded with a pointer, and `z` unfolds everything"
     );
 
-    // **And `Tab` reaches it**, in at most one turn of the ring. The bound is
-    // the assertion and not a guard: a walk that does not reach every bay in
-    // `WALK.len()` presses is a ring with a bay missing from it or a `Tab` that
-    // has stopped moving, and a `while` here would hang on either rather than
-    // say which.
+    // Tab traversal reaches folded bays within one complete ring cycle.
     let mut focus = Focus::default();
     let reached = (0..WALK.len()).any(|at| {
         if at > 0 {
@@ -395,12 +346,7 @@ fn a_folded_bay_takes_focus_and_is_not_ringed() {
     );
 }
 
-/// The three pointers are three readings of one field.
-///
-/// Each of them is moved through the method that is its only writer and read
-/// back out of the shared path — `View::focus`, the one field they are all in —
-/// and then out of its own reader. Two directions of one claim: the storage is
-/// one thing, and what each of the three *means* is unchanged.
+/// Deck selection, library cursor, and scope focus reflect shared pointer state via `View::focus`.
 #[test]
 fn the_three_pointers_are_one_mechanism() {
     let mut view = View::new(Room::Day);

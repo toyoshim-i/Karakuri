@@ -4,24 +4,8 @@ use super::library_common::*;
 // The scope row: four questions, one of them marked
 // ---------------------------------------------------------------------------
 
-/// The scope row draws the chips it was handed, in the order it was handed them
-/// — which is the bay's own row: `all`, `my sets`, `presets`, `folder`,
-/// `history`.
-///
-/// It is the mock's row with its first chip renamed and moved, which is
-/// [ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md):
-/// `my sets` is the starred subset now, so the chip that lists everything the
-/// store holds is `all` and it comes first, because it is the listing the other
-/// three are questions about.
-///
-/// `history` is last and is not a library of Sets (ADR-0308): its rows are the
-/// versions of the Set the load pulldown's deck is running, which is why it
-/// sits after the four rather than among them.
-///
-/// The `+` the mock draws after them is not one of them, and that is asserted
-/// rather than left to a reader counting the chips: it is the arena's own gap
-/// drawn a fifth time, and a chip for it would be a control over adding a
-/// region.
+/// Verifies the scope row draws all five chips in order: `all`, `my sets`,
+/// `presets`, `folder`, `history` (ADR-0299, ADR-0308).
 #[test]
 fn the_scope_row_draws_the_chips_it_was_handed_in_the_order_it_was_handed_them() {
     let (mut view, mut panel) = showing_mock();
@@ -33,12 +17,7 @@ fn the_scope_row_draws_the_chips_it_was_handed_in_the_order_it_was_handed_them()
     );
 }
 
-/// One chip is marked and it is the one the scope pointer is on, asserted by
-/// drawing the bay and finding the wash.
-///
-/// The mark follows the pointer rather than being painted at a fixed chip,
-/// which is the failure a first-chip default hides completely — so the pointer
-/// is stepped the whole way round and the wash is read off the frame each time.
+/// Verifies the marked chip follows the scope pointer across all choices.
 #[test]
 fn the_marked_chip_is_the_scope_the_pointer_is_on() {
     let (mut view, mut panel) = showing_mock();
@@ -150,13 +129,7 @@ fn a_scope_that_is_not_on_the_row_is_refused() {
 // The load route: a cursor, a letter, and no pointer
 // ---------------------------------------------------------------------------
 
-/// Every filled rectangle painted at one of the bay's own row boxes, as the row
-/// index it landed on.
-///
-/// The cursor's mark is a wash and nothing else — `.lib-row.cursor` sets a
-/// `background` and a `color`, and no rule, caret or chevron — so a row that is
-/// not under it paints no rectangle of its own at all. That is what makes
-/// counting them the whole assertion: one washed row, and it is the cursor's.
+/// Returns row indices of filled rectangles matching the bay's row boxes.
 fn washed(shapes: &[egui::Shape], bay: &LibraryBay) -> Vec<usize> {
     (0..bay.rows)
         .filter(|index| {
@@ -174,13 +147,7 @@ fn washed(shapes: &[egui::Shape], bay: &LibraryBay) -> Vec<usize> {
         .collect()
 }
 
-/// The cursor is one row and the row is the one it is on, asserted by drawing
-/// the bay and finding the wash.
-///
-/// The mock puts `.lib-row.cursor` on the first row and this console starts
-/// there, so the untouched case is the mock's own picture. What the walk then
-/// proves is that the mark follows the pointer rather than being painted at a
-/// fixed row — the failure a first-row default hides completely.
+/// Verifies the cursor is drawn as a wash on the active row and moves with the pointer.
 #[test]
 fn the_cursor_is_one_row_and_it_is_the_row_it_is_on() {
     let (mut view, mut panel) = showing_mock();
@@ -216,13 +183,7 @@ fn the_cursor_is_one_row_and_it_is_the_row_it_is_on() {
     assert_eq!(washed(&drawn, &bay), vec![0], "the walk back drew nothing");
 }
 
-/// The cursor is held inside the rows the bay drew, and it does not wrap.
-///
-/// This bay has no scroll position, so the Sets an operator can reach are the
-/// ones the foot counts as listed — a cursor past them would sit on a row
-/// nobody can see, under a pill saying a press will load it. And a walk that
-/// wrapped would jump the length of the list on one press of a key somebody is
-/// leaning on.
+/// Verifies the cursor is bounded by the displayed rows and does not wrap.
 #[test]
 fn the_cursor_stays_inside_the_rows_that_are_listed() {
     let mut view = View::new(Room::Day);
@@ -257,23 +218,7 @@ fn the_cursor_stays_inside_the_rows_that_are_listed() {
     assert_eq!(empty.cursor_row(), 0);
 }
 
-/// The foot says where a press would land, and the letter follows the pulldown
-/// rather than the deck selection.
-///
-/// `console.html`: *"The letter in the pulldown is the whole warning … What the
-/// control owes instead is to say where it lands before the press."* So this
-/// asserts what is painted rather than a rectangle, and asserts it again after
-/// the mark moves — a foot that read `A` whatever was aimed at would pass the
-/// first half and be a lie for the other three decks.
-///
-/// And it asserts which of the two marks the letter is, which is the whole of
-/// ADR-0305: the letter used to be [`View::selection`], so a test that only
-/// walked one mark would pass against the readout this replaced. The second
-/// half moves the *selection* with the target standing still and reads the foot
-/// again.
-///
-/// The letter is its own galley, because the arrow beside it is drawn rather
-/// than typed — see [`the_foots_arrow_is_drawn_rather_than_typed`].
+/// Verifies the foot indicates target deck from pulldown rather than selection (ADR-0305).
 #[test]
 fn the_foot_says_which_deck_a_press_would_land_on() {
     let (mut view, mut panel) = showing_mock();
@@ -330,25 +275,7 @@ fn the_foot_says_which_deck_a_press_would_land_on() {
     );
 }
 
-/// The foot's arrow is drawn rather than typed, because `egui`'s default face
-/// has no U+2192.
-///
-/// The pill was `"load \u{2192} "` with the deck's letter appended, and the
-/// panel drew `load □ A`: a readout of *where a press would land* with a tofu
-/// where the arrow was. `CHEVRON_W` three bays along records the answer for
-/// this whole class of question — whether a glyph is in the default face has no
-/// good answer, so the mark is drawn — and this is that answer applied here.
-///
-/// # What it asserts
-///
-/// 1. Nothing painted in the foot carries U+2192, which is the defect
-///    itself and is asserted over every galley rather than over the
-///    constant: a character typed back into the word would fail here.
-/// 2. A triangle is painted in the arrow's box, so the mark did not simply
-///    go away — a pill reading `load A` says nothing about where the letter
-///    stands to the word.
-/// 3. The box is between the word and the letter, which is what makes the
-///    three one reading rather than a mark parked at one end.
+/// Verifies foot arrow is drawn via path rather than U+2192 glyph to avoid tofu rendering.
 #[test]
 fn the_foots_arrow_is_drawn_rather_than_typed() {
     let (mut view, mut panel) = showing_mock();
@@ -438,19 +365,7 @@ fn a_press_on_load_asks_for_the_deck_the_pulldown_names() {
     );
 }
 
-/// A pick in the pulldown names a deck, asks for nothing, and moves neither the
-/// ring nor the cursor.
-///
-/// Three claims because they are the three the control owes: the capsule puts
-/// the list down, a row of that list is `Aim::Deck` and no `Operation` at all,
-/// and performing it leaves [`View::selection`] where it was. The third is the
-/// one a reader will doubt — *surely picking a deck selects it* — and it is
-/// exactly what ADR-0305 refused: `Operation::SelectDeck` moves the keys, and
-/// this mark is the one that does not.
-///
-/// The list goes away with the pick, which is the gesture ending: nothing is
-/// emitted, so there is no host arm to end it in, and a card left down would go
-/// on claiming every press on the console (`input::claim`'s rule 2).
+/// Verifies pulldown selection names target deck without moving selection or cursor (ADR-0305).
 #[test]
 fn a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing() {
     let (mut view, panel) = showing_mock();
@@ -518,19 +433,7 @@ fn a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing() {
     assert!(!view.target_open(), "the list stayed down after a pick");
 }
 
-/// The pulldown offers the decks the mixer is drawing strips for, and no others
-/// — and a console with no strip at all cannot put a list down.
-///
-/// `console.html`: *"A deck the mixer is drawing no strip for is not in the
-/// list, which is the count `0`–`3` are refused on"*. So this is
-/// [`View::select`]'s own refusal read a second time, asserted in both
-/// directions: three strips list three decks, and deck D is turned down rather
-/// than clamped to the last one there is.
-///
-/// The empty case is the one that would bite, and it is why `open_target`
-/// refuses: a card with no rows in it offers nothing to pick and nothing to
-/// leave by, and rule 2 would hand it every press on the console until a second
-/// press shut it.
+/// Verifies pulldown offers only decks with mixer strips and refuses open if empty.
 #[test]
 fn the_pulldown_offers_the_decks_the_mixer_is_drawing_and_no_others() {
     let (mut view, panel) = showing_mock();
@@ -568,14 +471,7 @@ fn the_pulldown_offers_the_decks_the_mixer_is_drawing_and_no_others() {
     assert_eq!(bay.load(&ctx, bare.target()).list(viewport(&panel)), None);
 }
 
-/// While the list is down, every press on the console is part of that gesture.
-///
-/// `input::claim`'s rule 2, which the two cards in the transport row are
-/// already under: the card is drawn over this bay's own rows, so a press inside
-/// it belongs to the card and a press anywhere else is the dismissal. Both
-/// halves are asserted, because a rule that only claimed the card would leave
-/// the first press outside it doing whatever it does the rest of the time —
-/// loading a deck, or moving a fader.
+/// Verifies that while target pulldown is open, all presses are captured or dismiss it.
 #[test]
 fn while_the_list_is_down_every_press_is_part_of_that_gesture() {
     let (mut view, mut panel) = showing_mock();

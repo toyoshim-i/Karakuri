@@ -1,15 +1,7 @@
 use super::panel_column_common::*;
 use super::sample::sample;
 
-/// Every `.rs` file under `dir`, including the ones in directories under it.
-///
-/// The read was one level deep until 2026-09-07, with the count floor above as
-/// its only guard — and the floor could not have caught the case it was written
-/// for. There are seven `.rs` files directly under `SRC`; splitting `view.rs`
-/// into `view/` would leave seven of them there and take every emission in it
-/// out of this scan, silently, with `files.len() >= 7` still true.
-/// `crates/karakuri/src/main.rs`'s press handler ran the same listing with the
-/// same floor and is gone; this is the other half.
+/// Recursively finds every `.rs` file under `dir`.
 fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
     let entries = fs::read_dir(dir).unwrap_or_else(|e| {
         panic!(
@@ -27,18 +19,7 @@ fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
     }
 }
 
-/// Every operation a control in this crate constructs, by the criterion in this
-/// file's header, as an `Operation` apiece.
-///
-/// Sorted and deduplicated by title, because the question is which rows are
-/// reached and one row may be reached from more than one file. Every `.rs` file
-/// under [`SRC`], as one string, for [`DRAWN`]'s markers to be looked for in.
-///
-/// Comments are not cut, unlike [`emissions`]: a marker naming a field or a
-/// function is looked for as text, and a mention of one in a doc comment is a
-/// mention of a thing that exists. The failure this guards against is a readout
-/// that stopped being drawn, and deleting a field deletes the lines that talk
-/// about it.
+/// Concatenates source code of all `.rs` files in [`SRC`] into a single string for [`DRAWN`] marker searches.
 fn code_of_src() -> String {
     let dir = workspace().join(SRC);
     let mut files = Vec::new();
@@ -132,50 +113,11 @@ fn elsewhere() -> BTreeSet<String> {
     found
 }
 
-/// Every row's title and its panel badge, in page order: the badge's class —
-/// `has`, `plan` or `gap` — and the text it names the control's home with.
-///
-/// Read verbatim and never decoded, for `mcp.rs`'s reason: a `gap` badge says
-/// `&mdash;` and a home that needed decoding to match would be a home nobody
-/// could find on the console page. What a readout the panel draws is drawn by,
-/// one row per readout: the title on [`PAGE`] and a marker in [`SRC`] that
-/// draws it.
-///
-/// # Why a `has` badge can be satisfied by this and not only by an emission
-///
-/// [`every_panel_route_the_page_marks_built_is_emitted_by_a_console_control`]
-/// demands that some line of this crate construct `Operation::<the variant>`,
-/// and for a write that is the only way a surface reaches an operation: a fader
-/// that moves nothing is not a fader. A readout has no gesture at all. It is
-/// answered without being asked, so there is no press to attach an emission to,
-/// and inventing one would be ADR-0264's own rejected alternative in a worse
-/// form.
-///
-///
-/// [ADR-0284](../../../docs/adr/0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md)
-/// left the badge at `plan` and named the correction to start from: relax the
-/// check for rows the page marks `read`, and hold the drawing somewhere that
-/// can see it. What it turned that shape down for was what it would stop
-/// checking — relaxing for a class of rows removes the emission check for
-/// *every* member of it, including the two that are `has` today because a
-/// gesture really does emit. This table is the answer to that objection: the
-/// check is not relaxed, it is given a second way to be met, and the second way
-/// is as mechanical as the first. A row that is neither emitted nor drawn still
-/// fails.
-///
-/// A hand-written table, and the precedent is `press_handler::ASKED` in
-/// `crates/karakuri/src/main.rs` — the same shape, the same failure mode, and
-/// the same answer to it: an entry that names nothing fails, and a badge with
-/// no entry fails. What this one cannot see is the *seam* — that the value
-/// reaching the readout is the one the deck said — because `karakuri-console`
-/// cannot see `crates/karakuri`. That half is the window's own test, named
-/// beside each entry.
+/// Readouts drawn by the panel that satisfy `has` badges via source markers rather
+/// than emissions (ADR-0284). Maps row titles on [`PAGE`] to code markers in [`SRC`].
 const DRAWN: [(&str, &str); 1] = [
-    // **The transport row's health capsule** — `landed`, `overloaded` or
-    // `failed`, taken off the one drain that writes the Staging lane. The
-    // drawing is `tests/transport.rs`'s; the seam is `crates/karakuri`'s
-    // `the_swap_report_says_what_the_lane_says`, which takes a device because
-    // a `swap::Event` cannot be made without one.
+    // Transport row's health capsule (`landed`, `overloaded`, or `failed`).
+    // Drawn in tests/transport.rs; seam tested in crates/karakuri.
     ("Find out what a write did", "pub health: Option<Stage>"),
 ];
 
@@ -266,12 +208,8 @@ fn the_scan_finds_the_page_and_the_source() {
     );
 }
 
-/// A control reaching past the page.
-///
-/// An operation this crate's controls emit whose panel badge is not `has` is a
-/// meter that has stopped moving with the thing it measures — ADR-0213's stated
-/// failure mode, which is that a badge moved and a figure did not, from the
-/// side where the code moved first.
+/// Asserts that any operation emitted by console controls has a corresponding
+/// built (`has`) badge in the specification (ADR-0213).
 #[test]
 fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
     let routes = panel_routes();
@@ -300,14 +238,8 @@ fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
     }
 }
 
-/// [`DRAWN`], held against the page and the source it stands between.
-///
-/// Written to fail rather than to pass, on
-/// [`the_unreachable_exemption_is_still_the_state_of_the_page`]'s terms: a
-/// table that names a row the page no longer marks `read`, or a marker no
-/// longer in the source, is a second way to meet a `has` badge that has stopped
-/// being met. It is also what stops the table being used on a write row, where
-/// an emission is the only honest evidence.
+/// Verifies that every [`DRAWN`] entry corresponds to a `read` row marked `has`
+/// and its marker exists in source.
 #[test]
 fn every_drawn_entry_names_a_read_row_the_page_marks_built_and_a_drawing_that_is_there() {
     let reads = reads();
@@ -340,14 +272,7 @@ fn every_drawn_entry_names_a_read_row_the_page_marks_built_and_a_drawing_that_is
     }
 }
 
-/// The one exemption, held against the page it exempts.
-///
-/// [`UNREACHABLE`] is a list written by hand, so it is written to fail rather
-/// than to go stale: an entry nothing emits is an exemption granted to nobody,
-/// and an entry whose badge has become `has` is an exemption that has stopped
-/// being true — which is what happens the day somebody settles `SetSync`'s
-/// record and the row is genuinely reachable. Either way this says so and names
-/// the line to delete.
+/// Verifies that manual exemptions in [`UNREACHABLE`] remain emitted and not yet marked `has`.
 #[test]
 fn the_unreachable_exemption_is_still_the_state_of_the_page() {
     let emitted: BTreeSet<&str> = emissions().iter().map(|op| op.title()).collect();
@@ -371,16 +296,8 @@ fn the_unreachable_exemption_is_still_the_state_of_the_page() {
     }
 }
 
-/// The page claiming a control that does not exist.
-///
-/// It fails apart from the test above because it is a different failure: that
-/// one says the console reached past the specification, this one says the
-/// specification promises a player a control nothing draws. The home is checked
-/// too, in the place `mcp.rs` checks a tool's name — the panel column's badge
-/// text is a place on the console rather than an identifier this crate holds,
-/// so what is checkable is that a built route names one at all. A `has` badge
-/// saying `&mdash;` would be the page asserting an operator reaches it and
-/// declining to say from where.
+/// Asserts that every panel route marked built (`has`) on the page is actually
+/// emitted or drawn by a console control.
 #[test]
 fn every_panel_route_the_page_marks_built_is_emitted_by_a_console_control() {
     let emitted: BTreeSet<&str> = emissions().iter().map(|op| op.title()).collect();

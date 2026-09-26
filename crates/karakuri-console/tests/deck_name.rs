@@ -1,43 +1,4 @@
-//! The name in an Inspector pane's head: this console's second letter-taking
-//! flow.
-//!
-//! The head reads `showing deck A · drift_night` with the `keep` capsule at the
-//! other end of the same row. A press on the name puts the head into a naming
-//! state, letters go into it, return files the deck under what was typed, and
-//! escape leaves it alone —
-//! [ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md).
-//!
-//! Nine things:
-//!
-//! 1. Where the run sits, as `.half-head`'s flex row lays it out — after
-//!    the label, one gap along, aligned with the capsule at the other end.
-//! 2. That it clears every boundary's grab, which is `keep_pill.rs`'
-//!    arithmetic at the other end of the same row: the capsule's nearest
-//!    boundary is the pane divider on its right, and this one's is the
-//!    divider on its left.
-//! 3. Where the `▾` boundary is. The mock's chevron means *point this pane
-//!    at another deck* and is not a control this console has. The name
-//!    target stops at the run's own ink and the chevron's rectangle is
-//!    reserved beside it, so the day the chooser lands it takes that place
-//!    rather than taking it back.
-//! 4. That the run never reaches the `keep` capsule.
-//! 5. That a press opens the field in that head and in no other, and that
-//!    one head asks at a time.
-//! 6. That the commit is `SaveSet { deck, id: Some(typed) }` for the deck
-//!    that head is showing — and that the capsule beside it still files
-//!    under a stamp, which is ADR-0287 surviving as the unnamed route.
-//! 7. That escape leaves the deck alone, and that a half-typed name is not
-//!    kept for next time.
-//! 8. That a head with no room for the run draws none, and that a console
-//!    that has not drawn has none — `keep_pill.rs`' two guards, on a
-//!    readout instead of on a capsule.
-//! 9. That the field is *painted*: the label reads `keep as` and the run
-//!    reads what was typed with the caret after it.
-//!
-//! What is not here and cannot be: that `input::claim` gives the panel a press
-//! on the run, and that the keyboard reaches `View::type_into_name` while a
-//! head is asking. Those are `input::PROBES`' row and the window's key arm, in
-//! files this test's author does not own.
+//! Inspector pane head deck name editing and commit flows (ADR-0292).
 
 mod common;
 
@@ -136,21 +97,10 @@ fn the_run_sits_one_gap_after_the_label() {
                 named.name.height(),
                 size::PILL_H
             );
-            // **As wide as the run, or as wide as what the row leaves it** —
-            // the count at the right of the head is placed before this and the
-            // words stop one gap short of it, so at the narrowest viewport the
-            // arrangement admits the *name* is clipped rather than the count
-            // dropped. Both halves are asserted, because the derivation is a
-            // `min` of exactly these two.
+            // Width is bounded by text run width and available row space before the count.
             let count = pane_count(&ctx, &at_pane, &pane, None, None)
                 .expect("a head with room for its count");
-            // **The chooser's own room comes off it too**, since 2026-09-10:
-            // the `▾` sits between the run and everything else in the row and
-            // is a control now, so the run is clipped short of it rather than
-            // over it (ADR-0338, decision 5). The mark's width is read off the
-            // derivation rather than restated, because `CHEVRON_W` is the
-            // view's own and a second copy here would go on saying what it
-            // said the day the mark changed size.
+            // Chooser chevron room is deducted from available width (ADR-0338).
             let room = count.min.x
                 - size::HALF_HEAD_GAP
                 - (named.chevron.width() + size::HALF_HEAD_GAP)
@@ -256,13 +206,7 @@ fn a_name_too_long_for_the_head_is_clipped_at_the_capsule() {
     );
 }
 
-/// A head with no room for any of the run draws none, which is `keep_pill`'s
-/// rule read on a readout: a target over ink nobody can see is a press that
-/// lands on nothing an operator could have aimed at.
-///
-/// The narrow head is built here rather than solved for, because the panel's
-/// own minimum is far wider than this — `keep_pill.rs`' reason, one control
-/// along.
+/// A pane head with insufficient space renders no name target.
 #[test]
 fn a_head_with_no_room_for_the_run_draws_none() {
     let pane = mock();
@@ -277,11 +221,7 @@ fn a_head_with_no_room_for_the_run_draws_none() {
     // and the gap the words stop short of it by: a head exactly this wide has
     // the run starting where the run must already have stopped.
     let capsule = run(&ctx, "keep") + size::PILL_PAD_X * 2.0;
-    // **And the chooser between them**, which is the `▾` this pass made a
-    // control: the run stops one gap short of the mark and the mark keeps its
-    // place, so a head this wide has nowhere left to paint a name. Its width
-    // is read off a head that has room rather than restated — the view owns
-    // `CHEVRON_W`.
+    // The chevron chooser occupies space, leaving zero width for the name in narrow heads.
     let chevron = deck_name(&ctx, &at_pane, &pane, None, None)
         .expect("a head with room for the run")
         .chevron
@@ -659,11 +599,7 @@ fn words_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<Str
         .collect()
 }
 
-/// The head says what the letters are for, and shows them with the caret after
-/// them. `showing deck A · drift_night` becomes `keep as deck A · glass▏`: the
-/// label is the only thing in the row that can say what a run of letters is
-/// *for*, and the deck stays because the half of the run being replaced is
-/// exactly the half a name is.
+/// Pane head shows editing label prefix `keep as` followed by typed text and caret.
 #[test]
 fn the_head_reads_keep_as_while_it_is_asking() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);

@@ -1,24 +1,13 @@
-//! The regions the console has, and the names they answer to.
+//! Console regions and their corresponding lookup names.
 //!
-//! A name is how the keyboard, a MIDI map and MCP each reach a region, so this
-//! is checked against `docs/manual/console.html` rather than against the
-//! arrangement: the list below is read off the manual, and the arrangement has
-//! to match it in both directions.
+//! Reconciled against `docs/manual/console.html` so names reachable by
+//! keyboard, MIDI, and MCP match the manual in both directions.
 
 mod common;
 
 use common::names;
 
-/// Every heading in *What each region is standing on* that names a region of
-/// the panel, plus the two bays the mock draws that the headings fold together
-/// — "Library, and staging under it" is one heading and two bays, and the mock
-/// heads them `Library` and `Staging`.
-///
-/// The headings that are not regions are not here: *Who is holding a control*,
-/// *A knob is bound to a deck*, *Two focuses*, *Authority is per node* and
-/// *Every icon explains itself* are all properties of what a region contains.
-/// *Health, in the transport* names the transport, which is also the mock's
-/// first bay.
+/// Panel regions named in manual headings, including bays drawn by the mock.
 const MANUAL: &[&str] = &[
     "transport",
     "library",
@@ -72,20 +61,8 @@ fn nothing_resolves_that_is_not_a_named_region() {
     );
 }
 
-/// The body row — the one holding the two panes and the centre — has no name,
-/// and *nothing reaches it* is not the reason. `Layout::hit` hands the row out
-/// as `Hit::Divider { split, .. }` and `crates/karakuri/src/main.rs`'s
-/// fold-at-pointer turns that into `Op::Fold(split)`, so `g` over the gap
-/// between two panes folds this row today. What it cannot be is reached by
-/// anything holding only a name — a keyboard, a MIDI map or MCP — and giving it
-/// one would assert that folding the row of three panes is an operation an
-/// operator asks for, which is a decision nobody has taken (ADR-0197).
-///
-/// So this is not a test that the row is unreachable. It pins the two things
-/// that decision would change: the row is still the three-way split holding the
-/// panes and the centre, and it still answers `None` when asked for a name.
-/// Naming it is then a line somebody writes here on purpose, rather than one
-/// that arrives with an edit to the arrangement.
+/// The body row is unnamed to prevent direct naming operations (ADR-0197)
+/// while still supporting pointer-based divider folding.
 #[test]
 fn the_row_holding_the_panes_and_the_centre_is_unnamed() {
     let layout = karakuri_console::layout();

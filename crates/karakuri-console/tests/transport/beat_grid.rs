@@ -33,21 +33,7 @@ fn the_grid_reads_the_position_the_beats_say() {
     }
 }
 
-/// Beat zero is a place on the grid and not the absence of one, and the
-/// two ways an `f64` gets it wrong are here rather than left to be discovered
-/// on a panel.
-///
-/// - A position a hair before the downbeat. `(-1e-18).rem_euclid(4.0)` is
-///   `4.0` exactly — the true remainder is a hair under the divisor and rounds
-///   up to it. As a dot *index* that was one past the end of a four-dot grid
-///   and had to be clamped; as a position it is the downbeat, because
-///   `beat_at` measures round the cycle and `4.0` is no distance at all from
-///   the first dot. The clamp went with the index (ADR-0212), so what this
-///   asserts now is that the light lands on dot 0 rather than that a number
-///   was caught on the way out.
-/// - A position before the session's own zero. `Oscillator::behind` reads
-///   the same grid at an earlier time, which is what a slot warming behind the
-///   session is, and a `%` on a negative is negative: a position no grid has.
+/// Verifies that beat zero and negative beat positions map correctly onto the beat grid (ADR-0212).
 #[test]
 fn beat_zero_and_the_beats_before_it_are_places_on_this_grid() {
     for beats in [0.0, -1e-18, -0.5, -1.0, -4.0, -4.5, -7.9] {
@@ -193,23 +179,7 @@ fn the_light_is_a_pure_function_of_the_position() {
     }
 }
 
-/// At the instant of a beat the grid is the mock's own picture, which is the
-/// claim above followed all the way to the paint pass.
-///
-/// `Transport::position` is arithmetic and `TransportRow::at` is that
-/// arithmetic carried, and neither of them is a colour: a grid that read the
-/// right position and painted the wrong dot would pass every assertion above.
-/// So this draws the frame and counts the dots by their fill — `.beat-grid i`
-/// is `--c-line`, `.beat-grid i.on` is `--c-pink` — and walks the light from
-/// beat to beat, checking each time that exactly one dot is fully lit, that it
-/// is the one the light is on, and that the other three are exactly the unlit
-/// colour.
-///
-/// That is the mock's markup, `<i class="on"></i><i></i><i></i><i></i>`, and it
-/// is why the mock did not have to be contradicted to make the beat continuous:
-/// it is a frame of the travel rather than a different drawing (ADR-0212). What
-/// happens between two of these frames is
-/// `between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it`.
+/// Verifies painted beat grid dot colors and glow halo shapes at exact beat instants (ADR-0212).
 #[test]
 fn at_the_instant_of_a_beat_the_grid_is_the_mocks_picture() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -225,11 +195,7 @@ fn at_the_instant_of_a_beat_the_grid_is_the_mocks_picture() {
         view.transport = Some(values);
         let row = transport(&drawn_once(), panel.layout(), Some(values)).expect("a row");
 
-        // **Six shapes the size of a dot and not five**: the halo under the
-        // lit one is a blurred rectangle of the same size, which is how
-        // `.beat-grid i.on`'s `box-shadow: 0 0 9px var(--c-glowp)` is drawn —
-        // the same mechanism the Outputs row's dot and every bay's card use.
-        // So the two are told apart by their blur, and both are checked.
+        // Includes the blurred halo shape under the lit dot (`box-shadow`), giving 6 shapes total.
         let painted: Vec<egui::epaint::RectShape> = shapes_inside(&mut view, &mut panel, strip)
             .into_iter()
             .filter_map(|shape| match shape {
@@ -377,13 +343,7 @@ fn between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it() {
     }
 }
 
-/// How many beats there are in a bar is the harness's answer and not a constant
-/// here, so a grid of three is three dots and lights the third.
-///
-/// `karakuri_signal`'s own `BEATS_PER_BAR` says of itself that it is
-/// provisional — v0.2 of the IR spec has no time signature anywhere — so a 4
-/// written into this crate would be a copy that goes on saying four the day
-/// that changes, with nothing on the panel saying so.
+/// Asserts that grid width and dot count follow the transport's dynamic `beats_per_bar`.
 #[test]
 fn the_grid_is_as_many_dots_as_the_bar_has_beats() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -424,14 +384,7 @@ fn the_grid_is_as_many_dots_as_the_bar_has_beats() {
     assert!(near(row.grid.width(), size::BEAT_W));
 }
 
-/// A reading nobody has is not drawn as a plausible one, which is the whole
-/// value's rule read at the one place it is a word rather than a shape.
-///
-/// The mock's `58 fps · cpu 12.4/16.6 ms` has two numbers this console may not
-/// have: the rate, which needs a stretch of untouched window to measure, and
-/// the budget, which is the display's refresh interval and which `winit` will
-/// not always name. Neither absence draws a `0`, a `—`, or the mock's own 16.6
-/// — each drops its own words and leaves the rest of the line.
+/// Verifies that missing performance readings (FPS or frame budget) cleanly omit their labels.
 #[test]
 fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
