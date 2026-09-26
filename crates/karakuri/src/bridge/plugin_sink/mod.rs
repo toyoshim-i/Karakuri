@@ -237,9 +237,7 @@ mod windows {
             let dxgi_format = match format.remove_srgb_suffix() {
                 wgpu::TextureFormat::Bgra8Unorm => DXGI_FORMAT_B8G8R8A8_UNORM,
                 wgpu::TextureFormat::Rgba8Unorm => DXGI_FORMAT_R8G8B8A8_UNORM,
-                other => {
-                    return Err(format!("unsupported format for output plugin: {other:?}"))
-                }
+                other => return Err(format!("unsupported format for output plugin: {other:?}")),
             };
 
             let size = wgpu::Extent3d {
@@ -264,7 +262,9 @@ mod windows {
                                 .position(|&c| c == 0)
                                 .unwrap_or(desc.Description.len());
                             let desc_name = String::from_utf16_lossy(&desc.Description[..len]);
-                            if desc_name.contains(&adapter_name) || adapter_name.contains(&desc_name) {
+                            if desc_name.contains(&adapter_name)
+                                || adapter_name.contains(&desc_name)
+                            {
                                 if let Ok(adapter) = adapter1.cast::<IDXGIAdapter>() {
                                     matching_adapter = Some(adapter);
                                     break;
@@ -275,7 +275,10 @@ mod windows {
                     }
 
                     let (p_adapter, driver_type) = match matching_adapter.as_ref() {
-                        Some(a) => (Some(a), windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN),
+                        Some(a) => (
+                            Some(a),
+                            windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN,
+                        ),
                         None => (None, D3D_DRIVER_TYPE_HARDWARE),
                     };
 
@@ -308,9 +311,12 @@ mod windows {
                             Quality: 0,
                         },
                         Usage: D3D11_USAGE_DEFAULT,
-                        BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                        BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0)
+                            as u32,
                         CPUAccessFlags: 0,
-                        MiscFlags: (D3D11_RESOURCE_MISC_SHARED.0 | D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0) as u32,
+                        MiscFlags: (D3D11_RESOURCE_MISC_SHARED.0
+                            | D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0)
+                            as u32,
                     };
 
                     let mut d3d11_texture: Option<ID3D11Texture2D> = None;
@@ -326,11 +332,7 @@ mod windows {
                         .map_err(|e| format!("cast to IDXGIResource1 failed: {e}"))?;
 
                     let handle = dxgi_resource1
-                        .CreateSharedHandle(
-                            None,
-                            GENERIC_ALL.0,
-                            None,
-                        )
+                        .CreateSharedHandle(None, GENERIC_ALL.0, None)
                         .map_err(|e| format!("CreateSharedHandle failed: {e}"))?;
 
                     let hal_desc = wgpu_hal::TextureDescriptor {
@@ -347,7 +349,9 @@ mod windows {
 
                     let hal_texture = hal_vulkan
                         .texture_from_d3d11_shared_handle(handle, &hal_desc)
-                        .map_err(|e| format!("Vulkan failed to import D3D11 shared handle: {e:?}"))?;
+                        .map_err(|e| {
+                            format!("Vulkan failed to import D3D11 shared handle: {e:?}")
+                        })?;
 
                     let texture_desc = wgpu::TextureDescriptor {
                         label: Some("output plugin DXGI shared texture"),
@@ -421,8 +425,9 @@ mod windows {
                         )
                         .map_err(|e| format!("CreateCommittedResource failed: {e}"))?;
 
-                    let raw_resource = raw_resource
-                        .ok_or_else(|| "CreateCommittedResource produced null resource".to_string())?;
+                    let raw_resource = raw_resource.ok_or_else(|| {
+                        "CreateCommittedResource produced null resource".to_string()
+                    })?;
 
                     let handle = d3d12_device
                         .CreateSharedHandle(&raw_resource, None, GENERIC_ALL.0, None)
@@ -694,7 +699,9 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
                 .map_err(|e| format!("{e}"))?;
 
             let child_surface_id = unsafe {
-                use ::windows::Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE};
+                use ::windows::Win32::Foundation::{
+                    DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE,
+                };
                 use ::windows::Win32::System::Threading::GetCurrentProcess;
 
                 let child_proc = HANDLE(plugin.child_raw_handle());
@@ -832,210 +839,4 @@ impl Sink for PluginSink {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    mod gpu {
-        use super::*;
-
-        #[test]
-        #[cfg(target_os = "macos")]
-        fn macos_surface_creates_and_allocates_iosurface_id() {
-            let gpu = Gpu::headless().expect("no GPU");
-            let surface = macos::MacOsSurface::new(
-                &gpu,
-                640,
-                480,
-                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
-            )
-            .expect("MacOsSurface");
-            assert!(surface.surface_id > 0, "IOSurfaceID must be non-zero");
-            assert_eq!(surface.width, 640);
-            assert_eq!(surface.height, 480);
-
-            // Verify lookup by ID succeeds (cross-process lookup simulation)
-            unsafe {
-                let looked_up = macos::IOSurfaceLookup(surface.surface_id);
-                assert!(
-                    !looked_up.is_null(),
-                    "IOSurfaceLookup must succeed for globally shared IOSurface"
-                );
-                macos::CFRelease(looked_up as *const std::ffi::c_void);
-            }
-        }
-
-        #[test]
-        #[cfg(target_os = "windows")]
-        fn windows_surface_creates_and_allocates_dxgi_shared_handle() {
-            let Ok(gpu) = Gpu::headless() else {
-                eprintln!("headless GPU initialization failed; skipping");
-                return;
-            };
-            println!("Running windows_surface test on backend: {:?}", gpu.adapter.get_info().backend);
-            println!("Adapter name: {}", gpu.adapter.get_info().name);
-            println!("Adapter has VULKAN_EXTERNAL_MEMORY_WIN32: {}", gpu.adapter.features().contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32));
-            println!("Device has VULKAN_EXTERNAL_MEMORY_WIN32: {}", gpu.device.features().contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32));
-            let surface = windows::WindowsSurface::new(
-                &gpu,
-                640,
-                480,
-                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
-            )
-            .expect("WindowsSurface");
-            assert!(
-                surface.surface_id > 0,
-                "DXGI shared handle must be non-zero"
-            );
-            assert_eq!(surface.width, 640);
-            assert_eq!(surface.height, 480);
-        }
-
-        #[test]
-        #[cfg(target_os = "macos")]
-        fn plugin_sink_integration_with_karakuri_syphon_binary() {
-            let candidates = [
-                "../Karakuri-syphon/target/debug/karakuri-syphon",
-                "../../Karakuri-syphon/target/debug/karakuri-syphon",
-                "../../../Karakuri-syphon/target/debug/karakuri-syphon",
-                "/Users/toyoshim/Work/GitHub/Karakuri/Karakuri-syphon/target/debug/karakuri-syphon",
-            ];
-            let mut command = None;
-            for c in candidates {
-                let p = std::path::Path::new(c);
-                if p.exists() {
-                    command = Some(
-                        p.canonicalize()
-                            .unwrap_or_else(|_| p.to_path_buf())
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
-                    break;
-                }
-            }
-            let Some(command) = command else {
-                return;
-            };
-
-            let gpu = Gpu::headless().expect("no GPU");
-            let mut sink = PluginSink::open(
-                &gpu,
-                &command,
-                1280,
-                720,
-                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
-            )
-            .expect("PluginSink::open");
-            assert!(sink.is_alive());
-            assert_eq!(sink.server_name(), "Karakuri");
-            assert_eq!(sink.size(), (1280, 720));
-
-            let present = karakuri_engine::Present::new(
-                &gpu.device,
-                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
-                1280,
-                720,
-            );
-            let mut encoder = gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            present.draw(&mut encoder, sink.view(), sink.size());
-            sink.after_draw(&mut encoder);
-            gpu.queue.submit([encoder.finish()]);
-
-            sink.acquire(&gpu).expect("acquire");
-            sink.present(&gpu).expect("present frame 0");
-
-            let t = sink.telemetry();
-            assert_eq!(t.host_dropped, 0);
-
-            drop(sink);
-        }
-
-        #[test]
-        #[cfg(target_os = "windows")]
-        fn plugin_sink_integration_with_karakuri_spout_binary() {
-            let candidates = [
-                "../Karakuri-spout/target/debug/karakuri-spout.exe",
-                "../../Karakuri-spout/target/debug/karakuri-spout.exe",
-                "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
-            ];
-            let mut command = None;
-            for c in candidates {
-                let p = std::path::Path::new(c);
-                if p.exists() {
-                    command = Some(
-                        p.canonicalize()
-                            .unwrap_or_else(|_| p.to_path_buf())
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
-                    break;
-                }
-            }
-            let Some(command) = command else {
-                return;
-            };
-
-            std::env::remove_var("WGPU_BACKEND");
-            let Ok(gpu) = Gpu::headless() else {
-                return;
-            };
-            println!("Running Spout integration test with backend: {:?}", gpu.adapter.get_info().backend);
-
-            let mut sink = PluginSink::open(
-                &gpu,
-                &command,
-                1280,
-                720,
-                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
-            )
-            .expect("PluginSink::open");
-            assert!(sink.is_alive());
-            assert_eq!(sink.server_name(), "Karakuri");
-            assert_eq!(sink.size(), (1280, 720));
-
-            let _present = karakuri_engine::Present::new(
-                &gpu.device,
-                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
-                1280,
-                720,
-            );
-            let mut encoder = gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            {
-                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("test red clear"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: sink.view(),
-                        resolve_target: None,
-                        depth_slice: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 1.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-            }
-            sink.after_draw(&mut encoder);
-            gpu.queue.submit([encoder.finish()]);
-
-            sink.acquire(&gpu).expect("acquire");
-            sink.present(&gpu).expect("present frame 0");
-
-            let t = sink.telemetry();
-            assert_eq!(t.host_dropped, 0);
-
-            drop(sink);
-        }
-    }
-}
+mod tests;

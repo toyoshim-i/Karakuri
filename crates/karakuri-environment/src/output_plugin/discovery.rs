@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::places::Plugins;
 use super::{HostMessage, PluginMessage, Refusal, PROTOCOL_VERSION};
+use crate::places::Plugins;
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 

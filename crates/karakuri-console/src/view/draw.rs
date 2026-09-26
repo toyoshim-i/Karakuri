@@ -258,8 +258,14 @@ impl View {
                             plugin_available,
                             plugin_name,
                         )
-                        .map(|r| r.told(projector).told_plugin_name(0, plugin, plugin_available, plugin_name))
-                        {
+                        .map(|r| {
+                            r.told(projector).told_plugin_name(
+                                0,
+                                plugin,
+                                plugin_available,
+                                plugin_name,
+                            )
+                        }) {
                             outputs::outputs_into(ui, &pal, &row);
                         }
                     }
