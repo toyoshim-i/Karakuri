@@ -220,12 +220,28 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
         "wrong number of dividers in {:?}",
         l.name(id)
     );
-    assert!(
-        near(cursor, origin + extent),
-        "the children of {:?} end at {cursor} rather than {}",
-        l.name(id),
-        origin + extent
-    );
+    if !near(cursor, origin + extent) {
+        assert!(
+            cursor < origin + extent,
+            "the children of {:?} overflow their parent, ending at {cursor} past {}",
+            l.name(id),
+            origin + extent
+        );
+        for c in l.children(id) {
+            if !l.is_placed(*c) {
+                continue;
+            }
+            let (_, max) = l.bounds(*c);
+            let (_, e) = along(axis, l.rect(*c));
+            assert!(
+                near(e, max),
+                "the children of {:?} end at {cursor} rather than {}, and {:?} is at {e} with room to its maximum of {max}",
+                l.name(id),
+                origin + extent,
+                l.name(*c)
+            );
+        }
+    }
 }
 
 /// Assert every visible region is within the `[min, max]` it declares, along

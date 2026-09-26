@@ -64,7 +64,7 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
     // `assert_within_bounds` says — and the two that decide the size are worth
     // naming: the mixer still has room for four strips, and the inspector's
     // panes are wide enough for the parameter grid the mock draws in them.
-    assert!(near(rect_of(&layout, "mixer").h, 316.0));
+    assert!(near(rect_of(&layout, "mixer").h, 292.0));
     assert!(rect_of(&layout, "inspector-1").w >= 207.0);
     assert!(rect_of(&layout, "inspector-2").w >= 207.0);
 

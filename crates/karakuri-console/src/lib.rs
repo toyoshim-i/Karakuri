@@ -91,6 +91,7 @@ fn left_pane() -> Spec {
             Spec::view("staging")
                 .fixed(125.0)
                 .min(66.0)
+                .max(125.0)
                 .collapsed_size(size::HEAD_H),
         ],
     )
@@ -169,21 +170,23 @@ fn right_pane() -> Spec {
     Spec::column(
         BAY_DIVIDER,
         vec![
-            // Mixer bay: fixed height and minimum 316px ensuring four channel strips remain visible (ADR-0157).
+            // Mixer bay: fixed height 292px ensuring four channel strips and transition row fit without dead space (ADR-0157).
             Spec::view("mixer")
-                .fixed(316.0)
-                .min(316.0)
-                .max(f32::INFINITY)
+                .fixed(292.0)
+                .min(292.0)
+                .max(292.0)
                 .collapsed_size(size::HEAD_H),
             // Master minimum height (94px): bay head 27, padding 18, out row 16.5, gap 8, and one fx slot 24.5.
             Spec::view("master")
                 .flex(1.0)
                 .min(94.0)
+                .max(f32::INFINITY)
                 .collapsed_size(size::HEAD_H),
             // Sequencer bay: natural height 178px; minimum 119.5px holding ruler, one lane, and footer.
             Spec::view("sequencer")
                 .fixed(178.0)
                 .min(119.5)
+                .max(f32::INFINITY)
                 .collapsed_size(size::HEAD_H),
         ],
     )
