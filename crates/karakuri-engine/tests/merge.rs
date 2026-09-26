@@ -1,24 +1,4 @@
-//! The L5 node, nested: several renderers composited rather than overdrawn.
-//!
-//! **Placing the node is what decides which**, and the two are different
-//! operations rather than one with a dial — `docs/ir-spec.md`, "Overdraw and
-//! compositing are different operations, and the graph says which". Five
-//! claims:
-//!
-//! - **A merge of one is exact.** `0.0 + 1.0 * src` is `src`, so a Set that
-//!   grows a second renderer later did not change what the first looked like.
-//! - **Additive renderers agree either way.** Addition is addition and the fold
-//!   order is the draw order, so the memory is what compositing costs for this
-//!   shape and nothing about the picture changes. That is the claim that says
-//!   the node is wired correctly rather than merely producing *something*.
-//! - **Each input has its own edge** — gain, opacity, blend and mask per
-//!   renderer, which is the whole reason to pay for the targets.
-//! - **The targets follow a resize**, since they are frame-sized and a Set is
-//!   built before it is sized.
-//! - **A selection is the fold and not the draw.** Making one renderer live
-//!   takes the others out of the picture and leaves them costing exactly what
-//!   they cost before — which is the claim the control is sold on, and the
-//!   reason it is a uniform write rather than a rebuild.
+//! Integration tests for L5 composite layering versus direct overdraw.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -77,11 +57,7 @@ proc {name} {{
         )
     }
 
-    /// **Not square, deliberately.** The merge's targets are frame-sized and
-    /// allocated from a `(width, height)` pair, so a transposition between the two
-    /// is invisible to any square fixture — and what it produces is a target that
-    /// is short in one axis, which `textureLoad` answers with zeros rather than an
-    /// error. Half a frame goes black and nothing says so.
+    // Non-square dimensions to expose any width/height transposition issues.
     const W: u32 = 96;
     const H: u32 = 64;
 
@@ -168,14 +144,7 @@ proc {name} {{
 
     // ---------------------------------------------------------------------------
 
-    /// **A merge of one is exact.** The mix of a single input at unity is
-    /// `0.0 + 1.0 * src`, which is `src` for every finite texel — so a Set built to
-    /// composite and a Set built to overdraw draw the same frame when there is only
-    /// one renderer to fold.
-    ///
-    /// Byte-for-byte rather than within a tolerance, because "exact" is the claim.
-    /// It is what makes adding a second renderer later a change to the second
-    /// renderer and not to the first.
+    /// Verifies that compositing a single input is bit-exact with direct overdraw.
     #[test]
     fn a_merge_of_one_input_hands_the_material_on_unchanged() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -197,16 +166,7 @@ proc {name} {{
         );
     }
 
-    /// **Additive renderers agree either way**, which is what says the node is
-    /// wired correctly rather than merely producing a picture. Overdraw accumulates
-    /// the second renderer onto the first's target through its blend state;
-    /// compositing gives each a cleared target and adds them in the fold. Addition
-    /// is addition, and the order is the draw order both times.
-    ///
-    /// Within a tolerance rather than exactly, because the two take the sum in
-    /// different places: overdraw adds in the blend unit at `f16`, and compositing
-    /// adds in the shader at `f32` and stores once. The agreement is the claim; the
-    /// last bits are not.
+    /// Verifies that multiple additive renderers produce matching visual output under compositing and overdraw.
     #[test]
     fn additive_renderers_composite_to_what_they_overdraw_to() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -276,19 +236,7 @@ proc {name} {{
         );
     }
 
-    /// **Selecting one renderer leaves only that one in the frame**, and
-    /// leaves it exactly as it was.
-    ///
-    /// Both halves are the claim. The first is what a selection is for; the
-    /// second is what makes it a *choice* rather than a fade — the surviving
-    /// renderer must arrive at the level it was already at, because nothing
-    /// about its own edge was touched.
-    ///
-    /// This goes through the flag rather than through an opacity, which is a
-    /// different path in the shader: `Input::contributes` folds `live` into the
-    /// uniform and the fold skips the input entirely, where an opacity of zero
-    /// is still a texel fetch and a multiply. The fader test above cannot see
-    /// this one.
+    /// Verifies that solo renderer selection isolates the chosen renderer while preserving its contribution level.
     #[test]
     fn selecting_one_renderer_leaves_only_that_renderer_in_the_frame() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -331,15 +279,7 @@ proc {name} {{
         );
     }
 
-    /// **A selection on an overdrawing Set is carried and does nothing**,
-    /// which is `Set::set_input`'s rule and is stated rather than refused: the
-    /// edges are there under both layerings and nothing reads them without an
-    /// L5.
-    ///
-    /// It matters because it is what a replayed `select` record meets when a
-    /// session recorded against `--merge` is replayed without it — and because
-    /// `Layering` is not a Set file record, that is the ordinary case rather
-    /// than an exotic one.
+    /// Verifies that renderer selection on an overdrawing Set is a safe no-op.
     #[test]
     fn selecting_a_renderer_of_an_overdrawing_set_changes_nothing() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -383,18 +323,7 @@ proc {name} {{
         );
     }
 
-    /// **An L5 folds at most as many inputs as its shader binds**, and more is
-    /// refused rather than truncated.
-    ///
-    /// `shaders/composite.wgsl` declares four textures, which is the same number a
-    /// deck holds and for the same reason. A Set that quietly dropped its fifth
-    /// renderer would draw a picture nobody asked for, with no error and no log —
-    /// and the fifth is the one an author added last, so it is the one they are
-    /// looking at.
-    ///
-    /// **Overdrawing has no such limit**, which is the other half: the renderers
-    /// share one attachment and run in order, so a hundred of them cost a hundred
-    /// passes and one target. The refusal is about compositing alone.
+    /// Verifies that compositing rejects more input renderers than the L5 shader supports.
     #[test]
     fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
         let gpu = Gpu::headless().expect("no GPU available");

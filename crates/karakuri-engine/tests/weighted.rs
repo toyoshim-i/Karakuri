@@ -1,15 +1,6 @@
-//! `blend weighted`, asserted in pixels.
-//!
-//! The claims worth having here are all comparisons against `additive`, because
-//! almost everything that could go wrong with weighted blended OIT produces a
-//! picture rather than an error: a revealage cleared to the wrong value, a
-//! resolve that forgot to normalise, a depth weight measured against nothing.
-//! Each of those is a plausible frame. So every test below draws the *same*
-//! material both ways and names what has to differ, or what has to not.
-//!
-//! Two sprites overlapping is the smallest fixture that can tell the modes
-//! apart at all: one sprite alone is a case where the two agree exactly, which
-//! is itself one of the claims.
+//! Integration tests for weighted blended order-independent transparency (OIT),
+//! validating depth weighting, coverage equivalence, alpha clamping, and buffer resizing
+//! against additive blending controls.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -24,16 +15,7 @@ mod gpu {
     const W: u32 = 64;
     const H: u32 = 64;
 
-    /// Two elements at fixed positions, no spawning, no motion — the picture is a
-    /// pure function of `seed` so both modes get literally identical geometry.
-    ///
-    /// `seed 0` sits at the origin and `seed 1` three units toward the eye and a
-    /// little to the side, so the two sprites partly overlap while their depths
-    /// differ by a third of the orbit's radius. Everything the weighted path
-    /// computes per fragment is a function of that depth.
-    ///
-    /// The camera orbits, so this only holds near `t = 0` — every test here draws
-    /// one step and no more.
+    /// Two elements at fixed positions with depth separation for overlap testing.
     const PAIR_L1: &str = r#"
 proc pair {
   kind     L1
@@ -54,11 +36,7 @@ proc pair {
 }
 "#;
 
-    /// A flat, opaque-ish sprite: a constant colour over the whole quad, so a texel
-    /// inside the overlap is covered by exactly two fragments of known alpha.
-    ///
-    /// `alpha` and the two colours are params so a test can vary them without a
-    /// second fixture.
+    /// Generates an L4 quad sprite procedure with constant color and configurable blend mode.
     fn sprite_l4(blend: &str) -> String {
         format!(
             r#"
@@ -183,21 +161,7 @@ proc flat_sprite {{
             .collect()
     }
 
-    /// **The blend mode does not change what a texel is covered by.** Two sprites of
-    /// opacity 0.5 over one another cover three quarters under both modes, because
-    /// `1 - prod(1 - a)` is what both accumulate — weighted in a revealage target
-    /// and additive in its alpha channel, by different arithmetic reaching the same
-    /// number.
-    ///
-    /// That agreement is what lets L5 stay out of this: `composite.wgsl` reads a
-    /// slot's alpha as coverage and does not care which pass wrote it.
-    ///
-    /// **An earlier version of this called itself a saturation test** — "weighted
-    /// saturates where additive sums" — which is false and was never what it
-    /// asserted. Additive's alpha blend is `One` / `OneMinusSrcAlpha`, so it
-    /// produces exactly the same probability; the two only part company for an
-    /// alpha above 1, which is `an_alpha_above_one_is_clamped`'s business and not
-    /// this test's.
+    /// Verifies that weighted and additive blend modes produce equivalent total coverage on overlap.
     #[test]
     fn the_blend_mode_does_not_change_what_a_texel_is_covered_by() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -226,13 +190,7 @@ proc flat_sprite {{
         }
     }
 
-    /// **The near sprite wins the overlap, and under `additive` neither does.**
-    ///
-    /// The two sprites are red at the origin and blue three units nearer the eye.
-    /// Additive sums them, so the overlap is the same magenta whichever is in front.
-    /// Weighted resolves toward the nearer one, so blue has to come out ahead of red
-    /// — which is the whole reason the weight is a function of depth rather than a
-    /// constant.
+    /// Verifies that weighted blending resolves overlapping geometry toward the nearer fragment.
     #[test]
     fn the_nearer_sprite_dominates_the_overlap_only_under_weighted() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -327,14 +285,7 @@ proc flat_sprite {{
         }
     }
 
-    /// **Alpha above 1 is clamped**, which `additive` does not do and the ir-spec
-    /// says so beside the declaration. Under additive an alpha of 2.0 doubles what
-    /// the fragment adds; under weighted it is opacity, and a revealage of
-    /// `prod(1 - 2)` is negative light.
-    ///
-    /// The control is what makes this a test of the clamp rather than of the fixture:
-    /// additive at 2.0 has to be visibly brighter than additive at 1.0, or the
-    /// parameter never reached the shader.
+    /// Verifies that alpha values exceeding 1.0 are clamped under weighted blending.
     #[test]
     fn an_alpha_above_one_is_clamped_under_weighted_and_not_under_additive() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -412,21 +363,7 @@ proc flat_sprite {{
         );
     }
 
-    /// **A resize reallocates the accumulation targets**, asserted against what the
-    /// additive path covers rather than against the weighted path's own earlier
-    /// self.
-    ///
-    /// The first version of this compared a Set taken through a resize round trip
-    /// against one resized straight to the frame, and **it passed with
-    /// `Oit::resize` stubbed out to do nothing** — because both Sets then
-    /// accumulated into the 1×1 targets `Set::build` leaves, agreed with each other
-    /// perfectly, and covered one texel. A comparison between two copies of the same
-    /// mistake is not a test.
-    ///
-    /// Coverage is geometry, and the blend mode is not geometry: whichever mode ran,
-    /// exactly the texels the sprites' quads landed on have material on them. So the
-    /// additive frame is the control, and it is a control the weighted path cannot
-    /// accidentally agree with.
+    /// Verifies that resizing reallocates OIT accumulation targets matching additive coverage.
     #[test]
     fn the_accumulation_targets_follow_a_resize_and_cover_what_additive_covers() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -452,19 +389,7 @@ proc flat_sprite {{
         );
     }
 
-    /// Two strokes that land on **the same screen line** while running through depth
-    /// in opposite directions.
-    ///
-    /// Both lie in a plane through the eye, so each one's projection runs between
-    /// the same two screen points: any point at `eye + s * v` projects where `v`
-    /// does, whatever `s` is. `near_strand` starts three units from the eye at the
-    /// right-hand end and finishes twelve away at the left; `far_strand` does the
-    /// reverse. So they overlap along their whole length, and which of them is
-    /// nearer *changes sign half way across*.
-    ///
-    /// That is the only arrangement in which a stroke's depth has to vary **along**
-    /// it for the picture to be right. The numbers are literals because they are
-    /// computed against a stationary camera the test installs — see the test.
+    /// Line segment fixture with two crossing strands that invert relative depth order along screen projection.
     const CROSSING_STRANDS_L1: &str = r#"
 proc strands {
   kind     L1
@@ -517,18 +442,7 @@ proc flat_strand {{
         )
     }
 
-    /// **A stroke is weighted along its length, not at one end.**
-    ///
-    /// The claim `SEGMENT_EXPANSION`'s `w = mix(_clip.w, _clip_b.w, corner.x)` makes
-    /// and the only one in this change that had no picture behind it: a review
-    /// replaced that `w` with `_clip.w` — every corner taking the head's depth — and
-    /// the whole suite stayed green, because everything else here draws sprites,
-    /// where all six corners are at one depth anyway and the two are the same
-    /// expression.
-    ///
-    /// The camera is stopped for this test, at the origin's height, because the
-    /// fixture's coordinates are worked out against a particular eye. `Orbit`'s
-    /// default speed would have the answer depend on which instant the frame is.
+    /// Verifies that depth weights vary continuously along line segment length rather than taking endpoint depth.
     #[test]
     fn a_weighted_stroke_is_weighted_along_its_length() {
         let gpu = Gpu::headless().expect("no GPU available");

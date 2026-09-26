@@ -1,22 +1,6 @@
-//! `beats`: the session's tempo grid, readable from IR.
-//!
-//! Without it a procedure has `t` and nothing else, so **the picture runs at
-//! wall time whatever the music does** — a tempo change moves the beat grid
-//! every binding is sampled on and moves nothing that is drawn. That is the
-//! gap this closes, and the first test below is the whole of it.
-//!
-//! The rest is what makes it usable rather than merely present:
-//!
-//! - `beats` and `t` name the **same instant**, exactly, so a procedure reading
-//!   both is not reading two clocks;
-//! - it is **per substep**, like `t`, so a frame rate drop does not move the
-//!   beat;
-//! - and it is **continuous across a tempo correction**, so following the room
-//!   does not mean jumping whenever the tracker trims.
-//!
-//! The material is deliberately minimal. What is under test is a number
-//! reaching a shader and being the right number; anything that looks good
-//! would only make a failure harder to read.
+//! Integration tests verifying that the tempo grid `beats` ambient is readable
+//! from IR, advances per substep, matches `t` at 60 bpm, and remains continuous
+//! across tempo corrections.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -88,11 +72,8 @@ proc t_ring {
 }
 "#;
 
-    /// Accumulating, and the term accumulated depends on `beats`, so the sum
-    /// records every instant it was evaluated at rather than only the last one.
-    /// That is what makes it able to detect a `beats` that advances once per frame
-    /// instead of once per substep — the closed-form ring above cannot, because an
-    /// intermediate value is overwritten.
+    /// Accumulating geometry driven by `beats`. The running sum records every
+    /// intermediate evaluation, enabling detection of per-substep advances.
     const ACCUMULATE: &str = r#"
 proc accumulate_beats {
   kind     L1
@@ -204,21 +185,7 @@ proc plain_points {
 
     // ---------------------------------------------------------------------------
 
-    /// **The picture follows the tempo**, which is the whole reason this ambient
-    /// exists.
-    ///
-    /// The same procedure, the same seed, the same number of frames, and the same
-    /// `t` at the end of them — only the session's tempo differs. Without `beats`
-    /// there is no number a procedure can read that carries a tempo at all, so the
-    /// two runs would be identical and the music could do what it liked.
-    ///
-    /// **The tempos are chosen so the two runs do not land on the same angle**, and
-    /// that is not a detail. The ring is closed form: `position` is written outright
-    /// every step, so only the final instant reaches the buffer and every earlier
-    /// one is overwritten. 120 and 180 bpm over one second are two whole turns and
-    /// three — indistinguishable at the end of it, and a test that picked them would
-    /// report that the tempo does nothing. 120 against 150 is two turns against two
-    /// and a half, which is half a turn apart.
+    /// Verifies that procedure output tracks changes in session tempo.
     #[test]
     fn the_picture_follows_the_tempo() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -248,17 +215,7 @@ proc plain_points {
         );
     }
 
-    /// **`beats` and `t` name the same instant.**
-    ///
-    /// At 60 bpm a beat is a second, so the grid and the clock are numerically the
-    /// same and two procedures differing only in which they read must draw the same
-    /// frame — bit for bit, not nearly.
-    ///
-    /// That exactness is the point and it is not free. The session oscillator
-    /// accumulates its `t` in f64 while a Set derives its own as an f32 product of
-    /// a step count; the two agree to about seven digits. `beats` is therefore
-    /// computed from the Set's `t` rather than from the oscillator's position, so
-    /// the two ambients cannot drift apart no matter how long the session runs.
+    /// Verifies that at 60 bpm, `beats` and `t` evaluate to the identical instant.
     #[test]
     fn beats_and_t_name_the_same_instant() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -283,32 +240,7 @@ proc plain_points {
         );
     }
 
-    /// **The anchor: the instants a substep actually reads are the Set's own
-    /// clock**, as absolute numbers rather than as a comparison between two runs.
-    ///
-    /// Every other test in this file — and in `generated.rs`, `lifecycle.rs` and
-    /// `priming.rs` — compares one run against another. That is the right shape for
-    /// invariance claims and it is blind to one whole class of defect: shift *every*
-    /// substep's `t` by a whole `dt` and both sides of every comparison shift with
-    /// it, so all 43 suites stay green while the clock a procedure reads is off by a
-    /// frame. Found exactly that way, by injecting the shift into whichever function
-    /// derives the per-substep instant — `Set::write_step_args` when this was
-    /// written, `Set::prepare_on` since the node split — and watching nothing fail.
-    ///
-    /// So this asserts against arithmetic instead. `position.x` is written outright,
-    /// so it holds the **last** substep's instant and must equal [`Set::time`].
-    /// `age` accumulates `t`, so it holds the **sum over every substep since frame
-    /// zero** and must equal `dt * (1 + 2 + ... + n)` — which pins where the
-    /// sequence starts as well as where it ends, and pins it across a frame of four
-    /// steps as well as a frame of one.
-    ///
-    /// The two halves are not redundant *arithmetically*: a defect giving every
-    /// substep the frame's final instant leaves `position.x` correct and moves `age`
-    /// from `66·dt` to `76·dt`. They are partly redundant in *practice*, because
-    /// freezing the instant freezes `beats` with it and
-    /// `an_accumulating_procedure_reading_beats_is_substep_invariant` catches that
-    /// too — which is worth knowing rather than worth removing: that test would stop
-    /// covering it the moment `beats` stopped being derived from this `t`.
+    /// Verifies that substeps evaluate against the Set's clock in exact arithmetic.
     #[test]
     fn the_instants_a_substep_reads_are_the_sets_own_clock() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -319,11 +251,7 @@ proc plain_points {
 
         let mut set = build(&gpu, CLOCK_PROBE);
         let mut signals = Signals::new(120.0, u64::from(SEED));
-        // The same arithmetic the engine does, in the same order and the same
-        // precision: `t_at(n)` is `n as f32 * dt`, and the accumulator is a running
-        // f32 sum in substep order. A reference computed in f64 would differ in the
-        // last bits and the test would need a tolerance wide enough to hide a real
-        // defect.
+        // Running f32 accumulator in substep order matching engine precision.
         let (mut n, mut expected_age) = (0u64, 0.0f32);
         for steps in FRAMES {
             let _ = frame(&gpu, &mut set, &mut signals, steps);
@@ -360,16 +288,7 @@ proc plain_points {
         }
     }
 
-    /// **Per substep, like `t`.**
-    ///
-    /// Twenty-one steps reached two ways: twenty-one frames of one, and seven of
-    /// three. A `beats` advanced once per frame would give the three-step frames
-    /// one musical instant where they should have three, and an accumulating
-    /// procedure records the difference — the ring above would not, because it
-    /// overwrites `position` and only the last instant survives.
-    ///
-    /// This is the same shape as `generated.rs`'s test for `t`, and for the same
-    /// reason: a frame rate drop must not move the beat.
+    /// Verifies that `beats` advances per substep rather than per frame.
     #[test]
     fn an_accumulating_procedure_reading_beats_is_substep_invariant() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -396,18 +315,7 @@ proc plain_points {
         );
     }
 
-    /// **A tempo correction bends the rate and does not move a beat that has
-    /// already happened.**
-    ///
-    /// The oscillator guarantees that and `oscillator.rs` asserts it directly; what
-    /// this checks is that the guarantee survives the trip into a shader, because
-    /// the alternative is a picture that jumps every time the tracker trims. A trim
-    /// is a few thousandths of a beat and arrives several times a second — a
-    /// `beats` that recomputed history on every one would shimmer.
-    ///
-    /// Continuity is asserted where it can be seen: the frame straight after the
-    /// correction differs from the one before it by about what one frame of
-    /// movement is, rather than by a whole turn of the ring.
+    /// Verifies that tempo corrections bend the rate continuously without jumping the beat grid.
     #[test]
     fn a_tempo_correction_does_not_jump_the_grid() {
         let gpu = Gpu::headless().expect("no GPU available");

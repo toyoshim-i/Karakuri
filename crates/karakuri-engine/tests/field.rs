@@ -44,13 +44,7 @@ proc ball {
 }
 "#;
 
-    /// **A second shape, offset from the first along the up axis**, so that "which
-    /// field" is a question with two different answers on screen. Up rather than
-    /// across, because the orbit camera looks along a horizontal axis: a shape
-    /// offset that way sits behind the first and adds no silhouette to count. It declares `radius` as well,
-    /// deliberately: two fields sharing a param name is the case an address has to
-    /// survive, and `Field:0:radius` and `Field:1:radius` are two numbers because
-    /// they are two procedures.
+    /// A second field procedure offset along the up axis, sharing param names to test distinct addressing.
     const SHELL: &str = r#"
 proc shell {
   kind Field
@@ -269,30 +263,7 @@ proc lens {
         );
     }
 
-    /// **A procedure that takes a field and a Set that binds it to nothing is
-    /// refused by name.** The call lowers to a function name, so a module without
-    /// it is WGSL naga refuses — a panic on the thread that built it, from a `.kir`
-    /// the checker accepted, which is the one shape a composition check exists to
-    /// prevent.
-    ///
-    /// **Refused at the declaration rather than at the call**, which is the
-    /// difference the slot makes: the sentence names the slot the file declared and
-    /// the flag that would bind it, where the one it replaced could only say that
-    /// some procedure somewhere evaluated a field.
-    /// **A slot bound to something that is not a field is refused**, and the
-    /// refusal says what the node it names actually is.
-    ///
-    /// The alternative is a Set that builds a renderer calling a function the
-    /// bound node never produced — a geometry has no `_field_shape_at` to splice,
-    /// and nothing below here would notice before naga did.
-    /// **Two Field slots on one procedure are accepted**, which is the rule a
-    /// geometry slot does not follow and the reason the two are told apart by type.
-    ///
-    /// A marcher wanting a shape and a cutter is the ordinary case, and a field has
-    /// no node for a second one to need: each slot is another copy of a body under
-    /// another name, with params of its own. Both are bound to the same field here
-    /// because a Set holds one — what is being claimed is the *notation*, and that
-    /// two names reach it independently.
+    /// Verifies that declaring multiple field slots on a single procedure is permitted.
     #[test]
     fn two_field_slots_on_one_procedure_are_accepted() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -339,18 +310,7 @@ proc lens {
         );
     }
 
-    /// **Two fields in one Set, one per slot on one renderer**, which is the thing
-    /// this commit is for: the language stopped capping a Set at one field and the
-    /// plumbing went on doing it, an `Option` at a time.
-    ///
-    /// **Both declare `radius`**, on purpose. That is the case an address has to
-    /// survive — `Field:0:radius` and `Field:1:radius` are two numbers because they
-    /// are two procedures — and it is the one a param keyed by declared name alone
-    /// could not tell apart.
-    ///
-    /// The two assertions are each other's control. Growing the shape must grow the
-    /// figure and growing the cutter must swallow it, so a Set that wrote one value
-    /// into both slots fails whichever way round it got them.
+    /// Verifies that multiple fields can be bound to distinct slots on a single renderer.
     #[test]
     fn two_fields_reach_one_renderer_through_two_slots() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -434,14 +394,7 @@ proc lens {
         );
     }
 
-    /// **Two renderers in one Set read the same field value.** A field has no node,
-    /// so nothing owns the value: every caller writes it into its own uniform, and
-    /// "the same answer everywhere" is a property of the Set rather than of any one
-    /// of them.
-    ///
-    /// Both renderers draw the same figure, so they agree exactly or not at all —
-    /// and the assertion is against a *third* Set at a different radius, so two
-    /// renderers agreeing on the wrong number cannot pass.
+    /// Verifies that multiple renderers bound to the same field read consistent uniform values.
     #[test]
     fn two_renderers_in_one_set_agree_on_the_fields_value() {
         let gpu = Gpu::headless().expect("a GPU");
@@ -534,13 +487,7 @@ proc lens {
     }
 }
 
-/// **The refusals, which reach no device.**
-///
-/// A slot nothing binds, a slot bound to the wrong kind of node, and a caller
-/// too expensive with its field inlined are all decided before a pipeline
-/// exists — and were only reachable through a constructor that took one.
-/// `Set::validate` is that check pass on its own, and `Set::build_many` reaches
-/// these rules by calling it rather than by holding a copy.
+/// Non-GPU validation tests for field slot binding errors and refusals.
 mod refused {
     use super::gpu::{compile, edge, proc_name, BALL, LENS, STILL};
     use karakuri_engine::set::{Edge, Layering, SetError, Wiring};
@@ -579,16 +526,7 @@ mod refused {
         validate_wired(field.as_slice(), &[l4], &edges)
     }
 
-    /// **A `.kir` that checks clean and a Set that cannot be built.** A marcher
-    /// evaluating a field nothing bound would compile a call to a function
-    /// nothing spliced in: it is WGSL naga refuses — a panic on the thread that
-    /// built it, from a `.kir` the checker accepted, which is the one shape a
-    /// composition check exists to prevent.
-    ///
-    /// **Refused at the declaration rather than at the call**, which is the
-    /// difference the slot makes: the sentence names the slot the file declared
-    /// and the flag that would bind it, where the one it replaced could only say
-    /// that some procedure somewhere evaluated a field.
+    /// Verifies that unbound field slots produce validation errors naming the missing slot.
     #[test]
     fn an_unbound_field_slot_is_refused_rather_than_fatal() {
         let err = validate_wired(&[], &[LENS], &[]).expect_err("nothing fills `lens.shape`");
@@ -605,12 +543,7 @@ mod refused {
         assert!(err.to_string().contains("shape"), "{err}");
     }
 
-    /// **A slot bound to something that is not a field is refused**, and the
-    /// refusal says what the node it names actually is.
-    ///
-    /// The alternative is a Set that builds a renderer calling a function the
-    /// bound node never produced — a geometry has no `_field_shape_at` to splice,
-    /// and nothing below here would notice before naga did.
+    /// Verifies that binding a field slot to a non-field node produces a descriptive validation error.
     #[test]
     fn a_field_slot_bound_to_something_that_is_not_a_field_is_refused() {
         let to_the_l1 = vec![edge("lens", "shape", "still")];
