@@ -6,6 +6,10 @@ use super::*;
 
 pub struct View {
     pub room: Room,
+    /// Active theme selection mode (Auto, Day, or Night).
+    pub theme_mode: ThemeMode,
+    /// Whether the transport theme selection dropdown menu is open.
+    pub theme_menu_open: bool,
     /// Whether the external projector window is open (ADR-0156).
     pub projector: bool,
     /// Whether plugin sink 0 (Syphon) is active.

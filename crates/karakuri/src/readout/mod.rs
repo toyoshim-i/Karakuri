@@ -69,9 +69,11 @@ pub(crate) struct Readout {
 
 impl Readout {
     pub(crate) fn new(width: f32, height: f32) -> Readout {
+        let mut view = View::new(Room::Day);
+        view.theme_mode = karakuri_console::room::ThemeMode::Auto;
         Readout {
             panel: Panel::new(width, height),
-            view: View::new(Room::Day),
+            view,
             // Four classes shut, which is what a run starts with (ADR-0235).
             opening: Opening::closed(),
             slot_policies: SlotPolicies::new(),
@@ -234,8 +236,9 @@ impl Readout {
     }
 
     pub(crate) fn room(&mut self) {
-        self.view.room = self.view.room.other();
-        println!("room: {}", self.view.room.word());
+        self.view.theme_mode = self.view.theme_mode.next();
+        self.view.room = self.view.theme_mode.resolve(None);
+        println!("theme: {}", self.view.theme_mode.word());
     }
 }
 

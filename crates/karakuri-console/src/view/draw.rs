@@ -354,6 +354,19 @@ impl View {
             {
                 transport::arrangement_into(ui, &pal, &pill, arr);
             }
+            if let Some(pill) = theme_pill(
+                ui.ctx(),
+                panel.layout(),
+                values,
+                audio,
+                tracking,
+                map,
+                arr,
+                self.theme_mode,
+                self.theme_menu_open,
+            ) {
+                transport::theme_into(ui, &pal, &pill, self.theme_mode, self.theme_menu_open);
+            }
             // Inspector wiring card rendered above bays (Rule 2).
             if let Some((pane_at, node, input)) = wiring {
                 if let Some(pane) = panes.get(pane_at) {

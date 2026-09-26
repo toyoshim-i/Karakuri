@@ -40,6 +40,21 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                     return Claim::Panel;
                 }
             }
+            if let Some(pill) = crate::view::theme_pill(
+                ctx,
+                panel.layout(),
+                view.transport,
+                view.audio.as_ref(),
+                view.tracker,
+                view.map.as_ref(),
+                &view.arrangement,
+                view.theme_mode,
+                view.theme_menu_open,
+            ) {
+                if pill.hit(p) {
+                    return Claim::Panel;
+                }
+            }
             match PROBES.iter().any(|probe| (probe.ask)(panel, ctx, view, p)) {
                 true => Claim::Panel,
                 false => Claim::Egui,

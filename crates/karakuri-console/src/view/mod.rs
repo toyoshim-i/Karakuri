@@ -19,6 +19,7 @@ use karakuri_operation::{
 use crate::budget::{Declared, PANEL_PASS};
 use crate::focus::{self, Focus};
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
+pub use crate::room::ThemeMode;
 use crate::room::{size, Palette, Room};
 
 mod transport;
@@ -28,12 +29,12 @@ pub(crate) use transport::next_tonemap;
 
 /// Transport bay module re-exports (ADR-0121).
 pub use transport::{
-    arrangement, audio_in, beat_at, exposure_at, learn_pill, look, map_pill, offset_at,
+    arrangement, audio_in, beat_at, exposure_at, learn_pill, look, map_pill, offset_at, theme_pill,
     tracker_group, transport, unit_of, unit_of_offset, Arrangement, ArrangementPill, Ask, AudioAsk,
-    AudioIn, AudioInPill, Item, LearnPill, Look, LookRow, MapPill, MapRow, Menu, Rec, Tracker,
-    TrackerGroup, Transport, TransportRow, BEAT_PITCH, BEAT_STALENESS, EXPOSURE_MAX, EXPOSURE_MIN,
-    EXPOSURE_TRACK_W, LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS, LATENCY_OFFSET_STEP_MS,
-    OFFSET_TRACK_W, TEMPO_BAND, TEMPO_SPAN,
+    AudioIn, AudioInPill, Item, LearnPill, Look, LookRow, MapPill, MapRow, Menu, Rec, ThemeAsk,
+    ThemePill, Tracker, TrackerGroup, Transport, TransportRow, BEAT_PITCH, BEAT_STALENESS,
+    EXPOSURE_MAX, EXPOSURE_MIN, EXPOSURE_TRACK_W, LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS,
+    LATENCY_OFFSET_STEP_MS, OFFSET_TRACK_W, TEMPO_BAND, TEMPO_SPAN,
 };
 
 mod mixer;
@@ -173,6 +174,11 @@ impl View {
     pub fn new(room: Room) -> View {
         View {
             room,
+            theme_mode: match room {
+                Room::Day => ThemeMode::Day,
+                Room::Night => ThemeMode::Night,
+            },
+            theme_menu_open: false,
             // Projector window initially inactive.
             projector: false,
             plugin: false,
@@ -263,6 +269,13 @@ impl View {
             prompt: PromptState::new(),
             // Pre-allocate region layout cache up to REGIONS capacity.
             placed: Vec::with_capacity(REGIONS.len()),
+        }
+    }
+
+    /// Synchronizes the active room palette with system theme when theme mode is Auto.
+    pub fn sync_theme(&mut self, system: Option<egui::Theme>) {
+        if self.theme_mode == ThemeMode::Auto {
+            self.room = self.theme_mode.resolve(system);
         }
     }
 }
