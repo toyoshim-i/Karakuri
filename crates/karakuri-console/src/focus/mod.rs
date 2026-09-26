@@ -58,13 +58,8 @@ pub fn press(
             ),
         };
     }
-    // Space at bay level toggles folding across all bays (ADR-0259, ADR-0343).
-    if key == Press::Space
-        && view
-            .focus()
-            .address(bay.name)
-            .is_none_or(|address| address.at().is_empty())
-    {
+    // Space always toggles folding for the focused bay unconditionally (ADR-0259, ADR-0343).
+    if key == Press::Space {
         return fold(panel, bay);
     }
     let Some(built) = built(bay.name) else {
@@ -289,130 +284,8 @@ pub fn press(
         ),
 
         // ------------------------------------------------------------------
-        // `space` — the addressed thing's next state
+        // `enter`, `alt-enter`, `ctrl-enter` — primary action and secondary modifiers
         // ------------------------------------------------------------------
-        (Addressed::Head, Press::Space) => Asked::Nothing(
-            "a head is not a control — press a digit to name one of the controls in it",
-        ),
-        (Addressed::Item(_), Press::Space) => Asked::Nothing(
-            "this item has no state of its own — press a digit to name one of the controls in \
-             it, where it draws any",
-        ),
-        (Addressed::OfHead(nth, control), Press::Space) => {
-            cycled(view, panel, None, nth, control, held)
-        }
-        (Addressed::Of { item, nth, control }, Press::Space) => {
-            cycled(view, panel, item, nth, control, held)
-        }
-        // Chain slot controls: cycles cut chip or resets parameter to default.
-        (
-            Addressed::InCard {
-                through,
-                control: Control::ChainCut,
-                ..
-            },
-            Press::Space,
-        ) => chain_cut(view, through),
-        (
-            Addressed::InCard {
-                through,
-                nth,
-                control: Control::ChainParam,
-            },
-            Press::Space,
-        ) => chain_param(view, through, nth, Step::Default),
-        // Card rows perform actions via `enter` rather than cycling state.
-        (Addressed::InCard { control, .. }, Press::Space) => match control.answers() {
-            Answers::Nothing(why) => Asked::Nothing(why),
-            _ => Asked::Nothing(
-                "this row performs rather than sets, so it has no next state — enter runs it",
-            ),
-        },
-        (
-            Addressed::Under {
-                item,
-                through,
-                nth,
-                control,
-            },
-            Press::Space,
-        ) => under_space(view, item, through, nth, control),
-        // Chooser entries perform actions rather than holding state.
-        (Addressed::UnderHead { .. }, Press::Space) => Asked::Nothing(
-            "this control performs rather than sets, so it has no next state — enter runs it",
-        ),
-        (Addressed::Bay, Press::Space) => fold(panel, bay),
-
-        // ------------------------------------------------------------------
-        // `enter` — the act the addressed thing is for
-        // ------------------------------------------------------------------
-        (Addressed::Item(item), Press::Enter) => match built.act {
-            Some(act) => performed(view, Some(item), act),
-            None => Asked::Nothing(
-                "this item performs nothing — enter is the act a control is for, and this bay's \
-                 items are things you set rather than things you run",
-            ),
-        },
-        // Opens card from its parent control.
-        (Addressed::OfHead(_, control), Press::Enter) if card_of(control).is_some() => {
-            open_card(view, control)
-        }
-        // Executes addressed card row action and closes the card.
-        (
-            Addressed::UnderHead {
-                through,
-                nth,
-                control,
-            },
-            Press::Enter,
-        ) => match built.head.get(through.wrapping_sub(1)).copied() {
-            Some(above) if card_of(above).is_some() => {
-                card_enter(view, bay.name, built, above, control, nth)
-            }
-            _ => Asked::Nothing(
-                "nothing here performs — enter is the act the addressed control is for, \
-                     and this one sets rather than performs",
-            ),
-        },
-        (Addressed::OfHead(_, control), Press::Enter) => act_of(view, None, control),
-        // Enter on slot remove button removes it from the chain.
-        (
-            Addressed::InCard {
-                through,
-                control: Control::ChainRemove,
-                ..
-            },
-            Press::Enter,
-        ) => chain_remove(view, through),
-        (
-            Addressed::Of {
-                item: None,
-                control,
-                ..
-            },
-            Press::Enter,
-        ) if card_of(control).is_some() => open_card(view, control),
-        (Addressed::Of { item, control, .. }, Press::Enter) => act_of(view, item, control),
-        (
-            Addressed::InCard {
-                through,
-                nth,
-                control,
-            },
-            Press::Enter,
-        ) => match built.item().nth(through, items) {
-            Some(above) => card_enter(view, bay.name, built, above, control, nth),
-            None => Asked::Nothing("this control is not drawn"),
-        },
-        (
-            Addressed::Under {
-                item,
-                through,
-                nth,
-                control,
-            },
-            Press::Enter,
-        ) => under_enter(view, item, through, nth, control),
         (Addressed::Bay, Press::Enter) => {
             if items > 0 {
                 let nth = remembered(view, bay.name, items);
@@ -427,6 +300,9 @@ pub fn press(
                 )
             }
         }
+        (Addressed::Bay, Press::AltEnter | Press::CtrlEnter) => {
+            Asked::Nothing("a bay has no secondary action")
+        }
         (Addressed::Head, Press::Enter) => {
             if !built.head.is_empty() {
                 address_into(view, bay.name, 1);
@@ -435,5 +311,118 @@ pub fn press(
                 Asked::Nothing("this head draws no controls")
             }
         }
+        (Addressed::Head, Press::AltEnter | Press::CtrlEnter) => {
+            Asked::Nothing("a head has no secondary action")
+        }
+        (Addressed::Item(item), Press::Enter) => match built.act {
+            Some(act) => performed(view, Some(item), act),
+            None => Asked::Nothing(
+                "this item performs nothing — enter is the act a control is for, and this bay's \
+                 items are things you set rather than things you run",
+            ),
+        },
+        (Addressed::Item(_), Press::AltEnter | Press::CtrlEnter) => {
+            Asked::Nothing("an item has no secondary action")
+        }
+        // Opens card from its parent control.
+        (Addressed::OfHead(_, control), Press::Enter) if card_of(control).is_some() => {
+            open_card(view, control)
+        }
+        (
+            Addressed::OfHead(nth, control),
+            key @ (Press::Enter | Press::AltEnter | Press::CtrlEnter),
+        ) => entered(view, panel, None, nth, control, key, held),
+        // Executes addressed card row action and closes the card.
+        (
+            Addressed::UnderHead {
+                through,
+                nth,
+                control,
+            },
+            Press::Enter,
+        ) => match built.head.get(through.wrapping_sub(1)).copied() {
+            Some(above) if card_of(above).is_some() => {
+                card_enter(view, bay.name, built, above, control, nth)
+            }
+            _ => Asked::Nothing(
+                "nothing here performs — enter is the act the addressed control is for, \
+                 and this one sets rather than performs",
+            ),
+        },
+        (Addressed::UnderHead { .. }, Press::AltEnter | Press::CtrlEnter) => {
+            Asked::Nothing("this control has no secondary action")
+        }
+        (
+            Addressed::Of {
+                item: None,
+                control,
+                ..
+            },
+            Press::Enter,
+        ) if card_of(control).is_some() => open_card(view, control),
+        (
+            Addressed::Of { item, nth, control },
+            key @ (Press::Enter | Press::AltEnter | Press::CtrlEnter),
+        ) => entered(view, panel, item, nth, control, key, held),
+        // InCard controls
+        (
+            Addressed::InCard {
+                through,
+                control: Control::ChainCut,
+                ..
+            },
+            Press::Enter,
+        ) => chain_cut(view, through),
+        (
+            Addressed::InCard {
+                through,
+                nth,
+                control: Control::ChainParam,
+            },
+            Press::AltEnter | Press::CtrlEnter,
+        ) => chain_param(view, through, nth, Step::Default),
+        (
+            Addressed::InCard {
+                control: Control::ChainParam,
+                ..
+            },
+            Press::Enter,
+        ) => Asked::Nothing("a parameter is stepped with arrows — alt-enter resets to default"),
+        (
+            Addressed::InCard {
+                through,
+                control: Control::ChainRemove,
+                ..
+            },
+            Press::Enter,
+        ) => chain_remove(view, through),
+        (
+            Addressed::InCard {
+                through,
+                nth,
+                control,
+            },
+            Press::Enter,
+        ) => match built.item().nth(through, items) {
+            Some(above) => card_enter(view, bay.name, built, above, control, nth),
+            None => Asked::Nothing("this control is not drawn"),
+        },
+        (Addressed::InCard { .. }, Press::AltEnter | Press::CtrlEnter) => {
+            Asked::Nothing("this control has no secondary action")
+        }
+        (
+            Addressed::Under {
+                item,
+                through,
+                nth,
+                control,
+            },
+            key @ (Press::Enter | Press::AltEnter | Press::CtrlEnter),
+        ) => under_action(view, item, through, nth, control, key),
+
+        // ------------------------------------------------------------------
+        // Unconditional Space folding
+        // ------------------------------------------------------------------
+        (_, Press::Space) => fold(panel, bay),
     }
 }

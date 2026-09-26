@@ -169,23 +169,17 @@ fn esc_takes_the_chooser_away_and_leaves_the_address_on_add_lane() {
     assert_eq!(at(&view, "sequencer"), vec![HEAD]);
 }
 
-/// `space` sets and `enter` performs, so neither `+ lane` nor one of its entries
-/// has a next state — and each refusal names the key that does run it.
+/// `space` unconditionally folds the bay, while `enter` performs/opens the chooser.
 #[test]
-fn space_declines_on_the_chooser_and_names_enter() {
+fn space_folds_on_the_chooser_and_enter_opens_it() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "sequencer", ADD_LANE);
-    for _ in 0..2 {
-        match press(&mut view, &panel, Press::Space) {
-            Asked::Nothing(why) => assert!(
-                why.contains("enter"),
-                "`space` on the chooser declined without naming the key that runs it: {why}"
-            ),
-            other => panic!("`space` on the chooser set something: {other:?}"),
-        }
-        press(&mut view, &panel, Press::Enter);
-        press(&mut view, &panel, Press::Digit(1));
-    }
+    let id = panel.layout().find("sequencer").expect("the bay");
+    assert_eq!(
+        press(&mut view, &panel, Press::Space),
+        Asked::Panel(Op::Fold(id)),
+        "`space` on the chooser did not fold the bay"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -225,10 +219,10 @@ fn put_the_card_down(view: &mut View, asked: &Asked) {
 }
 
 /// The tempo figure is a track the arrows step — one press, one beat a minute,
-/// named here and stepped by the host — and it has no value `space` returns it
+/// named here and stepped by the host — and it has no value `alt-enter` returns it
 /// to (ADR-0350).
 #[test]
-fn the_arrows_step_the_tempo_figure_and_space_declines_on_it() {
+fn the_arrows_step_the_tempo_figure_and_alt_enter_declines_on_it() {
     let (panel, mut view) = transport();
     walk_to(&mut view, &panel, "transport", TEMPO);
     assert_eq!(
@@ -246,12 +240,12 @@ fn the_arrows_step_the_tempo_figure_and_space_declines_on_it() {
             step: Step::Down
         }
     );
-    match press(&mut view, &panel, Press::Space) {
+    match press(&mut view, &panel, Press::AltEnter) {
         Asked::Nothing(why) => assert!(
             why.contains("declared"),
-            "`space` on the tempo declined without saying it has no value to return to: {why}"
+            "`alt-enter` on the tempo declined without saying it has no value to return to: {why}"
         ),
-        other => panic!("`space` on the tempo figure set something: {other:?}"),
+        other => panic!("`alt-enter` on the tempo figure set something: {other:?}"),
     }
     match press(&mut view, &panel, Press::Arrow(Arrow::Right)) {
         Asked::Nothing(why) => assert!(

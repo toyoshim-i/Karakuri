@@ -383,12 +383,12 @@ fn the_levels_the_world_holds_are_named_and_not_read() {
             "`{path:?} ↑` in `{bay}` did not ask the host to step {level:?}"
         );
         assert_eq!(
-            press(&mut view, &panel, Press::Space),
+            press(&mut view, &panel, Press::AltEnter),
             Asked::Stepped {
                 level,
                 step: Step::Default
             },
-            "`space` on {level:?} is not the value it was declared at"
+            "`alt-enter` on {level:?} is not the value it was declared at"
         );
     }
 }
