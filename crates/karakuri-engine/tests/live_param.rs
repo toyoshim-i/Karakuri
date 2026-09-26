@@ -1,24 +1,4 @@
-//! A parameter written to a deck slot that is playing, from the call to the
-//! texel.
-//!
-//! **The claim is that a knob is not a build.** `Set::write_param` writes a
-//! number into a map and touches no shader and no pipeline; `Set::prepare`
-//! packs that map into a uniform on every frame of every slot. So a write
-//! reaches the frame after the one it was made in, with no worker, no
-//! candidate and no swap — and the only thing that says so at the far end is a
-//! rendered texel, because a map that is right and a slot that keeps rendering
-//! the Set it was built with look identical from anywhere else.
-//!
-//! **And that the route in is a `Deck`.** `HotSwap::live_mut` is `pub(crate)`
-//! because handing out the live `Set` would be a second way to *render* one;
-//! writing a value is neither rendering nor replacement, and
-//! `Deck::schedule_selection` already reaches `live_mut` on exactly those
-//! terms. What is asserted here is the public road: nothing in this file names
-//! a `Set` after the deck is built.
-//!
-//! What is *not* here is a rebuild carrying the value over. Nothing does that,
-//! and `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`
-//! says why it is a decision rather than a gap.
+//! Integration tests for parameter updates written directly to live deck slots.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -166,12 +146,7 @@ proc glowing {
         );
     }
 
-    /// **A write through the deck is on screen at the next frame, and no build
-    /// happened.**
-    ///
-    /// The frame before the write is asserted too, so that a test which
-    /// happened to draw the new value from the start could not pass: the pair
-    /// of readings is the claim, and the only thing between them is one call.
+    /// Verifies that parameter writes via the deck update shader uniforms on the next frame without rebuilding.
     #[test]
     fn a_write_through_the_deck_reaches_the_live_sets_uniform_without_a_rebuild() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -244,16 +219,7 @@ proc glowing {
         close(b, 2.0, "glow.z at heat 2.0");
     }
 
-    /// **The wildcard refusal survives the deck**, which is the point of
-    /// reaching `Set::write_param` rather than reaching past it: a bare name
-    /// over nodes that are not under one authority is one control spanning two
-    /// arrangements, and it is refused whole rather than landed on the half
-    /// that permits it
-    /// (`docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`).
-    ///
-    /// The frame is read afterwards because *refused whole* is a claim about
-    /// what did **not** move: a refusal that had already written the renderer
-    /// would return the same `Err`.
+    /// Verifies that wildcard parameter writes across conflicting authority nodes are rejected atomically.
     #[test]
     fn a_wildcard_write_is_refused_through_the_deck_where_the_landing_disagrees() {
         let gpu = Gpu::headless().expect("no GPU available");

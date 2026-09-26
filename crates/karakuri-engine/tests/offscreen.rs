@@ -1,11 +1,4 @@
-//! The guard on the vertical slice.
-//!
-//! "Get a triangle on screen, then never break it" needs something that fails
-//! when it breaks. A window cannot do that in CI or in a subagent, but an
-//! offscreen `Rgba16Float` target and a readback can, and they check more than a
-//! screenshot would: that the HDR format survives the round trip, that additive
-//! blending accumulates, and that simulation time advances from steps rather
-//! than from a clock.
+//! Offscreen rendering integration tests verifying headless HDR rendering, blending, and readback.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test

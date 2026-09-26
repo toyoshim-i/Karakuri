@@ -1,67 +1,6 @@
-//! **A test that takes a GPU device lives under `mod gpu`, and one that does
-//! not lives outside it.** This file is what makes that true rather than
-//! intended: it reads the workspace's own source and checks every `#[test]` in
-//! it, both ways round.
+//! Invariant tests ensuring all tests accessing GPU devices are placed under `mod gpu`.
 //!
-//! # What the convention buys
-//!
-//! `cargo test -p <crate>` keeps its exact present meaning — everything runs,
-//! and the pre-push hook is untouched. What is new is the *subtraction*:
-//!
-//! ```sh
-//! cargo test -p karakuri-engine -- --skip gpu::
-//! ```
-//!
-//! runs the part of a crate that needs no adapter. At the time this landed that
-//! was ~690 of ~990 tests for about three seconds of the ~306 the whole
-//! workspace costs, because the GPU tests are ~99% of the wall clock and almost
-//! none of the tests.
-//!
-//! `#[ignore]` was the obvious alternative and was rejected: it inverts the
-//! default, so `cargo test` would quietly stop meaning "everything" and
-//! `.githooks/pre-push` would have to grow `--include-ignored` in the same
-//! breath. A module path is inert — it changes what a filter can select and
-//! nothing about what runs by default.
-//!
-//! # Why the check is both ways round
-//!
-//! `--skip` is a *substring* match on the full test path, so `--skip gpu::`
-//! skips anything whose name contains those five characters. That makes the two
-//! directions two different failures, and both matter:
-//!
-//! - a GPU test **outside** `mod gpu` is a slow test in the fast set — the
-//!   filtered run takes a device it promised not to, and fails on a machine
-//!   without one;
-//! - a CPU test **inside** any module called `gpu` is a test that silently
-//!   stops running whenever anyone uses the filter. This is not hypothetical:
-//!   `karakuri_engine::gpu` is a real module, and a `#[test]` added inside it
-//!   would be named `gpu::tests::…` and swept up by the filter. The second
-//!   assertion below is what refuses that.
-//!
-//! # The case no in-process rule can see
-//!
-//! `karakuri-cli/tests/replay.rs` spawns `CARGO_BIN_EXE_karakuri-cli` and the
-//! *binary* reaches `Gpu::headless` in a process of its own. Nothing in that
-//! file mentions a device, so a scanner looking only for `Gpu::headless` would
-//! report the file clean while five tests took five devices. So spawning a
-//! binary that reaches a device counts as reaching one — [`GPU_BINARIES`] names
-//! them, and [`gpu_binaries_still_take_a_device`] refuses to let that list go
-//! stale. It is deliberately coarse: *any* spawn of such a binary counts, even
-//! `--help`, because which flags a test passes decides whether that run builds
-//! a Set and no static rule can read that. Coarse in this direction is safe —
-//! the worst case is a CPU test kept out of the fast set, never a GPU test let
-//! into it.
-//!
-//! # How it reads the source
-//!
-//! Comments and string literals are blanked before anything is matched, which
-//! is load-bearing twice over: this file's own `"Gpu::headless"` needle is a
-//! string, and several test files quote the call in prose. A test is judged by
-//! its body plus every same-file function it calls, transitively — helpers are
-//! resolved by bare name across the whole file, ignoring modules, which can
-//! only ever over-approximate. The shape is
-//! `karakuri-signal/tests/no_clock_access.rs`: scan the checked-in source, and
-//! carry a floor so the scan cannot silently match nothing.
+//! Enables `--skip gpu::` to run pure CPU tests without initializing hardware adapters.
 
 use std::collections::HashMap;
 use std::fs;
@@ -76,15 +15,7 @@ const DOOR: &str = "Gpu::headless";
 /// GPU test however little it looks like one.
 const GPU_BINARIES: &[(&str, &str)] = &[
     ("karakuri-cli", "crates/karakuri-cli/src"),
-    // **The panel**, spawned by `karakuri/tests/starts.rs`. That binary opens a
-    // window, makes a surface and requests an adapter before it prints the
-    // legend that test waits for, so starting it is a reach however little the
-    // test file says about `wgpu`. The door it is *checked* against below is
-    // the one in its own `mod gpu`; the shipped path reaches a device through
-    // `Gpu::from_instance` with a surface, which no static check here can see —
-    // so the claim `gpu_binaries_still_take_a_device` verifies is weaker than
-    // the reason this entry exists, and that is stated rather than left to be
-    // discovered.
+    // The panel binary opens a surface and initializes an adapter.
     ("karakuri", "crates/karakuri/src"),
 ];
 
@@ -102,12 +33,7 @@ fn workspace() -> PathBuf {
         .expect("workspace root")
 }
 
-/// Replace every comment and string literal with spaces, preserving length and
-/// line structure so nothing downstream has to care that they were there.
-///
-/// Byte-oriented on purpose: the sources are UTF-8 and full of non-ASCII prose,
-/// but every delimiter this cares about is ASCII, and a multi-byte character
-/// can never contain an ASCII byte — so a byte scan cannot land inside one.
+/// Replaces comments and string literals with spaces, preserving length and line structure.
 fn blank_comments_and_strings(src: &str) -> String {
     let b = src.as_bytes();
     let mut out: Vec<u8> = b.to_vec();
@@ -327,11 +253,7 @@ fn reaches_a_device(
     if body.contains(DOOR) {
         return true;
     }
-    // The whole expression, not just the variable name: `env!` is the only way
-    // to reach a `CARGO_BIN_EXE_*` (Cargo sets it for the compile, not for the
-    // run), so matching the call rather than the name keeps prose that merely
-    // mentions one from reading as a spawn. Read out of `raw` because the name
-    // lives inside a string literal, which the blanking has eaten.
+    // Match env!(CARGO_BIN_EXE_*) to detect spawned binaries requiring a GPU.
     if GPU_BINARIES
         .iter()
         .any(|(bin, _)| raw.contains(&format!("env!(\"CARGO_BIN_EXE_{bin}\")")))
@@ -430,13 +352,7 @@ fn every_gpu_test_is_under_mod_gpu_and_nothing_else_is() {
         }
     }
 
-    // Floors, not counts: the point is that the scan cannot come back empty
-    // because a path moved or the blanking ate the file. They read 120, 997 and
-    // 301 when this landed, and are meant to be raised, never lowered to fit a
-    // smaller scan. Three of them rather than one because they fail apart: a
-    // wrong root gives 0 files, a broken blanking gives files but no tests, and
-    // a renamed `Gpu::headless` gives tests but no GPU ones — and that last one
-    // would otherwise make the whole check pass by finding nothing to check.
+    // Minimum scan thresholds ensuring paths and patterns continue matching test fixtures.
     assert!(
         files >= 60,
         "only {files} source files scanned — is the layout still crates/*/{{src,tests}}?"
@@ -477,14 +393,7 @@ fn gpu_binaries_still_take_a_device() {
         let mut found = false;
         let mut checked = 0;
         walk(&dir, &mut found, &mut checked);
-        // A floor of one, and it was two until ADR-0214's move: the guard is
-        // against reading *nothing* — a renamed directory, or an extension
-        // filter that stopped matching — and `karakuri-cli/src` legitimately
-        // holds one file now. It is not the claim. The claim is `found`
-        // below, which needs the door read out of a real file, so an emptied
-        // or moved directory fails there too and says something useful when
-        // it does. Raising this back would mean asserting a crate's shape
-        // from a test about GPU markers, which is not this file's business.
+        // Guard against path restructuring or unindexed test directories.
         assert!(
             checked >= 1,
             "{} holds no Rust source at all — has the path moved?",

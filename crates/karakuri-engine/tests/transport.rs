@@ -1,21 +1,4 @@
-//! Transport, through a deck and a real GPU.
-//!
-//! `transport.rs`'s own tests cover the arithmetic — what mode maps the
-//! session's clock to which step count, and which modes a Set may be given.
-//! None of them touches a Set, which is the point of that split and also its
-//! limit: they would all pass on a deck that computed a seek and then ignored
-//! it.
-//!
-//! What is asserted here is the half that needs pixels:
-//!
-//! - a beat-synced slot **actually lands on the position**, rather than
-//!   advancing towards it;
-//! - scrubbing backwards **reproduces the earlier frame bit for bit**, which is
-//!   the whole claim `closed_form` was introduced to make and the one that
-//!   cannot be argued from arithmetic;
-//! - tempo sync changes the rate and **nothing else**;
-//! - and a free slot renders exactly what it rendered before the transport
-//!   existed.
+//! Integration tests for transport modes and synchronization via real GPU execution.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -37,14 +20,7 @@ mod gpu {
     const SEED: u32 = 19274;
     const BPM: f32 = 120.0;
 
-    /// **Closed form, so it can be placed.** Nothing here reads an attribute it
-    /// emits, there is no `spawn` and no `kill()` — the three things
-    /// `is_closed_form` refuses on. `age = t` rather than `age + dt` for exactly
-    /// that reason, and it is not a dodge: a procedure with no `spawn` block has
-    /// every element alive from frame zero, so an element's age *is* `t`.
-    ///
-    /// A ring whose angle is `t` alone, so the frame says where the clock is and
-    /// two frames at the same clock are the same frame.
+    /// Closed-form procedure with direct time dependency (age = t) without spawn/kill.
     const RING: &str = r#"
 proc ring {
   kind     L1
@@ -230,20 +206,7 @@ proc plain_points {
         }
     }
 
-    /// **Beat sync lands on the position rather than advancing towards it**, which
-    /// is the difference between a lock and a follow.
-    ///
-    /// The slot starts thirty steps behind — half a second, one beat at 120 bpm —
-    /// and the very next frame is level with the session. A transport that stepped
-    /// towards the target would take thirty frames to close that, and would pass
-    /// every arithmetic test in `transport.rs` while doing so.
-    ///
-    /// **The lag is manufactured by handing the deck an oscillator that has
-    /// already run**, which is what a Set installed part-way through a set
-    /// looks like from the slot's side. It used to be manufactured by parking
-    /// the slot for thirty frames, and that stopped producing a lag when every
-    /// slot started stepping on every frame (ADR-0269): a slot off air keeps
-    /// the room's tempo, so it never falls behind by standing still.
+    /// Verifies that beat sync immediately locks to the target position on the next frame.
     #[test]
     fn beat_sync_lands_in_one_frame_rather_than_catching_up() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -267,16 +230,7 @@ proc plain_points {
         );
     }
 
-    /// **Scrubbing backwards reproduces the earlier frame, bit for bit.**
-    ///
-    /// This is the claim `closed_form` exists to make, and the reason a rewind is
-    /// possible at all: the state at `t` does not depend on how the clock arrived
-    /// there, so putting the clock back and evaluating once gives the same image —
-    /// not a similar one.
-    ///
-    /// The comparison is against a frame captured on the way past rather than
-    /// against a second run, so what is asserted is that *this* slot returned to
-    /// where *it* was, and not merely that two runs of the same procedure agree.
+    /// Verifies that scrubbing backwards on closed-form procedures reproduces earlier frames bit-for-bit.
     #[test]
     fn scrubbing_back_a_beat_reproduces_the_frame_from_a_beat_ago() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -356,11 +310,7 @@ proc plain_points {
         );
     }
 
-    /// **Both refusals, at the point the operator asks and against a real Set.**
-    ///
-    /// `transport.rs` asserts the rule over the two flags; this asserts that the
-    /// flags reaching it are the ones the check pass put on the material. A rule
-    /// that is right about the wrong Set refuses nothing.
+    /// Verifies that inappropriate transport modes are rejected based on procedure capabilities.
     #[test]
     fn a_set_is_refused_the_mode_its_material_cannot_take() {
         let gpu = Gpu::headless().expect("no GPU available");

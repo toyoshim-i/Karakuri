@@ -1,11 +1,4 @@
-//! Tone mapping in the present pass.
-//!
-//! Uses `Points` — the hand-written vertical slice, not the generated path —
-//! as a source of strongly saturated, over-1.0 additive HDR content, because
-//! that is the failure mode a tone mapper exists to fix: channels pushed far
-//! past 1.0 unevenly by many overlapping additive sprites. Everything here
-//! reuses one `Present` across every operator, which is the point: switching
-//! `TonemapOp` is `set_tonemap`, a uniform write, never a rebuild.
+//! Integration tests for tone mapping operators in the present pass.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -16,12 +9,7 @@ mod gpu {
     const WIDTH: u32 = 64;
     const HEIGHT: u32 = 64;
 
-    /// Re-renders `points`' already-prepared state through `present`'s current
-    /// HDR target and reads back whatever `present.draw` wrote — an
-    /// `Rgba8UnormSrgb` target, so the hardware's sRGB encode is included, same as
-    /// every other caller of `Present::draw`. Each call is a fresh render (the
-    /// HDR target is cleared, not accumulated) so callers vary `present`'s
-    /// tonemap uniform between calls and compare the bytes.
+    /// Renders points through the HDR target and reads back the sRGB presentation output.
     fn capture(gpu: &Gpu, present: &Present, points: &mut Points) -> Vec<u8> {
         let format = wgpu::TextureFormat::Rgba8UnormSrgb;
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -80,12 +68,7 @@ mod gpu {
         pixels
     }
 
-    /// A `Points` source whose exposure is turned up far enough that its bright
-    /// core blows every channel well past 1.0 — the condition none of the
-    /// operators agree on, which is exactly what makes it a useful probe. (This
-    /// is `Points`'s own `params.exposure`, the hand-written slice's stand-in for
-    /// a procedure's `param exposure` — a different knob from the `exposure`
-    /// `Present::set_tonemap` takes, which is the operator's own control.)
+    /// Creates a high-exposure points source that blows out channels past 1.0 to test tone compression.
     fn hot_points(gpu: &Gpu) -> Points {
         let mut points = Points::new(&gpu.device, 4096, 19274);
         points.resize(WIDTH, HEIGHT);
@@ -106,13 +89,9 @@ mod gpu {
             .count()
     }
 
+    /// Verifies that the default tonemap operator initialized by Present is ACES at unit exposure.
     #[test]
     fn the_constructor_default_is_aces_at_unit_exposure() {
-        // Whatever `Present::new` uploads is what every caller that never touches
-        // the new API gets, including both offscreen paths — so it is worth
-        // pinning rather than leaving to whichever variant happens to be first in
-        // the enum. ACES was picked by looking at the four rendered side by side;
-        // see `TonemapUniform::default_op`.
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(
             &gpu.device,
@@ -182,13 +161,9 @@ mod gpu {
         );
     }
 
+    /// Verifies that continuous tone operators retain highlight variation where Clamp clips.
     #[test]
     fn a_real_tonemapper_recovers_detail_that_clamp_destroys() {
-        // Clamp is `min(c, 1.0)`: every over-1.0 texel in the blown-out core
-        // saturates to the same value, so the core reads as a flat disc no matter
-        // how much brighter its centre is than its edge. A real operator
-        // compresses instead of clipping, so it should produce strictly fewer
-        // fully-saturated texels than Clamp on the same content.
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(
             &gpu.device,
