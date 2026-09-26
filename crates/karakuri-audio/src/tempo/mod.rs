@@ -1,19 +1,6 @@
 //! Tempo and beat-phase estimation from the analyser's novelty curve.
-//!
-//! Pure estimation decoupled from control: a [`Tracker`] operates on novelty
-//! samples and tracking window centres in stream seconds without wall-clock dependencies.
-//! Downstream control policy (such as oscillator adjustment) is handled by [`crate::lock`].
-//!
-//! ## Estimation Pipeline
-//!
-//! 1. **Period estimation**: Lag autocorrelation across [`BPM_RANGE`].
-//! 2. **Octave folding**: Maps candidate periods into the single-octave [`tracking_window`]
-//!    `[centre / √2, centre * √2]` via power-of-two multiplication or division ([`fold`]).
-//! 3. **Phase and fit**: Folds the novelty window onto candidate periods to identify
-//!    beat alignment and calculate fit confidence.
-//!
-//! The single-octave window prevents octave ambiguity (such as choosing between `T` and `2T`).
-//! Triplet and non-power-of-two harmonics are mitigated using a log-normal prior ([`PRIOR_OCTAVES`]).
+//! Computes lag autocorrelation across candidate periods and folds estimates
+//! into a single-octave tracking window without wall-clock dependencies.
 
 use std::ops::RangeInclusive;
 

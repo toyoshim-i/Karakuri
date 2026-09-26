@@ -1,10 +1,5 @@
 //! Operation gating, auditing, and authorization rules.
-//!
-//! Enforces policy invariants before operations reach the engine (ADR-0235, ADR-0236):
-//! - Operations in protected classes are refused unless explicitly enabled via [`Open`].
-//! - Authorization is type-level: [`audit`] is the sole constructor of [`Allowed`].
-//! - Closed by default: [`Open::default`] starts with all protected classes closed.
-//! - Exhaustive classification: [`standing`] maps every [`Operation`] variant to a [`Class`].
+//! Enforces policy invariants and type-level authorization before operations reach the engine.
 
 pub mod rules;
 pub mod types;

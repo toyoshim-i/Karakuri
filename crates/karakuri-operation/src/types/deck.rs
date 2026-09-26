@@ -81,11 +81,8 @@ impl Sync {
     }
 }
 
-/// Subdivision value for one step of a sequencer pattern: sixteenth or eighth.
-///
-/// Pattern length is one fixed bar; step count directly corresponds to mode
-/// (16 steps for sixteenth, 8 steps for eighth). Stored pattern width remains 16 slots
-/// (ADR-0306, ADR-0320).
+/// Subdivision value for one step of a sequencer pattern (sixteenth or eighth note).
+/// Pattern length is one bar; stored pattern width remains 16 slots (ADR-0306, ADR-0320).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum StepMode {
     /// Sixteen steps to the bar, four to the beat. Default mode.

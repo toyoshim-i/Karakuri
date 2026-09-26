@@ -26,11 +26,8 @@ pub enum SignalId {
 }
 
 impl SignalId {
-    /// Resolves a signal name string to a typed [`SignalId`].
-    ///
-    /// Recognizes transport signals (`bpm`, `beat`, `bar`), audio feature names
-    /// (`energy`, `onset`, frequency band names/indices with optional `audio.` prefix),
-    /// and hashes unknown names into [`SignalId::Custom`].
+    /// Resolves a signal name string to a typed [`SignalId`], mapping transport
+    /// signals, audio feature names, frequency bands, and custom hashed names.
     pub fn resolve(name: &str) -> SignalId {
         let stripped = name.strip_prefix("audio.").unwrap_or(name);
         match stripped {

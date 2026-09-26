@@ -1,14 +1,6 @@
 //! The local oscillator: the single source of truth for phase and tempo.
-//!
-//! Advances strictly by simulation steps, never by reading external clocks.
-//! External tempo or MIDI sources apply corrections via [`Oscillator::correct`],
-//! adjusting tempo and phase shifts without mutating historical beat positions.
-//!
-//! ## Musical Position and Elapsed Beats
-//!
-//! - [`Oscillator::beats`]: Musical position including phase corrections.
-//! - [`Oscillator::elapsed_beats`]: Accumulated tempo scaling excluding phase shifts,
-//!   preventing noise generator lattice discontinuities during phase realignment.
+//! Advances simulation steps deterministically; external inputs apply continuous
+//! corrections without mutating historical beat coordinates.
 
 /// Beats per bar. v0.2 of the IR spec has no time-signature concept anywhere
 /// (no `bind` field, no Set-file record), so this is a fixed assumption of
@@ -85,11 +77,8 @@ impl Oscillator {
         self.steps_taken
     }
 
-    /// Applies a tempo and phase shift correction.
-    ///
-    /// Updates the tempo and shifts the beat grid continuously without moving
-    /// historical beats. The phase shift applies to [`Oscillator::beats`] but
-    /// does not alter [`Oscillator::elapsed_beats`].
+    /// Applies a continuous tempo and phase shift correction without altering
+    /// historical elapsed beats.
     pub fn correct(&mut self, bpm: f32, shift_beats: f32) {
         let shift = if shift_beats.is_finite() {
             shift_beats as f64
