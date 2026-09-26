@@ -72,11 +72,7 @@ color = vec4(1.0, 1.0, 1.0, 1.0);
 }
 "#;
 
-/// **The other three layers, and a second source.** A slot is not a pair:
-/// it can hold deformations between the geometry and the renderers, one
-/// camera, one `kind Field`, and more than one L1 — and every one of them
-/// was a file this surface could not name. Written out for the reason the
-/// pair above is, and minimal for the same one.
+/// Probe L2 deformation procedure fixture.
 pub const PROBE_L2: &str = r#"
 proc probe_warp {
 kind L2
@@ -89,12 +85,7 @@ position = vec3(position.x, position.y * 1.5, position.z);
 }
 "#;
 
-/// **A deformation that declares a slot nothing here can bind.**
-///
-/// It compiles on its own — a `uses` is a declaration, and one procedure is
-/// all `compile::check` ever sees — and the Set it lands in refuses to
-/// build until an `edge` says what fills `shape`. There is no tool on this
-/// surface that writes one.
+/// Deformation fixture declaring an unbound `Field` slot dependency.
 pub const PROBE_L2_USES: &str = r#"
 proc probe_warp_uses {
 kind L2
@@ -165,14 +156,7 @@ color = vec4(0.0, 1.0, 0.0, 1.0);
 }
 "#;
 
-/// **A geometry with something declared on it**, for the tests about
-/// cards.
-///
-/// The pair above declares no `param` and no range worth reading, so a
-/// rendering that dropped every `param_decl`, or one that printed a `min`
-/// where a `max` was, would pass against it. Every number here is a
-/// different number, and none of them is a number anything else in this
-/// module writes.
+/// Geometry fixture with explicit params and ranges for Set Card testing.
 pub const PROBE_KNOBS: &str = r#"
 proc probe_knobs {
 kind     L1
@@ -189,12 +173,7 @@ position = vec3(radius, 0.0, 0.0);
 }
 "#;
 
-/// A slot holding one of everything, in a file order that is deliberately
-/// not the order the layers compose in.
-///
-/// **The second L1 comes last and the renderer is in the middle**, because
-/// an index that came from a file's position rather than from its place
-/// within its own layer passes any fixture where the two agree.
+/// Starts a test server with a slot containing all layers in non-layer file order.
 pub fn start_chain() -> Server {
     let dir = tempfile::tempdir().expect("tempdir");
     let write = |name: &str, source: &str| {

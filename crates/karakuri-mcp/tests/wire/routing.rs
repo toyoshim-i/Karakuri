@@ -2,16 +2,7 @@
 
 use super::wire_common::*;
 
-/// **A write lands on the node its address names, and its neighbour is left
-/// alone** — asserted on the files rather than on what the call said.
-///
-/// This is the one property the routing through
-/// [`karakuri_operation::Operation`] could quietly lose: the wire's `index`
-/// becomes [`NodeAddress::index`] and comes back out again to resolve a file, so
-/// an address that arrived correct and was carried wrong would still return
-/// *compiled and written* and change the wrong procedure. A slot with two
-/// renderers is what makes that visible: with one, every wrong index is the
-/// right one.
+/// Verifies that write_procedure targets the exact node matching the layer and index without disturbing neighbouring nodes.
 #[test]
 fn a_write_reaches_the_node_its_address_names_and_not_its_neighbour() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -56,12 +47,7 @@ fn a_write_reaches_the_node_its_address_names_and_not_its_neighbour() {
 
 // -- what the audit of this file against the engine turned up -----------
 
-/// A slot whose head is anything but a geometry, for the tests below.
-///
-/// **`--set` takes whatever the operator typed first**, and nothing checks
-/// that it is an L1 — the sort that assembles the slot reads every file's
-/// own `kind` line, the head included, so a chain headed by a camera is an
-/// ordinary slot with an ordinary camera in it.
+/// Helper constructing a test slot where the head procedure declares a camera (L3).
 fn headed_by_a_camera(dir: &tempfile::TempDir) -> (Slots, Vec<std::path::PathBuf>) {
     let write = |name: &str, source: &str| {
         let path = dir.path().join(name);
@@ -77,15 +63,7 @@ fn headed_by_a_camera(dir: &tempfile::TempDir) -> (Slots, Vec<std::path::PathBuf
     )
 }
 
-/// **The head is addressed under the `kind` it declares**, like every other
-/// file of the slot.
-///
-/// It was filed as `L1:0` whatever it said, which no other reader of these
-/// files agrees with: `compile::sort_compiled` matches on the head's own
-/// `kind` and `history::seed` reads the head's `kind` line, taking a
-/// position only where a file declares nothing. So a slot headed by a
-/// camera had its camera at `L1:0`, its geometry unreachable, and its real
-/// `L3` addressable by nobody.
+/// Verifies that the head file is addressed under the layer it declares rather than unconditionally as L1:0.
 #[test]
 fn a_head_is_addressed_under_the_kind_it_declares() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -115,13 +93,7 @@ fn a_head_is_addressed_under_the_kind_it_declares() {
     assert!(past.contains("one L3"), "{past}");
 }
 
-/// **A file with no `kind` line at all keeps `history::seed`'s positional
-/// answer**: the first path is an L1 and every later one a renderer.
-///
-/// That fallback is the whole reason reading the head's `kind` is safe. A
-/// slot whose head cannot be read — or that is a `.kir` the scan finds no
-/// `kind` in — must still be addressable at `L1:0`, because that is where
-/// its snapshots are filed.
+/// Verifies that files declaring no explicit kind line fall back to positional defaults (first is L1).
 #[test]
 fn a_head_that_declares_nothing_is_still_the_slots_l1() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -179,17 +151,7 @@ fn a_write_addressed_to_a_geometry_does_not_overwrite_the_head() {
     assert!(read.contains("probe_camera"), "{read}");
 }
 
-/// **An L2 that declares `uses shape : Field` is written cleanly**, which
-/// is the promise `write_procedure`'s description had to stop making.
-///
-/// `compile::check` checks one procedure in isolation; everything between
-/// nodes is `Set::validate`, which is where an unbound slot is refused. So
-/// a clean write is not a slot that rebuilds, and this is still true after
-/// `wire_input` exists: the binding is a **second** call, and the window
-/// between the two is a slot that does not build. What changed is that
-/// there is now a second call to make — see
-/// [`a_uses_written_here_can_be_bound_here_and_the_slot_builds`], which
-/// takes this write the rest of the way.
+/// Verifies that writing a procedure with unbound inputs succeeds per-procedure without immediately enforcing set validation.
 #[test]
 fn a_write_that_needs_an_edge_still_returns_cleanly() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -225,15 +187,7 @@ fn a_write_that_needs_an_edge_still_returns_cleanly() {
     );
 }
 
-/// **A run with `--mcp` and no `--watch` has a scratch and an edit history
-/// like any other**, and the answer used to tell it the opposite.
-///
-/// `main.rs`'s `editable` is `watch || mcp.is_some()`: the deck runs from
-/// copies, so the files the operator named are never written to, and
-/// `history::seed` has filed the version the run started with. "It replaced
-/// the file on disk and there is no backup" was wrong in both halves, and
-/// it was wrong on the one surface whose reader cannot look at the
-/// terminal.
+/// Verifies that writing without watch still properly informs where original versions are backed up.
 #[test]
 fn a_write_without_watch_still_says_where_the_old_version_went() {
     let (server, reporter) = started(false);
@@ -270,12 +224,7 @@ fn checked(dir: &std::path::Path, name: &str) -> Checked {
         .unwrap_or_else(|e| panic!("{} does not check: {e}", path.display()))
 }
 
-/// **Whether the fixture's slot assembles**, with the wiring it is given.
-///
-/// `Set::validate` is `Set::build_many`'s whole check pass and needs no
-/// device, which is the only reason this can be asserted here at all: it is
-/// the same rule the render loop's rebuild would meet, run against the files
-/// that are actually on disk after a write.
+/// Checks whether the slot's files validate together under the given wiring edges.
 fn assembles(
     dir: &std::path::Path,
     edges: &[karakuri_engine::set::Edge],
@@ -301,17 +250,7 @@ fn assembles(
     .map(|_| ())
 }
 
-/// **The test that would have caught it**: a `uses` written through this
-/// server, an edge written through this server, and the slot assembling.
-///
-/// This is the whole trap and the whole fix in one run. `write_procedure`
-/// accepted a procedure declaring `uses shape : Field` — it compiles, and
-/// one procedure is all `compile::check` ever sees — and the slot then
-/// failed to build with `SetError::SlotUnbound`, which nothing on this
-/// surface could answer. The middle assertion is that failure, asserted
-/// rather than described, so that this test is about a trap that was real;
-/// the last is that the edge **this server sent to the loop** is the one
-/// that closes it.
+/// Verifies that an unbound procedure written over the wire can be bound via wire_input to assemble the slot.
 #[test]
 fn a_uses_written_here_can_be_bound_here_and_the_slot_builds() {
     let (server, seen) = wired(true);
@@ -328,8 +267,7 @@ fn a_uses_written_here_can_be_bound_here_and_the_slot_builds() {
     );
     assert!(!failed, "{said}");
 
-    // **The trap, on the frame it goes wrong.** The file on disk is the one
-    // the model wrote, it checks, and the slot it is in does not assemble.
+    // Verify slot fails to assemble with unbound slot error before wiring.
     let refused = assembles(&dir, &[]).expect_err(
         "a `uses` nothing binds assembled — this test's middle is gone and the two \
          halves either side of it are about nothing",
@@ -340,8 +278,7 @@ fn a_uses_written_here_can_be_bound_here_and_the_slot_builds() {
          test is about: {refused}"
     );
 
-    // **The way out, over the wire.** Both ends by name: the node is what
-    // the procedure calls itself, because nothing named it.
+    // Bind the dependency over the wire and verify slot now assembles cleanly.
     let (failed, said) = call(
         server.port,
         "wire_input",
@@ -367,14 +304,7 @@ fn a_uses_written_here_can_be_bound_here_and_the_slot_builds() {
     );
 }
 
-/// **Both ends reach the loop as the names that were typed**, and the input
-/// is not one of them.
-///
-/// Three strings on one request is three chances to hand the loop the wrong
-/// one, and every mistake of that kind reads as a working call: the edge is
-/// written, the slot refuses to build, and the refusal is about a node
-/// nobody named. Every one of these three names is a different word, on
-/// purpose.
+/// Verifies that wire_input delivers the exact node, slot input, and target names to the render loop.
 #[test]
 fn an_edge_reaches_the_loop_with_the_deck_and_both_ends_as_they_were_typed() {
     let (server, seen) = wired(true);
@@ -403,12 +333,7 @@ fn an_edge_reaches_the_loop_with_the_deck_and_both_ends_as_they_were_typed() {
     );
 }
 
-/// **Every part of an edge names something**, which is `parse_edge`'s rule
-/// on the command line and the same sentence here.
-///
-/// An absent part and an empty one are the two shapes, and neither may reach
-/// the render loop: an edge with a hole in it is a statement about a node,
-/// and there is no such statement.
+/// Verifies that edge definitions reject missing or empty node, input, or target fields.
 #[test]
 fn every_part_of_an_edge_names_something() {
     let (server, seen) = wired(true);
@@ -458,14 +383,7 @@ fn every_part_of_an_edge_names_something() {
     );
 }
 
-/// **A run without `--watch` has no watcher, and the answer says so** — the
-/// same fact `write_procedure` states about the other half of one edit.
-///
-/// The edge is still sent: it is the run's wiring from then on, and a
-/// `save_set` of that slot records it. What does not happen is the rebuild,
-/// and a model told "the slot is rebuilding" by a run that has nothing to
-/// rebuild it with would go looking for a change on screen that is never
-/// coming.
+/// Verifies that wiring without watch indicates that rebuilding will not happen automatically.
 #[test]
 fn an_edge_written_without_watch_says_no_watcher_will_rebuild_the_slot() {
     let (server, seen) = wired(false);
