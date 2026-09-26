@@ -80,11 +80,7 @@ proc soft_points {
 /// [`a_candidate_the_estimator_refuses_is_judged_on_its_measurement`].
 pub const TINY: (u32, u32) = (2, 2);
 
-/// An L4 consuming an attribute `L1` does not emit **and nothing can
-/// synthesise**. `Set::build` refuses this pair — stage 6, the composition
-/// check — which is the cheapest way to get a build that fails *on the worker
-/// thread*, as opposed to one that fails earlier and never becomes a `Request`
-/// at all.
+/// Shader fixture that consumes an unavailable attribute (`normal`) to trigger worker build failure.
 pub const L4_INCOMPATIBLE: &str = r#"
 proc wants_normal {
   kind  L4

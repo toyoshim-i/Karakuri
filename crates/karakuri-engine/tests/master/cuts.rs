@@ -3,12 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// **A retention is allocated only where a slot's answer names one, and at
-    /// most two ever** — one per cut, however many slots read them.
-    ///
-    /// The rule ADR-0317 wrote for one fixed pass, at a list's width: *a cut
-    /// that is read has to be held, so holding one nothing reads is the cost
-    /// nobody would pay* (P-0091).
+    /// Verifies retention textures are allocated only when slots declare cuts (at most one per cut kind).
     #[test]
     fn a_cut_is_held_only_where_a_slot_asked_for_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -69,13 +64,7 @@ mod gpu {
         );
     }
 
-    /// **The two cuts are two pictures**, which is why the cut is the slot's
-    /// answer rather than a decision the design took.
-    ///
-    /// `Cut::Mix` reads the frame as the mix wrote it, so what comes back has
-    /// been through nothing; `Cut::Exit` reads the chain's own output, so what
-    /// comes back has already been bloomed and shifted and is bloomed and
-    /// shifted again.
+    /// Verifies `Cut::Mix` and `Cut::Exit` yield visually distinct composited results.
     #[test]
     fn the_two_cuts_are_two_pictures() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -113,16 +102,7 @@ mod gpu {
         );
     }
 
-    /// **A slot reading the mix cut reads the previous frame's mix wherever it
-    /// sits in the list**, which is the position-independence the entry target
-    /// buys.
-    ///
-    /// `master.rs` used to copy the mix cut *between* two passes, because the
-    /// mix's own target was also the second pass's destination. A list cannot
-    /// honour that: the slot that reads the cut may be anywhere. So the entry
-    /// is held apart from the ping-pong pair and the copy happens at the end,
-    /// and this is the frame that says it worked — feedback second in the list
-    /// still trails.
+    /// Verifies slots reading `Cut::Mix` correctly receive the previous frame's mix regardless of position in chain.
     #[test]
     fn the_mix_cut_is_the_previous_frame_wherever_the_slot_sits() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -160,13 +140,7 @@ mod gpu {
         );
     }
 
-    /// **The first frame of a run with a retaining slot reads a black
-    /// history.**
-    ///
-    /// Which is what makes a run and its replay agree on frame one: nothing has
-    /// been retained yet, and a freshly allocated target reads as zero. If it
-    /// did not, this frame would carry whatever the driver left in that memory
-    /// and no two runs would agree.
+    /// Verifies that the initial frame of a retaining run reads empty (black) history textures.
     #[test]
     fn the_first_frame_of_a_retaining_run_reads_a_black_history() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -187,13 +161,7 @@ mod gpu {
         );
     }
 
-    /// **A run with a retention is bit-exact across two runs**, which is the
-    /// whole of what makes the retained frame part of the state a replay
-    /// reproduces rather than a thing the picture picked up along the way
-    /// (`docs/principles/0092-…`).
-    ///
-    /// Both cuts, because they are held from different targets and only one of
-    /// them is downstream of the passes.
+    /// Verifies bit-exact determinism across identical runs using retention textures.
     #[test]
     fn a_retaining_run_is_bit_exact_across_two_runs() {
         let gpu = Gpu::headless().expect("no GPU available");

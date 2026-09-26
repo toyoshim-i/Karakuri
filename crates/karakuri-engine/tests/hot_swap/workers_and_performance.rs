@@ -53,18 +53,7 @@ mod gpu {
         );
     }
 
-    /// Two saves finishing between two frames leave two builds in the channel,
-    /// and the channel is FIFO. Installing the front of that queue would put a
-    /// superseded Set on screen — a `.kir` the operator has already replaced —
-    /// before reaching the current one. The frame that installs has to drain to
-    /// the newest.
-    ///
-    /// **The window this used to be about is gone** (ADR-0313): a candidate was
-    /// judged for thirty-eight frames, and two saves landing behind that window
-    /// was the ordinary case rather than a contrived one. What replaces it here
-    /// is the same guarantee reached the same way — no frames are rendered while
-    /// `b` and `c` build, so both results are certainly waiting when the next
-    /// one is.
+    /// Verifies that when multiple builds accumulate in the queue, only the newest build is installed.
     #[test]
     fn the_build_installed_after_a_verdict_is_the_newest_one() {
         const THIRD: u32 = 12_288;
@@ -97,11 +86,7 @@ mod gpu {
         );
     }
 
-    /// The worker can only leave its loop by panicking, and when it does its end of
-    /// the channel closes. `Disconnected` and `Empty` are otherwise the same thing
-    /// to the render thread, so without a distinction a `--watch` session would go
-    /// on rendering and silently ignore every save for the rest of the run. It is
-    /// reported once and the live Set is untouched.
+    /// Verifies that worker crashes emit a single `Event::WorkerLost` event without disturbing the running Set.
     #[test]
     fn a_worker_that_dies_is_reported_once_and_does_not_disturb_the_live_set() {
         struct Exploding(u32);
@@ -138,25 +123,7 @@ mod gpu {
         assert_eq!(h.swap.set().capacity(), FIRST, "the live Set was disturbed");
     }
 
-    /// **A source that refused reaches the render thread, and nothing else
-    /// about the frame changes.**
-    ///
-    /// The seam this is about is one word wide: `Source::poll` answered
-    /// `Option<Request>` until 2026-09-08, so a source that had turned a file
-    /// down said it on a terminal and answered `None` — which is the same
-    /// answer a source with nothing to report gives, and is why a checker's
-    /// diagnostics reached no surface in this instrument
-    /// (`docs/adr/0310-…`). So what is asserted here is that the refusal
-    /// **arrives**, that it arrives as its own word rather than as one of the
-    /// three the engine already had, and that it costs the live Set nothing.
-    ///
-    /// **`Silent` above is the negative control and it is not a spare one**:
-    /// every other test in this file drives the worker with it, so a version
-    /// that reported a refusal for *every* poll would take the whole file
-    /// down rather than passing here.
-    ///
-    /// It takes a device because a `HotSwap` does — `swap.rs`'s worker is the
-    /// thing under test, and it is spawned with a `wgpu::Device` and a queue.
+    /// Verifies that source refusal diagnostics propagate to the render thread without altering running Set state (ADR-0310).
     #[test]
     fn a_source_that_refused_says_so_and_the_live_set_is_untouched() {
         /// One refusal and then nothing, which is a watcher over a file that
@@ -247,11 +214,7 @@ mod gpu {
         }
     }
 
-    /// Wall-clock frame intervals across a swap: worst case and median, before,
-    /// during, and after. **Printed, not asserted** — see the module doc. Run with
-    /// `cargo test -p karakuri-engine --test hot_swap -- --nocapture` to see them;
-    /// they print labelled as the host-clock figures they are — see
-    /// `docs/principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md`.
+    /// Measures and logs wall-clock frame intervals before, during, and after a hot-swap.
     #[test]
     fn frame_times_across_a_swap_are_measured_and_reported() {
         let (capacity, size) = REAL;
@@ -261,12 +224,7 @@ mod gpu {
         // question being asked.
         let (mut h, tx) = Harness::channel_driven_at(GENEROUS_MS, capacity, size);
 
-        // Discarded, for the same reason the watchdog discards its own first
-        // frames: the process's first frames pay for pipeline first-use, first
-        // touch of the element buffers, and whatever the GPU's clocks were doing
-        // before there was work. Leaving them in makes the "before" window read
-        // slower than the "after" one and invites the conclusion that swapping
-        // made things faster.
+        // Warm up pipeline to eliminate first-use overhead before recording baseline intervals.
         for _ in 0..60 {
             h.frame();
         }
@@ -280,11 +238,7 @@ mod gpu {
         tx.send(request(L4, capacity, "second"))
             .expect("worker alive");
         let in_flight = h.frames_until(is_swapped, "the swap").0;
-        // One more frame before the slice indices are taken. `Harness::frame`
-        // pushes an interval at the *top* of a frame, so when the `Swapped` event
-        // is first seen the swap frame has begun but not ended and its interval is
-        // not in the vector yet — the last entry is the frame before it. Rendering
-        // one more frame is what puts the swap frame's own interval at the end.
+        // Render an additional frame so the swap frame's interval is captured in history.
         h.frame();
         let at_swap = h.intervals.len();
 

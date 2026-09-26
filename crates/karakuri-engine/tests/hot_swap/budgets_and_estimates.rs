@@ -20,28 +20,7 @@ mod gpu {
         let _ = Gpu::headless();
     }
 
-    /// **An over-budget candidate stays in the slot, and the slot is marked
-    /// stopped** — ADR-0316, and the verdict this file used to assert the
-    /// opposite of.
-    ///
-    /// Forced with an absurd budget rather than with a slow shader: a procedure
-    /// heavy enough to miss the budget on one machine is comfortable on another,
-    /// and a test that depends on which is which is not a test.
-    /// [`an_over_budget_candidate_is_stopped_on_a_budget_derived_from_its_own_measurement`]
-    /// is the same claim against a threshold taken from a second measurement
-    /// rather than from a constant, which is the other half of
-    /// `docs/contributing.md` §1.
-    ///
-    /// **What is asserted is that nothing was put back.** The Set the operator
-    /// asked for is the live one, at the capacity that names it; the Set it
-    /// displaced is gone, not parked; and [`HotSwap::overloaded`] is what says
-    /// the slot is not to be stepped. *Not stepped* is the deck's half of it and
-    /// is asserted in `tests/deck.rs` — a `HotSwap` driven directly, as this
-    /// harness drives it, has no branch to skip, which is exactly why the flag
-    /// is public.
-    ///
-    /// **The swap and its verdict are one drain** (ADR-0313), so this reads
-    /// both out of the same `events()` call.
+    /// Verifies that an over-budget candidate replaces the running set while marking the slot stopped (ADR-0316).
     #[test]
     fn an_over_budget_candidate_stays_and_the_slot_is_marked_stopped() {
         // Nothing is faster than zero milliseconds, so every candidate fails.
@@ -99,13 +78,7 @@ mod gpu {
             cost_ms > 0.0 && cost_ms.is_finite(),
             "the verdict decided on {cost_ms}, which is not a cost"
         );
-        // **And it says which of the two numbers it was** (ADR-0298's
-        // `Decision::basis`, reached through the one rule in
-        // `governor::budgeted`). A candidate now arrives with both — the worker
-        // measures it and fits an `estimate` for it at the output's size
-        // (ADR-0356) — so which one answered is the one rule's business and not
-        // this machine's: whichever it is, the verdict carries it and
-        // `Unbudgetable` is unreachable by construction.
+        // Verifies the verdict carries the basis reported by `governor::budgeted` (ADR-0298).
         let (spent, spent_ms) = budgeted_by_the_one_rule(&h.swap);
         assert_eq!(
             (basis, Some(cost_ms)),
@@ -161,29 +134,7 @@ mod gpu {
         );
     }
 
-    /// **The gate is the candidate's own cost, held against a threshold taken
-    /// from a second measurement rather than from a constant.**
-    ///
-    /// `docs/contributing.md` §1: *check a number against a second measurement
-    /// whose bias direction you know rather than against a constant*. The test
-    /// above forces the verdict with a budget of zero, which proves the branch is
-    /// reachable and proves nothing about *what* is being compared — a watchdog
-    /// still reading frame intervals would pass it. This one measures the
-    /// candidate first, then rebuilds the same candidate against half its own
-    /// budgeted cost, so the only way to fail is on a number that actually
-    /// belongs to that Set.
-    ///
-    /// **Half of what the slot is budgeted at, rather than half of its
-    /// measurement.** A candidate arrives with both numbers since ADR-0356 and
-    /// the verdict is taken on whichever `governor::budgeted` spends, so a
-    /// threshold derived from the other one is not a threshold on the quantity
-    /// under test — on this machine the estimate at the output's size and the
-    /// measurement at the harness's 1x1 viewport differ by a factor of three,
-    /// either way round.
-    ///
-    /// The two runs are two harnesses because a `HotSwap`'s budget is what a
-    /// candidate is judged against at the moment it lands, and the first run has
-    /// to be allowed to keep its candidate in order to be asked what it cost.
+    /// Verifies candidate budgeting evaluates against relative measured costs rather than arbitrary constants.
     #[test]
     fn an_over_budget_candidate_is_stopped_on_a_budget_derived_from_its_own_measurement() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -214,20 +165,7 @@ mod gpu {
             "a generous budget threw the candidate out anyway"
         );
 
-        // An eighth of what this machine just budgeted the Set at. Not a
-        // constant, and not a shader chosen for being slow: whatever this
-        // adapter's host clock reads, the same Set cannot fit in an eighth of
-        // it.
-        //
-        // **An eighth rather than a half, because the two runs are two
-        // devices.** Half was the margin while the verdict was taken on one
-        // draw; the number it is taken on now is a fit through two rungs of a
-        // few hundred microseconds each, and on this crate's development
-        // machine the same Set across two `Gpu::headless` adapters reads three
-        // times apart. That spread is the instrument's and not the Set's
-        // (`P-0095`), so the margin covers it. What the test turns on is not
-        // the margin: it is the exact equality below, which no threshold can
-        // satisfy by accident.
+        // An eighth of measured cost ensures the budget is reliably exceeded across headless devices.
         let (mut tight, tx) = Harness::channel_driven(spent / 8.0);
         for _ in 0..5 {
             tight.frame();
@@ -272,13 +210,7 @@ mod gpu {
             tight.swap.overloaded(),
             "a candidate that cannot fit half its own measured cost left the slot unmarked"
         );
-        // Two readings of the same Set on the same adapter, so the second is
-        // the first within whatever the host clock's noise is — asserted as a
-        // band and not as equality, because a host clock is not a repeatable
-        // instrument (`P-0095`). What it rules out is the number being something
-        // else entirely, which is what a frame interval would be. The
-        // measurement is compared with the measurement: the estimate is a fit
-        // at another size and is not the same quantity.
+        // Verifies the measurement is repeatable within host clock noise tolerances.
         let again = tight
             .swap
             .measured_cost()
@@ -328,13 +260,7 @@ mod gpu {
             seen.iter().any(|s| s.contains("held the budget")),
             "no acceptance message: {seen:?}"
         );
-        // **The verdict's number is the Set's own**, and this is the one place
-        // the two can be compared bit for bit: the candidate was kept, so the
-        // readings that travelled with it are the ones the slot is holding now.
-        // A frame interval would not be equal to either by accident.
-        //
-        // Which of the two it is, is `governor::budgeted`'s and not this
-        // test's (ADR-0356) — see [`budgeted_by_the_one_rule`].
+        // Verifies the verdict cost matches the Set's own budgeted cost (ADR-0356).
         let (spent, spent_ms) = budgeted_by_the_one_rule(&h.swap);
         assert_eq!(
             (cost_ms, basis),
@@ -348,25 +274,7 @@ mod gpu {
         );
     }
 
-    /// **A swapped-in Set arrives with an estimate, taken at the output's size,
-    /// and the verdict is reached on it** (ADR-0356).
-    ///
-    /// The counterpart of `governor.rs`'
-    /// `estimate_slots_gives_govern_a_number_at_the_decks_own_size`, which is
-    /// the same claim about a slot that has never stepped. Until ADR-0356 a
-    /// swap was the hole in that: a cold slot at startup got a fit at the
-    /// deck's own size and every Set an operator loaded afterwards was judged
-    /// and governed on one draw at `HotSwap::measure_size` — the preview cell,
-    /// which is a frame nobody composites.
-    ///
-    /// **What is asserted is the path and not a number.** The worker takes the
-    /// estimate, it travels with the build, it installs with the Set, and the
-    /// one rule in `governor::budgeted` spends it. Whether the fit *answered*
-    /// is this machine's business: `docs/contributing.md` §1, the probe demotes
-    /// to a host clock here and two small rungs can come out with a negative
-    /// slope, which is `Unfit::FragmentTermNegative` — a failed measurement
-    /// rather than a cheap Set. Both outcomes are asserted, exactly as the
-    /// governor test asserts both, because both are the wiring working.
+    /// Verifies that swapped-in Sets arrive with estimates evaluated at output size (ADR-0356).
     #[test]
     fn a_swapped_in_set_arrives_estimated_at_the_output_size_and_is_judged_on_it() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -467,26 +375,7 @@ mod gpu {
         );
     }
 
-    /// **A candidate the estimator refuses is budgeted on its measurement, and
-    /// the refusal travels anyway.**
-    ///
-    /// ADR-0296 §2: `Unfit` is a refusal to answer and not a small answer, so a
-    /// slot whose estimate refused falls back to its measurement and is decided
-    /// by arithmetic identical to what stood before that record.
-    ///
-    /// **The refusal is forced by the output's size, which is the only one
-    /// reachable without depending on the adapter.** A `point_rate` nothing can
-    /// bound is *not* one: ADR-0293 made an unknown floor a placement rather
-    /// than a wall, so `estimate` draws the accurate pair against `u32::MAX`
-    /// and answers with `floor: None`. What has no answer is a target with no
-    /// room under it — a 2x2 slot cannot hold two distinct rungs above a
-    /// 64-row floor — and `Unfit::NoRoomBelowTheTarget` comes back before a
-    /// draw is spent.
-    ///
-    /// This is the branch that keeps ADR-0313's *a candidate with no number is
-    /// kept and reported as not judged* honest in the other direction: there
-    /// **is** a number here, the measurement's, so the candidate is judged on
-    /// it rather than waved through.
+    /// Verifies that candidate budgeting falls back to measured cost when estimation is refused (ADR-0296).
     #[test]
     fn a_candidate_the_estimator_refuses_is_judged_on_its_measurement() {
         let (mut h, tx) = Harness::channel_driven_at(GENEROUS_MS, FIRST, TINY);
@@ -549,20 +438,7 @@ mod gpu {
         );
     }
 
-    /// **A resize keeps the estimate and re-reads it at the new size.**
-    ///
-    /// ADR-0296 dropped it, on the ground that `Estimate::target` says which
-    /// size the answer was for and a kept one after a resize is a right number
-    /// about a frame nobody is drawing. That is true of the *number* and not of
-    /// the estimate: `a + b·area` and the two rungs it was fitted through are
-    /// on the record, so the answer at another target is arithmetic over data
-    /// already taken (ADR-0356). Dropping it put every slot back on its
-    /// measurement for every frame of a window drag.
-    ///
-    /// What is asserted is that the kept estimate is a *re-read* and not a
-    /// carried-over number: the fit's own `a` and `b` predict the new answer
-    /// exactly, which is the definition of the thing having been re-evaluated
-    /// rather than relabelled.
+    /// Verifies that resizing re-evaluates retained estimates at the new target dimensions (ADR-0356).
     #[test]
     fn a_resize_after_a_swap_re_targets_the_estimate_rather_than_dropping_it() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);

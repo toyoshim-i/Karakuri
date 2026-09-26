@@ -16,12 +16,7 @@ pub const FEEDBACK: &str = include_str!("../../../../examples/feedback.kir");
 pub const BLOOM: &str = include_str!("../../../../examples/bloom.kir");
 pub const RGB_SHIFT: &str = include_str!("../../../../examples/rgb_shift.kir");
 
-/// **The four fragment entry points `master.wgsl` held until 2026-09-10**,
-/// term for term, over the chain's own bind group layout.
-///
-/// Kept here and nowhere else: the engine no longer contains them, and a
-/// replacement that nothing ever ran against what it replaced is a claim
-/// rather than a fact.
+/// Baseline hand-written fragment entry points from legacy master.wgsl for equivalence testing.
 pub const HAND_WRITTEN: &str = r#"
 struct Chain {
     feedback: f32,
@@ -122,12 +117,7 @@ fn fs_rgb_shift(in: VsOut) -> @location(0) vec4<f32> {
 }
 "#;
 
-/// A chain slot that is nothing but the clock it was handed. Every texel of
-/// the frame it writes is `(t, beats, dt)`, so a readback is a direct
-/// reading of the uniform the pass ran under.
-///
-/// The `amount` parameter is declared and unused: it is what
-/// `moving_a_parameter_leaves_the_clock_where_it_is` writes.
+/// Shader probe that writes `(t, beats, dt, 1.0)` to every texel for uniform inspection.
 pub const CLOCK: &str = r#"
 proc clock_probe {
   kind L5
@@ -272,13 +262,7 @@ pub fn readback(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u8> {
     pixels
 }
 
-/// One frame: the source into wherever the mix writes, the chain, and the
-/// linear HDR target read back.
-///
-/// **`mix_target` and not `hdr_view`**, which is the whole seam this file
-/// is about: with a chain running the two are different targets, and a
-/// test that rendered into `hdr_view` would be feeding the chain nothing
-/// and reading its own source back.
+/// Renders points into `present.mix_target()`, runs the master chain, and reads back the HDR texture.
 pub fn frame(gpu: &Gpu, present: &Present, points: &mut Points) -> Vec<u8> {
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     points.render(&mut encoder, present.mix_target(), 1);
@@ -287,13 +271,7 @@ pub fn frame(gpu: &Gpu, present: &Present, points: &mut Points) -> Vec<u8> {
     readback(gpu, present.hdr_texture())
 }
 
-/// **The mix, as many frames of it as asked for**, each kept in a texture
-/// of its own.
-///
-/// A `Present` with an empty chain writes the mix straight into the target
-/// the present pass reads, so this is exactly what the first slot of a
-/// chain would be handed — which is what lets the hand-written pass below
-/// be run on the same input the shipped procedure sees.
+/// Captures a sequence of rendered mix textures with an empty chain for comparison inputs.
 pub fn mixes(gpu: &Gpu, count: usize) -> Vec<wgpu::Texture> {
     let present = present(gpu);
     let mut points = hot_points(gpu);
