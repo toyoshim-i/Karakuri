@@ -358,7 +358,7 @@ fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() 
     assert_eq!(readout.aimed(Aim::Shut), Acted::Nothing);
     assert!(!readout.view.target_open());
 
-    // **A pick names a deck, asks for nothing, and puts the list away.**
+    // Target deck pick selects the destination deck and closes the list without changing active selection.
     readout.aimed(Aim::Open);
     assert_eq!(readout.aimed(Aim::Deck(2)), Acted::Nothing);
     assert_eq!(
@@ -377,7 +377,7 @@ fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() 
         "the list stayed down after a pick"
     );
 
-    // **And the load goes down the path the key and the drop take.**
+    // Emitting the load routes through the standard operation path.
     let want = Operation::LoadSet {
         deck: 2,
         set: "drift_night".to_owned(),

@@ -13,9 +13,7 @@ pub(crate) fn layer_word(layer: Layer) -> &'static str {
         Layer::L3 => "L3",
         Layer::L4 => "L4",
         Layer::Field => "F",
-        // **A bare letter like the four above and unlike `F`'s neighbour**,
-        // which is the address a press types back in — `L5:0`, on
-        // `karakuri_environment::setfile::layer_ordinal`'s numbering.
+        // Layer L5 address format matches user input syntax (e.g. `L5:0`).
         Layer::L5 => "L5",
     }
 }
@@ -101,16 +99,11 @@ pub(crate) fn inspector(
                 capacities: capacity_ladder(declared),
                 salt: karakuri_engine::set::derived_salt(salt, 1),
             }),
-            // **A deck with no geometry has neither chip**, which is the state
-            // this `Option` is: there is no element count to size and no
-            // randomness to seed.
+            // Decks without geometry omit capacity and seed chips.
             _ => None,
         };
 
-        // Every published control, resolved to the node it belongs to and
-        // numbered by its position in the interface — which is the number a
-        // MIDI control is learned against, so it counts the controls that were
-        // published and not the rows that could be placed.
+        // Number published controls sequentially by interface position for MIDI learn indexing.
         let published = set.published();
         // Controls declared by the material's default interface (ADR-0100, ADR-0329).
         // Matches by (address, key) pair to distinguish wildcards from addressed controls (ADR-0318).
@@ -195,10 +188,7 @@ pub(crate) fn inspector(
             let Some((layer, index)) = set.node_named(name) else {
                 continue;
             };
-            // **The address goes with the level**, because a press on a chip
-            // has to say which node it is about and the two are absent
-            // together — `view::NodeAuthority`, which is why this is one field
-            // over there rather than two.
+            // Associate node address with its authority level (`view::NodeAuthority`).
             let authority = set
                 .authority(layer, index)
                 .map(|level| view::NodeAuthority {
@@ -227,9 +217,7 @@ pub(crate) fn inspector(
                 renderer_nodes += 1;
                 renderer_authority = match renderer_nodes {
                     1 => authority,
-                    // **More than one node under one head has no one
-                    // authority**, and authority is per node (ADR-0216). The
-                    // chip is dropped rather than showing the first of them.
+                    // Omit authority chip when multiple renderers share a folded head (ADR-0216).
                     _ => None,
                 };
                 // Folded renderer head only displays keep capsule if exactly one renderer exists (ADR-0338).
@@ -246,10 +234,7 @@ pub(crate) fn inspector(
                 addr: node_addr(layer, index),
                 name: name.clone(),
                 authority,
-                // **Every node but the built-in camera has a source to keep**,
-                // which is what `builtin_camera` above answers. The address
-                // rides with it rather than beside it, for `view::Node::keep`'s
-                // own reason: a head with nothing to keep has no node either.
+                // Nodes with editable source files expose a keep address (excluding built-in camera).
                 keep: (layer != Layer::L3 || Some(index) != builtin_camera).then_some(
                     karakuri_operation::NodeAddress {
                         layer: asked_layer(layer),
@@ -482,9 +467,7 @@ pub(crate) fn wired_input(
             to: to.clone(),
         },
     )];
-    // **One request, so one answer** — `rewired` answers per request and this
-    // hands it exactly one, which is why the `into_iter().next()` below cannot
-    // be an empty list.
+    // Single rewire request yields exactly one outcome.
     let said = rewired(&asked, edges, aims, slot_count)
         .into_iter()
         .next()?;

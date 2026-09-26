@@ -133,10 +133,7 @@ impl App {
         );
 
         let scale = self.scale as f32;
-        // **The projector's size read before the borrow**, which is
-        // the whole of why it is a `Copy` field on [`Projector`]
-        // rather than a call on the window: `aim` takes `&mut` of the
-        // engine and `Gfx` holds both.
+        // Read projector size before borrowing engine in aim call.
         let projector = gfx.projector.as_ref().map(|p| p.size);
         let plugin = gfx.plugin.as_ref().map(|p| p.size());
         let external_output = crate::bridge::render_size(&[projector, plugin]);
@@ -147,9 +144,7 @@ impl App {
             scale,
             external_output,
         );
-        // **What the console draws on the projector's chip**, written
-        // per frame beside the frame it is about, exactly as the
-        // picture's own registration is — see `view::View::projector`.
+        // Update projector chip readout state for current frame.
         self.readout.view.projector = projector.is_some();
         self.readout.view.plugin = gfx.plugin.is_some();
         self.readout.view.plugin_available = crate::app::operations::is_plugin_available(gfx, 0);
@@ -195,10 +190,7 @@ impl App {
                     &mut self.readout,
                     self.recording.recorder(),
                     &acted,
-                    // **A frame is already being drawn**, so a lane
-                    // asks for none: this is inside the handler that
-                    // composes, and a `Repaint::Now` here would be the
-                    // frame this one already is.
+                    // Frame is already active; omit duplicate repaint.
                     Repaint::Never,
                 );
             }
@@ -235,9 +227,7 @@ impl App {
         self.readout.view.master_chain_building = gfx.engine.chain_swap.building().is_some();
         // Read open model classes directly from the handle shared with the MCP server.
         self.readout.view.opening = self.readout.opening.read();
-        // **And what the mixer strips read**, beside the frame they
-        // are about for the same reason. One strip per slot, so two —
-        // see `mixer`.
+        // Populate mixer strip state from deck slots for this frame (see `mixer`).
         mixer(
             &gfx.engine.deck,
             &gfx.material,
@@ -361,17 +351,11 @@ impl App {
             f.texture
                 .create_view(&wgpu::TextureViewDescriptor::default())
         });
-        // **Read from inside the closure, because that is where the
-        // engine's half ends and the panel's begins.** `Cost::engine`
-        // and `Cost::paint` are then adjacent by construction, rather
-        // than two `Instant::now()`s a statement could get between.
+        // Record engine completion at closure boundary to accurately measure engine vs UI cost.
         let mut panel_started = None;
         let mut submitting = None;
         let engine_started = Instant::now();
-        // The run's one open store, taken out of `self` before the
-        // borrow of `self.gfx` below. It is what a chain slot naming
-        // anything but a shipped procedure resolves against, and it is
-        // the store this run's builds were put in.
+        // Borrow held store reference before borrowing gfx to resolve chain slot procedures.
         let held = &*self.held;
         let composed = {
             let Gfx {
@@ -505,17 +489,12 @@ impl App {
                 },
             )
         };
-        // The engine's half ran from the top of `compose` to the
-        // moment it handed the encoder over; the panel's is the rest
-        // of the call, the one submission included.
+        // Track engine and panel paint duration across the encoder handover boundary.
         let panel_started = panel_started.expect("`finally` runs on every frame");
         cost.engine = panel_started - engine_started;
         cost.paint = panel_started.elapsed();
         cost.submit = submitting.expect("`finally` runs on every frame").elapsed();
-        // **Said and not returned on**, and neither of this program's
-        // sinks can produce it — `Presented::present` is `Ok(())`. It
-        // is here because a third sink could, and because a frame the
-        // other sinks took is not one this window may drop.
+        // Log presentation errors without dropping frames accepted by other sinks.
         if let Err(e) = composed {
             println!("a sink failed to present: {e}");
         }
@@ -549,10 +528,7 @@ impl App {
         self.costs.live = live;
         // Timestamp clock mode determined by engine calibration probe (P-0095).
         self.costs.clock = gfx.engine.deck.clock();
-        // **And what the panel asked for on its own account**, which
-        // is the other half of why frames are being drawn on an
-        // untouched window. Asked of the view here for the same reason
-        // `live` is: one answer per frame, kept for the reading.
+        // Query panel repaint requests to maintain smooth UI animations.
         self.costs.declared = self.readout.view.animating(self.readout.panel.layout());
         if live {
             gfx.window.request_redraw();

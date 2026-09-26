@@ -31,10 +31,7 @@ impl Readout {
                 audio.shut();
                 Acted::Nothing
             }
-            // **Out of this crate and into the one that can open a device.**
-            // The pill names the input and `attached` opens it, which is the
-            // seam ADR-0156 draws: a control asks, and whoever holds the
-            // device decides.
+            // Forward audio input attachment operation to app handler (ADR-0156).
             AudioAsk::Operation(operation) => {
                 audio.shut();
                 Acted::Emitted(Some(operation))
@@ -58,9 +55,7 @@ impl Readout {
                 self.view.arrangement.shut();
                 Acted::Nothing
             }
-            // **The one flow on this panel that asks for letters.** Reached
-            // only with no arrangement in use: with one in use, saving again
-            // means that name and the pill asks for the operation instead.
+            // Prompt for new arrangement name when no arrangement is active.
             Ask::Name => {
                 println!(
                     "arrangement: type a name and press return — letters, digits, `-` and \
@@ -69,17 +64,12 @@ impl Readout {
                 self.view.arrangement.asks_a_name();
                 Acted::Nothing
             }
-            // **The same operation `r` performs**, reached from the other end
-            // of the panel exactly as the Outputs row's dot reaches `f`'s
-            // fold. `Readout::op` is what says the arrangement in use is the
-            // default again, whichever surface asked.
+            // Reset arrangement to default layout via Readout::op.
             Ask::Panel(op) => {
                 self.view.arrangement.shut();
                 Acted::Operated(self.op(op))
             }
-            // **Down the path every other emitted operation takes**, which is
-            // the whole reason `arrangement` sits on it: a record is written
-            // by whoever holds the store, and the pill holds nothing.
+            // Emit arrangement operation to the store handler.
             Ask::Operation(operation) => {
                 self.view.arrangement.shut();
                 Acted::Emitted(Some(operation))
@@ -141,10 +131,7 @@ impl Readout {
                 self.view.shut_pane_target();
                 Acted::Nothing
             }
-            // **The pick puts the card away and emits**, and it is one
-            // gesture: `View::point_pane` is what takes the card down, and it
-            // is reached through [`pointed_pane`] so that a press and a
-            // model's `operate` move the pointer by one route.
+            // Dismiss targeting card and emit pane re-pointing operation.
             view::Pointing::Pick(operation) => Acted::Emitted(Some(operation)),
         }
     }
@@ -165,21 +152,14 @@ impl Readout {
                 self.view.shut_target();
                 Acted::Nothing
             }
-            // **The whole of a pick**, and it asks for nothing: the mark is
-            // the console's, exactly as the library cursor is, and no
-            // operation in the vocabulary names it. `Operation::SelectDeck` is
-            // emphatically not what this is — that one moves the keys.
+            // Update target deck selection without emitting an operation.
             Aim::Deck(deck) => {
                 self.view.aim_at(deck);
                 Acted::Nothing
             }
-            // **Down the path the key and the drop already take.** `played`
-            // performs `LoadSet` by re-pointing the slot's source, so all
-            // three routes arrive at the same place (ADR-0228).
+            // Emit LoadSet operation onto targeted deck (ADR-0228).
             Aim::Load(operation) => Acted::Emitted(Some(operation)),
-            // **A load with one operand missing is not a load**, and the
-            // press says so rather than going quiet: P-0083, and the same
-            // sentence `Released::Nowhere` is answered with one bay along.
+            // Report refusal when attempting to load without a selected Set (P-0083).
             Aim::NoSet => {
                 println!("load: nothing under the cursor — this library is listing no Sets");
                 Acted::Nothing
@@ -271,17 +251,12 @@ impl Readout {
                 self.view.shut_menu();
                 Acted::Nothing
             }
-            // **Down the path the button, the key and the drop already take.**
-            // `played` performs `LoadSet` by re-pointing the slot's source, so
-            // all four routes arrive at the same place (ADR-0228).
+            // Emit LoadSet operation from context menu (ADR-0228).
             Picked::Load(operation) => {
                 self.view.shut_menu();
                 Acted::Emitted(Some(operation))
             }
-            // **The send leaves as an operation and the file is written where
-            // every other disk write on this panel is** — the window, on the
-            // branch a star and a keep already take, because a bundle is a
-            // store read and a `.kbset` is a file (P-0091, ADR-0156).
+            // Emit SendSet operation to export set bundle (P-0091, ADR-0156).
             Picked::Send(operation) => {
                 self.view.shut_menu();
                 Acted::Emitted(Some(operation))
@@ -333,15 +308,12 @@ impl Readout {
 
     /// Toggles operation class permissions directly in the environment map without creating operations (ADR-0236).
     pub(crate) fn opened(&mut self, pill: &McpPill) -> Acted {
-        // **Annotated**: it says what a press composes — an opening and not a `bool`.
+        // Transition MCP class permission to next state.
         let next: Open = pill.next(self.view.opening);
         self.opening.set(next);
         self.view.opening = next;
         let open = next.holds(pill.class);
-        // **What the pill says it did, in the words a refusal says it in.**
-        // `Class::title` and `Class::opened_at` are the gate's own strings, so
-        // the sentence a model is refused with and the sentence an operator
-        // reads at the pill name one thing the same way (P-0090).
+        // Log updated class state using standard status messages (P-0090).
         println!(
             "{}: `{}` — {} is {} to a model. {}. the operator opens it at {}.",
             pill.class.bay(),
@@ -402,10 +374,7 @@ impl Readout {
     pub(crate) fn narrowed(&mut self, operation: Operation) -> Acted {
         let holds = match &operation {
             Operation::ListSets { holds, .. } => holds.as_deref(),
-            // **A kind press keeps the field where it is**, which is the whole
-            // of what two controls on one row means: `FilterLibrary` carries
-            // the six chips and says nothing about `holds`, so the value that
-            // goes back into `View::narrow` is the one the field is already on.
+            // Preserve active holds filter when updating kind filters.
             Operation::FilterLibrary { .. } => self.view.filters().holds,
             _ => {
                 unreachable!("the filter row emits `ListSets` and `FilterLibrary` and nothing else")
@@ -414,8 +383,7 @@ impl Readout {
         let holds = holds.map(str::to_owned);
         let kinds = match &operation {
             Operation::FilterLibrary { kinds } => *kinds,
-            // **And a `holds` press keeps the chips where they are**, for the
-            // reason above read the other way: `ListSets` carries no kinds.
+            // Preserve active kind filters when updating holds filter.
             _ => self.view.filters().kinds,
         };
         let moved = self.view.narrow(holds.as_deref(), kinds);
@@ -428,10 +396,7 @@ impl Readout {
                 (Some(Scope::AllSets | Scope::MySets), true) =>
                     "the listing under it is what the store holds, narrowed, and the cursor is \
                      back at the top of it",
-                // **A step that arrived where it already was**, which is the
-                // `holds` field on a store whose Sets name no node: the press
-                // asks for the listing again, and that is `Readout::chose`'s
-                // answer for the chip that is already marked.
+                // Redundant filter selection re-queries the store for identical criteria.
                 (Some(Scope::AllSets | Scope::MySets), false) =>
                     "already what this bay is narrowed to, so this asks the store that same \
                      question again",
@@ -453,10 +418,7 @@ impl Readout {
                     "read: closed — {}",
                     match self.view.shut_reading() {
                         true => "the list is a list again, and the chip asks for it back",
-                        // The chip answers `Shut` off the block the bay is
-                        // drawing, so this is a reading that went away between
-                        // the layout and the press. Said rather than
-                        // unreachable.
+                        // Reading closed prior to click.
                         false => "there was nothing open",
                     }
                 );
@@ -472,9 +434,7 @@ impl Readout {
             set,
             procedure,
         } = taken;
-        // **The mark first, and the hand after it.** Both are this console's
-        // own pointers and neither is an operation, so the order is only about
-        // the borrow — but the mark is what says the press was seen.
+        // Update library row selection before starting carry drag.
         let moved = self.view.point_at(row);
         println!(
             "press ({:.0}, {:.0}): `{set}` is in hand — let it go over a strip to load it there, \
@@ -482,10 +442,7 @@ impl Readout {
             p.x, p.y
         );
         self.panel.carry(p, set, procedure);
-        // **The `bool` is answered rather than dropped**, which is the whole
-        // of the re-read above: a row the hand arrived at is a row the reading
-        // moves to, and a press that landed on the row the cursor was already
-        // on moved nothing and asks for nothing.
+        // Return Acted::Pointed if cursor row changed, otherwise Acted::Nothing.
         match moved {
             true => Acted::Pointed,
             false => Acted::Nothing,

@@ -26,10 +26,7 @@ fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
             value: 0.25
         }
     );
-    // **Every mode of the cycle, because a chip that emits three
-    // operations has three records to write** — and the mode is a wire
-    // name, so a mode that reached `Record::Blend` misspelled would be
-    // refused by the engine on the way back rather than here.
+    // Verify each blend mode in the cycle produces the corresponding wire record.
     for (deck, blend) in BlendMode::ALL.into_iter().enumerate() {
         let deck = deck as u8;
         assert_eq!(
@@ -104,10 +101,7 @@ fn the_deck_heads_two_operations_go_different_distances() {
         }),
         ..Current::default()
     };
-    // **The amount is the console's own constant**, not a figure written
-    // again here: the arrow that emits it and the record that carries it
-    // are one number or the panel and the deck disagree about how far a
-    // press goes.
+    // Verify scrub uses the console's scrub constant.
     let scrub = Operation::ScrubDeck {
         deck: 1,
         beats: SCRUB_BEATS,
@@ -123,18 +117,14 @@ fn the_deck_heads_two_operations_go_different_distances() {
         "a press of the deck head's forward arrow, from -1.50, did not come out at -1.25 — \
          so the record is not the offset the deck holds plus the amount the arrow asks for"
     );
-    // **And the reading is what makes it one**: without it the conversion
-    // says so rather than starting the deck's scrub from zero, which is
-    // why `reading` has an arm for this operation at all.
+    // Missing transport state must result in an owed read rather than zero-init.
     assert_eq!(
         written(&scrub, &Current::default()),
         Written::Owed(Owed::NotRead(karakuri_operation_record::Reading::Transport)),
         "a scrub with no transport read came back with a record, which means it invented \
          the position it moved from"
     );
-    // **The mode goes out as a wire name and the engine reads its own name
-    // back**, which is what `apply` does with it and is the blend chip's
-    // assertion one control along.
+    // Engine round-trips sync mode wire names matching vocabulary.
     for sync in SYNCS {
         assert_eq!(
             EngineSync::from_name(sync.name()).map(mix::sync),
@@ -165,10 +155,7 @@ fn the_deck_heads_two_operations_go_different_distances() {
          anchored at 126 with the scrub cleared — either the slot's old anchor survived \
          being re-engaged, or the position it was scrubbed to did"
     );
-    // **And the reading is what makes it one.** Without the tempo the
-    // conversion says so rather than anchoring at a guess, which is the
-    // scrub's own arrangement two assertions up and the reason `reading`
-    // has an arm for this operation at all.
+    // Missing tempo state must yield an owed read rather than guessing.
     assert_eq!(
         written(&set, &Current::default()),
         Written::Owed(Owed::NotRead(karakuri_operation_record::Reading::Tempo)),
@@ -220,8 +207,7 @@ fn anything_that_makes_texels_keeps_the_loop_awake() {
     view.picture = Some(some);
     assert!(live(&view), "a live picture did not keep the loop awake");
 
-    // **The case the picture-alone rule gets wrong**: the picture folded
-    // away with deck A still auditioning under it.
+    // Verify preview rendering keeps the loop awake even when picture is folded.
     view.picture = None;
     view.previews[0] = Some(some);
     assert!(

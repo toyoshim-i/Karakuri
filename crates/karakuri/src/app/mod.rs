@@ -142,9 +142,7 @@ impl App {
         mcp: Option<mcp::Reporter>,
         opening: Opening,
         pointing: mcp::Slots,
-        // **Made in [`main`] from the loop this is about to be run on**, for
-        // [`App::waker`]'s reason: the surface is opened in `resumed`, which
-        // is handed an `ActiveEventLoop` and cannot make one of these.
+        // EventLoopProxy created from event loop running App (for use across thread/handler boundaries).
         waker: EventLoopProxy<()>,
         slot_policies: SlotPolicies,
     ) -> App {
@@ -159,10 +157,7 @@ impl App {
                 }
             }
         }
-        // **The one handle, and it lives on the readout because that is where
-        // the pills reach it.** A copy kept on [`App`] as well would be a second
-        // answer to what is open the day one of them was written and the other
-        // was not.
+        // Store single shared handle on readout for view access.
         readout.view.opening = opening.read();
         readout.opening = opening;
         readout.slot_policies = slot_policies.clone();
@@ -191,27 +186,20 @@ impl App {
             presets: launch.presets,
             plugins: launch.plugins,
             discovered_plugins,
-            // **Pointed nowhere**, which is where every run starts: a folder
-            // is chosen by dropping one on this window and no flag names one
-            // before it opens (ADR-0275).
+            // Initial folder path unset; populated via drag-and-drop (ADR-0275).
             folder: None,
             faulted: false,
-            // **Nothing held**, which is a window nobody has pressed a key on
-            // and is also what `winit` reports the moment focus leaves it.
+            // Shift modifier key state initially clear.
             shift: false,
             keymap,
             readout,
-            // **The manual is read here, before the window opens**, which is
-            // where a 340 KB parse belongs: it is one walk of the page
-            // compiled into this binary and it is on no frame path (P-0091).
+            // Parse manual once at startup before window creation (P-0091).
             hover: karakuri_console::hover::Hover::new(),
             costs: Costs::new(),
             scale: 1.0,
             egui_due: None,
             frame_drawn_at: None,
-            // **Due at once on a served run**, so the first thing a model asks
-            // for is taken on the first wake rather than a tenth of a second
-            // after it.
+            // Check MCP requests immediately on first iteration if server is active.
             served: mcp.is_some().then(Instant::now),
             started: Instant::now(),
             waker,
@@ -222,10 +210,7 @@ impl App {
             keeping: Keeping {
                 mcp,
                 slot_policies: slot_policies.clone(),
-                // **Empty until there is a deck**, because the launch nodes are
-                // what the engine's compile produced and there is no engine
-                // before `resumed`. It is seeded there, off [`Engine::placed`],
-                // on the same pass that makes the watchers.
+                // Seeded from initial engine compilation output in `resumed` ([`Engine::placed`]).
                 playing: Playing {
                     playing: Vec::new(),
                 },
@@ -267,10 +252,7 @@ impl App {
         otherwise: Repaint,
     ) -> Performed {
         let prev_mixer_revision = gfx.engine.deck.mixer_revision();
-        // **What the conversion answered, filled by the one arm that runs
-        // it**, and carried out of this function because the drain that has no
-        // terminal has to say it over a socket — see [`Performed`], where why
-        // it is carried rather than converted a second time is written down.
+        // Capture operation record for external clients (e.g. MCP responses; see [`Performed`]).
         let mut converted = None;
         let repaint = match acted {
             Acted::Nothing => otherwise,
@@ -325,10 +307,7 @@ impl App {
         egui_due: &mut Option<Instant>,
         costs: &mut Costs,
     ) {
-        // **Collected out of the borrow before any of it is acted on**, and it
-        // is a `match` rather than a `let else` on `keeping.mcp` because the
-        // loop below takes `&mut` of the same struct: the reporter is read,
-        // the queue is drained into a `Vec`, and the borrow ends on this line.
+        // Drain pending operations before mutating keeping state.
         let asked: Vec<mcp::OperateRequest> = match keeping.mcp.as_ref() {
             Some(mcp) => mcp.operations().collect(),
             None => return,
@@ -348,24 +327,18 @@ impl App {
                 continue;
             }
             let title = operation.title();
-            // **A star is answered and never performed**, and [`favourite`]
-            // answers `None` for every other operation, so this is the whole
-            // of the branch. Nothing falls through: nothing was written, so
-            // there is no record to write and no frame to ask for.
+            // Favorites are handled directly without emitting engine operations.
             if let Some(refusal) = favourite(store, Asked::Model, &operation) {
                 println!("{refusal}");
                 reply.settled(Err(refusal));
                 continue;
             }
-            // **The projector, opened where the chip in the Outputs row opens
-            // it**, which is the one act in this file that makes a window and
-            // is why this function takes the loop.
+            // Handle projector window routing via event loop.
             let mut aside = None;
             if let Operation::RouteFrame { output, on } = &operation {
                 aside = routed(gfx, event_loop, *output, *on);
             }
-            // **And the `rec` pill's two ends**, gathered here and written off
-            // the render thread exactly as the press does — see [`Sessions`].
+            // Route recording state requests off the render thread (see [`Sessions`]).
             if let Operation::RecordSession {
                 recording: asked_for,
             } = &operation
@@ -440,10 +413,7 @@ impl App {
             &mut asked,
         );
         for operation in asked.drain(..) {
-            // **The conversion's answer is dropped here and read in
-            // [`App::operated`]**, and that is the difference between the two
-            // drains rather than an omission: a hand is at the surface that
-            // printed the outcome and a model is not (ADR-0315).
+            // Discard conversion result; MIDI feedback is rendered locally on surface (ADR-0315).
             let repaint = App::performed(
                 gfx,
                 started,

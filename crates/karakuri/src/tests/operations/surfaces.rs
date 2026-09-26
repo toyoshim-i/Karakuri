@@ -36,10 +36,7 @@ fn a_set_is_two_paths_or_none_and_anything_else_is_refused() {
         "three paths were read as a Set"
     );
 
-    // **An empty message is `--help`**, which is the one arm that is a
-    // request rather than a mistake — [`main`] prints [`USAGE`] to stdout
-    // and exits 0 on it, and prints it to stderr and exits 2 on every
-    // other. A refusal that came back empty would be a silent exit.
+    // Help flags return an empty error string so main can print usage and exit 0.
     assert_eq!(of(&["--help"]).err(), Some(String::new()));
     assert_eq!(of(&["-h"]).err(), Some(String::new()));
     assert!(
@@ -57,9 +54,7 @@ fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() 
         .to_str()
         .expect("this workspace's path is not utf-8");
 
-    // **The default store is the shared constant**, which is the whole of
-    // what deleting `const STORE` was for: this asserts the two programs
-    // read one directory rather than two that look alike.
+    // Verify default store path matches the shared constant.
     assert_eq!(
         of(&[]).expect("a bare run").store,
         std::path::PathBuf::from(karakuri_environment::places::STORE),
@@ -149,9 +144,7 @@ fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() 
         );
     }
 
-    // **An unknown option is not a path**, which is the mistake a typo
-    // actually makes: without this, `--prests DIR` becomes a two-path Set
-    // and is reported as a file that will not open.
+    // Unknown options must be rejected rather than parsed as file arguments.
     let typo = of(&["--prests", library]).expect_err("an unknown option was read as half of a Set");
     assert_eq!(typo, "unknown option `--prests`");
     assert!(
@@ -178,10 +171,7 @@ fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
          (ADR-0270)"
     );
 
-    // **And the pair this program opens on, checked for a per-file read and
-    // not for a number.** ADR-0270 split these: which pair is the default is
-    // a demo decision, and what it may not do is run at something other than
-    // what its own file declares.
+    // Verify capacity matches the file's own header declaration (ADR-0270).
     let l1 = checked(&sources.l1);
     let declared = l1
         .capacity

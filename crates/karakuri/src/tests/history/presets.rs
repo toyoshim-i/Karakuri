@@ -45,8 +45,7 @@ fn the_presets_scope_lists_the_kset_files_and_not_the_parts_beside_them() {
         "`drift_shell.kir` is a part and the listing took it for a row"
     );
 
-    // **Sorted, because a directory read is not.** Two runs that drew the
-    // rows in two orders would be a bay nobody can point at.
+    // Verify preset listing is sorted alphabetically.
     let mut sorted = listed.iter().map(|p| p.id.clone()).collect::<Vec<_>>();
     sorted.sort();
     assert_eq!(
@@ -67,9 +66,7 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
     Store::open(&root).expect("a store to take into");
     let examples = shipped_presets().dir;
 
-    // **The authored form, out of a folder rather than out of `presets`.**
-    // The rows are the same words the bay draws, and the file behind one
-    // is found by asking the directory again on the press.
+    // Folder scope discovers and imports authored Sets from directory.
     assert!(
         folder_listing(Some(&examples))
             .iter()
@@ -104,9 +101,7 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
         vec!["beat_cloud".to_owned()],
         "a refused folder row left something behind"
     );
-    // **And the two operations one press performs**, in the order they
-    // happen: the transfer names the *file* and the load names the id the
-    // file filed itself under.
+    // Press executes transfer followed by load operation.
     let [take, load] = taken_in_press(1, taken);
     assert!(
         matches!(&take, Operation::TransferSet { transfer: SetTransfer::Take { file } }
@@ -146,8 +141,7 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
     )
     .expect("the Set that was just taken in cannot be read back");
 
-    // **A folder nobody has pointed anywhere holds no row**, which is the
-    // same refusal a preset root that has gone gives.
+    // Unpointed folder scope returns an error.
     assert!(taking_in(&second, Taking::Folder(None), "beat_cloud").is_err());
 
     std::fs::remove_dir_all(&root).expect("clean up");
@@ -210,9 +204,7 @@ fn loading_a_preset_takes_it_in_and_leaves_it_under_my_sets() {
         "the preset was taken in and `all` does not list it"
     );
 
-    // **And the parts are in the store**, which is what makes the load
-    // after this a load of material the store holds: `setfile::load` is
-    // what the aim is built from and it reads them by address.
+    // Set parts are imported into the store and reloadable by ID.
     karakuri_environment::setfile::load(&Store::open(&root).expect("the store"), "beat_cloud")
         .expect("the Set that was just taken in cannot be read back");
 
@@ -421,18 +413,14 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
 
     let mut view = View::new(Room::Day);
     view.scopes = Scope::ALL.to_vec();
-    // **`all` is the first chip and is where a row of chips starts**, so
-    // this is asserted rather than marked: `select_scope` answers whether
-    // the mark *moved*, and a console handed this row is already on it.
+    // Initial scope defaults to AllSets.
     assert_eq!(view.scope(), Some(Scope::AllSets));
 
     let said = listing(&mut view, &root, Some(&presets), None, None);
     assert_eq!(view.library, vec!["night01".to_owned()]);
     assert!(said.contains("all") && said.contains('1'), "{said}");
 
-    // **And `my sets` is that listing starred, which is nothing yet**
-    // (ADR-0299): the store holds a Set and the operator has not chosen
-    // it, so the subset is empty for an answer rather than for an absence.
+    // MySets is initially empty before any sets are starred (ADR-0299).
     assert!(view.select_scope(Scope::MySets));
     let said = listing(&mut view, &root, Some(&presets), None, None);
     assert!(
@@ -442,8 +430,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
     );
     assert!(said.contains("my sets"), "{said}");
 
-    // **A star put on it puts the row there**, which is the whole of what
-    // the subset is: the same store, the same listing, one file beside it.
+    // Marking a set as favourite adds it to the MySets listing.
     assert!(
         favourite(
             &root,
@@ -463,8 +450,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
         "the bay was not told which rows are starred: {:?}",
         view.starred
     );
-    // **And taking it off takes the row away again**, which is the state
-    // this test goes on to assert the empty sentence of.
+    // Removing favourite removes it from MySets.
     favourite(
         &root,
         Asked::Operator,
@@ -507,9 +493,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
         "the two scopes that answer nothing are empty for two different reasons and this \
          program gives one sentence for both"
     );
-    // **It says what to press**, which is the difference between a scope
-    // that is empty and a scope that is broken: `my sets` is the starred
-    // subset, so the way to fill it is a star and the sentence names one.
+    // Empty MySets state mentions starring a set.
     assert!(
         why_nothing(Scope::MySets, false, false).contains("star"),
         "the `my sets` sentence does not say what fills it: {}",
@@ -528,10 +512,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
         "the `folder` sentence does not say how a directory is chosen: {}",
         why_nothing(Scope::Folder, false, false)
     );
-    // **And a folder that *has* been pointed somewhere is a third kind of
-    // nothing**, which is the sentence that arrived with the drop: an
-    // empty scope for want of a gesture and one for want of a Set file in
-    // the directory are the same drawing and not the same fact.
+    // Unpointed folder vs pointed-empty folder yield distinct messages.
     assert_ne!(
         why_nothing(Scope::Folder, false, false),
         why_nothing(Scope::Folder, true, false),

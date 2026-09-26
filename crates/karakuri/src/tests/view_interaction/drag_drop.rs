@@ -59,9 +59,7 @@ fn a_press_on_a_strips_ground_selects_that_deck() {
         "the press did not address the keys to the deck the strip is"
     );
 
-    // **The selection moves where the operation is performed**, which is
-    // `pointed` and not the press arm: `SelectDeck` writes no record, so
-    // the surface that emits it is what performs it (ADR-0198).
+    // Selection updates when the operation is performed by `pointed`, not at press emission (ADR-0198).
     assert_eq!(
         readout.view.selection(),
         0,

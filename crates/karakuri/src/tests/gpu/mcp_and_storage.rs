@@ -53,8 +53,7 @@ mod gpu {
             engine.placed.len(),
             "the file does not name every node the slot is running"
         );
-        // **What the deck is running, not what a flag says.** The capacity is
-        // the L1's own declaration and the salt is this slot's.
+        // Verify saved capacity and salt reflect running engine slot values.
         assert_eq!(
             loaded.capacities,
             vec![Some(engine.capacity)],
@@ -82,17 +81,13 @@ mod gpu {
         let mut panel = Panel::new(1440.0, 900.0);
         view::rearrange(&mut panel, CANVAS);
 
-        // **Its own copies, because this test edits a `.kir`** — which is what
-        // `working_copies` is for and why no other device test in this file
-        // needs it.
+        // Isolated working copies allow live mutation of .kir sources.
         let root = scratch_dir("swapped");
         let (_, running) =
             working_copies(&root, &shipped(), SLOTS).expect("the copies this deck runs from");
         let store = std::sync::Arc::new(Store::open(&root).expect("store"));
         let (built_tx, built) = std::sync::mpsc::channel();
-        // **One handle for the deck and the server**, which is [`main`]'s
-        // arrangement and not a second one: the engine's watchers publish into
-        // it and the server resolves through it.
+        // Shared slot handle between engine watchers and MCP server.
         let pointing = mcp::Slots::of(
             running
                 .iter()
@@ -144,10 +139,7 @@ mod gpu {
         // The transport's health capsule, off the same drain, so this test
         // reads both halves of what one verdict writes.
         let mut health: Option<view::Stage> = None;
-        // **`staging` answers whether a build landed**, and since ADR-0326 it
-        // takes the build up as well — the diff that makes the rows is the
-        // same read that replaces what the slot is playing, so there is no
-        // second pass here to do it in.
+        // Staging applies rebuild diffs and updates active playback (ADR-0326).
         let mut landed = false;
         let deadline = Instant::now() + Duration::from_secs(30);
         while !landed && Instant::now() < deadline {
@@ -165,17 +157,11 @@ mod gpu {
             landed,
             "nothing was built in 30s — the watcher never saw the edit"
         );
-        // **What the verdict was, read off the deck** — not off any of the
-        // three surfaces below, which is what makes them a check rather than a
-        // value compared with itself. See this test's documentation for why
-        // both answers are states of the instrument and neither is a failure.
+        // Query deck overload state directly to validate against surface reports.
         let stopped = engine.deck.overloaded(EngineSlot(ON_AIR as u8));
         let row = rows.iter().find(|row| row.deck == ON_AIR);
 
-        // **The same sentence, out of the server.** `swap_outcome` answers with
-        // the reports the render loop handed over, newest last. Read before the
-        // surfaces are checked, because every one of them is checked against
-        // it.
+        // Query swap outcome from MCP server to verify reported verdict.
         let (failed, said) = call(port, "swap_outcome", serde_json::json!({}));
         assert!(!failed, "swap_outcome refused: {said}");
         assert!(
@@ -210,8 +196,7 @@ mod gpu {
                  else about it: {said}"
                 );
             }
-            // **It was stopped** (ADR-0316). The version is in the slot, the
-            // slot is not stepping it, and three surfaces say so in one word.
+            // Candidate stopped due to budget limit (ADR-0316).
             true => {
                 let row = row.expect(
                     "the slot was stopped for cost and the lane drew no row, which is \
@@ -384,10 +369,7 @@ mod gpu {
             aimed.capacity,
             aimed.capacities
         );
-        // **The next salt in the slot's own sequence, from the salt the slot is
-        // running** — the console cannot compute this and must not, so what is
-        // checked here is that the number handed over is the engine's own
-        // derivation and not the value it was derived from (P-0092).
+        // Verify offered salt is derived by the engine from the active slot salt (P-0092).
         let running = set.source_salts()[0];
         assert_eq!(
             aimed.salt,
@@ -406,9 +388,7 @@ mod gpu {
         assert!(addrs.contains(&"L1:0"), "{addrs:?}");
         assert!(addrs.contains(&"L4"), "{addrs:?}");
 
-        // **Nothing has spoken for any node**, so every chip reads the
-        // default — which is what `Set::authority` answers and not a word this
-        // file chose.
+        // Unconfigured nodes default to manual authority.
         for node in &pane.nodes {
             assert_eq!(
                 node.authority.map(|a| a.level),
@@ -416,10 +396,7 @@ mod gpu {
                 "{} reads something other than the default nobody has changed",
                 node.addr
             );
-            // **And the chip carries the node it is about**, because a press
-            // on one has to say which node — the address is `Set::node_named`'s
-            // and not `Node::addr` read back, which is a display string
-            // (ADR-0286).
+            // Authority chip retains underlying node identity (ADR-0286).
             assert!(
                 node.authority.is_some(),
                 "{} draws a chip with no node behind it",
@@ -440,9 +417,7 @@ mod gpu {
             "a deck that overdraws has no live renderer to mark"
         );
 
-        // **Every published control found a node**, and the ordinals are the
-        // interface's own positions spanning the groups — the number a MIDI
-        // control is learned against.
+        // Verify published controls map to nodes with contiguous ordinals across groups.
         let published = engine
             .deck
             .slot(karakuri_engine::DeckSlot(0))
@@ -450,19 +425,13 @@ mod gpu {
             .published()
             .len();
         assert!(published > 0, "the pair publishes what it declares");
-        // **No node of this pair declares an input**, so no group draws a
-        // `uses` line — read off the aims rather than assumed, because an empty
-        // list here and an empty *reading* are two different facts and only one
-        // of them is about the material.
+        // Procedures declaring no inputs omit uses lines.
         assert!(
             pane.nodes.iter().all(|node| node.uses.is_empty()),
             "a node of the launch pair drew a `uses` line, and the pair declares no input"
         );
 
-        // **The rows off the interface are not among them**, and on this pair
-        // there are none: nobody has narrowed anything, so `Set::published`
-        // answers with `declared_interface` itself and every row has a number
-        // (ADR-0329).
+        // Full interface is published with numbered rows (ADR-0329).
         let mut ords: Vec<usize> = pane
             .nodes
             .iter()

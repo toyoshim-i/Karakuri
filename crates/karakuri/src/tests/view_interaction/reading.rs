@@ -29,9 +29,7 @@ fn a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on() {
     assert_eq!(open.reading.nodes, 0);
     assert_eq!(open.reading.knobs_word(), "0 knobs");
 
-    // **And a row naming a Set this store does not hold puts the block
-    // away and says why**, where leaving the last reading drawn would
-    // describe one Set under another's name.
+    // A non-existent Set dismisses the open reading view and reports the error.
     view.library = vec!["night01".to_owned(), "gone01".to_owned()];
     let said = read_reading(&mut view, &root);
     assert!(
@@ -58,8 +56,7 @@ fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
     view.scopes = Scope::ALL.to_vec();
     view.library = vec!["night01".to_owned(), "morph01".to_owned()];
 
-    // **No reading is open**, so a move re-reads nothing — there is
-    // nothing for the rule to keep following.
+    // When no reading is open, cursor movement does not trigger re-reading.
     assert!(
         view.walk(1, 0..2),
         "the cursor did not move off the first row"
@@ -74,9 +71,7 @@ fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
     let _ = read_reading(&mut view, &root);
     assert!(view.reading_open());
 
-    // **A press that did not move the cursor**, with a reading open: the
-    // rule is the cursor's, so this is the one call `Readout::took` used
-    // to get wrong by discarding the `bool` `View::point_at` handed back.
+    // Press that does not move the cursor keeps open reading intact without re-reading.
     assert_eq!(
         reread_if_open(false, &mut view, &root),
         None,
@@ -88,9 +83,7 @@ fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
         "a press that did not move the cursor changed which row is open"
     );
 
-    // **A move, with the reading still open**: the row the cursor
-    // arrives at is the one that comes back, on whichever surface's
-    // `moved` said so.
+    // Moving cursor with open reading updates reading to new row's Set.
     assert!(view.walk(-1, 0..2), "the cursor did not move back to row 0");
     let said =
         reread_if_open(true, &mut view, &root).expect("a reading was open and the cursor moved");
@@ -142,9 +135,7 @@ fn a_press_on_the_params_chip_asks_for_the_set_under_the_cursor() {
         "the chip did not ask for the Set under the cursor"
     );
 
-    // **The reading is the caller's to answer**, and this file's press
-    // handler holds no store — so the block is opened here the way the
-    // window loop opens it, and the second press is what is under test.
+    // Second click on params chip dismisses the currently open reading.
     readout.view.read(Reading {
         id: "drift_night".to_owned(),
         ..Reading::default()

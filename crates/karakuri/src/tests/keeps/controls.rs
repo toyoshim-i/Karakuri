@@ -29,9 +29,7 @@ fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
         "one mapping was pluralised: {one}"
     );
 
-    // **A map's complaints are carried rather than swallowed**, which is
-    // `Map::parse`'s own requirement of its callers: a caller that dropped
-    // them would leave an operator pressing a pad that never loaded.
+    // Map parsing warnings are reported in the surface status line.
     let noted = surface_line(
         "x",
         Some("m"),
@@ -41,15 +39,14 @@ fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
     );
     assert!(noted.contains("line 4"), "{noted}");
 
-    // **No map is a state and the sentence is what to do about it.**
+    // Surfaces without a map report instructions for learning controls.
     let bare = surface_line("x", None, None, 0, &[]);
     assert!(
         bare.contains("no map") && bare.contains("turn a knob"),
         "a surface with no map was not told how to get one: {bare}"
     );
 
-    // **Nothing plugged in is the ordinary state of this program**, and it
-    // is what every machine a test runs on is in.
+    // Having no MIDI inputs connected is treated as normal operation.
     let none = unsurfaced("no MIDI input matching `` — there are no MIDI inputs");
     assert!(
         none.contains("not a fault") && none.contains("pointer"),
@@ -101,10 +98,7 @@ fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusa
         "a device somebody named and is not there was reported as a state: {missing}"
     );
 
-    // **The case that can only arrive during a set**, on a machine with
-    // whatever it happens to have plugged in: a pick nothing can match.
-    // Nothing is opened — `pick` refuses before a stream is built — so
-    // this runs anywhere and touches no hardware.
+    // Picking an unavailable audio input is refused without altering active stream.
     let mut open: Option<audio::Audio> = None;
     let mut told_pill = Some(AudioIn::NONE);
     let line = attached(
@@ -170,9 +164,7 @@ fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
         0.0,
         "space on a level is the value it was declared at, and an offset is declared at none"
     );
-    // **The press is counted from where the session is**, never from zero:
-    // a step that ignored what it was standing on would jump the offset to
-    // one step whatever a hand had dialled.
+    // Offset step key presses adjust relative to the current offset value.
     assert_eq!(offset_key(Step::Up, 20.0), 25.0);
     assert_eq!(offset_key(Step::Down, 20.0), 15.0);
 }

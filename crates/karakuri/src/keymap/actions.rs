@@ -42,9 +42,7 @@ pub(super) fn key_reset(_ctx: &mut KeyCtx) -> Option<Op> {
 
 pub(super) fn key_save(ctx: &mut KeyCtx, gfx: &mut Gfx) {
     let deck = ctx.readout.view.selection();
-    // **`None`, and it is the payload saying so rather than this function
-    // inventing a stamp.** A caller that can type a name is not made to
-    // take a timestamp, and a key press is not one of them.
+    // Save current deck set; passing None generates a default timestamped ID.
     let acted = Acted::Emitted(Some(Operation::SaveSet { deck, id: None }));
     // Records the action emission before executing the set save operation.
     let repaint = App::performed(

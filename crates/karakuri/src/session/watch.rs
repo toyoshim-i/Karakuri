@@ -15,9 +15,7 @@ pub(crate) fn rewired(
     slot_count: usize,
 ) -> Vec<Result<String, String>> {
     use std::fmt::Write as _;
-    // **Every edge into the list before any watcher is re-aimed**, so that a
-    // frame carrying two of them rebuilds once, at the wiring the frame ended
-    // with.
+    // Record all requested edges before re-aiming watchers to batch rebuilds.
     let mut said: Vec<Option<Result<String, String>>> = asked.iter().map(|_| None).collect();
     let mut named: Vec<usize> = Vec::new();
     for (at, (slot, edge)) in asked.iter().enumerate() {
@@ -54,10 +52,7 @@ pub(crate) fn rewired(
             "slot {slot}: wired `{}.{}={}`",
             edge.node, edge.slot, edge.to
         );
-        // Keyed on the input alone, like the replacement above, and **only ones
-        // that were applied**: a later request refused for its slot number wrote
-        // nothing, and telling this one it had been replaced by an edge that
-        // never landed would be the same lie in the other direction.
+        // Track whether this edge was replaced by a subsequent valid request in the same batch.
         let over = asked[at + 1..].iter().find(|(later_slot, later)| {
             slot_in_range(*later_slot, slot_count)
                 && later.node == edge.node
@@ -93,8 +88,7 @@ pub(crate) fn rewired(
         line.push_str(tail);
         said[at] = Some(Ok(line));
     }
-    // Every entry was filled by one of the two loops above: the first answers
-    // the refusals and the second answers everything it skipped.
+    // Unwrap all populated results.
     said.into_iter().map(Option::unwrap).collect()
 }
 
@@ -139,10 +133,7 @@ pub(crate) fn watched(
     };
     let watching = watch::Watch::new(
         slot,
-        // **Bare, so every node is called what its procedure declares**,
-        // which is `Set::build`'s own: *"A pair names nothing, so both
-        // nodes are called what their procedures are."* A name here
-        // belongs to the *use* and this program has no syntax for one.
+        // Launch pair procedures use default bare names derived from procedure declarations.
         karakuri_environment::compile::Named::bare(&sources.l1),
         vec![karakuri_environment::compile::Named::bare(&sources.l4)],
         Layering::Overdraw,
@@ -158,16 +149,12 @@ pub(crate) fn watched(
         Vec::new(),
     )
     .aimed_by(aimed);
-    // **Where a rebuild's sources go**, so that what a slot is running has an
-    // address a Set file can name. Nothing is put until a build happens, and
-    // the put is on the worker thread that compiled it.
+    // Configure store destination for rebuilt procedure sources.
     let watching = match stored {
         Some((store, tx)) => watching.storing_to(store, tx),
         None => watching,
     };
-    // **Where every version that compiles is kept**, under the Set this slot is
-    // running — which at launch is none, and is `at.set` for the same reason
-    // the CLI reads its own aim there: one answer, and the aim is what moves it.
+    // Configure snapshot repository for successful compilation versions.
     let watching = match snapshots {
         Some(shared) => watching.snapshotting_to(shared, at.set.clone()),
         None => watching,

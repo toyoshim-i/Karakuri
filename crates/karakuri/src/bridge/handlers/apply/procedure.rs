@@ -32,9 +32,7 @@ pub(crate) fn overlaying(
              says which layer it implements in a `kind` line, and this one says nothing"
         )
     })?;
-    // **Head and rest are one list here**, because *the first node of that kind*
-    // is a question about the slot's files in order and the split is only how a
-    // `watch::Aim` carries them.
+    // Flatten head and rest files into a single ordered sequence.
     let mut files: Vec<karakuri_environment::compile::Named> = std::iter::once(aim.at.head.clone())
         .chain(aim.at.rest.iter().cloned())
         .collect();
@@ -61,15 +59,12 @@ pub(crate) fn overlaying(
         &String::from_utf8_lossy(&source),
     )?;
     match added {
-        // **Named after the row**, because nothing in the slot named it: a node
-        // added here is addressed by the name an operator can read off the row
-        // they pressed.
+        // Name newly added node after the selected row.
         true => files.push(karakuri_environment::compile::Named {
             name: Some(name.to_string()),
             path,
         }),
-        // **The node keeps the name the Set gave it**, which is what an `edge`
-        // resolves against — see this function's own head.
+        // Retain original node identifier to preserve edge routing.
         false => files[at].path = path,
     }
     let mut files = files.into_iter();
@@ -157,10 +152,7 @@ pub(crate) fn put_back(
             );
         }
     };
-    // **`Some(id)` and never `None`**, which is [`walked`]'s filter said again
-    // where it decides what is written rather than what is drawn: a version
-    // filed under no Set is a version of nothing, and landing one because a
-    // `None` read as a wildcard would put another run's edit on a deck.
+    // Filter versions strictly matching the target Set ID.
     let of_the_set = || {
         found
             .versions
@@ -183,9 +175,7 @@ pub(crate) fn put_back(
         karakuri_operation::Revision::Previous(node) => {
             let layer = setfile::kind_name(ir_layer(node.layer));
             let addr = node_addr(ir_layer(node.layer), node.index);
-            // **Most recent first is `history::list`'s own order**, kept
-            // rather than re-sorted here: the newest is what the slot is
-            // running and the one after it is the step back.
+            // Order is newest first; advance past current version to select previous.
             let mut chain = of_the_set()
                 .filter(|version| version.layer == layer && version.index == node.index as usize);
             let running = chain.next();

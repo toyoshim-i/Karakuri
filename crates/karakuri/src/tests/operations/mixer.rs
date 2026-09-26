@@ -129,10 +129,7 @@ fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
         "the window said `{settled}`, which does not say why there is no record"
     );
 
-    // **And the two are different sentences.** Collapsing them is the
-    // failure this whole test is about at one remove: a harness that
-    // printed one line for both would tell an operator that an undecided
-    // fade is as settled as a deck selection.
+    // Unwritten pending records and settled silent operations produce distinct messages.
     assert_ne!(
         said, settled,
         "a record nobody can write yet and a record nobody needs to write came out \
@@ -224,8 +221,7 @@ fn the_strip_reads_the_base_and_the_procedure_written_over_it() {
         ),
         "drift_night + orbit_wide"
     );
-    // **A slot nobody has loaded a Set onto**: no id names what it is
-    // running, so the base is the pair the run opened with.
+    // Unloaded slots default to the launch pair as base material.
     assert_eq!(
         derived_material(
             &base_material(None, "coil_vortex + star_flares"),
@@ -287,8 +283,7 @@ fn a_procedure_load_replaces_one_file_and_keeps_the_base_set() {
         0,
     );
 
-    // **The deck holds no camera, so the procedure is added as node 0 of
-    // its kind** — the case the row is for.
+    // Loading a procedure of a new kind appends it as node 0 of that kind.
     let line = overlaying(&root, None, 0, &mut aim, "orbit_wide").expect("the load was refused");
     assert!(
         line.contains("orbit_wide") && line.contains("kept") && line.contains("L3"),
@@ -309,21 +304,16 @@ fn a_procedure_load_replaces_one_file_and_keeps_the_base_set() {
         "a node added by this row is not named after it"
     );
 
-    // **Everything else restated**, which is `Aiming::changed`'s single
-    // derivation — the layering, the capacity, the salts, the camera and
-    // the wiring come back as the slot's own.
+    // Existing slot configuration (layering, capacity, salts, camera, wiring) is preserved.
     assert_eq!(sent.layering, Layering::Composite);
     assert_eq!(sent.capacity, Some(2048));
     assert_eq!(sent.salts, vec![9]);
     assert_eq!(sent.camera.radius, 3.5);
     assert_eq!(sent.edges.len(), 1);
-    // **And the Set it is filed under does not move**, which is what keeps
-    // the snapshot every compile takes alive (ADR-0304, ADR-0308).
+    // Preserves Set association across procedure loads (ADR-0304, ADR-0308).
     assert_eq!(sent.set.as_deref(), Some("drift_night"));
 
-    // **A second load of the same kind lands on the node the first one
-    // added**, which is *the first node of that kind* read a second time:
-    // the slot still holds three nodes.
+    // Loading a procedure of an existing kind replaces the existing node.
     std::fs::write(
         root.join(Store::PROCEDURES).join("tunnel_eye.kir"),
         "  kind L3\n",
@@ -346,8 +336,7 @@ fn a_procedure_load_replaces_one_file_and_keeps_the_base_set() {
         "the replaced node did not keep the name the edges resolve against"
     );
 
-    // **A renderer replaces the renderer that is there** — `L4:0`, and the
-    // geometry does not move.
+    // Loading an L4 renderer replaces the active renderer without affecting geometry.
     std::fs::write(
         root.join(Store::PROCEDURES).join("hard_dots.kir"),
         "kind L4\n",
@@ -367,8 +356,7 @@ fn a_procedure_load_replaces_one_file_and_keeps_the_base_set() {
         "the renderer's file was not replaced"
     );
 
-    // **A name neither tier holds is refused with the name back**, and
-    // nothing is sent.
+    // Nonexistent procedure names are rejected and nothing is sent.
     let why = overlaying(&root, None, 0, &mut aim, "no_such_thing")
         .expect_err("a name nothing holds was loaded");
     assert!(
@@ -377,8 +365,7 @@ fn a_procedure_load_replaces_one_file_and_keeps_the_base_set() {
     );
     assert!(rx.try_recv().is_err(), "a refused load sent an aim");
 
-    // **A `.kir` that declares no kind is refused too**, because there is
-    // no layer to write it over.
+    // Procedures declaring no kind are rejected.
     std::fs::write(
         root.join(Store::PROCEDURES).join("mute.kir"),
         "// nothing\n",
@@ -402,16 +389,13 @@ fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
                 path: std::path::PathBuf::from("A0-grid.kir"),
             },
             rest: vec![karakuri_environment::compile::Named::bare("A1-points.kir")],
-            // **Overdrawing**, so the press below asks for the other one
-            // and the assertion is about a field that moved.
+            // Start with Overdraw so toggling to Composite changes state.
             layering: Layering::Overdraw,
             live: Some(2),
             capacity: Some(2048),
             seed_salt: 9,
             salts: vec![9],
-            // **A camera nobody's default produces**, so the assertion
-            // below is about a value that was carried rather than one that
-            // happens to coincide with `Orbit::default()`.
+            // Non-default orbit radius to assert preservation across re-aiming.
             camera: karakuri_engine::camera::Orbit {
                 radius: 3.5,
                 ..karakuri_engine::camera::Orbit::default()
@@ -450,8 +434,7 @@ fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
         Layering::Composite,
         "the press did not move the one field it is about"
     );
-    // **The thirteen that did not move.** Each of these is a symptom
-    // somebody would meet on the next save rather than on this press.
+    // All other slot fields must remain unchanged after the toggle.
     assert_eq!(aim.head.name.as_deref(), Some("grid"));
     assert_eq!(aim.rest.len(), 1);
     assert_eq!(aim.live, Some(2), "the fold was silently un-selected");
@@ -475,9 +458,7 @@ fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
     );
     assert_eq!(aims[0].at.layering, Layering::Composite);
 
-    // **Asking for the layering the slot is now in sends nothing**, because
-    // a re-aim rebuilds the whole slot and this one would land on the same
-    // picture (P-0091).
+    // Idempotent layering requests send nothing (P-0091).
     let line = composited(
         &mut aims,
         &Operation::SetCompositing {
@@ -495,10 +476,7 @@ fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
         "a press asking for the state the slot is in recompiled it"
     );
 
-    // **And the second press restates what the first one left**, which is
-    // what keeping `Aiming::at` buys: back to overdraw, with the layering
-    // read off the aim this program is holding rather than off the launch
-    // pair.
+    // Subsequent toggle restores original overdraw layering from current aim state.
     composited(
         &mut aims,
         &Operation::SetCompositing {

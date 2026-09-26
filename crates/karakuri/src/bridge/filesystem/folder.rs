@@ -139,8 +139,7 @@ pub(crate) fn folder_dropped(
     presets: Option<&karakuri_environment::places::Presets>,
     dropped: &[&std::path::Path],
 ) -> Option<String> {
-    // **Where the bay is still pointed**, read before anything moves, because
-    // both refusals say it and the accept below replaces it.
+    // Record previous library path for error messages before updating.
     let kept = match folder.as_deref() {
         Some(at) => format!("This library is still pointed at `{}`.", at.display()),
         None => String::from("This library is still pointed nowhere."),
@@ -158,8 +157,7 @@ pub(crate) fn folder_dropped(
             ))
         }
     };
-    // **Asked once, here.** `is_dir` would answer `false` for a path that
-    // cannot be examined at all, which is a different thing and is said as one.
+    // Query path metadata once to distinguish non-directory files from access errors.
     match std::fs::metadata(one) {
         Err(why) => Some(format!(
             "  folder: `{}` could not be examined ({why}), so whether it is a folder is not \
@@ -182,9 +180,7 @@ pub(crate) fn folder_dropped(
         }),
         Ok(_) => {
             *folder = Some(one.to_path_buf());
-            // **The line the bay draws is spelled here**, which is
-            // `View::library`'s seam one row up: this side reads the disk and
-            // the panel is handed what to draw (ADR-0156).
+            // Update view folder display path (ADR-0156).
             view.folder = Some(one.display().to_string());
             // Mark the folder scope chip in the view.
             view.select_scope(Scope::Folder);
@@ -193,10 +189,7 @@ pub(crate) fn folder_dropped(
                 true => "the `folder` chip is marked",
                 false => "this console draws no `folder` chip, so nothing is marked",
             };
-            // **`None`, and it cannot be anything else here**: this drop has
-            // just marked the `folder` chip, so the listing being re-asked is
-            // a directory's and never a history's, and a Set id handed in
-            // would be a value nothing reads.
+            // Pass None for active Set since folder scope lists directory contents.
             let said = listing(view, store, presets, folder.as_deref(), None);
             // Reset cursor to top of listing for newly loaded folder.
             view.point_at(0);

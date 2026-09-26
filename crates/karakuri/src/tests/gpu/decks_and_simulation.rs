@@ -52,8 +52,7 @@ mod gpu {
         };
         assert_eq!(operation, Operation::SetGain { deck: 0, gain: 0.0 });
 
-        // **Nothing has been told anything yet**, so the deck is where it was
-        // and so is the strip the frame would draw.
+        // Verify deck and strip values remain unchanged before operation application.
         assert_eq!(engine.deck.gain(karakuri_engine::DeckSlot(0)), was);
         let mut after = Vec::new();
         mixer(&engine.deck, &material, &mut after);
@@ -132,10 +131,7 @@ mod gpu {
             engine.deck.slot_count()
         );
 
-        // **No two slots alike, in all three values.** An answer read off the
-        // wrong slot is then a wrong answer rather than the right one by luck,
-        // and the blends are seeded so the selected deck's next mode is not
-        // where it already was.
+        // Seed distinct values across all slots to prevent false positive matches.
         let seeded = [
             (0.20_f32, 0.90_f32, Blend::Add),
             (0.40, 0.70, Blend::Max),

@@ -144,8 +144,7 @@ fn a_pointed_lane_takes_its_levels_from_the_published_range() {
                 ord: Some(1),
                 name: "twist".to_owned(),
                 value: 1.0,
-                // **Not `[0, 1]`**, so a range that was read and a pair
-                // that was assumed cannot look alike.
+                // Distinct non-unit range to verify values are read from definition.
                 range: [0.25, 4.0],
                 param: param.clone(),
                 bound: None,
@@ -194,8 +193,7 @@ fn a_pointed_lane_takes_its_levels_from_the_published_range() {
         "an on step writes the top of the published range and an off step the bottom"
     );
 
-    // **A control this console holds no row for is refused and said**,
-    // rather than defaulted into two numbers nobody chose.
+    // Targeting a parameter without a console row is rejected.
     let refused = sequenced(
         &mut banks,
         &mut playhead,
@@ -259,9 +257,7 @@ fn a_removed_lane_takes_its_steps_with_it_and_the_rest_move_up() {
         "the lanes after the removed one move up, which is what a lane index means"
     );
 
-    // **An index this pattern has not got is refused in the words every
-    // surface refuses an address in**: the thing named, then what there was to
-    // name (`karakuri_environment::no_such_slot`).
+    // Out-of-bounds lane index is rejected with standard address error.
     let refused = sequenced(
         &mut banks,
         &mut playhead,
@@ -299,8 +295,7 @@ fn a_removed_lane_takes_its_steps_with_it_and_the_rest_move_up() {
         "{refused}"
     );
 
-    // **The lane that is driving comes out too**, and nothing refuses it: a
-    // lane's writes are its whole record, so they stop here (ADR-0322).
+    // Active lane removal succeeds and stops further writes (ADR-0322).
     assert!(sequenced(
         &mut banks,
         &mut playhead,
