@@ -58,16 +58,23 @@ Karakuri is a real-time visual performance system where human performers and aut
   - Hardened bay-scoped keyboard navigation model with interactive tooltip key learning and global promotion.
   - Unified bay header interaction: retained 27px header bars on fold, 6-dot menu dice reservation, and double-click folding across all 7 bays (ADR-0364).
   - Dynamic MIDI controller map editing and wipe mask geometry carried forward to M10.
+- **[M9: Integrated Agent Terminal & Prompt Bay](history/m9.md)** (Closed 2026-09-27):
+  - Left-pane Prompt bay layout integration beneath Library and Staging with flexible height budgeting and 27px retained header bar on fold (ADR-0343, ADR-0364, ADR-0365).
+  - Multi-session detached PTY background process multiplexer with 1024-line scrollback buffers and automatic lifecycle cleanup on process exit.
+  - 18 sorted AI CLI presets (`agy`, `aider`, `claude`, `ollama`, ...) plus `custom...` defaulting to system interactive shell (`sh`/`powershell`).
+  - Terminal cursor-anchored borderless multiline input with native macOS/Windows IME candidate positioning for Japanese and multilingual prompt drafting.
+  - ANSI VT100 / xterm sequence emulation (24-bit Truecolor, relative cursor positioning, alternate screen buffer, raw LF/CR semantics, and cursor visibility toggles).
+  - Smooth console focus ladder with keyboard capture mode forwarding arrow keys and control characters to PTY stdin while preserving `Tab` bay navigation and `Esc` release.
 
 ---
 
 ## 3. The Path to MVP
 
-The remaining open work is structured into two sequential milestones: integrated agent terminal and prompt bay (M9, active), and final release polish (M10).
+The path to MVP has reached its final release milestone: **M10 (MVP Polish & Release Readiness)**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ M9: Integrated Agent Terminal & Prompt Bay (Active Milestone)           │
+│ M9: Integrated Agent Terminal & Prompt Bay (Closed 2026-09-27)          │
 │ - Left-Pane Prompt Bay & Layout Integration (Foldable, 27px Bar)        │
 │ - Multi-Session Detached PTY Multiplexer & Process Lifecycle Manager   │
 │ - Alphabetical CLI Selector (agy, aider, claude, codex, deepseek, ...)  │
@@ -76,7 +83,7 @@ The remaining open work is structured into two sequential milestones: integrated
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ M10: MVP Polish & Release Readiness                                     │
+│ M10: MVP Polish & Release Readiness (Active Milestone)                  │
 │ - In-App Dynamic MIDI Controller Map Editing & 14-Bit CC Support         │
 │ - Wipe Mask Geometry & Edge Softness Control                            │
 │ - Master Chain Reordering & Custom Chain Persistence                    │
@@ -88,57 +95,7 @@ The remaining open work is structured into two sequential milestones: integrated
 
 ---
 
-### M9 — Integrated Agent Terminal & Prompt Bay (Active Milestone)
-
-**Objective**: Embed an interactive agent terminal (Prompt Bay) directly into the console to seamlessly execute, monitor, and collaborate with autonomous AI coding agents and local/remote LLM CLIs side-by-side with live visual performance.
-
-#### Key Deliverables:
-1. **Left-Pane Prompt Bay Architecture & Layout Integration**:
-   - Introduce `prompt` bay at the bottom of the left pane beneath Library and Staging (`library`, `staging`, `prompt`).
-   - Default height ~240px, minimum height ~120px, flex expansion alongside Library; bounded Staging (~125px).
-   - Retain full compliance with ADR-0343 and ADR-0364 (27px header bar preserved when folded, 6-dot menu dice affordance, header double-click to fold/unfold, and keyboard `Space` folding).
-2. **Multi-Session Background Terminal Multiplexer**:
-   - Process manager spawning agent CLI tools in detached pseudo-terminals (PTY via `portable-pty` or OS PTY).
-   - Background output reader and scrollback ring buffer per session (configurable buffer, defaulting to 1024 lines).
-   - Multi-session concurrency: switching active CLI sessions keeps background processes alive without termination (e.g. running Claude while inspecting configs via a custom shell).
-   - Session lifecycle handling: automatic cleanup upon process exit, resetting the selection to unselected state and clearing the terminal screen.
-3. **Alphabetically Sorted CLI Selection Menu & Executable Detection**:
-   - Header selector pill displaying active session (or `[ Prompt ▾ ]` when unselected).
-   - Dropdown presenting sorted agent presets with `custom...` pinned at the end:
-     1. `agy` (Google Antigravity CLI)
-     2. `aider` (Open-source AI pair programmer)
-     3. `claude` (Anthropic Claude Code CLI)
-     4. `cline` (Open-source autonomous coding agent)
-     5. `codex` (OpenAI Codex CLI)
-     6. `copilot` (GitHub Copilot CLI)
-     7. `deepseek` (DeepSeek CLI)
-     8. `grok` (xAI Grok CLI)
-     9. `hermes` (Nous Hermes AI agent CLI)
-     10. `kimi` (Moonshot Kimi CLI)
-     11. `mimo` (Xiaomi MiMo CLI)
-     12. `minimax` (MiniMax CLI)
-     13. `mistral` (Mistral AI CLI)
-     14. `muse` (Muse CLI)
-     15. `ollama` (Local LLM runner for offline live venues)
-     16. `opencode` (OpenCode AI coding assistant CLI)
-     17. `pi` (Pi CLI)
-     18. `qwen` (Alibaba Qwen CLI)
-     19. `custom...` (Arbitrary user command and arguments)
-   - Dynamic PATH resolution (`which` lookup): unavailable binaries are rendered with strikethrough (`~~...~~`) and disabled; running sessions display active status badges (`●`).
-4. **Dynamic Cursor-Anchored Native Input with Japanese IME & Multi-Line Support**:
-   - Web-terminal-inspired architecture: dynamic, borderless `egui::TextEdit::multiline` positioned precisely at the terminal cursor coordinates `(cursor_x, cursor_y)`.
-   - Native OS IME integration (macOS/Windows): candidate selection and preedit composition attach accurately to the cursor, enabling seamless Japanese and multilingual prompting.
-   - Rich multi-line instruction input: supports line breaks, long prompt drafting, and multi-line code/shader pasting prior to submission to PTY `stdin`.
-   - Raw key forwarding: single-character confirmations (`[y/N]`), arrow keys, and control sequences (`Ctrl+C`, `Ctrl+D`) forwarded cleanly to PTY.
-5. **Console Focus Ladder & Bay Escaping**:
-   - Smooth focus transition between console navigation and terminal input.
-   - `Enter` on Prompt bay enters terminal prompt edit mode; `Esc` un-focuses the terminal back to bay level for global navigation and bay switching.
-
-**Exit Condition**: Prompt bay renders stably in the left pane, switches between running agent sessions without process interruption, accepts Japanese IME and multi-line prompts via cursor-anchored input, and interacts directly with Karakuri via local MCP.
-
----
-
-### M10 — MVP Polish & Release Readiness
+### M10 — MVP Polish & Release Readiness (Active Milestone)
 
 **Objective**: Final integration, usability refinement, multi-hour stress testing, and packaging for initial 1.0 release.
 
