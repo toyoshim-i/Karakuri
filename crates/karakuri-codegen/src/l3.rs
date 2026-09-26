@@ -1,10 +1,4 @@
-//! L3 lowering: lowers a `camera` procedure into a single compute entry point writing `CameraState`.
-//!
-//! Evaluates camera parameters once per frame on the GPU with `@workgroup_size(1)`,
-//! enabling direct access to simulation geometry without host readbacks.
-//!
-//! Output parameters (`eye`, `target`, `up`, `fov_y`, `near`, `far`) default to orbit camera
-//! settings and are overridden by procedure statements.
+//! Compiles L3 `camera` procedures into a single compute entry point writing `CameraState`.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, BlockKind, Kind, Output};

@@ -1,11 +1,5 @@
-//! Field lowering: lowers a `kind Field` procedure into a WGSL function.
-//!
-//! Unlike pass-generating procedures, a field lowers to a pure function and a parameter
-//! list without its own bindings, entry points, or uniform struct.
-//!
-//! Field functions are named per slot (via [`fn_name`]) rather than per procedure,
-//! allowing multiple slots referencing the same field to coexist without collision.
-//! Field parameters are prefixed with the slot name inside the caller's `Uniforms` struct.
+//! Lowers `kind Field` procedures into pure WGSL distance functions and parameter lists.
+//! Functions are named per slot ([`fn_name`]) to avoid collisions across multiple slots.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};

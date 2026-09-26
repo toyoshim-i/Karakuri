@@ -1,15 +1,4 @@
-//! L5 procedure lowering: generates fullscreen fragment post-processing shader passes.
-//!
-//! ## Execution & Resource Layout
-//!
-//! - **Fullscreen geometry**: Generates procedural full-viewport triangle coordinates (`point_coord` in `[0.0, 1.0]`).
-//! - **Bind group layout**: Matches master compositing pass bindings:
-//!   - `@group(0) @binding(0)`: Uniform parameters (`u`)
-//!   - `@group(0) @binding(1)`: Source render texture (`src`)
-//!   - `@group(0) @binding(2)`: Retained previous frame texture (`held`, if `retains` is declared)
-//!   - `@group(0) @binding(3)`: Texture sampler (`samp`)
-//!   - `@group(0) @binding(4...)`: Auxiliary user texture bindings (`tex_<slot>`)
-//! - **Camera decoupling**: L5 post passes operate on rasterized framebuffers and exclude camera ray projections.
+//! Generates L5 fullscreen fragment post-processing shader passes and resource bindings.
 
 use karakuri_ir::typed::{Checked, TStmt, Target, TexRef};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};

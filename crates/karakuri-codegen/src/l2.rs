@@ -1,15 +1,4 @@
-//! L2 procedure lowering: generates compute shader passes for element deformation.
-//!
-//! ## Execution Model
-//!
-//! - **Pass-through copy**: Prior to running deformation statements, output slots are populated
-//!   from upstream inputs, zero-initializing any newly declared attributes.
-//! - **Statelessness invariant**: Output transformations derive strictly from upstream inputs
-//!   without temporal state accumulation.
-//! - **Masking and weighting**: If present, spatial mask evaluation and parameter weight combine
-//!   via linear interpolation: `mix(input, deformed, weight * strength)`.
-//! - **Liveness preservation**: Inactive/dead element slots are skipped; compaction occurs strictly
-//!   at the L1 stage.
+//! Generates L2 compute shader passes for stateless element deformation and spatial masking.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};

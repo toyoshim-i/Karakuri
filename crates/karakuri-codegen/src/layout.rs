@@ -1,10 +1,4 @@
-//! Pipeline binding layout specifications and buffer contracts.
-//!
-//! Defines the group and binding slot layout shared between `karakuri-codegen`
-//! and `karakuri-engine`:
-//! - Compute (L1/L2/L3): Uniforms, counts buffers, and ping-pong state bindings (`PREV`, `NEXT`).
-//! - Render (L4): Uniforms, element attribute buffers, and camera bindings.
-//! - Post-process (L5): Texture samplers and input/output framebuffer textures.
+//! Pipeline binding layout specifications and buffer contracts across compute, render, and post passes.
 
 use karakuri_ir::layout::{align_up, ElementLayout, StorageElemTy};
 

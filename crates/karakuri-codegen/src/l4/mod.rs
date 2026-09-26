@@ -1,16 +1,4 @@
-//! L4 lowering: compiles `vertex` and `fragment` blocks into a WebGPU render pipeline.
-//!
-//! # Execution Model
-//!
-//! - **Quad expansion**: Every element generates six vertices forming a camera-facing quad
-//!   (`TriangleList`), supporting both point sprite and line segment rendering without changing
-//!   primitive topology.
-//! - **Topology inference**: The check pass infers point vs. segment expansion based on assignments
-//!   to `clip_b`.
-//! - **Dead element handling**: Dead instances inside `counts.range` are collapsed to zero-area quads
-//!   in the vertex stage to avoid rasterization overhead.
-//! - **Varyings optimization**: Only attributes referenced in the fragment block are emitted as
-//!   varying outputs from the vertex stage.
+//! Compiles L4 `vertex` and `fragment` blocks into camera-facing quad render pipelines.
 
 use std::collections::HashSet;
 

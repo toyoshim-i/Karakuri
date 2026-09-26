@@ -1,9 +1,5 @@
-//! L1 lowering: compiles `spawn` and `element` into WGSL compute entry points.
-//!
-//! Handles:
-//! - Double-buffered element updates (`prev` / `next` storage bindings).
-//! - Static vs compacted procedures (supporting optional prefix-sum survivor compaction).
-//! - Substep parameters (`step_args`) and birth-fraction time delta scaling.
+//! Compiles L1 `spawn` and `element` procedures into WGSL compute entry points.
+//! Handles double-buffered element updates, optional survivor compaction, and substep scaling.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
