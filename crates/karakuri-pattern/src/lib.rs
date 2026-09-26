@@ -1,11 +1,5 @@
 //! Sequencer pattern representation, step lanes, and bank management.
-//!
-//! Evaluates musical step sequences against beat counts to emit typed [`Operation`]s.
-//!
-//! - [`Pattern`]: Represents one bar of 16 step slots in either eighth or sixteenth note subdivisions.
-//! - [`Lane`]: Associates a [`LaneTarget`] with step bitmasks and discrete on/off levels.
-//! - [`Banks`]: Session container managing four pattern banks and tracking the armed bank.
-//! - [`Playhead`]: Tracks step progression and emits operations only upon step boundary crossings.
+//! Evaluates musical step sequences against beat counts to emit typed operations.
 
 use karakuri_operation::{LaneTarget, Operation, StepMode};
 
