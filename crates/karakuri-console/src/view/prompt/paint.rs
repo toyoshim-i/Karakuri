@@ -243,12 +243,24 @@ pub fn prompt_into(
                                 }
 
                                 // Interactive terminal shortcuts while in capture mode
-                                if state.is_captured() && (response.has_focus() || is_focused) {
+                                if state.is_captured() {
                                     let ctrl = ui.input(|i| i.modifiers.ctrl);
                                     if ctrl && ui.input(|i| i.key_pressed(egui::Key::C)) {
                                         let _ = session.send_bytes(b"\x03");
                                     } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::D)) {
                                         let _ = session.send_bytes(b"\x04");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::Z)) {
+                                        let _ = session.send_bytes(b"\x1a");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::L)) {
+                                        let _ = session.send_bytes(b"\x0c");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::U)) {
+                                        let _ = session.send_bytes(b"\x15");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::W)) {
+                                        let _ = session.send_bytes(b"\x17");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::A)) {
+                                        let _ = session.send_bytes(b"\x01");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::E)) {
+                                        let _ = session.send_bytes(b"\x05");
                                     } else if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
                                         let _ = session.send_bytes(b"\x1b[A");
                                     } else if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
@@ -258,8 +270,11 @@ pub fn prompt_into(
                                     } else if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
                                         let _ = session.send_bytes(b"\x1b[C");
                                     } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                                        state.set_captured(false);
-                                        response.surrender_focus();
+                                        let _ = session.send_bytes(b"\x1b");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::Backspace))
+                                        && buf.is_empty()
+                                    {
+                                        let _ = session.send_bytes(b"\x7f");
                                     }
                                 }
 
