@@ -243,7 +243,8 @@ impl View {
                         bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         prompt::prompt_head_into(ui, &pal, rect, &self.prompt);
-                        prompt::prompt_into(ui, &pal, rect, &self.prompt);
+                        let is_focused = self.focused(panel).map(|r| r.name) == Some("prompt");
+                        prompt::prompt_into(ui, &pal, rect, &self.prompt, is_focused);
                     }
                     // A pane draws nothing of its own. It has no card — it is
                     // inside the bay's — and no head, and its body is as empty
