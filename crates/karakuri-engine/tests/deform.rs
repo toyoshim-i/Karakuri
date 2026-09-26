@@ -1,25 +1,5 @@
-//! L2 nodes: a deformation between the simulation and the renderers.
-//!
-//! Three claims, and the middle one is the layer's whole design:
-//!
-//! - **A deformation reaches what is drawn.** It runs on the GPU between the
-//!   simulation and the draw, so the only way to see it is in the elements a
-//!   renderer read.
-//! - **It is stateless.** Not by a rule the checker enforces but by how it is
-//!   lowered — reads and writes address the output buffer, and the output is
-//!   rebuilt from the input every frame, so there is nothing to accumulate onto.
-//!   A modulator that drifted would be one that cannot be stacked, cannot be
-//!   fused, and drags `closed_form` out of the L1's hands.
-//! - **They chain**, and the second one sees the first one's work.
-//!
-//! A fourth arrived with the layer's masks: **a deformation can be partial**,
-//! in two independent ways. `weight` is a declared `param` and scales the whole
-//! modulation; a `mask` block computes a `strength` per element and decides
-//! *where*. Both end at one `mix` between what reached the node and what the
-//! body wrote.
-//!
-//! The material is a lattice with no motion of its own, so anything that moves
-//! moved because a `deform` moved it.
+//! Integration tests for L2 deformation stages, asserting rendering effect,
+//! statelessness across frames, stage chaining, weighting, and masking.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -37,18 +17,7 @@ mod gpu {
     const H: u32 = 64;
     const CAPACITY: u32 = 1;
 
-    /// **One element, at the origin, still.** Every measurement below is a
-    /// displacement, so one element is the whole of what they need — and it is what
-    /// keeps them linear: a spread of elements walks off the top of a 64-texel frame
-    /// after a shift or two, and the mean of what is *left* then moves further than
-    /// the material did. That is what an earlier fixture measured, and it reported a
-    /// chain of two composing as three.
-    ///
-    /// Displacement is along `y` rather than `x` for a related reason. The camera is
-    /// pinned so that a shift is measurable at all, and an `Orbit` at angle zero
-    /// sits on the `+x` axis — material laid along `x` is laid along the view
-    /// direction and projects to one point, which reads exactly like a deformation
-    /// that never ran.
+    /// Single element at origin fixture for linear displacement measurement.
     const STILL: &str = r#"
 proc still {
   kind     L1
@@ -85,12 +54,7 @@ proc {name} {{
         )
     }
 
-    /// **Two elements, told apart by `seed` and separated on screen.**
-    ///
-    /// A mask needs material it can treat differently, and a measurement needs to
-    /// see both halves: these sit either side of centre along `z`, which is the
-    /// screen's horizontal under the pinned camera below — `x` is the view
-    /// direction and would put one behind the other.
+    /// Two-element fixture separated along z to test selective masking by seed.
     const PAIR: &str = r#"
 proc pair {
   kind     L1
@@ -147,11 +111,7 @@ proc dots {
         )
         .expect("a chain of one L1, some L2s and one L4");
         set.resize(&gpu.device, W, H);
-        // **The camera is pinned, which the measurements need rather than prefer.**
-        // The default orbits at 0.15 rev/s from a height of two, so successive
-        // frames look from different angles and the x axis these fixtures lay their
-        // material along is foreshortened by an amount that changes every frame.
-        // Head-on and still, a displacement in x is a displacement in texels.
+        // Pin camera to ensure displacements along axes map linearly to screen texels.
         set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
@@ -161,12 +121,7 @@ proc dots {
         set
     }
 
-    /// One frame, returning the mean row of every lit texel weighted by brightness —
-    /// where the material sits on screen, in texels.
-    ///
-    /// The elements themselves cannot be read back: `Set::read_elements` returns the
-    /// **simulation's** buffer, which a deformation never touches. That is correct
-    /// and is exactly why this measures the picture instead.
+    /// Returns the brightness-weighted mean row of lit texels in the rendered frame.
     fn centre_y(gpu: &Gpu, set: &mut Set) -> f32 {
         let px = frame(gpu, set);
         let (mut sum, mut weight) = (0.0f64, 0.0f64);
@@ -252,19 +207,7 @@ proc dots {
         );
     }
 
-    /// **And it is stateless**, which is the decision the whole layer rests on.
-    ///
-    /// `position = position + shift` reads the *input's* position, not this node's
-    /// own output from last frame, so it lands one `shift` from where the simulation
-    /// put the element — on frame one and on frame twenty alike. A stateful L2 would
-    /// walk the material off screen, and would also be one that cannot be stacked
-    /// freely, cannot be fused by a graph compiler, and drags `closed_form` out of
-    /// the L1's hands.
-    ///
-    /// The lowering is what makes this true rather than a check refusing what breaks
-    /// it: reads and writes both address the output buffer, and the output buffer is
-    /// rebuilt from the input before the block runs. There is nothing to accumulate
-    /// onto.
+    /// Verifies that deformations remain stateless across frames without accumulating drift.
     #[test]
     fn a_deformation_does_not_accumulate_over_frames() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -404,11 +347,7 @@ proc tinted_dots {
         )
         .err()
         .expect("`tint` is not available without the deformation that emits it");
-        // **The variant, not just the word.** Asserting only that the message
-        // says `tint` passes for the wrong reason the day the composition check
-        // stops firing: the build then goes ahead, naga refuses the WGSL, and
-        // the `Invalid` that comes back happens to name `tint` too. Found by
-        // injecting exactly that.
+        // Verify that the error matches SetError::Composition specifically naming the missing attribute.
         let message = err.to_string();
         assert!(
             matches!(err, karakuri_engine::set::SetError::Composition { .. }),
@@ -424,16 +363,7 @@ proc tinted_dots {
     // Partial deformation: `weight` and `mask`
     // ---------------------------------------------------------------------------
 
-    /// **`weight` scales the whole modulation**, and it is an ordinary declared
-    /// `param` — which is the point of it being one rather than a number inside the
-    /// mask. It goes on a fader, takes a binding, moves under a transition, and is
-    /// saved in a Set file, none of which an expression could.
-    ///
-    /// Asserted as arithmetic and not as an inequality: half the weight is half the
-    /// displacement, exactly, because the lowering blends between what reached the
-    /// node and what the body wrote. An inequality would pass for any monotone
-    /// wrong answer, and the whole point of a fader is that its middle is the
-    /// middle.
+    /// Verifies that the declared `weight` parameter linearly scales deformation displacement.
     #[test]
     fn a_weight_scales_how_much_of_the_deformation_lands() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -473,14 +403,7 @@ proc weighted {
         );
     }
 
-    /// **A mask decides where.** The two elements differ only in `seed`, so a mask
-    /// on `seed` deforms one and leaves the other exactly where the simulation put
-    /// it — which shows as the centroid moving half as far as it does when both go.
-    ///
-    /// **The anchor is the half**, not the direction. A mask that let both through
-    /// would move it the full distance and a mask that let neither through would
-    /// move it none, so an inequality against zero would pass for the first of
-    /// those — which is the mask doing nothing at all.
+    /// Verifies that mask strength selectively applies deformation to matching elements.
     #[test]
     fn a_mask_applies_the_deformation_to_some_elements_and_not_others() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -524,16 +447,7 @@ proc lift_one {
         );
     }
 
-    /// **A mask reads what reached the node, not what the body wrote.** Running it
-    /// after the deformation would decide where to apply a deformation from a
-    /// position that deformation had already moved — which for a mask written
-    /// against `position` is a different set of elements every frame, and for a
-    /// stationary one is the wrong set once.
-    ///
-    /// The fixture makes the two answers differ by a whole element: the mask admits
-    /// what is on the far side of the origin along `z`, and the deformation moves
-    /// everything across it. Evaluated on the input, exactly one element passes;
-    /// evaluated on the output, the other one does.
+    /// Verifies that mask evaluations read input attributes rather than deformed outputs.
     #[test]
     fn a_mask_reads_the_input_rather_than_the_deformed_element() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -570,17 +484,7 @@ proc crossing {
         );
     }
 
-    /// **The gate reaches every attribute the body wrote, and `weight` multiplies
-    /// the mask rather than replacing it.**
-    ///
-    /// Two holes a review found with surviving mutations, and they are the same
-    /// hole seen twice: every other test here measures `position`, and every one of
-    /// them uses a weight or a mask but never both. Restricting the blend to
-    /// `position` passed the whole workspace, and so did `strength = weight`, which
-    /// destroys the formula the layer is built on.
-    ///
-    /// `tint` is the probe because it is not `position`: the material does not move,
-    /// so what is measured is the colour of a sprite that stayed where it was.
+    /// Verifies that gating covers non-position attributes and `weight` multiplies mask strength.
     #[test]
     fn the_gate_reaches_every_attribute_and_weight_multiplies_the_mask() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -670,20 +574,7 @@ proc paint {{
         );
     }
 
-    /// **A slot the input did not have is zeroed, not left as it was** — which is
-    /// the statelessness claim applied to an attribute the L2 *added*, and the one
-    /// half of it nothing was watching.
-    ///
-    /// An L2 owns one element buffer and rewrites it every frame, so whatever a
-    /// newly emitted slot holds before the body runs is **this node's own output
-    /// from the previous frame**. That is exactly the accumulation the layer is not
-    /// allowed to have, and it hides from every test that writes the attribute in
-    /// full: a stale value overwritten completely is a stale value nobody can see.
-    ///
-    /// A *partial* write is what makes it visible. At half strength the gate lands
-    /// the tint half way from what the slot held to what the body wrote — from zero
-    /// that is 0.5 every frame, and from last frame's 0.5 it is 0.75, then 0.875,
-    /// walking to white. Twenty frames is plenty.
+    /// Verifies that newly emitted attributes start from zero each frame rather than retaining prior state.
     #[test]
     fn an_attribute_a_deformation_adds_starts_from_zero_every_frame() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -756,14 +647,7 @@ proc half_paint {
         );
     }
 
-    /// **The gate is clamped, because `mix` extrapolates.**
-    ///
-    /// Nothing stops a `mask` block writing a `strength` of 2, and nothing should:
-    /// it is an expression over attributes and a generated one will land outside
-    /// `[0, 1]` sooner or later. What must not happen is the arithmetic taking it
-    /// literally — `mix(a, b, 2)` applies the deformation *twice over*, and a
-    /// negative one applies its inverse. Both are a wrong picture rather than a
-    /// missing one, which is the kind this suite exists to catch.
+    /// Verifies that mask strengths outside [0, 1] are clamped rather than extrapolating.
     #[test]
     fn a_strength_outside_the_unit_range_is_clamped_rather_than_extrapolated() {
         let gpu = Gpu::headless().expect("no GPU available");
