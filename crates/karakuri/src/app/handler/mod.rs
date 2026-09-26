@@ -91,6 +91,7 @@ impl ApplicationHandler for App {
         surface.configure(&gpu.device, &config);
 
         let ctx = egui::Context::default();
+        karakuri_console::room::configure_fonts(&ctx);
         let egui = egui_winit::State::new(
             ctx,
             egui::ViewportId::ROOT,

@@ -129,6 +129,9 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
     }
 }
 
+/// Terminal and input font size in the Prompt bay.
+pub const PROMPT_FONT_SIZE: f32 = 10.0;
+
 /// Paints the internal body of the Prompt bay (terminal area with scrollback and prompt bar).
 pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) {
     let head = head_box(bay_rect);
@@ -144,10 +147,11 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
     let output_rect = Rect::from_min_max(body_rect.min, Pos2::new(body_rect.max.x, sep_y));
     let input_rect = Rect::from_min_max(Pos2::new(body_rect.min.x, sep_y), body_rect.max);
 
-    let font_id = FontId::new(size::BASE, FontFamily::Monospace);
+    let font_id = FontId::new(PROMPT_FONT_SIZE, FontFamily::Monospace);
 
     // 1. Output scrollback area
     let mut output_ui = ui.new_child(egui::UiBuilder::new().max_rect(output_rect));
+    output_ui.spacing_mut().item_spacing.y = 2.0;
     egui::ScrollArea::vertical()
         .stick_to_bottom(true)
         .auto_shrink([false, false])
@@ -157,13 +161,13 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                 CliSelection::Unselected => {
                     ui.label(
                         egui::RichText::new("karakuri agent terminal (m9)")
-                            .color(pal.faint)
-                            .monospace(),
+                            .font(font_id.clone())
+                            .color(pal.faint),
                     );
                     ui.label(
                         egui::RichText::new("select an agent cli above to start")
-                            .color(pal.faint)
-                            .monospace(),
+                            .font(font_id.clone())
+                            .color(pal.faint),
                     );
                 }
                 CliSelection::Preset(preset) => {
@@ -175,10 +179,18 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                             } else {
                                 format!("session: {} (ready)", preset.display_name())
                             };
-                            ui.label(egui::RichText::new(label).color(pal.pink).monospace());
+                            ui.label(
+                                egui::RichText::new(label)
+                                    .font(font_id.clone())
+                                    .color(pal.pink),
+                            );
                         } else {
                             for line in lines {
-                                ui.label(egui::RichText::new(line).color(pal.text).monospace());
+                                ui.label(
+                                    egui::RichText::new(line)
+                                        .font(font_id.clone())
+                                        .color(pal.text),
+                                );
                             }
                         }
                     }
@@ -189,12 +201,16 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                         if lines.is_empty() {
                             ui.label(
                                 egui::RichText::new(format!("session: custom [{}] (ready)", cmd))
-                                    .color(pal.pink)
-                                    .monospace(),
+                                    .font(font_id.clone())
+                                    .color(pal.pink),
                             );
                         } else {
                             for line in lines {
-                                ui.label(egui::RichText::new(line).color(pal.text).monospace());
+                                ui.label(
+                                    egui::RichText::new(line)
+                                        .font(font_id.clone())
+                                        .color(pal.text),
+                                );
                             }
                         }
                     }
@@ -216,7 +232,11 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
     let mut input_ui = ui.new_child(egui::UiBuilder::new().max_rect(input_rect));
     input_ui.horizontal_centered(|ui| {
         ui.add_space(6.0);
-        ui.label(egui::RichText::new(">").color(pal.pink).monospace());
+        ui.label(
+            egui::RichText::new(">")
+                .font(font_id.clone())
+                .color(pal.pink),
+        );
 
         let mut buf_guard = state.input_buffer.lock().ok();
         if let Some(ref mut buf) = buf_guard {
