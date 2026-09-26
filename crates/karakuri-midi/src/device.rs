@@ -1,12 +1,5 @@
 //! Hardware MIDI input/output port communication and asynchronous event polling.
-//!
-//! ## Architecture
-//!
-//! - **Non-blocking ingestion**: MIDI callback threads deliver parsed messages through an `mpsc` channel;
-//!   the render/app thread drains incoming messages via [`Port::drain`].
-//! - **Wakeup callbacks**: Interactive frontends can register wake closures ([`Port::waking`])
-//!   to wake sleeping event loops upon message arrival without leaking GUI dependencies into this crate.
-//! - **Direct transmission**: Outgoing feedback and motorized fader updates are sent over [`midir::MidiOutputConnection`].
+//! Non-blocking message ingestion, frontend wake closures, and outgoing transmission.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 

@@ -1,12 +1,5 @@
 //! The synthesized signal bus: computes deterministic signals derived from the local
-//! oscillator's `t` and `bpm`.
-//!
-//! The bus answers only unseeded signals identifiable by name alone. Parameterized
-//! noise generators require explicit configuration and are sampled through
-//! [`NoiseConfig`](crate::NoiseConfig).
-//!
-//! [`SynthesizedBus`] resolves all valid names without returning `Option`; consumers
-//! evaluate [`Sample::confidence`](crate::Sample::confidence).
+//! oscillator's `t` and `bpm`. Answers unseeded signals identifiable by name alone.
 
 use crate::oscillator::Oscillator;
 use crate::{Sample, SignalBus, SignalId};

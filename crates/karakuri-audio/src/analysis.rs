@@ -1,11 +1,6 @@
 //! Audio block spectral analysis and feature extraction.
-//!
-//! Transforms PCM sample blocks into frequency band energies, RMS levels, and spectral flux onsets.
-//!
-//! ## Normalization
-//!
-//! - Levels map from [`FLOOR_DB`] (-60 dBFS) to [`TOP_DB`] (-6 dBFS RMS) into `[0.0, 1.0]`.
-//! - Sub-band energies share broadband scaling for consistent level calibration across signals.
+//! Transforms PCM sample blocks into frequency band energies, RMS levels,
+//! and spectral flux onsets with standardized decibel scaling.
 
 use std::sync::Arc;
 

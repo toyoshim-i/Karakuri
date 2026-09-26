@@ -1,13 +1,6 @@
 //! Measured audio signal payload and bus routing.
-//!
 //! Encapsulates external audio analysis features ([`AudioFrame`]) as plain data with
-//! associated confidence ratings. Audio frames are `Copy` and fixed-size (no allocations
-//! or locks).
-//!
-//! ## Confidence Semantics
-//! - `1.0`: Active input with fresh analysis (including silence).
-//! - Falling: Aging analysis data past the measurement window.
-//! - `0.0`: Stale data or inactive input; fallback to base parameter values or synthesized bus.
+//! associated confidence ratings and zero allocations.
 
 use crate::bus::SynthesizedBus;
 use crate::{Sample, SignalBus, SignalId};

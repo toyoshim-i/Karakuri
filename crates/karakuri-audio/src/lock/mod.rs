@@ -1,18 +1,6 @@
 //! Phase-locked loop for synchronizing the local oscillator with audio beat estimates.
-//!
-//! Evaluates incoming [`Estimate`] values and produces [`Correction`] recommendations
-//! (tempo adjustment and phase shift) for [`karakuri_signal::Oscillator`].
-//!
-//! ## Design & Invariants
-//!
-//! - **Oscillator Decoupling**: The engine renders exclusively from the local oscillator;
-//!   corrections trim or acquire tempo without overriding clock autonomy.
-//! - **Stiff Phase Lock**: Once locked, minor phase drift is gently trimmed via [`TRIM_TAU_PHASE`];
-//!   large discrepancies require sustained evidence ([`RELOCK_EVIDENCE`]) before re-locking.
-//! - **Feed-Forward Delay Compensation**: Computes overall lead (`ahead = analysis_lag + output_lag`)
-//!   to ensure visual beats align precisely with audience acoustic perception.
-//! - **Confidence Gating**: Estimates below [`GATE_CONFIDENCE`] produce no corrections, allowing
-//!   the oscillator to free-run seamlessly during audio dropouts.
+//! Computes tempo adjustment and phase shift corrections with confidence gating
+//! and feed-forward delay compensation for audience alignment.
 
 use karakuri_signal::Oscillator;
 
@@ -259,11 +247,8 @@ impl BeatLock {
         }
     }
 
-    /// Shifts the tracking grid by an octave factor (e.g. 2.0 for ×2, 0.5 for ÷2).
-    ///
-    /// Preserves current beat phase while relocating the tracking octave window.
-    /// Resets accumulated agreement and disagreement evidence. Returns `None` if
-    /// the target BPM falls outside [`crate::tempo::BPM_RANGE`].
+    /// Shifts the tracking grid by an octave factor (e.g. 2.0 for ×2, 0.5 for ÷2)
+    /// while preserving current beat phase.
     pub fn octave(&mut self, factor: f32, oscillator: &Oscillator) -> Option<Correction> {
         let bpm = oscillator.bpm() * factor;
         if !BPM_RANGE.contains(&bpm) {

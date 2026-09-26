@@ -1,39 +1,6 @@
 //! Declarative mapping table translating incoming MIDI messages to operations and vice versa.
-//!
-//! ## Mapping Specification
-//!
-//! Maps MIDI Control Change (`cc`), 14-bit CC (`cc14`), and Note (`note`) events to discrete
-//! or continuous operations:
-//!
-//! ```text
-//!   # slot faders, on the channel the surface is set to
-//!   cc 1 ch 1 -> gain 0
-//!   cc 5      -> opacity 0
-//!   cc 9      -> mask-position 0
-//!   cc 20     -> exposure
-//!
-//!   # pads
-//!   note 36 -> residency 0 live
-//!   note 40 -> residency 1 priming
-//!   note 44 -> blend 0 over
-//!   note 48 -> residency 2 allocated
-//!   note 56 -> tap
-//!
-//!   # a control of the Set on a deck, by its place in the interface
-//!   cc 30   -> param 0 3
-//! ```
-//!
-//! ## Invariants & Grammar Rules
-//!
-//! - **State-targeting semantics**: Mapping rules target absolute states or setpoints rather than
-//!   relative toggle steps (Principle 0090, ADR-0196).
-//! - **Positional parameter addressing**: Published Set parameters are addressed by deck and slot
-//!   position (`cc -> param <deck> <position>`) rather than procedure name (ADR-0268).
-//! - **14-bit CC handling**: High-resolution faders (`cc14 <msb> <lsb>`) map 14-bit ranges
-//!   (`[0, 16383]`). Lone MSBs execute coarse updates immediately; incoming LSBs refine the value
-//!   without timer delays.
-//! - **Bi-directional feedback (`Echo`)**: Maps surface controls to outgoing wire representations
-//!   to drive LED indicators and motorized faders.
+//! Handles CC, 14-bit CC, and Note events, mapping them to state-targeting operations
+//! and bi-directional feedback representations.
 
 use std::collections::HashMap;
 

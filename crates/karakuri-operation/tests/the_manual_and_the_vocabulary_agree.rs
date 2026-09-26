@@ -1,8 +1,5 @@
 //! Integration tests verifying bidirectional correspondence between
-//! operations specified in `docs/manual/operations.html` and the [`Operation`] enum.
-//!
-//! Ensures every documented operation row matches a corresponding [`Operation`] variant
-//! and that no orphaned variants exist without documentation.
+//! operations in `docs/manual/operations.html` and the [`Operation`] enum.
 
 use std::fs;
 use std::path::{Path, PathBuf};

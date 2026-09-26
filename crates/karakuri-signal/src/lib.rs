@@ -1,13 +1,6 @@
 //! Signal bus and local oscillator for tempo and modulation routing.
-//!
-//! ## Invariants
-//!
-//! - **Bus completeness**: Missing signal providers fall back to synthesized defaults;
-//!   consumers differentiate signals via [`Sample::confidence`].
-//! - **Local oscillator decoupling**: Render frames sample only the local oscillator;
-//!   external inputs apply corrections rather than replacing clock state.
-//! - **Declarative bindings**: Procedures consume signals strictly through declared params
-//!   attached via bind records.
+//! Connects synthesized clocks, audio measurements, and procedural noise
+//! to parameter bindings via deterministic signal IDs.
 
 pub mod bus;
 pub mod id;

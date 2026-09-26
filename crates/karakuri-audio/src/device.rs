@@ -1,16 +1,6 @@
 //! Audio input device stream management and lock-free thread synchronization.
-//!
-//! ## Architecture
-//!
-//! - **Callback-side analysis**: Audio frame analysis ([`crate::analysis`]) and tempo estimation
-//!   ([`crate::tempo`]) execute within the audio callback thread without dynamic allocations.
-//! - **Non-blocking synchronization**: Frame data is transferred across thread boundaries
-//!   via `try_lock` access on a single mutex, ensuring neither the audio callback nor the render
-//!   thread blocks.
-//! - **Reverse tempo control**: Tempo window guidance is passed from the render thread to the
-//!   audio thread using atomic floats (`AtomicU32`).
-//! - **Staleness attenuation**: Hardware timestamps compute signal confidence decay across dropped
-//!   or delayed sample frames (Principle 0092).
+//! Executes frame analysis on callback threads, synchronizing data across
+//! thread boundaries via try_lock access with decay on dropped frames.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
