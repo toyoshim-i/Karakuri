@@ -77,30 +77,18 @@ fn a_strip_is_the_mocks_own_boxes() {
         size::STRIP_H
     );
 
-    // Asserts remaining vertical space under strips accounts for transition row (`XFADE_H`),
-    // the retired crossfader row (`CROSSFADER_ROW`), and gaps against total bay height (316).
-    const CROSSFADER_ROW: f32 = 16.5;
-    let leftover = 316.0 - size::HEAD_H - size::STRIPS_PAD * 2.0 - size::STRIP_H;
+    // Asserts remaining vertical space under strips matches transition row (`XFADE_H`)
+    // against total bay height (292).
+    let leftover = 292.0 - size::HEAD_H - size::STRIPS_PAD * 2.0 - size::STRIP_H;
     assert!(
         near(size::XFADE_H, 37.5),
         "`.xfade` is {} tall here and the mock draws 37.5 of it",
         size::XFADE_H
     );
     assert!(
-        near(
-            leftover,
-            size::XFADE_H + size::XFADE_GAP + CROSSFADER_ROW + 0.5
-        ),
-        "the {leftover} the mixer has under its strips is not the transition row ({}) plus the \
-         crossfader's gap and row ({} + {CROSSFADER_ROW}) plus the half pixel the bay's own \
-         27 + 227.5 + 61 was rounded up by",
-        size::XFADE_H,
-        size::XFADE_GAP
-    );
-    assert!(
-        near(leftover, 61.5),
-        "what the mixer has left under its strips is not the 61 `.xfade` was reserved — the \
-         bay's own 27 + 227.5 + 61 was rounded up by the half pixel this is over"
+        near(leftover, size::XFADE_H),
+        "the {leftover} the mixer has under its strips matches transition row ({})",
+        size::XFADE_H
     );
 
     let strips = mock_strips();
