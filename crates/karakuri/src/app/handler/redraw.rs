@@ -315,6 +315,7 @@ impl App {
         let input = gfx.egui.take_egui_input(&gfx.window);
         let panel = &mut self.readout.panel;
         let view = &mut self.readout.view;
+        view.sync_theme(gfx.egui.egui_ctx().system_theme());
         // Paint hover layer last so tooltips overlay all other panels and cards.
         let hover = &mut self.hover;
         let now = self.started.elapsed();

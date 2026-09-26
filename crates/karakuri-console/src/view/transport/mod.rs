@@ -4,6 +4,7 @@ pub mod arrangement;
 pub mod audio_in;
 pub mod look;
 pub mod tempo;
+pub mod theme;
 pub mod tracker;
 
 pub use arrangement::*;
@@ -15,6 +16,8 @@ pub(crate) use look::next_tonemap;
 pub use look::*;
 pub(super) use tempo::transport_into;
 pub use tempo::*;
+pub(super) use theme::theme_into;
+pub use theme::*;
 pub(super) use tracker::tracker_into;
 pub use tracker::*;
 

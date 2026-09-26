@@ -70,6 +70,28 @@ impl Readout {
             return Some(self.arranged(ask));
         }
 
+        // Theme selector pill and card
+        let theme = view::theme_pill(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+            self.view.tracker,
+            self.view.map.as_ref(),
+            &self.view.arrangement,
+            self.view.theme_mode,
+            self.view.theme_menu_open,
+        );
+        let asked = theme
+            .as_ref()
+            .and_then(|pill| pill.ask(self.view.theme_menu_open, at));
+        if self.view.theme_menu_open {
+            return Some(self.themed(ctx, asked.unwrap_or(view::ThemeAsk::Shut)));
+        }
+        if let Some(ask) = asked {
+            return Some(self.themed(ctx, ask));
+        }
+
         // Inspector wiring / uses card
         let room = view::to_egui(self.panel.layout().viewport());
         let picked = self.view.wiring_open().and_then(|(pane_at, node, input)| {

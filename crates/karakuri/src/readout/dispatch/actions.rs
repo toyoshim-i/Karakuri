@@ -101,6 +101,27 @@ impl Readout {
         }
     }
 
+    /// Dispatches theme selector pill interactions, toggling the dropdown menu or selecting a theme mode.
+    pub(crate) fn themed(&mut self, ctx: &egui::Context, ask: view::ThemeAsk) -> Acted {
+        match ask {
+            view::ThemeAsk::Toggle => {
+                self.view.theme_menu_open = !self.view.theme_menu_open;
+                Acted::Nothing
+            }
+            view::ThemeAsk::Select(mode) => {
+                self.view.theme_mode = mode;
+                self.view.theme_menu_open = false;
+                self.view.room = mode.resolve(ctx.system_theme());
+                println!("theme: {}", mode.word());
+                Acted::Nothing
+            }
+            view::ThemeAsk::Shut => {
+                self.view.theme_menu_open = false;
+                Acted::Nothing
+            }
+        }
+    }
+
     /// Dispatches input wiring card interactions, toggling the dropdown card or emitting wire operations (ADR-0329).
     pub(crate) fn wired(&mut self, ask: Wiring) -> Acted {
         match ask {

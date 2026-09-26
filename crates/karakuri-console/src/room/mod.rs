@@ -38,6 +38,49 @@ impl Room {
     }
 }
 
+/// Theme preference for the console room styling: Auto (system theme), Day, or Night.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThemeMode {
+    #[default]
+    Auto,
+    Day,
+    Night,
+}
+
+impl ThemeMode {
+    pub const ALL: [ThemeMode; 3] = [ThemeMode::Auto, ThemeMode::Day, ThemeMode::Night];
+
+    /// Returns the theme mode string displayed in readouts.
+    pub fn word(self) -> &'static str {
+        match self {
+            ThemeMode::Auto => "auto",
+            ThemeMode::Day => "day",
+            ThemeMode::Night => "night",
+        }
+    }
+
+    /// Cycles to the next theme mode (Auto -> Day -> Night -> Auto).
+    pub fn next(self) -> ThemeMode {
+        match self {
+            ThemeMode::Auto => ThemeMode::Day,
+            ThemeMode::Day => ThemeMode::Night,
+            ThemeMode::Night => ThemeMode::Auto,
+        }
+    }
+
+    /// Resolves the theme preference to a concrete Room theme given an optional system theme.
+    pub fn resolve(self, system: Option<egui::Theme>) -> Room {
+        match self {
+            ThemeMode::Auto => match system {
+                Some(egui::Theme::Dark) => Room::Night,
+                _ => Room::Day,
+            },
+            ThemeMode::Day => Room::Day,
+            ThemeMode::Night => Room::Night,
+        }
+    }
+}
+
 /// Palette color tokens corresponding to CSS variables (`--c-*`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {

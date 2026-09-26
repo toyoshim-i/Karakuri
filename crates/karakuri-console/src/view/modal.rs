@@ -28,6 +28,8 @@ pub enum ModalOverlay {
     MasterChainAddChooser,
     /// Prompt bay agent CLI selection dropdown menu.
     PromptCliMenu,
+    /// Transport theme selection dropdown menu.
+    ThemeMenu,
 }
 
 impl ModalOverlay {
@@ -44,6 +46,7 @@ impl ModalOverlay {
             Self::SequencerLaneChooser => "SequencerLaneChooser",
             Self::MasterChainAddChooser => "MasterChainAddChooser",
             Self::PromptCliMenu => "PromptCliMenu",
+            Self::ThemeMenu => "ThemeMenu",
         }
     }
 }
@@ -81,6 +84,9 @@ impl View {
         if self.prompt.menu_open {
             return Some(ModalOverlay::PromptCliMenu);
         }
+        if self.theme_menu_open {
+            return Some(ModalOverlay::ThemeMenu);
+        }
         None
     }
 
@@ -117,6 +123,10 @@ impl View {
             ModalOverlay::MasterChainAddChooser => self.shut_chain_add(),
             ModalOverlay::PromptCliMenu => {
                 self.prompt.shut_menu();
+                true
+            }
+            ModalOverlay::ThemeMenu => {
+                self.theme_menu_open = false;
                 true
             }
         }
