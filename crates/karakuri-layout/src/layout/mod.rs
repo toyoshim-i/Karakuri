@@ -1,8 +1,5 @@
-//! The arena, the solve, and the operations that change what is stored.
-//!
+//! Layout arena, solver, and operations.
 //! Separates [`Arrangement`] model storage from solved [`Solved`] layout state.
-//! Solving borrows [`Arrangement`] immutably, ensuring layout passes never write back
-//! to node definitions.
 
 mod solver;
 mod types;
@@ -19,10 +16,7 @@ use crate::spec::Spec;
 use crate::{Axis, Point, Rect, Sizing};
 
 /// An arrangement of regions, and the rectangles it currently solves to.
-///
-/// Transient states like [`set_aside`](Layout::set_aside) are excluded from
-/// serialization. Saved arrangements preserve persistent user collapse states.
-/// Validates tree structure and identifier uniqueness upon deserialization.
+/// Excludes transient states (`set_aside`) from serialization.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "Wire")]
 pub struct Layout {
@@ -33,15 +27,10 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// Build an arrangement from its declarative form.
-    ///
-    /// The viewport starts empty, so every rectangle is zero until
-    /// [`set_viewport`](Layout::set_viewport) says otherwise.
+    /// Builds an arrangement from its declarative form.
     ///
     /// # Panics
-    ///
-    /// Panics if two nodes carry the same name. Names must be globally unique
-    /// across views and splits within the layout.
+    /// Panics if node names are not globally unique across views and splits.
     pub fn new(spec: Spec) -> Layout {
         let mut nodes = Vec::new();
         let root = build(&mut nodes, spec, None);
@@ -111,11 +100,7 @@ impl Layout {
     }
 
     /// Returns an iterator over placed children of `id` in layout order.
-    ///
-    /// Placed children are those currently tiled by the split (non-collapsed,
-    /// or closed nodes keeping their edge). Divider indices in
-    /// [`set_divider`](Layout::set_divider) and [`Hit::Divider`] address
-    /// boundaries between placed children.
+    /// Addresses non-collapsed nodes and closed nodes keeping their edge.
     pub fn placed_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
         self.children(id)
             .iter()
@@ -213,11 +198,7 @@ impl Layout {
         self.arrangement.placed(id.0)
     }
 
-    /// Returns true if `id` is closed: collapsed while preserving its divider
-    /// edge, with no active solo in effect.
-    ///
-    /// Closed nodes have zero visible extent, but their divider remains
-    /// placed and hit-testable.
+    /// Returns true if `id` is collapsed while preserving its divider edge (and no solo active).
     pub fn is_closed(&self, id: NodeId) -> bool {
         self.arrangement.is_closed(id.0)
     }
@@ -241,12 +222,7 @@ impl Layout {
 
     // -- operations ------------------------------------------------------
 
-    /// Collapses `id`, removing its extent.
-    ///
-    /// If `id` was configured with [`Spec::keeps_its_edge`], its divider edge
-    /// remains placed ([`is_closed`](Layout::is_closed)). Ancestor collapse
-    /// transitively hides all descendant nodes. Stored size is preserved for
-    /// subsequent [`expand`](Layout::expand).
+    /// Collapses `id`, removing its visible extent while preserving stored size for expansion.
     pub fn collapse(&mut self, id: NodeId) {
         self.set_collapsed(id, true);
     }
@@ -270,11 +246,7 @@ impl Layout {
         }
     }
 
-    /// Sets or clears the transient `aside` flag for `id`.
-    ///
-    /// Used by rendering callers when a region is temporarily displayed elsewhere
-    /// or unavailable. This state is not serialized and is evaluated dynamically
-    /// per frame. Writing identical values avoids marking the layout dirty.
+    /// Sets or clears the transient `aside` flag for `id` (excluded from serialization).
     pub fn set_aside(&mut self, id: NodeId, aside: bool) {
         if self.node(id.0).aside != aside {
             self.node_mut(id.0).aside = aside;
@@ -314,12 +286,8 @@ impl Layout {
         self.dirty = true;
     }
 
-    /// Moves the boundary between placed children `index` and `index + 1` of
-    /// `split` to `position` (an absolute coordinate along the split's axis).
-    ///
+    /// Moves the boundary between placed children `index` and `index + 1` of `split` to `position`.
     /// Returns the clamped coordinate where the divider actually settled.
-    /// Boundary adjustments stop at the immediate bounds of the adjacent pair
-    /// and do not cascade into outer siblings.
     pub fn set_divider(&mut self, split: NodeId, index: usize, position: f32) -> f32 {
         self.solve();
         let (axis, _) = match self.arrangement.split_of(split.0) {
@@ -419,10 +387,7 @@ impl Layout {
     // -- the solve -------------------------------------------------------
 
     /// Recomputes region rectangles if dirty flags indicate modifications.
-    ///
-    /// Solves layout in two phases:
-    /// 1. Bottom-up [`measure`] computes usable extent per node along its parent axis.
-    /// 2. Top-down `solve_subtree` assigns rectangles based on sizes, weights, and constraints.
+    /// Uses bottom-up measurement followed by top-down recursive subtree solving.
     pub fn solve(&mut self) {
         if !self.dirty {
             return;
@@ -472,10 +437,6 @@ impl Layout {
     // -- hit testing -----------------------------------------------------
 
     /// Hit-tests point `p` against the layout, applying `grab` margin around dividers.
-    ///
-    /// Dividers take priority within `grab` distance of their boundary. Non-laid-out
-    /// or folded nodes return [`Hit::Nothing`]. Closed nodes are hit-testable via
-    /// their preserved divider.
     pub fn hit(&self, p: Point, grab: f32) -> Hit {
         debug_assert!(!self.dirty, "hit() read a stale solve; call solve() first");
         if !self.viewport.contains(p) {
