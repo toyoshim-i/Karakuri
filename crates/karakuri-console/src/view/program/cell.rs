@@ -51,9 +51,7 @@ pub fn caption_into(
     image: Rect,
     deck: usize,
     picture: Option<Picture>,
-    // **Whether this slot has stopped updating** — [`View::overloaded`]. It
-    // changes the word and nothing else: not the letter, not the badge, and
-    // not the image above, which is the still it is about.
+    // Whether this slot has stopped updating (overloaded).
     overloaded: bool,
     cost: Option<Budgeted>,
     marked: bool,

@@ -43,9 +43,7 @@ fn the_params_chip_asks_for_the_set_under_the_cursor() {
         "the cursor moved and the chip went on naming the row it started on"
     );
 
-    // **The gap before the chip is nobody's**, which is `.lib-foot`'s `gap`
-    // rather than a target: the count, the space beside it and the ground
-    // between the two capsules take no press.
+    // Inter-capsule gaps and count area in the foot hit-test to None.
     let gap = Point::new(chip.min.x - size::LIB_FOOT_GAP * 0.5, chip.center().y);
     assert!(
         ask(&view, &bay).is_some(),
@@ -57,9 +55,7 @@ fn the_params_chip_asks_for_the_set_under_the_cursor() {
         "the gap between the `params` chip and the `load` button answered a press"
     );
 
-    // **A library that lists nothing has no Set to read**, and the chip is
-    // still drawn because the foot is what the count is in. A press on it asks
-    // nothing rather than asking for a Set with no name.
+    // Clicking the read chip with an empty library emits no operation.
     let empty =
         library(panel.layout(), SCOPES, &[], None, None, 0.0).expect("the bay draws its foot");
     let chip = empty.params_chip(&ctx, AIMED);
@@ -74,9 +70,7 @@ fn the_params_chip_asks_for_the_set_under_the_cursor() {
         "a bay listing nothing asked for a Set"
     );
 
-    // **And with a reading open the same press closes it**, which is the
-    // block's own state read off the bay rather than off anything the chip is
-    // told.
+    // Clicking the read chip while reading is open toggles it closed.
     let (view, panel) = showing_reading();
     let open = library(
         panel.layout(),
@@ -178,19 +172,14 @@ fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
         block.well.max.y
     );
 
-    // **The five the mock lists all still fit**, which is what makes the
-    // paragraph above about a block between two rows rather than about a
-    // shorter list. The bay this column gives the Library is taller than five
-    // rows and a reading of ten, and nothing was pushed out.
+    // All five mock items remain visible alongside the reading block.
     assert_eq!(
         open.rows, shut.rows,
         "the mock's five rows and a ten-line reading fit the bay, and {} were listed",
         open.rows
     );
 
-    // **A library taller than its list is where the block costs rows**, and
-    // what it costs is the block's own height read in rows — the foot says so
-    // in the words it already says a truncated listing in.
+    // Reading block consumes vertical row capacity, reducing visible row count.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
     let mut deep = View::new(Room::Day);
     deep.library = many.clone();
@@ -214,10 +203,7 @@ fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
         cut.rows,
         full.rows
     );
-    // **And it is a count of what fits and not a number chosen**: the last row
-    // listed is inside the list and the next one would not have been, which is
-    // `the_rows_tile_the_list_and_stay_inside_it`'s claim asked of a list with
-    // a block in the middle of it.
+    // Visible row count accurately matches remaining vertical capacity.
     assert!(
         !cut.list.contains_rect(cut.row(cut.rows)),
         "row {} at {:?} would have fitted under the block in {:?} and was not drawn",
@@ -374,9 +360,7 @@ fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
             "the reading does not say `{want}`: {words:?}"
         );
     }
-    // **The well itself**, so a box of type standing on the card cannot pass
-    // this: the mock draws these rows on the recess the staging lane's
-    // candidates stand on.
+    // Reading rows render inside a recessed well container.
     assert!(
         drawn.iter().any(|shape| matches!(
             shape,
@@ -386,8 +370,7 @@ fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
         "nothing filled the reading's well at {:?}: {drawn:#?}",
         block.well
     );
-    // **And nothing in it is a figure this reading did not pay for.** The
-    // element storage is bytes, and no line here says so.
+    // Verify element storage figures in bytes are omitted.
     assert!(
         !words.iter().any(|word| word.contains("bytes")),
         "the reading draws an element-storage figure, which needs every source in the Set \
@@ -571,10 +554,7 @@ fn the_history_chip_is_the_fifth_and_a_press_on_it_asks_for_the_walk() {
         },
         "the `history` chip asked for something other than `Walk the edit history`"
     );
-    // **And the Set is the host's answer rather than the chip's**: the console
-    // holds a deck letter, the id rides the aim, and a walk aimed at a deck
-    // running the pair the run launched with names no Set — which lists
-    // nothing rather than everything (ADR-0276, ADR-0308).
+    // Walking history without an aimed Set passes None, yielding an empty listing (ADR-0276, ADR-0308).
     assert_eq!(
         chosen.asked(None),
         Operation::WalkHistory { set: None },
@@ -617,9 +597,7 @@ fn a_history_listing_is_the_rows_the_host_handed_in_and_the_foot_counts_them() {
         "the rows were drawn in an order this bay invented"
     );
 
-    // **A history taller than the bay**, which is the foot's second number
-    // doing the only thing it is for: the rows are what fit and the total is
-    // what the host handed over.
+    // Long history listing displays visible count alongside total items.
     let many: Vec<String> = (0..60)
         .map(|at| format!("20260908-1430{at:02}-000_slot0_L4_beat_strokes"))
         .collect();
@@ -668,8 +646,7 @@ fn a_press_on_a_history_row_lands_that_version_on_the_pulldowns_deck() {
         "a row of `history` was taken in hand as though it were a Set"
     );
 
-    // **And the other way round**: back on a library scope the rows are Sets,
-    // so the carry answers and the landing does not.
+    // Returning to a library scope re-enables carry operations on Set rows.
     assert!(view.select_scope(Scope::AllSets));
     view.library = mock();
     assert!(

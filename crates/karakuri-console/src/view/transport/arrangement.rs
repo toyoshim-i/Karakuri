@@ -448,9 +448,7 @@ pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
     };
     popup_card(painter, pal, card);
 
-    // **The field, where a name is being asked for.** The card has one row in
-    // it and `pill.rows` is zero, which is what stops `row` handing out a
-    // rectangle for something that is not a list.
+    // Name input field rendered when naming a new arrangement.
     if let Some(typed) = arr.naming() {
         let field = Rect::from_min_size(
             Pos2::new(
@@ -472,8 +470,7 @@ pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
         };
         card_row_text(painter, row, name, colour);
     }
-    // The rule under the two verbs, which is what makes the names below it a
-    // list rather than two more items.
+    // Rule separator between verb actions and filed arrangement names.
     if pill.rows > VERBS {
         let y = pill.row(VERBS).min.y - size::HAIRLINE * 0.5;
         painter.line_segment(
@@ -484,8 +481,7 @@ pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
             Stroke::new(size::HAIRLINE, pal.hair),
         );
     }
-    // **`n of m`, in the Library bay's own words**, and only where the list
-    // could not be shown whole.
+    // Foot summary readout (`n of m`) when list is truncated.
     if pill.rows < pill.of {
         let foot = Rect::from_min_max(
             Pos2::new(card.min.x, card.max.y - size::LIB_FOOT_H),

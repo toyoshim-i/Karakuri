@@ -18,17 +18,14 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
     assert_sane(&layout);
     assert_within_bounds(&layout);
 
-    // The centre took the pane's width, and not the divider — the pane is
-    // closed rather than gone, so the gap it keeps is still drawn. Nothing
-    // else moved: the right pane is exactly where and what it was.
+    // The center panel absorbs the pane width; the right pane geometry remains unaffected.
     assert!(layout.is_closed(id_of(&layout, "left-pane")));
     assert!(near(rect_of(&layout, "centre").w, centre.w + 340.0));
     assert!(near(rect_of(&layout, "right-pane").w, right.w));
     assert!(near(rect_of(&layout, "right-pane").x, right.x));
     assert!(near(rect_of(&layout, "left-pane").w, 0.0));
 
-    // And nothing was destroyed by folding it: unfolding restores the width it
-    // was storing all along.
+    // Unfolding restores the previously stored pane width.
     layout.expand(id_of(&layout, "left-pane"));
     layout.solve();
     assert!(near(rect_of(&layout, "left-pane").w, 340.0));
@@ -76,7 +73,7 @@ fn solo_on_the_program_leaves_the_program_holding_the_window() {
         );
     }
 
-    // And the panel comes back exactly as it was.
+    // Unsoloing restores original panel geometry.
     layout.unsolo();
     layout.solve();
     assert_eq!(rects(&layout), rects(&solved(PLAUSIBLE)));

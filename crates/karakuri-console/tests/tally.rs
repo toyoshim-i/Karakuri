@@ -10,8 +10,7 @@ use karakuri_console::view::{mixer, program_bay, Level, Mask, Mixer, Strip, Tall
 use karakuri_layout::{Hit, Point};
 use karakuri_operation::{BlendMode, Operation, Residency};
 
-/// A strip that is where it was asked to be, at `tally` — the ordinary case,
-/// and the one where a press cannot tell the two residencies apart.
+/// Returns a strip settled at `tally` where requested and current residency match.
 fn settled(slot: usize, tally: Tally) -> Strip {
     Strip {
         name: ["drift_night", "lattice_veil", "glass_shell", "slow_tide"][slot].to_owned(),

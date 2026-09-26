@@ -31,10 +31,7 @@ impl Grammar {
     ];
 }
 
-/// Which way an arrow points. Four rather than two, because the axis is half of
-/// what an arrow means: the Mixer's strips are a row and the Library's rows are
-/// a column, so `←→` walk one and `↑↓` the other, and a level is stepped by
-/// `↑↓` whichever bay it is in.
+/// Direction for navigation arrow keys along vertical or horizontal axes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arrow {
     Up,
@@ -292,9 +289,7 @@ impl Control {
             Control::Audio | Control::Arrangement => Answers::Act(Act::Open),
             Control::Input => Answers::Act(Act::Attach),
             Control::Save => Answers::Act(Act::Save),
-            // **The reset is one row of the page and `r` is the key that
-            // reaches it**, so this row of the menu is drawn and is not
-            // performed here.
+            // New arrangement reset is handled globally via hotkey `r`.
             Control::New => Answers::Nothing(
                 "start a new one is the reset, and r starts one from anywhere on this panel",
             ),
@@ -302,9 +297,7 @@ impl Control {
             Control::Tonemap => Answers::State,
             Control::Exposure => Answers::Level,
             Control::Solo | Control::Class => Answers::State,
-            // **The picture's on and off is the Outputs row's one control**,
-            // and it is one row of the page with one badge. A second press for
-            // it here would be a route no badge could name.
+            // Picture output is controlled via the Outputs row sinks.
             Control::Picture => Answers::Nothing(
                 "the picture's on and off is the Outputs row's sink — tab to the outputs row \
                  and press space on it",
@@ -379,9 +372,7 @@ impl Control {
                     | Control::Slot
                     | Control::AddEffect
             ),
-            // **A card's rows are walked**, so the arrows reach the control
-            // that opens the card and the rows under it, where they reach
-            // neither of the other two acts.
+            // Card items support directional navigation.
             Grammar::Arrows
                 if matches!(
                     self,
@@ -451,10 +442,7 @@ pub enum Act {
     Restore,
     /// The addressed slot, taken out of the master chain.
     Remove,
-    /// The addressed lane, taken out of the pattern — what the minus at the end of
-    /// the lane's row asks for, reached by `enter` on the lane itself. A second
-    /// variant rather than the one above because the two are reached at different
-    /// rungs and name different operations.
+    /// Removes the addressed lane from the pattern via `enter`.
     RemoveLane,
     /// A slot of the addressed procedure, appended to the master chain. After it
     /// the card is gone and the address is back on `+ add`.
@@ -498,10 +486,7 @@ impl Of {
         if let Some(control) = self.first.get(nth - 1) {
             return Some(*control);
         }
-        // **The suffix is counted from the end**, which is what makes a rung
-        // whose middle repeats resolvable at all: how many of the repeat there
-        // are is the bay's reading, and the controls after them are however
-        // many this table names.
+        // Suffix index resolved relative to drawn bounds.
         let after = drawn - nth;
         if let Some(control) = self.last.len().checked_sub(after + 1) {
             return Some(self.last[control]);
@@ -583,13 +568,9 @@ impl Built {
     /// Returns whether the grammar key acts within this bay (excluding global bay folding under [`ANY`]).
     pub fn reaches(&self, key: Grammar) -> bool {
         match key {
-            // **A digit names the nth item, and `0` the head.** Every bay the
-            // manual lists draws items, and every bay has a head or something
-            // standing in for one, so a digit reaches somewhere in any bay
-            // whose grammar is built at all.
+            // Digits select items or bay head (0).
             Grammar::Digit => true,
-            // **The arrows walk those items**, whatever the items are made of,
-            // and step whatever levels they hold on top of that.
+            // Arrow keys walk items or step levels.
             Grammar::Arrows => true,
             _ => {
                 self.head.iter().any(|c| c.reached_by(key))
@@ -601,9 +582,7 @@ impl Built {
     }
 }
 
-/// The picture, by the name the arrangement gives it — the node the Program
-/// bay's `solo` acts on and the Outputs row's one sink turns on and off. A
-/// constant for [`MIXER`]'s reason.
+/// Name identifier for the Program bay picture node.
 pub const PICTURE: &str = "program-view";
 
 /// The Transport row, by the name the arrangement gives it. [`MIXER`]'s reason.

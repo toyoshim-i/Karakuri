@@ -373,10 +373,7 @@ pub(crate) fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node
     if let Some(authority) = node.authority {
         auth_into(painter, pal, head, node, authority.level);
     }
-    // **The `keep` capsule at the right of the head**, and the chips above are
-    // laid out inside what it leaves — [`node_keep`], which is where both
-    // halves of that arithmetic are. A head that carries none draws none,
-    // which is [`Node::keep`]'s two cases rather than a capsule that refuses.
+    // Paint node keep capsule at right edge of node head if present.
     if let Some(pill) = node_keep(painter.ctx(), head, node) {
         // Node head keep capsule is drawn in standard mini pill styling without selection wash.
         let galley = painter.layout_no_wrap(
@@ -396,28 +393,19 @@ pub(crate) fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node
         });
     }
 
-    // **The inputs this node declares, under its head and above its rows**,
-    // for the same reason and asked the same way: [`uses_rect`] and
-    // [`uses_chip_in`] are where that arithmetic is written, and this paints
-    // what they answer.
+    // Declared inputs positioned below the head and above parameter rows.
     for (index, uses) in node.uses.iter().enumerate() {
         uses_into(painter, pal, uses_rect(rect, index), uses);
     }
 
-    // **Where the renderer row is, asked rather than measured here**: a press
-    // has to resolve to the same rectangle the chips were drawn in, and
-    // [`rend_row_in`] is the one place that arithmetic is written.
+    // Renderer selection row positioned via `rend_row_in`.
     if !node.renderers.is_empty() {
         rend_row_into(painter, pal, rend_row_in(rect, node), &node.renderers);
     }
-    // **Where a row is, asked rather than accumulated.** The running sum this
-    // loop used to keep was a second answer to the same question the moment a
-    // press had to be resolved to a row — see [`param_rect`].
+    // Parameter rows positioned via `param_rect`.
     for (index, param) in node.params.iter().enumerate() {
         param_into(painter, pal, param_rect(rect, node, index), param);
-        // **Where the sensitivity row is, asked rather than measured here**,
-        // which is the renderer row's rule one level up: a press has to
-        // resolve to the same rectangle the chips were drawn in.
+        // Sensitivity row positioned via `sens_rect`.
         if let (Some(row), Some(source)) = (sens_rect(rect, node, index), param.bound.as_ref()) {
             sens_into(painter, pal, row, source);
         }

@@ -58,9 +58,7 @@ pub struct Candidate {
 /// Implements ADR-0200, ADR-0313, ADR-0316, and ADR-0326. Returns `None` if
 /// there are no outstanding candidates or insufficient vertical space.
 pub fn staging(layout: &karakuri_layout::Layout, candidates: &[Candidate]) -> Option<StagingBay> {
-    // **Nothing outstanding on any slot, which is this lane's ordinary
-    // state** — and the state every run starts in. Drawing an empty list
-    // would be the standing sentence the page refuses.
+    // Returns None if no candidates are present.
     if candidates.is_empty() {
         return None;
     }
@@ -131,10 +129,7 @@ impl StagingBay {
             ),
             egui::vec2(w, size::PILL_H),
         );
-        // **Against what the row's left-hand end is already using**, which is
-        // the deck letter and the address: a capsule that reached back over
-        // the address would be drawn on top of the thing it is a control for,
-        // and a press would then be aimed by something it is covering.
+        // Ensure capsule does not overlap leading deck letter and address text.
         let letter = DECK_LETTERS.get(candidate.deck).copied().unwrap_or("?");
         let least = size::CAND_PAD_X
             + width(letter, size::BASE)
@@ -205,8 +200,7 @@ fn staging_box(region: Rect, total: usize) -> Option<StagingBay> {
             region.max.y - size::STAGE_LIST_PAD_BOTTOM,
         ),
     );
-    // **Narrower than its own padding is no list**, which is
-    // [`library::library_box`]'s refusal across the same axis.
+    // Suppress layout if list width is smaller than horizontal padding.
     if list.width() <= 0.0 {
         return None;
     }

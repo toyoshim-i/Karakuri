@@ -27,9 +27,7 @@ fn one_node(params: usize) -> Pane {
                 },
                 level: Authority::Manual,
             }),
-            // **A node with a source**, which every node but the built-in
-            // camera has — and the capsule this draws is what the tests
-            // below measure the head's right-hand end against.
+            // Node with a source code address, drawing a keep capsule.
             keep: Some(NodeAddress {
                 layer: Layer::L1,
                 index: 0,

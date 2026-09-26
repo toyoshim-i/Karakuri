@@ -455,10 +455,7 @@ fn an_address_on_something_that_is_gone_goes_back_to_the_bay() {
         "the address stayed on a strip that is gone"
     );
 
-    // **And the same one rung up**, where the path names an item and no control
-    // under it: a strip that has gone is a strip that has gone at either depth,
-    // and clamping onto the nearest one would put a press on a deck nobody
-    // addressed.
+    // Verify item-level address paths are also cleared when the targeted item is removed.
     let (panel, mut view) = console();
     focus_on(&mut view, &panel, "mixer");
     press(&mut view, &panel, Press::Digit(4));

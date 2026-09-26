@@ -398,9 +398,7 @@ pub fn master(
         Pos2::new(label.max.x + size::MASTER_GAP, mid - size::FADER_H * 0.5),
         Pos2::new(value.min.x - size::MASTER_GAP, mid + size::FADER_H * 0.5),
     );
-    // **A track with no length is no control**, which is `Grab::new`'s own
-    // refusal one crate layer down: a bay narrow enough that the word and the
-    // figure meet has nothing left to draw a fader in.
+    // Suppress control when horizontal track space is depleted.
     if track.width() <= 0.0 {
         return None;
     }
@@ -526,9 +524,7 @@ fn slot_row(
     // other. It is as wide as the wider of the two words rather than as wide
     // as the one it is showing.
     let cut = slot.cut.map(|_| {
-        // **A `.mini`, the mixer's own blend chip** — the same 9px word inside
-        // the same padding and the same border, because it is the same thing:
-        // one value of a closed list, shown and cycled.
+        // Size cut chip based on widest possible Cut enum label.
         let word = karakuri_operation::Cut::ALL
             .iter()
             .map(|c| width_at(c.name(), size::MINI_SIZE))
@@ -672,8 +668,7 @@ pub(super) fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
         pal.faint,
     );
     fader_into(painter, pal, row.fader, false, None);
-    // **Right-aligned in a box that does not move**, so the figure ends at the
-    // bay's padding whatever it says.
+    // Right-align readout value against fader bounds.
     let galley = painter.layout_no_wrap(
         master_text(row.out),
         FontId::new(size::BASE, FontFamily::Proportional),
@@ -724,9 +719,7 @@ pub(super) fn slot_into(ui: &Ui, pal: &Palette, slot: &SlotRow) {
     };
     word(slot.name, &slot.words, pal.text, false);
     word(slot.remove, REMOVE_GLYPH, pal.faint, true);
-    // **`.mini.sel`**, which is the mixer's blend chip exactly: a lavender
-    // wash and a lavender word, because what it says is *this is the one
-    // chosen*.
+    // Render selected cut chip style (`.mini.sel`).
     if let (Some(chip), Some(cut)) = (slot.cut, slot.reading) {
         mini_into(painter, pal, chip, true, |painter, colour| {
             let galley = painter.layout_no_wrap(

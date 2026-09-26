@@ -235,10 +235,7 @@ fn the_back_capsule_is_the_smaller_box_inside_the_row() {
             }),
             "row {index}'s capsule asked for the wrong version"
         );
-        // **And the keep does not answer for the same point**, which is
-        // structural rather than an ordering: `StagingBay::keep` refuses a
-        // point its own capsule claims, so a press on the capsule cannot also
-        // be a keep whatever order a caller asks the two in.
+        // `StagingBay::keep` refuses points claimed by capsules, ensuring a single action per press.
         assert_eq!(
             lane.keep(&ctx, &view.staging, p),
             None,
@@ -248,8 +245,7 @@ fn the_back_capsule_is_the_smaller_box_inside_the_row() {
     }
     assert_eq!(asked, 2, "not every capsule was asked");
 
-    // **The negative control**: a row that names no node draws no capsule and
-    // answers no press, because both operations are spelled with a node.
+    // Negative control: rows naming no node draw no capsule and answer no press.
     let mut view = showing(&strips);
     view.staging = vec![refused_candidate(
         0,

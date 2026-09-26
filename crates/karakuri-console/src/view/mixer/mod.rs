@@ -195,10 +195,7 @@ pub fn mixer<'a>(
     layout: &karakuri_layout::Layout,
     strips: &'a [Strip],
 ) -> Option<Mixer<'a>> {
-    // **No deck behind the console, so there are no strips.** Every test in
-    // this crate is here, and so is the whole of `cargo test -p
-    // karakuri-console`. Drawing four empty strips would be inventing six
-    // readings a slot; this is `View::picture`'s rule, one bay along.
+    // Returns None if no channel strips are present.
     if strips.is_empty() {
         return None;
     }

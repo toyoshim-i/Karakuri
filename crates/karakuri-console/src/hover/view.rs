@@ -9,40 +9,34 @@ use crate::room::Palette;
 
 // Tooltip layout constants transcribed from CSS `[data-tip]::after` rules in `style.css`.
 
-/// `[data-tip]::after`'s `min-width: 150px`: a tip is never narrower than this,
-/// however few words are in it.
+/// Minimum tooltip width matching `[data-tip]::after` (`min-width: 150px`).
 pub const TIP_MIN_W: f32 = 150.0;
 
-/// `[data-tip]::after`'s `max-width: 236px`, which is what the words wrap to
-/// once the padding is taken off.
+/// Maximum tooltip width matching `[data-tip]::after` (`max-width: 236px`).
 pub const TIP_MAX_W: f32 = 236.0;
 
-/// `[data-tip]::after`'s `padding: 7px 9px`, down the sides.
+/// Tooltip horizontal padding matching `[data-tip]::after` (`padding: 7px 9px`).
 pub const TIP_PAD_X: f32 = 9.0;
 
-/// `[data-tip]::after`'s `padding: 7px 9px`, top and bottom.
+/// Tooltip vertical padding matching `[data-tip]::after` (`padding: 7px 9px`).
 pub const TIP_PAD_Y: f32 = 7.0;
 
-/// `[data-tip]::after`'s `border-radius: 9px`.
+/// Tooltip border radius matching `[data-tip]::after` (`border-radius: 9px`).
 pub const TIP_RADIUS: f32 = 9.0;
 
-/// `[data-tip]::after`'s `font-size: 10.5px`.
+/// Tooltip font size matching `[data-tip]::after` (`font-size: 10.5px`).
 pub const TIP_SIZE: f32 = 10.5;
 
-/// `[data-tip]::after`'s `line-height: 1.55`, as a multiple of the size above.
+/// Tooltip line height multiplier matching `[data-tip]::after` (`line-height: 1.55`).
 pub const TIP_LINE: f32 = 1.55;
 
-/// `[data-tip]::after`'s `top: calc(100% + 6px)`: the gap between what is being
-/// explained and the box explaining it.
+/// Gap between target control and tooltip (`top: calc(100% + 6px)`).
 pub const TIP_GAP: f32 = 6.0;
 
 /// Max text wrapping width: [`TIP_MAX_W`] minus horizontal padding [`TIP_PAD_X`].
 pub const TIP_WRAP: f32 = TIP_MAX_W - TIP_PAD_X * 2.0;
 
-/// `[data-tip]::after`'s `box-shadow: 0 8px 26px rgba(0,0,0,0.22)`, and it is
-/// the tip's own rather than `--c-shadow`: the mock gives this one box a shadow
-/// of its own, so the palette's is not the one to draw it with. 0.22 of 255 is
-/// 56.
+/// Tooltip drop shadow matching `[data-tip]::after` (`box-shadow: 0 8px 26px rgba(0,0,0,0.22)`).
 pub const TIP_SHADOW: egui::epaint::Shadow = egui::epaint::Shadow {
     offset: [0, 8],
     blur: 26,

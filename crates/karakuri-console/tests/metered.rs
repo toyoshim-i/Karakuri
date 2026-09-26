@@ -23,9 +23,7 @@ fn arrangement() -> Panel {
     panel
 }
 
-/// A settled slot with its meter reading: where it was asked to be, nothing
-/// armed on either fader, and the one value on the strip that moves without a
-/// hand on anything.
+/// Helper constructing a settled strip with active meter readings.
 fn metered() -> Strip {
     Strip {
         name: "glass_shell".to_owned(),

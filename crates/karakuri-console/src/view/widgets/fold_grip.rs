@@ -15,10 +15,7 @@ const GRIP_STEP: f32 = 3.5;
 /// Width of a fold grip, which [`head_pills`] steps back by before placing the first pill.
 pub const GRIP_W: f32 = GRIP_STEP * (GRIP_COLS - 1) as f32 + GRIP_R * 2.0;
 
-/// The mock's `.grip`, `⋮⋮` — drawn rather than typed, because whether a
-/// vertical ellipsis is in `egui`'s default face is a question with no good
-/// answer and six dots is the same mark either way. Right-aligned to `right`;
-/// its width is [`GRIP_W`], which is what the pills beside it step back by.
+/// Paints the mock's `.grip` (`⋮⋮`) as six dots right-aligned to `right`.
 pub(crate) fn grip_dots(ui: &Ui, pal: &Palette, right: Pos2) {
     let h = GRIP_STEP * (GRIP_ROWS - 1) as f32;
     let painter = ui.painter();
@@ -93,9 +90,7 @@ pub struct FoldGrip {
 }
 
 impl FoldGrip {
-    /// What a press asks for, and there is one answer — see the type's own
-    /// documentation for why this is not the two [`ProgramHead::op`] chooses
-    /// between.
+    /// Returns the fold operation for this grip's target node.
     pub fn op(&self) -> Op {
         Op::Fold(self.id)
     }
@@ -114,8 +109,7 @@ pub fn bay_grip(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip
         return None;
     }
     let id = layout.find(name)?;
-    // The bay itself, a column folded around it, or a solo somewhere else: one
-    // question for every ancestor, which is [`program_head`]'s own guard.
+    // Bay must be visible.
     if !layout.visible(id) {
         return None;
     }
@@ -126,8 +120,6 @@ pub fn bay_grip(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip
         Pos2::new(right - GRIP_W - size::PILL_GAP, mid - size::PILL_H * 0.5),
         Pos2::new(right, mid + size::PILL_H * 0.5),
     );
-    // A head clipped to a bay too short or too narrow to hold the target draws
-    // no control rather than half of one — [`head_capsule`]'s own guard, one
-    // capsule along.
+    // Omit control if head cannot fully enclose the grip bounding box.
     head.contains_rect(grip).then_some(FoldGrip { grip, id })
 }

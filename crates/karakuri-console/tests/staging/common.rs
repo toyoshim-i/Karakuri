@@ -57,9 +57,7 @@ pub(crate) fn at_node(
         addr: format!("{}:{index}", layer_word(layer)),
         name: name.to_owned(),
         stage,
-        // **Empty, because every verdict but one is about a build.** The row
-        // that carries a sentence is `Stage::NotCompiled`'s, and
-        // [`refused_candidate`] is the one that builds it.
+        // Empty by default; only `Stage::NotCompiled` rows carry sentences (see [`refused_candidate`]).
         said: Vec::new(),
     }
 }

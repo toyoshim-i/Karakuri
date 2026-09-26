@@ -47,10 +47,7 @@ fn panel_badges() -> Vec<(String, String, String)> {
     found
 }
 
-/// What is folded and what is soloed, which is the whole of what an operation
-/// in this section can change about an arrangement that nothing has resized. A
-/// boundary drag moves rectangles and leaves this alone, which is why the drag
-/// is demonstrated separately and this is what the sweep compares.
+/// Returns visibility mask and solo status of panel nodes.
 fn shape(p: &mut Panel) -> (Vec<bool>, bool) {
     p.solve();
     let ids: Vec<NodeId> = p.nodes().iter().map(|n| n.id).collect();
@@ -284,9 +281,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
         )
     });
 
-    // **Step one of the real route.** `claim` is what the window loop asks
-    // before anything acts, and a press it hands to `egui` never reaches the
-    // control at all.
+    // Step 1: `claim` intercepts pointer input before UI dispatch.
     let on_the_pill = point_of(pill.pill.center());
     assert_eq!(
         claim(&mut p, &ctx, &view, on_the_pill),
@@ -295,10 +290,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
          from this control exists however it is drawn"
     );
 
-    // **Step two**: what the press asks for, off the same derivation `claim`
-    // hit-tested. Opening a menu is not an operation and never will be — no
-    // MIDI map and no MCP call could want to say it — so this arm is the
-    // affordance, and the rows below are where the vocabulary starts.
+    // Step 2: Query control intent; opening a menu is a local affordance.
     match pill.ask(&view.arrangement, on_the_pill) {
         Some(Ask::Open) => view.arrangement.opened(),
         other => panic!(
@@ -323,9 +315,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
          nothing and this pass would report every row unreached whatever the control does"
     );
 
-    // **Step three**: the caller performs it, which is what an `Op` arriving
-    // from a control means — the pill holds no authority and applies nothing
-    // (P-0090).
+    // Step 3: Dispatch operation; controls yield intent without direct execution authority (P-0090).
     for row in 0..open.rows {
         match open.ask(&view.arrangement, point_of(open.row(row).center())) {
             Some(Ask::Panel(op)) => {
@@ -388,9 +378,7 @@ fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
          `{SECTION}` from this control exists however it is drawn"
     );
 
-    // **Step two**: what the press asks for, off the same derivation `claim`
-    // hit-tested. **Step three**: the caller performs it — the pill holds no
-    // authority and applies nothing (P-0090).
+    // Step 2 & 3: Query and dispatch operation without local authority (P-0090).
     let op = head.op();
     let outcome = p.op(op);
     p.solve();

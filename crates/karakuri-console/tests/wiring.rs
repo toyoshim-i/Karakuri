@@ -143,17 +143,13 @@ fn a_uses_line_sits_between_the_head_and_the_rows() {
         line.row.contains_rect(line.chip),
         "the capsule is not inside the line it is drawn on"
     );
-    // **The capsule is against the right of the line**, which is `.sep`'s
-    // `flex: 1` — the node head's arrangement one row up.
+    // The capsule aligns right against the row boundary via `.sep { flex: 1 }`.
     assert!(near(line.row.max.x - line.chip.max.x, size::PARAM_PAD_R));
-    // **And a group with no input has no line**, which is most of them.
+    // Groups without inputs produce no `uses` line.
     assert_eq!(laid.uses_line(&ctx, &pane, 1, 0, false), None);
     assert_eq!(laid.uses_line(&ctx, &pane, 0, 1, false), None);
 
-    // **The rows below it step past it**, which is the property and not the
-    // line's own box: `param_rect` and `uses_rect` are two walks down one group
-    // and a row that did not count the line is drawn *on* it. Asserted against
-    // the mark, because the mark is what `param_rect` places.
+    // Subsequent rows are offset below the `uses` line.
     let first = laid.publish_mark(&pane, 0, 0).expect("the first row");
     assert!(
         first.min.y >= line.row.max.y,
@@ -212,8 +208,7 @@ fn the_card_is_shut_until_it_is_opened() {
     let first = open.row_at(room, 0).expect("its one row");
     assert!(card.contains_rect(first));
     assert_eq!(open.row_at(room, 1), None, "a row past the end of the card");
-    // **It hangs down**, which is where this control sits: the Library bay's
-    // hangs up out of a bay's foot and this one is inside a pane's body.
+    // The open card extends downward below the capsule inside the pane body.
     assert!(
         card.min.y >= open.chip.max.y,
         "the card is over the capsule rather than under it"
@@ -305,9 +300,7 @@ fn taking_a_control_off_names_the_rest_in_interface_order() {
     );
 }
 
-/// A press on an unpublished row's mark puts it back at the end of the list,
-/// which is a decision and not an accident: nothing says where it was, and
-/// inventing a place would move knobs nobody pressed anything about.
+/// Verifies that republishing a control appends it to the end of the controls list.
 #[test]
 fn putting_a_control_back_lands_it_at_the_end() {
     let pane = mock();
@@ -365,8 +358,7 @@ fn an_unpublished_row_has_no_fader() {
 
     // The row is there — this is the whole reason it stays.
     assert!(off.width() > 0.0);
-    // **A one-pixel sweep**, because a knob is about ten pixels wide and a
-    // coarse walk across a row can step over one.
+    // 1px horizontal sweep ensures narrow fader handles (~10px) are detected.
     let sweep = |y: f32| -> Vec<f32> {
         let mut found = Vec::new();
         let mut x = laid.body.min.x;

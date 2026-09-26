@@ -197,18 +197,13 @@ pub fn outputs_with_plugin_name(
     let row = to_egui(layout.rect(layout.find("outputs")?));
     let id = layout.find("program-view")?;
     let label = ctx.fonts_mut(|f| f.layout_job(label_job(Color32::PLACEHOLDER)).size().x);
-    // **The class pill's own word**, measured the way every capsule on this
-    // console is: `.pill` is as wide as what is in it, and the two states are
-    // not the same width.
+    // Measure class pill based on open state.
     let opened = open.holds(Class::InputsAndOutputs);
     let pill = pill_width(ctx, mcp_word(opened));
 
     let custom_0_name = plugin_name.unwrap_or(PLUGIN_0_NAME);
 
-    // **Every chip's name is measured, not just the first.** A capsule is as
-    // wide as what is in it, so where the third starts depends on what the
-    // second says — the same rule the class pill above made this row take for
-    // its first chip, four times over.
+    // Measure label widths for all four sink chips.
     let widths: [f32; 4] = std::array::from_fn(|i| {
         let word = match i {
             0 => PROGRAM_VIEW,
@@ -287,7 +282,7 @@ fn outputs_row(row: Rect, label_w: f32, pill_w: f32, name_w: [f32; 4]) -> Option
         Pos2::new(label.max.x + size::OUTPUTS_GAP, mid - size::PILL_H * 0.5),
         egui::vec2(pill_w, size::PILL_H),
     );
-    // **The chips, left to right from the pill, one `.outputs` gap apart.**
+    // Layout chips horizontally left-to-right from the MCP pill.
     let mut x = mcp.max.x;
     let chips: [(Rect, Rect); 4] = std::array::from_fn(|i| {
         let chip = Rect::from_min_size(
@@ -331,9 +326,7 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     let galley = painter.layout_job(label_job(pal.faint));
     painter.galley(row.label.min, galley, pal.faint);
 
-    // **The class pill, painted exactly as a bay head's is** — the same
-    // [`pill_at`] the other three go through, in a row that has no head to put
-    // it in. See [`Outputs::mcp`].
+    // Renders the class pill matching bay head style.
     pill_into(ui, pal, row.mcp, mcp_word(row.open), row.open);
 
     // Renders program view and auxiliary sink chips according to state (present, on, absent).

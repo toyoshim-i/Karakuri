@@ -67,8 +67,7 @@ pub fn arrangement() -> Spec {
     )
 }
 
-/// The arrangement, built. Every caller wants the [`Layout`], not the [`Spec`];
-/// the `Spec` is public because it is the thing that is *read*.
+/// Returns the constructed console layout.
 pub fn layout() -> Layout {
     Layout::new(arrangement())
 }
@@ -145,8 +144,7 @@ fn inspector() -> Spec {
         ],
     )
     .named("inspector")
-    // Flexible: the inspector is what gives height to the program and takes it
-    // back, which is the other half of "sized by height".
+    // Flexible inspector pane absorbing vertical space under the program bay.
     .flex(1.0)
     // Inspector min height (151.5px): head, half-head, deck-head, node-head, and 2 parameter rows.
     .min(
@@ -168,9 +166,7 @@ fn right_pane() -> Spec {
                 .fixed(316.0)
                 .min(316.0)
                 .max(f32::INFINITY),
-            // Minimum: bay head 27, `.master-body` padding 8 + 10, the out row
-            // 16.5, an 8px gap and one `.fx` at 4 + 16.5 + 4. The out fader
-            // and one effect is the least that is still a chain.
+            // Master minimum height (94px): bay head 27, padding 18, out row 16.5, gap 8, and one fx slot 24.5.
             Spec::view("master").flex(1.0).min(94.0),
             // Sequencer bay: natural height 178px; minimum 119.5px holding ruler, one lane, and footer.
             Spec::view("sequencer").fixed(178.0).min(119.5),
@@ -183,6 +179,5 @@ fn right_pane() -> Spec {
     .fixed(400.0)
     // Minimum width 172px: fits four mixer strips side-by-side with padding and gaps.
     .min(172.0)
-    // No maximum, for the reason the left pane and the centre have none.
     .max(f32::INFINITY)
 }

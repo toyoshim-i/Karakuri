@@ -128,9 +128,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
         );
     }
 
-    // **The ground under the last row**, which is where the list stops and the
-    // foot has not started.
-    //
+    // Space below the last row, before the foot.
     let below = bay.row(bay.rows - 1);
     let ground = Point::new(below.center().x, below.max.y + size::LIB_ROW_H * 0.5);
     assert!(
@@ -170,9 +168,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
         "a press below the list took a Set the bay never drew"
     );
 
-    // **And a listing shorter than the rows drawn takes nothing**, which is
-    // the refusal that makes handing the listing in worth doing: a row index
-    // answered bare would name a Set nobody can see.
+    // Rows beyond the listing length hit-test to None.
     assert_eq!(
         bay.take(Rows::NONE, row(&bay, 0)),
         None,
@@ -216,7 +212,7 @@ fn a_press_on_an_open_reading_takes_nothing_in_hand() {
         );
     }
 
-    // **And the rows under it are still their own**, pushed down by the block.
+    // Rows below the reading remain unchanged, shifted down by the block height.
     for index in (block.under)..bay.rows {
         let taken = bay
             .take(listed(&view.library), row(&bay, index))
@@ -301,8 +297,7 @@ fn a_drop_on_a_strip_asks_to_load_that_strips_deck() {
     let bay = bay(&panel, &view);
     let strips = strips_bay(&panel, &ctx, &view);
 
-    // **Where the press was made is over no strip**, so a destination
-    // resolved there is `None` for every row and every deck.
+    // Presses outside any strip resolve to None for all rows and decks.
     for index in 0..bay.rows {
         assert_eq!(
             strips.dropped(row(&bay, index)),
@@ -387,8 +382,7 @@ fn a_drop_on_a_live_deck_still_asks_for_the_load() {
         "a drop on the deck the room is watching was refused by the panel"
     );
 
-    // **The same points, every residency turned over.** If anything in the
-    // destination read a tally, one of these four would answer differently.
+    // Verifies destination points across inverted strip residencies.
     let mut turned = view.mixer.clone();
     for (slot, strip) in turned.iter_mut().enumerate() {
         strip.tally = [
@@ -637,9 +631,7 @@ fn one_rectangle_is_marked_and_it_is_the_one_the_release_names() {
     let (mut view, mut panel, ctx) = with_cells(&strips());
     let bay = bay(&panel, &view);
     let cells = program(&panel, &view);
-    // **The eight rectangles, taken off the two bays before anything is
-    // drawn**: `Mixer` borrows the strips the view holds, and `View::draw`
-    // takes it by `&mut`.
+    // Target rectangles across both bays pre-sampled before View::draw mutable borrows.
     let targets: Vec<Point> = {
         let strips = strips_bay(&panel, &ctx, &view);
         (0..4u8)

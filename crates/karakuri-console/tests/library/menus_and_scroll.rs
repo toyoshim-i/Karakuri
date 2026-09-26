@@ -113,8 +113,7 @@ fn the_row_menu_offers_the_drawn_decks_and_always_the_send() {
         "the separator answered a press"
     );
 
-    // **A console the mixer is drawing nothing for**, which is where this card
-    // and the pulldown's differ: the send is still there to pick.
+    // Send option remains selectable even when mixer strips are absent.
     let mut bare = View::new(Room::Day);
     bare.library = mock();
     bare.scopes = Scope::ALL.to_vec();
@@ -148,9 +147,7 @@ fn a_row_menu_pick_names_its_deck_and_its_own_row_and_moves_no_mark() {
     let menu = bay
         .menu(&ctx, viewport(&panel), view.menued())
         .expect("the menu is down");
-    // **Deck C's item and not deck A's**, which is what makes this a reading
-    // of the item rather than of a default: a card that named the first deck
-    // whatever was pressed would answer deck A and pass a test written on it.
+    // Select Deck C to verify the item is resolved rather than defaulting to Deck A.
     let want = Operation::LoadSet {
         deck: 2,
         set: "night01".to_owned(),
@@ -349,9 +346,7 @@ fn a_row_cut_by_an_edge_is_drawn_and_is_not_counted() {
     let panel = console(PLAUSIBLE);
     let sets = long();
 
-    // **A whole number of rows of scroll leaves the top flush**, which is the
-    // control the cut case is read against: nothing is hanging over the top
-    // edge here, so whatever the count does below is the top edge's doing.
+    // Scrolling by exact multiples of row height aligns the top row flush with the view.
     let flush = bay_at(&panel, &sets, None, size::LIB_ROW_H * 2.0);
     assert!(
         near(flush.row(flush.drawn().start).min.y, flush.list.min.y),
@@ -383,9 +378,7 @@ fn a_library_position_survives_the_bay_growing_and_shrinking() {
     let short = console(SMALLEST);
     let tall = console(PLAUSIBLE);
     let mut view = View::new(Room::Day);
-    // **A listing a tall bay holds whole and a short one does not**, which is
-    // the pair this is about: the stored position has to be past what the
-    // short bay can use, so that a clamp written back would show.
+    // Stored scroll offset exceeds short bay capacity to verify clamp persistence.
     view.library = (0..20).map(|n| format!("set{n:02}")).collect();
     view.scopes = Scope::ALL.to_vec();
     // Far past anything either bay can use, and it lands at the content —

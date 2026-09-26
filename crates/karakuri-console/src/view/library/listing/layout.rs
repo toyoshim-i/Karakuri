@@ -28,9 +28,7 @@ impl LibraryBay {
         let first = (0..self.total).find(|index| touching(*index));
         match first {
             None => 0..0,
-            // **From the first one that touches, and it is a run**: every row
-            // after it either touches or is below the list, so the end is the
-            // first that does not.
+            // Contiguous range of rows intersecting the visible listing area.
             Some(first) => {
                 let end = (first..self.total)
                     .find(|index| !touching(*index))
@@ -75,9 +73,7 @@ impl LibraryBay {
         p: karakuri_layout::Point,
     ) -> Option<Operation> {
         let p = Pos2::new(p.x, p.y);
-        // **The star's own box, inside the list** — `at_row`'s bound stated on
-        // the smaller rectangle: a star belongs to a row, and a row off the
-        // top of the list has one.
+        // Star must be hit within the visible list bounds.
         let row = self
             .drawn()
             .find(|index| self.list.contains(p) && self.star(*index).contains(p))?;
@@ -129,9 +125,7 @@ impl LibraryBay {
         };
         let (word, mark) = (run(LOAD_PILL), run(at.letter()));
         let mid = self.foot.center().y;
-        // **The pulldown**, and the gap inside it between the letter and the
-        // chevron is the one gap the mock states inside a capsule — the same
-        // `.sink` gap `arr · night ▾` puts between its words and its mark.
+        // Deck pulldown capsule with sink gap before chevron.
         let deck = self.pill(size::PILL_PAD_X * 2.0 + mark.x + size::SINK_GAP + CHEVRON_W);
         let letter = Rect::from_min_size(
             Pos2::new(deck.min.x + size::PILL_PAD_X, mid - mark.y * 0.5),
@@ -141,7 +135,7 @@ impl LibraryBay {
             Pos2::new(deck.max.x - size::PILL_PAD_X - CHEVRON_W * 0.5, mid),
             egui::vec2(CHEVRON_W, CHEVRON_H),
         );
-        // **The label, on the foot's own ground and on neither capsule.**
+        // Arrow indicator between load button and deck pulldown.
         let arrow = Rect::from_center_size(
             Pos2::new(deck.min.x - size::LIB_FOOT_GAP - LOAD_ARROW * 0.5, mid),
             egui::vec2(LOAD_ARROW, LOAD_ARROW),
@@ -163,8 +157,7 @@ impl LibraryBay {
             deck,
             letter,
             chevron,
-            // **Zero while it is shut**, which is what stops [`Load::row`]
-            // handing out a rectangle for a list nobody opened.
+            // Menu rows are zero while pulldown is closed.
             rows: match at.open {
                 true => at.decks,
                 false => 0,
@@ -268,10 +261,7 @@ impl LibraryBay {
             })
         };
         let loads = at.decks.min(DECKS);
-        // **The send is measured only where it is drawn**, which is
-        // [`Menued::sends`]: a card as wide as `Save as a kbset` with no such
-        // item in it would be a menu whose width said what it holds and was
-        // wrong.
+        // Measure save item width only when present (ADR-0338).
         let widest = (0..loads)
             .map(|deck| width(&load_item(deck as u8)))
             .chain(at.sends.then(|| width(MENU_SAVE)))

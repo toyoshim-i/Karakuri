@@ -179,10 +179,7 @@ impl Address {
     }
 }
 
-/// Which bay the keyboard is talking to, and what each bay remembers.
-///
-/// One pointer and nine addresses. The pointer is the dashed ring the mock
-/// draws; an address is the solid one, seen once per bay.
+/// Tracks focused bay and remembers internal navigation addresses across bays.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Focus {
     /// Name of currently focused bay, or `None` to default to first traversal bay (ADR-0259).
@@ -277,10 +274,7 @@ pub enum Addressed {
         nth: usize,
         control: Control,
     },
-    /// A rung under one of the bay's own controls, in a bay whose items are its
-    /// controls: the number of the control the address descended through, then the
-    /// number of the row under it and which row it is. The Transport's two cards
-    /// are the ones of these.
+    /// Control within a card opened from a headless bay control (e.g. Transport cards).
     InCard {
         through: usize,
         nth: usize,
@@ -320,10 +314,7 @@ pub fn addressed(
             .get(nth.checked_sub(1)?)
             .copied()
             .map(|control| Addressed::OfHead(nth, control)),
-        // **The rung under a head control**, which the Sequencer's chooser is
-        // the one of: it is matched before the item arms below because `HEAD`
-        // is zero and a path of three digits starting with one would otherwise
-        // read as an item, a control and a thing under it.
+        // Rung under head control (e.g. Sequencer chooser).
         [HEAD, through, nth] => {
             let above = built.head.get(through.checked_sub(1)?).copied()?;
             built
@@ -335,10 +326,7 @@ pub fn addressed(
                     control,
                 })
         }
-        // **The rung under one of a headless row's own controls**, which the
-        // Transport's two cards are: the control rung is the first, so a card
-        // it puts down is the second. A card that is not down draws no rows,
-        // so `drawn` answers zero and this resolves to nothing.
+        // Rung under headless row control (e.g. Transport modal cards).
         [through, nth] if matches!(built.items, Items::Controls(_)) => {
             let above = built.item().nth(through, items)?;
             built
@@ -439,25 +427,14 @@ pub enum Asked {
     /// The picture's on and off, which is one press asking for two things: the
     /// operation that names the output, and the fold that carries it out.
     Routed(Operation, Op),
-    /// A level, and which way the press went. The host reads the value off the
-    /// world and names the destination, because the size of a step and the clamp on
-    /// it are its arithmetic and `karakuri-cli`'s.
+    /// Stepped level adjustment dispatched to the host.
     Stepped { level: Level, step: Step },
-    /// The Library head's scope, stepped — the host performs it and re-reads the
-    /// listing, which is a directory read and not a thing this crate can do at all
-    /// (ADR-0156).
+    /// Steps Library head scope; host refreshes listing (ADR-0156).
     Scope,
-    /// The Set under the Library's cursor, loaded onto the selected deck — the
-    /// host's for the scope's reason, and because a preset row is taken into the
-    /// store on the way.
+    /// Loads selected Set onto active deck via host.
     Load,
-    /// A press on the audio-in pill or on one of its rows, in that control's own
-    /// words. The host performs it through the method a pointer press already
-    /// reaches, because opening the card enumerates the machine's inputs and this
-    /// crate takes no device (ADR-0156).
+    /// Dispatches audio input action to host (ADR-0156).
     Listened(AudioAsk),
-    /// A press on the arrangement pill or on one of its menu rows, in that
-    /// control's own words. The host performs it through the method a pointer press
-    /// already reaches: the names filed are a directory and the save writes a file.
+    /// Dispatches arrangement action to host.
     Arranged(Ask),
 }

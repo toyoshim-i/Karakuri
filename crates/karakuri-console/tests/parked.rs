@@ -16,8 +16,7 @@ use karakuri_console::view::{
 use karakuri_layout::NodeId;
 use karakuri_operation::BlendMode;
 
-/// A strip that is where it was asked to be — the ordinary case, and what every
-/// other test file in this crate is made of.
+/// Helper constructing a settled strip with the specified tally.
 fn settled(tally: Tally) -> Strip {
     Strip {
         name: "glass_shell".to_owned(),
@@ -192,10 +191,7 @@ fn a_settled_strip_is_still_and_asks_for_nothing() {
         let mut panel = arrangement();
         let mut view = View::new(Room::Day);
         view.mixer = vec![settled(tally)];
-        // **Whether the bay is drawn or folded**, because a slot that is not
-        // parked has nothing to declare either way — the fold is what stops a
-        // *pending* thing being paid for, and it is not a second reason to be
-        // still.
+        // Settled strips request no animation frames whether the mixer bay is drawn or folded.
         assert_eq!(
             view.animating(panel.layout()),
             None,

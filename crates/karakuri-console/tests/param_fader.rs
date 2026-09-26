@@ -494,9 +494,7 @@ fn a_row_the_body_does_not_reach_is_not_reachable() {
     let first_row = knob(&whole, &pane, 1, 0).center();
     let second_row = knob(&whole, &pane, 1, 1).center();
 
-    // The body cut **through** the second group, between its two rows: the
-    // group is still drawn, so `InspectorPane::drawn` has nothing to say about
-    // either point and what refuses the lower one is the body itself.
+    // Body bounds clipped between the second group's rows, testing body boundary rejection.
     let clipped = InspectorPane {
         body: egui::Rect::from_min_max(
             whole.body.min,

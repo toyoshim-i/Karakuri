@@ -321,10 +321,7 @@ fn every_panel_route_the_page_marks_built_is_emitted_by_a_console_control() {
     let reads = reads();
     let src = code_of_src();
     for (title, _, home) in claimed {
-        // **A row the page marks `read` may be met by a drawing instead**, and
-        // only by one this file can name and find. See [`DRAWN`]: a readout is
-        // answered without being asked, so there is no gesture to emit at, and
-        // the check is given a second way to be met rather than relaxed.
+        // Rows marked `read` may be satisfied by rendered readout drawings (see DRAWN).
         let drawn = reads.contains(title.as_str())
             && DRAWN
                 .iter()

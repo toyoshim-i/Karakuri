@@ -178,10 +178,7 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
         Claim::Egui,
         "the word OUTPUTS is a heading and is being treated as a control"
     );
-    // **And the class pill beside it is one**, which is this row's second
-    // control and the only one on the console that is not an operation at
-    // either end — `tests/mcp_pill.rs` is where it is all asserted, and this
-    // is the row saying it has two things in it a press can land on.
+    // The adjacent class pill claims pointer events as an interactive control.
     assert_eq!(
         claim(&mut panel, &ctx, &showing(&[]), at(sink.mcp.center())),
         Claim::Panel,
@@ -243,8 +240,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
     assert_eq!(fresh.cumulative_pass_nr(), 0);
     assert_eq!(outputs(&fresh, panel.layout(), Open::CLOSED), None);
 
-    // And the claim rule falls back to what it was: the pointer is over the
-    // outputs row, which without a control on it is `egui`'s.
+    // Without drawn controls, pointer events across the outputs row fall through to egui.
     let row = rect_of(panel.layout(), "outputs");
     let middle = Point::new(row.x + row.w * 0.5, row.y + row.h * 0.5);
     assert_eq!(
@@ -406,7 +402,7 @@ fn folding_through_the_dot_and_back_restores_the_arrangement() {
         "the deck previews are auditions of their own and swelled when the picture went"
     );
 
-    // On: exactly what it was, rectangle for rectangle.
+    // Toggling back restores original layout rectangles identically.
     let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
     panel.op(sink.op());
     panel.solve();
@@ -676,9 +672,7 @@ fn a_chip_asks_for_the_output_it_names() {
         })
     );
 
-    // **A plugin chip asks for nothing and takes no press**, which is what
-    // `no plugin` means: there is no manifest to read a sink out of, so the
-    // chip explains rather than switches.
+    // Uninstalled plugin sink chips remain inert and emit no route operations.
     for chip in &row.more[1..] {
         assert!(!chip.present, "{} is drawn as an absent sink", chip.name);
         assert_eq!(chip.route(), None);

@@ -53,8 +53,7 @@ fn a_row_carries_the_words_of_the_layers_it_implements() {
     );
     assert!(!rows.procedure(0), "a Set row says it is a procedure");
 
-    // **The star, the reading and the send take a Set and a procedure row hands
-    // them nothing**, which is one question rather than three.
+    // Procedure rows yield None for Set lookups.
     assert_eq!(rows.set(0), Some("drift_night"));
     assert_eq!(rows.set(2), None, "a procedure row was offered as a Set id");
     assert_eq!(rows.set(9), None, "a row past the end was offered as a Set");
@@ -390,10 +389,7 @@ fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
             asked,
             karakuri_operation::Operation::ListSets {
                 holds: want.map(str::to_owned),
-                // **The layer goes out unset and the field it came from is
-                // gone**: `Operation::ListSets` keeps the field for
-                // `list_sets` and `--list-sets`, and this console stopped
-                // asking it (ADR-0338).
+                // Layer filter is omitted per ADR-0338.
                 layer: None
             },
             "the `holds` field stepped from {set:?} to something else"
@@ -510,9 +506,7 @@ fn the_filter_fields_clear_every_boundary() {
         );
     }
 
-    // **And the pixel past the row's right-hand padding is still a
-    // boundary's**, which is what says the clearances above are clearances
-    // rather than the grab having gone missing.
+    // The pixel past the row padding remains within the boundary grab zone.
     let row = bay.filters.expect("the bay draws its filter row");
     assert!(
         matches!(
@@ -547,8 +541,7 @@ fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
         "narrowing to what it was already narrowed to moved something"
     );
 
-    // **A `holds` this console cannot draw is refused, and refused whole**:
-    // the kinds beside it are not written either.
+    // Refuse unrecognized holds filter values atomically without mutating kind filters.
     assert!(
         !view.narrow(Some("no_such_node"), LibraryKinds::EVERYTHING),
         "a filter the field cannot draw was accepted"
@@ -556,8 +549,7 @@ fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
     assert_eq!(view.filters().holds_word(), "soft_points");
     assert_eq!(view.filters().kinds, cameras);
 
-    // **The candidates go, and the field reads unset** — not `drift_shell`,
-    // which is what clamping would have answered.
+    // Discarding candidates resets the holds field to unset rather than clamping.
     view.holds = vec!["drift_shell".to_owned()];
     assert_eq!(view.filters().holds_word(), HOLDS_UNSET);
     assert_eq!(view.filters().holds, None);

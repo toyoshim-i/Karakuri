@@ -67,10 +67,7 @@ fn running() -> Transport {
         budget_ms: Some(16.6),
         chain_ms: None,
         health: Some(karakuri_console::view::Stage::Landed),
-        // **Nobody has said whether a recording is running**, so no `rec`
-        // pill is drawn — the console's own answer for a program that never
-        // told it, and what every test in this crate that does not say
-        // otherwise draws.
+        // Unset recording state omits the rec pill.
         rec: None,
     }
 }
@@ -110,8 +107,7 @@ fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
         .iter()
         .filter(|at| roll_moves_in(Phase::since(**at)) > ROLL_STALENESS)
         .collect();
-    // **What the declared rate alone asks for over the same second**, which is
-    // what this window did before ADR-0283 and is the number being beaten.
+    // Baseline frame count based purely on declared staleness rate across one second (ADR-0283).
     let at_the_declared_rate = (0..)
         .map(|step| ROLL_STALENESS * step)
         .take_while(|at| *at < ROLL_PERIOD)
@@ -131,9 +127,7 @@ fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
         resting.len()
     );
 
-    // **One of the fourteen is drawn at rest**, and it is the frame that
-    // discovers the rest rather than a frame spent in it: the thirteen before
-    // it are the travel, and the next one is a whole period later.
+    // Exactly one frame is rendered at rest to discover the resting state following travel.
     assert_eq!(
         resting.len(),
         1,
@@ -242,9 +236,7 @@ fn the_beat_keeps_its_rate_through_the_rolls_rest() {
         );
     }
 
-    // **And it is the beat that is holding it there**: folding the transport
-    // row away leaves the mixer's answer alone, which is where the rest shows
-    // up again.
+    // Folding the transport row reveals the mixer's resting animation schedule.
     let mut panel = panel;
     let transport = panel
         .layout()

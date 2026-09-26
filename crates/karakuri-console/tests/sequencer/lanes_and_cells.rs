@@ -44,9 +44,8 @@ fn the_bay_is_laid_out_under_its_head_and_stays_inside_the_card() {
         bay.ruler.max.y <= row.cells[0].min.y,
         "the ruler is over the rows it counts"
     );
-    // **What this bay claims**, which is what `input::PROBES` registers a
-    // bound for: a cell per drawn step, a label and a minus per lane, the mode
-    // pill, the four bank pills in the bay head and the foot's `+ lane`.
+    // Controls registered with `input::PROBES`: a cell per drawn step, lane label and minus,
+    // mode pill, four bank pills, and footer `+ lane`.
     assert_eq!(
         bay.controls(),
         SLOTS + 3 + BANKS + 1,

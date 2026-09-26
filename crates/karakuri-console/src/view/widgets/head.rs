@@ -134,9 +134,7 @@ impl Head {
             words[len] = pill;
             len += 1;
         }
-        // **The banks sit between the table's controls and the class pill**,
-        // which keeps the class pill rightmost — the rule this type's own
-        // documentation states and reads off the mock.
+        // Bank capsules sit between table controls and the class pill, keeping class rightmost.
         if let Some(at) = self.banks {
             for (bank, word) in BANK_PILLS.iter().enumerate() {
                 words[len] = word;

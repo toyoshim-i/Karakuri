@@ -43,7 +43,7 @@ fn shapes(view: &mut View, panel: &mut karakuri_console::panel::Panel) -> Vec<eg
     out.shapes.into_iter().map(|c| c.shape).collect()
 }
 
-/// Every text the console paints, with where it was painted.
+/// Collects all painted text elements paired with their positions.
 fn texts(view: &mut View, panel: &mut karakuri_console::panel::Panel) -> Vec<(egui::Pos2, String)> {
     shapes(view, panel)
         .into_iter()
@@ -154,10 +154,7 @@ fn the_state_word_is_what_the_cell_actually_distinguishes() {
         );
     }
 
-    // **With a slot behind every cell and one of them stopped.** The picture
-    // is unchanged — the cell is still showing that slot's target, which is
-    // the frame it stopped at — so the word is the only thing that moved, and
-    // the cells beside it must not move with it.
+    // Overloaded slot updates caption text without affecting adjacent cells.
     let mut view = with_material();
     view.overloaded[1] = true;
     let painted = texts(&mut view, &mut panel);
@@ -173,9 +170,7 @@ fn the_state_word_is_what_the_cell_actually_distinguishes() {
         );
     }
 
-    // **And a mark against a cell with no slot behind it says `no slot`.** A
-    // stopped slot that is not there is nothing, and the cell says which
-    // nothing it is (ADR-0258).
+    // Cells without assigned slots display `no slot` (ADR-0258).
     let mut view = View::new(Room::Day);
     view.overloaded = [true; 4];
     let painted = texts(&mut view, &mut panel);

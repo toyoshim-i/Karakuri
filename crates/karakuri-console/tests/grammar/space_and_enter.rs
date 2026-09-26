@@ -51,8 +51,7 @@ fn space_on_a_state_names_the_state_the_chip_would_name() {
     }
 }
 
-/// On a level the one state worth naming is the value it was declared at, which
-/// is the clause ADR-0259 buys with an argument rather than finds.
+/// Space key on a level resets to its declared default value (ADR-0259).
 #[test]
 fn space_on_a_level_is_the_value_it_was_declared_at() {
     let (panel, mut view) = console();
@@ -408,8 +407,7 @@ fn a_folded_bay_holding_focus_wears_the_mark() {
         "the mark is not the width of the bay it stands for: {mark:?} against {ring:?}"
     );
 
-    // **And a bay nobody folded wears none**, whatever else is folded: the bit
-    // this reads is the operator's own fold and not *is this drawn*.
+    // An unfolded bay displays no folded mark regardless of other bays' fold states.
     focus_on(&mut view, &panel, "mixer");
     assert!(view.folded_mark(&panel).is_none());
 }

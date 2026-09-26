@@ -218,8 +218,7 @@ fn the_grab_keeps_its_offset_so_the_value_does_not_jump() {
         "a press that moved nothing changed the value, so the grab did not keep its offset"
     );
 
-    // Ten pixels up the track is ten pixels' worth of value up from where the
-    // fader **was**, and a fader fills from the bottom.
+    // Moving 10px up the track shifts value upward from initial position (fills from bottom).
     let moved = egui::pos2(held.x, held.y - 10.0);
     let value = asked(panel.moved(point(moved))).expect("a move up the track asks for a value");
     assert!(
@@ -271,8 +270,7 @@ fn both_ends_of_both_faders_are_exactly_reachable() {
     );
     panel.released(None);
 
-    // The tall one: a column, filling from the **bottom**, and its fill sits
-    // `VFADER_INSET` inside the well at both ends.
+    // Vertical fader column fills from bottom and is inset by VFADER_INSET at both ends.
     take(&mut panel, &bay, fader.center());
     let floor = egui::pos2(fader.center().x, at.fader.max.y - size::VFADER_INSET);
     let ceiling = egui::pos2(fader.center().x, at.fader.min.y + size::VFADER_INSET);
@@ -534,10 +532,7 @@ fn the_value_the_strip_draws_comes_back_from_the_deck() {
         )));
     }
 
-    // **In the middle of the gesture**, which is where a kept value lives:
-    // the drag has asked for twenty different opacities and nobody has
-    // applied any of them, so the strip is still drawn at the one it was
-    // handed.
+    // During active drag before values are applied, the strip renders at its model value.
     assert_eq!(
         drawn(&mut panel, &strips, at.rect),
         painted,
@@ -564,8 +559,7 @@ fn the_value_the_strip_draws_comes_back_from_the_deck() {
     );
     assert_eq!(after.strip(0).fader_at(strips[0].opacity), was);
 
-    // And the strip **as painted**, which is where a value patched on the way
-    // into the frame would show and the rectangles above would not.
+    // Verify painted rendering matches initial state.
     assert_eq!(
         drawn(&mut panel, &strips, at.rect),
         painted,

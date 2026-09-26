@@ -81,9 +81,7 @@ impl Param {
     }
 
     pub(crate) fn movable(&self) -> bool {
-        // **A control off the interface draws no fader**, which is what
-        // publishing decides: the row is a name and a mark, and there is
-        // nothing on it to take hold of.
+        // Published parameters without MIDI bindings and valid ranges have draggable faders.
         self.ord.is_some() && self.bound.is_none() && self.range[1] > self.range[0]
     }
 }
@@ -372,10 +370,7 @@ pub(crate) fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
             true => 0.0,
             false => size::REND_ROW_H,
         }
-        // **A walk and not a stride, because a row is as tall as what is under
-        // it.** A bound row carries a sensitivity row, so the rows above this
-        // one are not all [`size::PARAM_H`] — which is [`InspectorPane::group`]'s
-        // own reason for walking the groups instead of multiplying, one level in.
+        // Rows vary in height depending on whether sensitivity rows are present.
         + node.params.iter().take(index).map(rows_h).sum::<f32>();
     Rect::from_min_max(
         Pos2::new(group.min.x, top),

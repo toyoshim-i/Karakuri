@@ -113,10 +113,7 @@ fn a_row_with_no_tips_is_one_the_mock_is_silent_about() {
             }
         );
     }
-    // **And there are exactly four of them**, which is the reading rule as a
-    // number: the four above and no other row. The loop is an `iff` per row
-    // and would still pass with a name in `SILENT` that no row has, which is
-    // how a row renamed out of this list stops being checked at all.
+    // Verify exactly the four silent rows have no tooltip entries.
     let empty: Vec<&str> = TIPS
         .iter()
         .filter(|(_, tips)| tips.is_empty())
@@ -134,10 +131,7 @@ const UNEVEN: [(&str, &str, usize); 8] = [
     // and the two plugin chips switch nothing, so `Outputs::chip_at` answers
     // `None` on them and there is nothing for a cite to resolve against.
     ("the Outputs row's sinks", "two of the four chips answer", 2),
-    // **The effect rows are owed**, and to `docs/roadmap.md`'s M5.16 pass 2b
-    // rather than to this milestone: ADR-0340 makes the master chain an
-    // ordered list of kind L5 procedures, and a tip per row of the chain the
-    // mock draws would be a citation of a bay about to be rebuilt.
+    // Effect rows are deferred to milestone M5.16 pass 2b (ADR-0340).
     (
         "the Master bay's five",
         "the chain's rows are M5.16 pass 2b's",
@@ -171,9 +165,7 @@ const UNEVEN: [(&str, &str, usize); 8] = [
         "the card carries no tip",
         1,
     ),
-    // `.auth` is one element the page tips once, and the three chips inside it
-    // are one reading — which is why `AUTHORITIES.len()` is the claim and one
-    // cite is the tip.
+    // The auth group is tipped as a single unit across its three authority chips.
     (
         "a node head's three authority chips",
         "one element over the three",
@@ -351,10 +343,7 @@ fn a_tip_appears_after_the_dwell_and_not_before() {
     // Up, and asking for nothing: the box does not move while it is shown.
     assert_eq!(hover.owed(&ctx, dwell * 2), Tip::Still);
 
-    // **And the frame the dwell runs out on asks for nothing either**, which
-    // is the one frame a `Dwelling(0)` would buy: the caller asks this inside
-    // the pass that paints the tip, so the deadline has already been met by
-    // the frame it is being asked on.
+    // The frame where dwell expires requests no further frames since it is handled during painting.
     let mut fresh = Hover::new();
     fresh.moved(Claim::Panel, &panel, &ctx, &view, at, Duration::ZERO);
     assert_eq!(fresh.owed(&ctx, dwell), Tip::Still);
@@ -382,9 +371,7 @@ fn it_goes_when_the_pointer_leaves() {
     assert_eq!(hover.resting_on().map(|tip| tip.control), None);
     assert_eq!(hover.owed(&ctx, dwell), Tip::Still);
 
-    // **And back on again is a new dwell and not the old tip.** A layer that
-    // took the tip down by forgetting where the pointer was would pass every
-    // line above and show the words again the instant the pointer returned.
+    // Re-entering the control initiates a fresh dwell period rather than reviving the old tip.
     hover.moved(Claim::Panel, &panel, &ctx, &view, at, dwell);
     assert_eq!(
         hover.showing(),
@@ -478,8 +465,7 @@ fn the_tips_midi_line_is_read_off_the_map_and_the_pages_reason_survives() {
         "the mock's own assignment is still in the tip: {live}"
     );
 
-    // **Unmapped keeps the page's words**, because they carry the reason and
-    // no reverse lookup can produce one.
+    // Unmapped controls preserve the documentation's original explanatory text.
     let why = "Which scope the library shows. \u{2295} MIDI: unassigned — a map line names a \
                word from a closed list, and this list grows when a directory is added.";
     assert_eq!(assigned(why, None), why);
@@ -487,9 +473,7 @@ fn the_tips_midi_line_is_read_off_the_map_and_the_pages_reason_survives() {
     let silent = "A control the mock says nothing about.";
     assert_eq!(assigned(silent, Some("cc 5")), silent);
 
-    // **And the constant is the page's own punctuation**, which is the one
-    // thing here that is transcribed: this fails if the mock stops ending its
-    // tips that way, which is what makes the transcription safe.
+    // Validates transcribed MIDI punctuation prefix against documentation source.
     let page = karakuri_console::hover::PAGE;
     assert!(
         page.contains("&#8853; MIDI:"),

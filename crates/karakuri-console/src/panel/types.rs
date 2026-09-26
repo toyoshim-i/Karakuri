@@ -10,13 +10,11 @@ pub(crate) const WORTH_SAYING: f32 = 0.5;
 
 pub struct Node {
     pub id: NodeId,
-    /// How deep in the tree, for a caller that indents. The one thing tree order
-    /// costs to work out and the arena does not store.
+    /// Depth in layout hierarchy tree.
     pub depth: usize,
 }
 
-/// What the pointer has hold of, and there is exactly one of it — see the
-/// module documentation for why this is one `Option` on [`Panel`] and not two.
+/// Currently held drag gesture on [`Panel`].
 #[derive(Debug)]
 pub(crate) enum Drag {
     Boundary(Boundary),
@@ -24,7 +22,7 @@ pub(crate) enum Drag {
     Carry(Carrying),
 }
 
-/// A boundary in hand: which one, and where along it the pointer took hold.
+/// Active boundary divider drag state.
 #[derive(Debug)]
 pub(crate) struct Boundary {
     pub(crate) split: NodeId,
@@ -36,8 +34,7 @@ pub(crate) struct Boundary {
     pub(crate) acted: bool,
 }
 
-/// A fader in hand: the control, its track and the grab — and the last value
-/// this drag asked for.
+/// Active fader drag state.
 #[derive(Debug)]
 pub(crate) struct Fading {
     pub(crate) grab: Grab,
@@ -56,51 +53,40 @@ pub(crate) struct Carrying {
 /// Identifies which fader control is held and maps it to the corresponding operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Knob {
-    /// The trim — the mock's `.trim .fader`, lying down — [`Operation::SetGain`].
+    /// Horizontal gain fader ([`Operation::SetGain`]).
     Trim {
-        /// Which deck's, which is the manual's word for what the code calls a slot —
-        /// the vocabulary's own choice, recorded in ADR-0180: *"The manual's deck is
-        /// the code's slot … the vocabulary takes the manual's word, since the manual
-        /// is its specification."*
+        /// Target deck index (ADR-0180).
         deck: u8,
     },
-    /// The fader — `.vfader`, standing up — [`Operation::SetOpacity`].
+    /// Vertical opacity fader ([`Operation::SetOpacity`]).
     Fader {
-        /// Which deck's, on [`Knob::Trim`]'s terms.
+        /// Target deck index.
         deck: u8,
     },
     /// Master chain output level before tone mapping ([`Operation::SetMasterOut`], ADR-0224).
     Out,
-    /// One declared parameter of one slot of the master chain, on the parameter
-    /// row the Master bay draws for it.
+    /// Master chain parameter fader on specified slot.
     Chain {
-        /// Which slot of the master chain, by its position — the address a chain
-        /// operation takes.
+        /// Slot index within the master chain.
         at: u32,
-        /// The parameter this track moves, by the name the slot's procedure declares
-        /// for it.
+        /// Parameter identifier declared by slot procedure.
         key: String,
-        /// The range the procedure declares the parameter over, low then high. A
-        /// track position is `[0, 1]`, and the operation carries the value at that
-        /// fraction of this range.
+        /// Declared value range `[min, max]`.
         range: [f32; 2],
     },
     /// Published parameter fader in an Inspector pane ([`Operation::WriteParam`], ADR-0280).
     Param {
-        /// Which deck's, on [`Knob::Trim`]'s terms.
+        /// Target deck index.
         deck: u8,
-        /// The control the interface published. A `None` node is a wildcard, and
-        /// `Set::write_param` is where ADR-0223's authority refusal meets it.
+        /// Published interface parameter address.
         param: ParamAt,
-        /// What it was published over. [`Knob::operation`]'s `value` is a track
-        /// position and this is what turns it into a number.
+        /// Declared value range `[min, max]`.
         range: [f32; 2],
     },
 }
 
 impl Knob {
-    /// The operation this knob asks for at `value`, and the whole of the
-    /// translation a fader performs.
+    /// Maps fader position `value` to the corresponding engine [`Operation`].
     pub fn operation(&self, value: f32) -> Operation {
         match self {
             Knob::Trim { deck } => Operation::SetGain {
@@ -112,9 +98,6 @@ impl Knob {
                 opacity: value,
             },
             Knob::Out => Operation::SetMasterOut { out: value },
-            // The operation names the slot by its position and carries what
-            // that one parameter is set to, never a step. The cut a slot reads
-            // is set by a press on the chip and not by a drag on the track.
             Knob::Chain {
                 at,
                 key,
@@ -126,8 +109,6 @@ impl Knob {
                     value: low + (high - low) * value.clamp(0.0, 1.0),
                 },
             },
-            // `crate::view::Param::at` inverted, which is the relation
-            // `Grab::value` has to `crate::view::filled` one field along.
             Knob::Param {
                 deck,
                 param,
@@ -154,22 +135,16 @@ impl Knob {
 pub struct Grab {
     pub(crate) knob: Knob,
     pub(crate) axis: Axis,
-    /// The track's zero end along the axis: the left of a row, and the *bottom* of
-    /// a column, because a fader stands up.
+    /// Origin coordinate of track along its axis (left for rows, bottom for columns).
     zero: f32,
-    /// How far the knob's centre travels between the ends. Positive.
+    /// Knob center travel distance between track endpoints.
     travel: f32,
-    /// Pointer coordinate less the knob's centre, at the moment of the press.
-    /// Subtracted from every later coordinate so the value does not jump to the
-    /// pointer on the first move — [`Boundary::offset`]'s rule on a value instead
-    /// of on a position.
+    /// Pointer grab offset from knob center along track axis.
     offset: f32,
 }
 
 impl Grab {
-    /// A fader taken hold of. `travel` is the length of track the knob's centre
-    /// moves along, and a track with none is refused: a control with nowhere to go
-    /// is not one a hand has hold of.
+    /// Creates a grab state if travel distance is positive.
     pub fn new(knob: Knob, axis: Axis, zero: f32, travel: f32, offset: f32) -> Option<Grab> {
         match travel > 0.0 {
             true => Some(Grab {
@@ -183,7 +158,7 @@ impl Grab {
         }
     }
 
-    /// Which control this is, and which deck's where it is a deck's.
+    /// Returns the controlled knob target.
     pub fn knob(&self) -> Knob {
         self.knob.clone()
     }
@@ -209,20 +184,19 @@ pub(crate) fn unit(at: f32) -> f32 {
 /// High-level panel operations decoupled from input keys or pointer positions (ADR-0175, ADR-0197).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
-    /// Fold this region away.
+    /// Collapse this region.
     Fold(NodeId),
     /// Makes `id` visible, expanding collapsed ancestors and undoing masking solos.
     Unfold(NodeId),
-    /// Fold the split enclosing this region.
+    /// Collapse the enclosing split.
     FoldEnclosing(NodeId),
-    /// Unfold everything folded. A folded region has no rectangle, so the pointer
-    /// cannot reach it to unfold it.
+    /// Expand all collapsed regions.
     UnfoldAll,
     /// Solo this region.
     Solo(NodeId),
-    /// Undo the solo.
+    /// Undo the active solo.
     Unsolo,
-    /// A fresh arrangement, at the same viewport.
+    /// Reset arrangement to default layout at same viewport.
     Reset,
     /// Produces layout placements for diagnostic and test verification (ADR-0164, ADR-0205).
     Report,
@@ -231,23 +205,21 @@ pub enum Op {
 /// What a press found under the pointer.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Pressed {
-    /// A boundary is now in hand, and every later [`Panel::moved`] moves it.
+    /// Divider boundary is grabbed.
     Grabbed {
         split: NodeId,
         index: usize,
         axis: Axis,
-        /// Where the boundary was, along the split's axis.
+        /// Solved position along split axis.
         at: f32,
-        /// Where along it the pointer took hold: the pointer's coordinate less the
-        /// boundary's.
+        /// Pointer grab offset along boundary axis.
         offset: f32,
     },
-    /// A divider the tree cannot produce a pair for, so there is nothing to drag.
-    /// Nothing is in hand.
+    /// Boundary divider without valid pair.
     NoPair { split: NodeId, index: usize },
     /// The interior of a region.
     Region { id: NodeId, rect: Rect },
-    /// Outside the viewport, or somewhere no visible region claims.
+    /// Outside the viewport, or unclaimed area.
     Nothing,
 }
 
@@ -259,14 +231,11 @@ pub enum Dragged {
         split: NodeId,
         index: usize,
         axis: Axis,
-        /// Where the drag asked the boundary to go: the pointer's coordinate along the
-        /// axis, less the offset it grabbed at.
+        /// Target coordinate requested by drag.
         asked: f32,
-        /// Where it went, which is what [`Layout::set_divider`] returned.
+        /// Solved coordinate returned by layout solver.
         landed: f32,
-        /// `Some(by)` when a stop held it, where `by` is `landed - asked` — how far
-        /// short of the ask, and which way. `None` when it landed where it was asked
-        /// to.
+        /// Displacement held by stop constraint if movement was resisted.
         held: Option<f32>,
     },
     /// A boundary drag triggered a fold or unfold operation on a pane.
@@ -281,29 +250,27 @@ pub enum Released {
     Rests {
         split: NodeId,
         index: usize,
-        /// Along the split's axis.
+        /// Coordinate along the split axis.
         at: f32,
     },
-    /// The boundary is no longer there — an operation during the drag folded one of
-    /// the pair away.
+    /// Boundary removed during drag by another operation.
     Gone { split: NodeId, index: usize },
-    /// A fader was released; the last value was already emitted during motion.
+    /// Fader released; final value already emitted during motion.
     Let { knob: Knob },
-    /// A carried item was dropped onto a valid target deck or chain (ADR-0273, P-0090).
+    /// Carried item dropped onto a valid target deck or chain (ADR-0273, P-0090).
     Dropped(Operation),
-    /// A carried item was dropped over no valid landing target.
+    /// Carried item dropped over no valid target.
     Nowhere { set: String },
-    /// The target refused the carried payload (ADR-0273, ADR-0340, P-0083).
+    /// Target refused the carried payload (ADR-0273, ADR-0340, P-0083).
     Refused { set: String, why: &'static str },
 }
 
 /// Target destination where a carried item was released (ADR-0273).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Landing {
-    /// The deck a strip or a preview cell names.
+    /// Target deck index.
     Deck(u8),
-    /// The master chain's list, with what adding the carried row asks for — or the
-    /// reason it asks for nothing, which is a row that is not a `kind L5`.
+    /// Master chain append result or rejection reason.
     Chain(Result<Operation, &'static str>),
 }
 
@@ -311,14 +278,13 @@ pub enum Landing {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility {
     Visible,
-    /// Folded itself.
+    /// Collapsed by fold operation.
     Folded,
-    /// Not folded, but inside something that is.
+    /// Hidden inside a collapsed parent region.
     InsideAFold,
 }
 
-/// One node of the arrangement and where it solved to. What [`Op::Report`]
-/// produces, one per [`Node`], in the same order.
+/// Placed layout node geometry reported by [`Op::Report`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placement {
     pub id: NodeId,
@@ -330,43 +296,35 @@ pub struct Placement {
 /// Result of executing an [`Op`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
-    /// [`Op::Fold`], [`Op::Unfold`] or [`Op::FoldEnclosing`]: `folded` is what the
-    /// node is afterwards, read back out of the layout rather than assumed from the
-    /// operation, and `root` that what folded was the root — so the panel is now
-    /// empty, and only [`Op::UnfoldAll`] brings it back.
+    /// Fold outcome with resulting collapse state and root status.
     Folded {
         id: NodeId,
         folded: bool,
         root: bool,
     },
-    /// [`Op::UnfoldAll`]: everything that was folded, in tree order. Empty when
-    /// nothing was.
+    /// Expanded node identifiers in tree order.
     Unfolded(Vec<NodeId>),
-    /// [`Op::Solo`].
+    /// Region soloed.
     Soloed(NodeId),
-    /// [`Op::Unsolo`]. `was` is false when there was no solo to undo, and nothing
-    /// changed.
+    /// Solo undone; `was` indicates whether a solo was active.
     Unsoloed { was: bool },
-    /// [`Op::Reset`].
+    /// Arrangement reset to defaults.
     Reset,
-    /// [`Panel::restore`]: a saved arrangement has been applied.
+    /// Saved arrangement applied ([`Panel::restore`]).
     Restored,
-    /// [`Op::Report`].
+    /// Layout placement report ([`Op::Report`]).
     Report(Vec<Placement>),
-    /// The operation had no valid target (e.g. [`Op::FoldEnclosing`] on root).
+    /// Operation had no valid target.
     Nothing,
 }
 
-/// What the pointer has hold of, and there is only ever one of them —
-/// [`Panel::in_hand`].
+/// Active drag interaction type ([`Panel::in_hand`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InHand {
-    /// A boundary, and the axis it runs along — which is what a resize cursor is
-    /// drawn from, and the whole of why the axis is here.
+    /// Divider boundary drag along the given axis.
     Boundary(Axis),
-    /// A fader. No axis, because there is no resize cursor for a value: see
-    /// [`Panel::in_hand`].
+    /// Fader parameter drag.
     Fader,
-    /// A Set or procedure carried out of the Library bay.
+    /// Set or procedure carried out of the Library bay.
     Carrying,
 }

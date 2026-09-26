@@ -20,123 +20,70 @@ impl View {
             carried.and_then(|at| program.and_then(|bay| bay.dropped(at, self.mixer.len())));
         let picture = self.picture;
         let previews = self.previews;
-        // **Beside the pictures, and read once for the frame with them**: the
-        // word a caption draws is a function of the pair, so a frame that read
-        // one of them twice could draw a mark against the other's answer.
+        // Deck overload state, read once for consistent caption rendering.
         let overloaded = self.overloaded;
-        // **Beside the pictures, and read once for the frame for their
-        // reason.** What each cell costs and what each cell is showing are two
-        // fields because they arrive from two places — see [`View::costs`].
+        // Frame computation costs per deck cell.
         let costs = self.costs;
         let values = self.transport;
         let arr = &self.arrangement;
-        // **Read once for the frame beside the arrangement**, and for the same
-        // reason: the arrangement pill is laid out from where this one ends,
-        // so a frame that asked twice could lay the two out from two answers.
+        // Audio input settings for pill layout.
         let audio = self.audio.as_ref();
-        // **And the tracker's own three, read once beside it.** The arrangement
-        // pill is laid out from where the octave's second half ends, so a frame
-        // that asked twice could lay the row out from two answers.
+        // Beat tracking state for tracker pill layout.
         let tracking = self.tracker;
-        // **And the map, read once beside the two above and for their reason**:
-        // `learn`, `map` and the arrangement pill are laid out one from the
-        // next, so a frame that asked twice could lay three controls out from
-        // three answers.
+        // MIDI mapping and learn mode states.
         let map = self.map.as_ref();
         let armed = self.learn;
         let look_at = self.look;
         let out = self.master_out;
         let chain = self.master_chain.as_ref();
-        // What `+ add` offers, read once for the frame: the card that is
-        // painted and the card a press lands on are one derivation.
+        // Available chain additions for `+ add` card.
         let adding = self.chain_choices();
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
-        // **And what each of those rows is**, read beside the names for their
-        // reason: the two halves are one listing (`Rows`), and a badge drawn
-        // from a second read could describe a row that had been rewritten
-        // under it (ADR-0338).
+        // Item kind tags aligned with library rows (ADR-0338).
         let kinds = self.kinds.as_slice();
-        // **Which of them are starred, read once for the frame beside the
-        // listing it points into** — `draw` takes `&mut self`, and the arm
-        // below borrows both.
+        // Starred items set snapshot.
         let starred = &self.starred;
         let scopes = self.scopes.as_slice();
-        // **The fifth pointer, read once for the frame** beside the two slices
-        // it borrows from — `draw` takes `&mut self`, and a filter read inside
-        // the arm below would be a second borrow of `holds`.
+        // Active filter criteria.
         let narrowed = self.filters();
-        // **And where this library is pointed, read once beside it** — the
-        // `.path` row is a rectangle in the bay as well as a line of type, so
-        // the derivation and the paint are asked one value, and `draw` takes
-        // `&mut self` where this borrows two fields.
+        // Active library directory path.
         let pointed = self.pointed();
-        // **The sixth, read here for the two above's reason**: it borrows the
-        // listing this frame is drawing, and `draw` takes `&mut self`. It is
-        // the cursor and the reading put together — see [`View::opened`].
+        // Active open library reading.
         let opened = self.opened();
-        // **The two pointers, read once for the frame** beside the readings
-        // they are drawn against — `draw` takes `&mut self` and the arms below
-        // borrow these slices, so a pointer read inside an arm would be a
-        // second borrow of the thing it points into.
+        // Mixer selection and library cursor row snapshots.
         let selection = self.selection();
         let cursor_row = self.cursor_row();
-        // **Where the dashed ring goes, asked once for the frame** beside the
-        // three pointers it is now the same field as — [`View::focus_mark`],
-        // which is the derivation this paints from rather than a second
-        // reading of where focus is.
+        // Active focus indicator position.
         let focused = self.focus_mark(panel);
-        // **And the mark a folded bay wears**, read here for the reason above
-        // it: it is the same pointer asked a second question, and a folded bay
-        // has no rectangle for the ring alone to sit on.
+        // Folded bay focus mark indicator.
         let folded = self.folded_mark(panel);
-        // **The third of them**, and it is read the same way and for the same
-        // reason: which chip is marked is a position in the row this frame is
-        // drawing, and a scope past its end is the last chip there is.
+        // Marked scope chip index.
         let scope = self.marked();
-        // **The fourth, and it is read here for the same reason** — the
-        // transition row is laid out from it and painted from it, and `draw`
-        // takes `&mut self` while the arms below borrow the slices beside it.
+        // Active transition configuration snapshot.
         let transition_at = self.transition;
-        // Target deck for load controls; distinct from active key selection (ADR-0305).
+        // Target deck for load controls (ADR-0305).
         let load = self.target();
         // Active popup card coordinates and states, read once per frame.
         let wiring = self.wiring_open;
         let pane_open = self.pane_open;
         let menued = self.menued();
-        // **And how far the Library bay is scrolled**, read once for the frame
-        // beside the two pointers above it: `library` clamps it and hands the
-        // clamped value back, and this is the stored one going in
-        // (`LibraryBay::scroll`, P-0082).
+        // Library vertical scroll offset (P-0082).
         let scrolled_to = self.library_scroll();
         let waiting = self.staging.as_slice();
-        // **What the Sequencer bay reads, taken once for the pass** beside the
-        // strips it sits under: `draw` takes `&mut self` and the loop below
-        // borrows the fields a reading would be read off.
+        // Sequencer state snapshot.
         let sequenced = self.sequencer.as_ref();
-        // **And what its `+ lane` chooser offers**, taken here for the same
-        // reason and read off three of this console's own values — the strips,
-        // the load pulldown's deck and that deck's published rows.
+        // Sequencer lane addition choices snapshot.
         let choices = self.lane_choices();
         let panes = self.inspector.as_slice();
-        // **The eighth pointer, read once for the frame beside the panes it is
-        // about** — how far each of them is scrolled. It is `Copy` and two
-        // `f32`s wide, and it is read here for the reason the seventh below is:
-        // `draw` takes `&mut self` and the loop already borrows `inspector`.
+        // Inspector pane scroll offsets snapshot.
         let scrolled = self.scroll;
-        // **The seventh pointer, read once for the frame** beside the panes it
-        // points into — `draw` takes `&mut self`, and a head asked inside the
-        // loop below would be a second borrow of the same struct.
+        // Deck name editing prompt state.
         let naming = self.naming.as_ref();
         let phase = self.phase;
-        // **The opening, read once for the pass.** Every head that opens a
-        // class lays its pills out against this one value, so no two capsules
-        // on a frame can be placed against two different states.
+        // Bay drawer opening state snapshot.
         let opening = self.opening;
-        // **What this crate cannot see** — see `Outputs::told`. Copied out
-        // beside `opening` for the same reason: the loop below borrows the
-        // arrangement and the palette, and one `bool` read here is one place
-        // the answer comes from.
+        // Projector and plugin sink states.
         let projector = self.projector;
         let plugin = self.plugin;
         let plugin_available = self.plugin_available;
@@ -349,10 +296,7 @@ impl View {
                             on_air: inspector::on_air(strips, pane.deck),
                             policy,
                             naming: typed,
-                            // **The same derivation `claim` hit-tests**, asked
-                            // here rather than inside the paint because the rows
-                            // it offers are the mixer's, and this loop already
-                            // borrows what a reading of them would come off.
+                            // Pane target derivation matching input hit-test.
                             target: pane_target(
                                 ui.ctx(),
                                 inspector::PaneTargetCtx {

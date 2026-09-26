@@ -366,10 +366,7 @@ fn the_pill_is_drawn_and_says_which_state_it_is_in() {
             )),
             "the {rec:?} pill drew no word: {shapes:?}"
         );
-        // **The mark is drawn rather than typed**, which is `Mask`'s rule: the
-        // mock's `&#9679;` is a glyph nobody here chose a font for, so it is a
-        // circle. A pill that had typed it would draw a second galley and no
-        // circle at all.
+        // The record status dot is rendered as a geometric circle rather than text glyph.
         assert!(
             shapes
                 .iter()

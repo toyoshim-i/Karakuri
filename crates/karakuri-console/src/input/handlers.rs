@@ -53,9 +53,7 @@ pub(super) fn on_audio(panel: &Panel, ctx: &egui::Context, view: &View, p: Point
         .is_some_and(|pill| pill.hit(p))
 }
 
-/// The arrangement pill, laid out from where the audio-in pill ends — which is
-/// why it is asked second: asking in the other order would derive this one from
-/// that one anyway.
+/// Hit-tests the arrangement pill in the transport bar.
 pub(super) fn on_pill(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     arrangement(
         ctx,
@@ -113,8 +111,7 @@ pub(super) fn on_learn(panel: &Panel, ctx: &egui::Context, view: &View, p: Point
     .is_some_and(|pill| pill.hit(p))
 }
 
-/// The `map` pill, which is a readout: the pointer reaches it and a press on it
-/// asks for nothing.
+/// Hit-tests the map pill in the transport bar.
 pub(super) fn on_map(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     map_pill(
         ctx,
@@ -181,10 +178,7 @@ pub(super) fn on_deck_name(panel: &Panel, ctx: &egui::Context, view: &View, p: P
     })
 }
 
-/// The `keep` capsule in each Inspector pane's head, one derivation per pane:
-/// the pane is [`inspector`]'s answer and the capsule is [`keep_pill`]'s, which
-/// is [`on_deck_head`]'s own arrangement one row up. One galley lookup per
-/// pane, for the word in the capsule.
+/// Hit-tests the `keep` capsule in each Inspector pane's head.
 pub(super) fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
@@ -300,10 +294,7 @@ pub(super) fn on_grip(panel: &Panel, _ctx: &egui::Context, _view: &View, p: Poin
         .any(|region| bay_grip(panel.layout(), region.name).is_some_and(|grip| grip.hit(p)))
 }
 
-/// The one control this console has in a bay head, and the only one of the
-/// twenty-three whose capsule a boundary's grab reaches — `view::program_head`
-/// is where that 0.75 of a pixel is measured and argued, and rule 3 above is
-/// what decides it.
+/// Hit-tests the solo capsule in the Program bay head.
 pub(super) fn on_solo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     program_head(ctx, panel.layout(), view.opening).is_some_and(|head| head.hit(p))
 }

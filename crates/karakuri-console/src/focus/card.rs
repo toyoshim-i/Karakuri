@@ -13,42 +13,32 @@ pub(crate) struct Card {
     pub(crate) rows: fn(&View) -> usize,
     /// How `enter` on the control puts it down, and what takes it away.
     pub(crate) puts: Puts,
-    /// What a press addressed below the control says while the card is up: the
-    /// rung is not drawn, and the sentence names the press that draws it.
+    /// Sentence returned when attempting to focus a closed card's row.
     pub(crate) shut: &'static str,
-    /// What `enter` on the control says with the card already down. It names the
-    /// keys that reach the rows.
+    /// Sentence returned when pressing enter on an already-open card control.
     pub(crate) standing: &'static str,
-    /// What a digit that named a row the card is not drawing says.
+    /// Sentence returned when an invalid row digit is entered.
     pub(crate) short: &'static str,
-    /// What an arrow says on a card that is down with nothing on it to walk.
+    /// Sentence returned when navigating an empty card.
     pub(crate) empty: &'static str,
-    /// What `←→` say, naming the pair that walks the rows.
+    /// Sentence returned when horizontal navigation is attempted on vertical card.
     pub(crate) column: &'static str,
-    /// What an arrow says where the address is already at the end.
+    /// Sentence returned when navigating past card boundaries.
     pub(crate) end: &'static str,
-    /// A sentence this card's own state carries in place of [`Card::short`] and
-    /// [`Card::empty`], or `None` for a card with no such state. The arrangement
-    /// menu's is the one: while it is asking for a name it is a field rather than
-    /// a list, and it draws no rows.
+    /// Dynamic refusal sentence when card is in a special busy mode (e.g. naming prompt).
     pub(crate) busy: Option<fn(&View) -> Option<&'static str>>,
 }
 
 /// How a card is put down and taken away.
 #[derive(Clone, Copy)]
 pub(crate) enum Puts {
-    /// This console's own state: the method that puts the card down, the method
-    /// that takes it away, and the sentence for a card with nothing to offer,
-    /// which is what refuses to put it down.
+    /// Local console modal card state.
     Console {
         put: fn(&mut View) -> bool,
         shut: fn(&mut View) -> bool,
         nothing: &'static str,
     },
-    /// The host's: `enter` leaves in the control's own word for it and the host
-    /// puts the card down, through the method a pointer press already reaches
-    /// (ADR-0156). `shut` is still this console's, because `esc` and `Tab` take
-    /// the card away without asking the host for anything.
+    /// Host-managed card state (ADR-0156).
     Host {
         asked: fn() -> Asked,
         shut: fn(&mut View),
@@ -56,8 +46,7 @@ pub(crate) enum Puts {
 }
 
 impl Card {
-    /// What a digit that named a row this card is not drawing says: the card is
-    /// up, its own state is in the way, or it draws fewer rows than that.
+    /// Returns refusal reason for a non-existent digit row.
     pub(crate) fn named(&self, view: &View) -> &'static str {
         match (self.down)(view) {
             false => self.shut,
@@ -65,18 +54,17 @@ impl Card {
         }
     }
 
-    /// What an arrow says on a card that is down and drawing nothing.
+    /// Returns refusal reason when navigating an empty card.
     pub(crate) fn bare(&self, view: &View) -> &'static str {
         self.asking(view).unwrap_or(self.empty)
     }
 
-    /// The sentence this card's own state carries in place of a count's, or
-    /// `None` where nothing is in the way.
+    /// Returns busy state sentence if active.
     pub(crate) fn asking(&self, view: &View) -> Option<&'static str> {
         self.busy.and_then(|state| state(view))
     }
 
-    /// Take this card away. A card that is already up is left as it is.
+    /// Closes the card.
     pub(crate) fn shut(&self, view: &mut View) {
         match self.puts {
             Puts::Console { shut, .. } => {
@@ -87,29 +75,23 @@ impl Card {
     }
 }
 
-/// The sentence a press addressed to a Transport card's rung carries while the
-/// card is up: the rung is not drawn, and `enter` on the pill is the press that
-/// draws it.
+/// Refusal sentence when focusing a closed Transport card's row.
 const CARD_SHUT: &str = "this card is not down, so there is nothing here to name — press enter on \
                          this control to put it down";
 
-/// The sentence a digit carries when a Transport card is drawing fewer rows than
-/// that.
+/// Refusal sentence when digit exceeds Transport card row count.
 const CARD_SHORT: &str =
     "this card is not drawing a row with that number — the digits count what is on it, from one";
 
-/// The sentence `enter` on a Transport pill carries with its card already down.
+/// Refusal sentence on pressing `enter` on an already-open Transport card.
 const CARD_STANDING: &str = "this card is already down — press a digit to name a row, or walk it \
                              with up and down, and enter runs the row the address is on";
 
-/// The sentence the arrangement menu carries while it is a field rather than a
-/// list. The keyboard is the name's while it is asking for one, which is the one
-/// flow on this panel that takes letters (ADR-0259).
+/// Refusal sentence while arrangement menu is awaiting name input (ADR-0259).
 const NAMING: &str = "this menu is asking for a name — type it and press return, or press esc to \
                       leave the arrangement unsaved";
 
-/// The sentence a digit carries when the `+ add` chooser is not offering that
-/// many.
+/// Refusal sentence when digit exceeds procedure chooser count.
 pub(crate) const CHAIN_CARD_SHORT: &str =
     "the chooser is not offering a procedure with that number — the \
                                 digits count what is on the card, from one";
@@ -455,10 +437,7 @@ fn row_act(view: &View, row: Control, nth: usize, verbs: usize) -> Asked {
             })),
             None => Asked::Nothing("this card is not drawing an input with that number"),
         },
-        // **Saving again means the name in use**, and with none in use the
-        // menu asks for one: the field takes the keyboard whole while it is
-        // asking, which is where the name is typed and where `return` files it
-        // (ADR-0259).
+        // Saving uses current arrangement name or prompts for one (ADR-0259).
         Control::Save => Asked::Arranged(match view.arrangement.name.clone() {
             Some(name) => Ask::Operation(Operation::SaveArrangement { name }),
             None => Ask::Name,
@@ -469,9 +448,7 @@ fn row_act(view: &View, row: Control, nth: usize, verbs: usize) -> Asked {
             })),
             None => Asked::Nothing("this menu is not drawing a name with that number"),
         },
-        // **The bank is this bay's own reading** rather than whichever pattern
-        // is armed by the time the operation is performed, which is every other
-        // arm of this bay's.
+        // Target pattern bank from current sequencer state.
         Control::LaneTarget => {
             let Some(bank) = view.sequencer.as_ref().map(|seq| seq.bank as u8) else {
                 return Asked::Nothing("this console has no pattern behind it");

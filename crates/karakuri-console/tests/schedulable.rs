@@ -37,8 +37,7 @@ fn node(panel: &Panel, name: &str) -> NodeId {
         .unwrap_or_else(|| panic!("the arrangement names `{name}`"))
 }
 
-/// A strip with nothing outstanding on it: where it was asked to be, and no
-/// transition armed on either fader.
+/// Helper constructing a settled strip with no active transitions.
 fn settled() -> Strip {
     Strip {
         name: "glass_shell".to_owned(),
@@ -82,10 +81,7 @@ fn running() -> Transport {
         budget_ms: Some(16.6),
         chain_ms: None,
         health: Some(karakuri_console::view::Stage::Landed),
-        // **A recording running**, because this is the worst case: the `rec`
-        // pill is the one thing in this row a console can be told about that
-        // adds shapes to it, and a worst case measured without it would be a
-        // worst case for a panel nobody is recording on.
+        // Running recording state included to test worst-case shape budget.
         rec: Some(karakuri_console::view::Rec::Running),
     }
 }
@@ -236,8 +232,7 @@ fn a_still_panel_is_zero_in_both_sums() {
         "an empty panel declared"
     );
 
-    // Four strips, every one of them where it was asked to be and with nothing
-    // armed on either fader.
+    // Settled strips with no active transitions declare zero frame budget.
     view.mixer = (0..DECKS).map(|_| settled()).collect();
     let declared = declared(&view, &panel);
     assert!(
@@ -275,8 +270,7 @@ fn the_beat_declares_while_the_console_is_live_and_nothing_is_pending() {
          panel is moving and a stopped panel looks exactly like this one"
     );
 
-    // And a deck that has settled — every strip where it was asked to be, no
-    // transition armed on either fader — takes nothing away from it.
+    // Settled decks do not alter the transport's beat declarations.
     view.mixer = (0..DECKS).map(|_| settled()).collect();
     assert_eq!(
         declared,
@@ -328,9 +322,7 @@ fn a_folded_transport_row_declares_nothing_and_unfolding_puts_it_back() {
          is still live"
     );
 
-    // **And the mixer bay is unaffected either way**, which is what makes
-    // these two regions and not one: a fold on the row takes the beat's term
-    // out of the sums and leaves the roll's where it was.
+    // Mixer region declarations remain independent when transport row is folded.
     view.mixer = (0..DECKS).map(|_| pending()).collect();
     panel.op(Op::Fold(row));
     let folded = declared(&view, &panel);

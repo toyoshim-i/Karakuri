@@ -63,9 +63,7 @@ struct Hand {
 /// columns and the divider either side of the picture.
 fn by_hand(size: (f32, f32), canvas: (f32, f32)) -> Hand {
     let (w, h) = size;
-    // A cell is the image and the caption band under it — `.cell`'s 4px gap
-    // and `.caption`'s 13px — and it is the **image** that is 16:9, so the
-    // column follows the image and the height a cell takes is the sum.
+    // The cell image is 16:9; total cell height includes the gap and caption band.
     let cell_h = 63.0f32;
     let band = 4.0 + 13.0;
     let column = (cell_h * 16.0 / 9.0).round();
@@ -139,9 +137,7 @@ fn a_nineteen_twenty_window_puts_the_cells_down_the_sides() {
         "the picture",
     );
 
-    // **A and B down the left, C and D down the right**, preserving 112 x 63
-    // of image with its 17 of caption band under each: two cells are
-    // (63 + 17) x 2 + 6 = 166 tall, centred in 350, so the first starts at 92.
+    // Cells A/B on left, C/D on right, preserving 112x63 image with 17px caption band.
     let left = 0.0;
     let right = 1142.0 - 112.0;
     let top = 92.0;
@@ -323,9 +319,7 @@ fn the_gaps_beside_the_picture_are_the_mocks_own() {
 
     let gap = arranged.picture.min.x - arranged.cells[0].max.x;
     assert!(near(gap, 4.0), "the gap to the picture is {gap}");
-    // **Between two stacked cells, and a cell ends at its caption** — the
-    // image's own bottom edge is 17 short of that, and measuring from there
-    // would read the caption band as part of the gap.
+    // Gap between vertically stacked cells is measured from the upper cell's caption bottom.
     let stacked = arranged.cells[1].min.y - caption_of(arranged.cells[0]).max.y;
     assert!(
         near(stacked, size::PREVIEW_GAP),
@@ -369,9 +363,7 @@ fn below_is_what_the_console_draws_today() {
 
     let region = rect_of(&layout, "deck-previews");
     assert!(near(arranged.cells[0].min.y, region.y));
-    // The **image** ends at its own height and the caption band fills the
-    // rest of the row, so the row's height is the cell's and the image's is
-    // one term of it.
+    // Cell image height and caption band together equal total preview row height.
     assert!(near(
         arranged.cells[0].max.y,
         region.y + size::PREVIEW_IMAGE_H

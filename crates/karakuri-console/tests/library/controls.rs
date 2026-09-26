@@ -13,10 +13,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
     let region = to_egui(rect_of(panel.layout(), "library"));
     let row = bay.scopes.expect("the bay was handed scopes");
 
-    // **Every chip, asked two pixels in from its own left edge.** Not the
-    // centre: the last chip runs out past the bay and its centre can be
-    // outside the row, which is the clip this row is drawn with and is
-    // [`a_chip_is_pressed_only_where_it_is_drawn`]'s subject.
+    // Sample 2px from the left edge of each chip; trailing chips clipped by bay bounds may have centers outside the row.
     let chips: Vec<(Scope, egui::Rect)> = bay.chips(&ctx, SCOPES).collect();
     assert_eq!(
         chips.len(),
@@ -59,10 +56,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         egui::pos2(region.max.x - inset, region.max.y - inset),
         region.center(),
     ];
-    // **The scope row's own ground**: its left padding, the gap between the
-    // first two chips, and the band above the capsules. `.scope` is a capsule
-    // and not a cell — the row is not a segmented control — so the space
-    // between two of them belongs to nobody.
+    // Scope row padding, gaps between chips, and overhead band hit-test as empty.
     points.push(egui::pos2(
         row.min.x + size::SCOPES_PAD_X * 0.5,
         row.center().y,
@@ -75,9 +69,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         chips[0].1.center().x,
         row.min.y + size::SCOPES_PAD_Y * 0.5,
     ));
-    // **The filter row's own ground**: its left padding and the gap between the
-    // two fields. `.field` is a capsule the same way `.scope` is, so what is
-    // between two of them belongs to nobody.
+    // Filter row padding and inter-field gaps hit-test as empty.
     let filters = bay.filters.expect("the bay draws its filter row");
     let holds = bay.field(Field::Holds).expect("the `holds` field");
     points.push(egui::pos2(
@@ -114,14 +106,9 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         "only {swept} points of the foot's ground were swept, and the three capsules cannot be \
          most of a row this wide"
     );
-    // **The label's own box**, asked explicitly rather than left to the sweep
-    // above: it is between two controls and a press on it must belong to
-    // neither of them.
+    // The load label hit-tests as empty space between surrounding controls.
     points.push(load.arrow.center());
-    // **The list's own ground under the last row**, which is where the rows
-    // stop and the foot has not started: a `.lib-row` is a stride and the list
-    // is whatever is left of the bay, so what is below the last of them is
-    // nobody's. The rows themselves are the panel's and are asked below.
+    // Unoccupied space below the last row and above the foot hit-tests as empty.
     let last = bay.row(bay.rows - 1);
     let ground = egui::pos2(last.center().x, last.max.y + size::LIB_ROW_H * 0.5);
     assert!(
@@ -140,9 +127,7 @@ fn the_chips_the_fields_the_params_chip_and_the_rows_are_the_bays_controls_and_n
         );
         asked += 1;
     }
-    // **And every drawn row is the panel's**, asked at three points across it:
-    // a press on one takes that Set in hand, and a row that went to `egui`
-    // would be the one gesture this bay exists for reaching nothing at all.
+    // Every drawn row is claimed by the panel across left, center, and right probes.
     for index in 0..bay.rows {
         let at = bay.row(index);
         for probe in [
@@ -189,9 +174,7 @@ fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag
     let bay = bay(&panel);
     view.mixer = std::iter::repeat_with(strip).take(4).collect();
 
-    // **The three, as wide as what is in them** — asked of `LibraryBay::load`,
-    // which is the derivation the paint uses, so the boxes swept here are the
-    // boxes drawn.
+    // Hit boxes for load controls match dimensions computed in LibraryBay::load.
     let load = bay.load(&ctx, view.target());
     for (what, box_) in [
         ("load", load.button),
@@ -229,10 +212,7 @@ fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag
         );
     }
 
-    // **And the contrast, on the two capsules the label sits between**, so
-    // that this cannot pass by a foot that takes no press anywhere: the label
-    // is `egui`'s and both capsules are the panel's, in one console in one
-    // state.
+    // Surrounding load capsules claim pointer events while the label between them yields to egui.
     for (what, capsule) in [("load", load.button), ("deck", load.deck)] {
         let at = capsule.center();
         assert_eq!(
@@ -243,8 +223,7 @@ fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag
         );
     }
 
-    // **And the row the drag begins on**, which is the half of this test that
-    // did not move.
+    // Origin row of drag remains stationary.
     let first = bay.row(0).center();
     assert_eq!(
         claim(&mut panel, &ctx, &view, Point::new(first.x, first.y)),
@@ -274,9 +253,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
             "the star at {star:?} hangs off the left of the list at {:?}",
             bay.list
         );
-        // **A boundary would take the press before any control did**, which is
-        // `input::claim`'s rule 3 and is what the two filter fields are
-        // measured against one row up.
+        // Pane boundary divider hit-test clearance check (`input::claim` rule 3).
         for p in [
             egui::pos2(star.min.x, star.center().y),
             egui::pos2(star.max.x, star.center().y),
@@ -301,7 +278,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
         );
     }
 
-    // **Nothing starred: every press asks for the star to go on.**
+    // Unstarred row: clicking star icon requests starring the set.
     let none = std::collections::BTreeSet::new();
     let at = bay.star(1).center();
     assert_eq!(
@@ -313,8 +290,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
         "the star did not name the row it is drawn on"
     );
 
-    // **And with that row starred it asks for the star to come off**, which is
-    // the same derivation reading the state it is drawn from.
+    // Starred row: clicking star icon requests unstarring the set.
     let one: std::collections::BTreeSet<String> =
         std::iter::once("lattice_veil".to_owned()).collect();
     assert_eq!(
@@ -326,9 +302,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
         "a starred row was asked to be starred again"
     );
 
-    // **The row's own ground is not the star's**, which is rule 4's *a control
-    // claims what it acts on and no more*: the far end of the same row is
-    // where the carry begins and the mark answers nothing there.
+    // Row ground outside the star icon does not claim star clicks (claim rule 4).
     let ground = egui::pos2(bay.row(1).max.x - size::LIB_ROW_PAD_X, at.y);
     assert_eq!(
         bay.starred(listed(&mock()), &none, Point::new(ground.x, ground.y)),
@@ -336,9 +310,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
         "the star answered a press at the far end of its row"
     );
 
-    // **And a listing shorter than the rows drawn takes nothing**, which is
-    // `take`'s refusal rather than a clamp: a star answered bare would name a
-    // Set nobody can see.
+    // Rows beyond the listing length refuse star clicks.
     assert_eq!(
         bay.starred(Rows::NONE, &none, Point::new(at.x, at.y)),
         None,
@@ -387,9 +359,7 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
         );
     }
 
-    // **The chip that is already marked asks for itself**, where the key would
-    // step off it. The two are asked of one console in one state, so this is
-    // the contrast and not two facts side by side.
+    // The currently active scope chip re-selects itself when pressed.
     assert!(view.select_scope(Scope::MySets));
     let (_, chip) = bay
         .chips(&ctx, SCOPES)
@@ -444,9 +414,7 @@ fn a_chip_is_pressed_only_where_it_is_drawn() {
         scope.name()
     );
 
-    // **And the ground of the row answers nothing either** — its left padding
-    // and the gap between two capsules, which is what makes the row a row of
-    // chips rather than a segmented control.
+    // Inter-chip gaps and padding in the scope row hit-test to None.
     for (p, what) in [
         (
             egui::pos2(row.min.x + size::SCOPES_PAD_X * 0.5, row.center().y),
@@ -539,8 +507,7 @@ fn the_chips_clear_every_boundary_but_the_one_the_row_is_clipped_by() {
             "`{}` starts {left} in from the bay's left edge and a boundary grabs {GRAB}",
             scope.name()
         );
-        // **Where the chip is drawn, no boundary has it.** The tail of the
-        // last one is outside the row and is nobody's business here.
+        // Visible chip regions remain clear of boundary grab areas.
         let drawn = chip.intersect(row);
         if drawn.width() <= 0.0 {
             continue;
@@ -556,9 +523,7 @@ fn the_chips_clear_every_boundary_but_the_one_the_row_is_clipped_by() {
         );
     }
 
-    // **And the band at the far end of the row is still a boundary's**, which
-    // is what says the clearances above are clearances rather than the grab
-    // having gone missing.
+    // The row edge boundary maintains its grab zone past the chips.
     let into = Point::new(row.max.x - 1.0, row.center().y);
     assert!(
         matches!(
@@ -589,7 +554,7 @@ fn the_names_are_the_harnesss_and_are_stored_nowhere() {
         Some(1)
     );
 
-    // And what a `View` holds is what it was handed, unchanged by drawing it.
+    // View library listing remains unmodified by render passes.
     let mut view = View::new(Room::Day);
     view.library = two.clone();
     let mut panel = console(PLAUSIBLE);

@@ -147,9 +147,7 @@ fn a_press_outside_the_band_is_ignored_rather_than_clamped() {
              outright"
         );
         assert!(!row.on_tempo(along(&row, unit)));
-        // **And the panel does not swallow it.** A control that claimed the
-        // press and then did nothing is the one outcome an operator cannot
-        // tell from a panel that has stopped.
+        // The panel falls back to claiming the press without dispatching an action.
         assert_eq!(
             claim(&mut panel, &ctx, &view, along(&row, unit)),
             Claim::Egui,
@@ -231,9 +229,7 @@ fn the_band_is_the_tempo_at_the_press_and_moves_with_the_grid() {
         "the walk from the mock's tempo to 240 is {presses} presses, and the manual's tip says          two — if this number moved, the band moved with it"
     );
 
-    // The last of those lands because 240 is inside the band by then, which is
-    // the whole reason the walk arrives rather than approaching: the press
-    // before it left the grid within 15% of where it was going.
+    // The final press lands because 240 BPM is within the 15% band of the target tempo.
     assert!(row_at(&panel, &ctx, 240.0 / 1.15).in_band(240.0));
 
     // And the same pixel is a different tempo on the two rows, because the

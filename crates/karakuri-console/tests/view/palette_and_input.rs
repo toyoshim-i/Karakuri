@@ -161,7 +161,7 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     panel.released(None);
     assert!(!panel.dragging());
 
-    // And afterwards the claim is back where it was.
+    // Verify default claims are restored following release.
     assert_eq!(claim(&mut panel, &ctx, &showing(&[]), middle), Claim::Egui);
     assert_eq!(claim(&mut panel, &ctx, &showing(&[]), pill), Claim::Panel);
     let boundary = on_a_boundary(&mut panel);

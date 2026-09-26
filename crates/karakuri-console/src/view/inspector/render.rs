@@ -38,9 +38,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
     // Hit-test and paint keep pill before words to preserve spacing in narrow panes.
     let keep = keep_pill(ui.ctx(), at, pane);
     let mcp = slot_mcp_pill(ui.ctx(), at, pane, policy);
-    // **And the count beside it**, which is what rule 04 asks of a pane that
-    // is showing part of itself — derived here off the same head and painted
-    // below, exactly as the capsule is. See [`pane_count`].
+    // Visible parameter count readout (P-0082, Rule 4).
     let count = pane_count(
         ui.ctx(),
         at,
@@ -68,10 +66,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         label,
         pal.faint,
     );
-    // **The run, from the same derivation `claim` hit-tests** — the mock's
-    // `.what`, and the console's second letter-taking flow while a name is
-    // going into it. `None` is a head with no room to paint any of it, which
-    // is [`deck_name`]'s own refusal and leaves the label alone in the row.
+    // Editable deck name text field.
     if let Some(named) = deck_name(
         ui.ctx(),
         at,
@@ -123,10 +118,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
             }
         }
     }
-    // **The count, in the label's own ink**: `.half-head`'s `color:
-    // var(--c-faint)`, which is what the mock gives every readout in this row
-    // and what the Library foot gives its own `5 of 27`. It is painted inside
-    // the head's clip and not the words' — the words stop short of it.
+    // Paint visible parameter count in faint ink.
     if let Some(rect) = count {
         let galley = painter.layout_job(span_at(&count_text(at, pane), size::BASE, pal.faint));
         painter.galley(
@@ -136,10 +128,7 @@ pub(crate) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) 
         );
     }
 
-    // **Derived here and hit-tested by `claim` off the same call**, which is
-    // the rule every other control on this panel is drawn under. `None` is a
-    // row too narrow to hold its chips, and it draws none rather than half of
-    // each — see [`deck_head`].
+    // Render deck controls subheader if space permits.
     if let Some(head) = deck_head(ui.ctx(), at, pane) {
         deck_head_into(ui, pal, &head, pane);
     }

@@ -15,10 +15,7 @@ fn a_press_off_the_pills_asks_for_nothing_and_is_not_claimed() {
     let bay = mixer(&ctx, panel.layout(), &strips).expect("the strips");
 
     let probes = [
-        // Two pixels left of the first pill, and **not** the middle of
-        // `.xfade`'s own padding: that point is five in from the bay's left
-        // edge and inside the pane boundary's `GRAB`, so rule 3 would answer
-        // *the panel's* before this row was asked anything at all.
+        // Left of first pill; outside pane boundary `GRAB` zone to avoid rule 3 triggering.
         (
             egui::pos2(at.shape.min.x - 2.0, at.shape.center().y),
             "the padding left of the first pill",
@@ -62,9 +59,7 @@ fn a_press_off_the_pills_asks_for_nothing_and_is_not_claimed() {
         );
     }
 
-    // **The strip above, which is a control and is not this row's.** A hit
-    // test that reached up would change what the next wipe means from a press
-    // meant for a blend mode.
+    // The strip above is separate; clicks on it must not be claimed by this row.
     for (probe, what) in [
         (bay.strip(0).blend.center(), "a strip's blend chip"),
         (bay.strip(0).mask.center(), "a strip's mask mini"),
@@ -121,10 +116,7 @@ fn no_pill_is_inside_a_boundarys_grab() {
             (at.shape, "shape"),
             (at.quantum, "quantum"),
             (at.length, "length"),
-            // **The `go` capsule is the one at the other end of the row**, so
-            // its clearance is off the bay's right edge rather than its left
-            // and is measured rather than inherited from the three: it is
-            // `.xfade`'s own `XFADE_PAD_X` of 10 against a `GRAB` of 6.
+            // The `go` capsule clearance off the bay's right edge (`XFADE_PAD_X` = 10 vs `GRAB` = 6).
             (at.go, "go"),
         ] {
             for probe in [

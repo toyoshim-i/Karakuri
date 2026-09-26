@@ -275,9 +275,7 @@ fn a_row_is_a_well_and_four_things_in_it() {
     }
     assert_eq!(asked, 2, "not every row was asked");
 
-    // **The name is one of the seven**, so the six beside it are the well, the
-    // deck's letter, the address, the verdict and the capsule's two — none of
-    // which an empty name takes with it.
+    // An empty name omits only its text shape, leaving the other 6 shapes intact.
     view.staging = vec![at_node(
         0,
         karakuri_operation::Layer::L4,
@@ -373,9 +371,7 @@ fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest(
         "the second diagnostic was drawn on a row that has room for one: {three:?}"
     );
 
-    // **And no other row carries one.** A landed candidate with the same name
-    // draws the name and the verdict and nothing else, which is what says the
-    // sentence belongs to the stage rather than to the row.
+    // Other stages (e.g. Landed) omit diagnostic text, confirming sentences are stage-specific.
     view.staging = vec![candidate(1, "drift_shell.kir", Stage::Landed)];
     let landed = words(&mut view, &mut panel);
     assert!(

@@ -82,26 +82,19 @@ pub(crate) fn reading_into(
             pal.faint,
         );
     };
-    // **The head is the one lav in the box**, which is `.addr`'s own colour
-    // and the mark that says this is a reading of the row above rather than
-    // a sixth Set.
+    // Reading header label styled in lavender ink.
     line(READING_HEAD, &reading.knobs_word(), pal.lav);
     for knob in &reading.knobs {
         line(&knob.key, &knob.range, pal.dim);
     }
-    // **The capacity is drawn in a knob's shape**, because that is how a
-    // procedure declares it — and it is the declaration rather than this
-    // Set's own number, which nothing on this panel says before a load. The
-    // mock's note carries that as owed rather than answered here.
+    // Capacity readout rendered in parameter row style.
     if let Some(capacity) = &reading.capacity {
         line(READING_CAPACITY, capacity, pal.dim);
     }
     if let Some(emits) = &reading.emits {
         line(READING_EMITS, emits, pal.dim);
     }
-    // **The foot counts the nodes and says how many of them could be read**,
-    // which is the one thing that keeps a knob missing for want of a card
-    // from being a knob missing in silence.
+    // Foot summary readout displaying total nodes and readable cards.
     line(&reading.nodes_word(), &reading.cards_word(), pal.dim);
 }
 
@@ -290,9 +283,7 @@ pub(crate) fn row_menu_into(ui: &Ui, pal: &Palette, menu: &RowMenu) {
     for index in 0..menu.loads.min(DECKS) {
         word(menu.load(index), load_item(index as u8));
     }
-    // **The separator and the send are drawn where there is one**, which is a
-    // Set row: a procedure cannot be written out as a `.kbset` — nothing takes
-    // a bare `.kir` in — so its menu is the loads and stops (ADR-0338).
+    // Separator rule and save action for sets (omitted for procedures per ADR-0338).
     if let Some(band) = menu.rule {
         let rule = band.center().y;
         painter.line_segment(

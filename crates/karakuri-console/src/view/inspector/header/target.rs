@@ -98,9 +98,7 @@ pub fn pane_target(ctx: &egui::Context, target_ctx: PaneTargetCtx<'_>) -> Option
     Some(PaneTarget {
         chevron: named.chevron,
         pane: index,
-        // **Zero while it is shut**, which is what stops [`PaneTarget::row`]
-        // handing out a rectangle for a card nobody opened — [`Load`]'s own
-        // field.
+        // Rows count is zero while dropdown card is closed.
         rows: match open {
             true => decks.min(DECK_LETTERS.len()),
             false => 0,

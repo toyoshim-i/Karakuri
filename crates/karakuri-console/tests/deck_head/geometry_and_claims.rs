@@ -106,9 +106,8 @@ fn a_pane_too_narrow_for_the_build_chips_keeps_the_rest_of_the_row() {
     let (pane_at, head) = chips(&panel, &ctx, 0, &pane);
     let full = pane_at.deck_head;
     let aim = head.aim.expect("a wide pane draws the two build chips");
-    // **Everything after the `.sep` moves left with the row's right edge**, so
-    // narrowing by the slack between the arrows and the capacity chip is
-    // exactly the width at which the seven stop fitting.
+    // Elements after `.sep` align to the right edge; narrowing by the slack
+    // between arrows and the capacity chip yields the threshold where chips no longer fit.
     let slack = aim.size.min.x - (head.forward.max.x + size::DECK_HEAD_GAP);
     let narrowed = |w: f32| InspectorPane {
         deck_head: egui::Rect::from_min_size(full.min, egui::vec2(w, full.height())),

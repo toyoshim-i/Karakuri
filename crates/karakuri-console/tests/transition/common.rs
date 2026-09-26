@@ -125,9 +125,7 @@ pub(crate) fn place(shape: usize, quantum: usize, length: usize) -> TransitionSe
     }
 }
 
-/// Every text the console paints on one frame, with where it was painted —
-/// `preview_caption.rs`'s helper, which is how *what is drawn* is asked
-/// anywhere in this crate.
+/// Returns all text rendered by the console during a frame along with their positions.
 pub(crate) fn texts(view: &mut View, panel: &mut Panel) -> Vec<(egui::Pos2, String)> {
     let ctx = drawn_once();
     let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));

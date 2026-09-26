@@ -261,8 +261,7 @@ fn the_target_gives_a_boundary_the_top_three_quarters_of_a_pixel_and_no_more() {
 // What a press on the grip does
 // ---------------------------------------------------------------------------
 
-/// A press folds the bay the grip is in, performed and read back off the layout
-/// — and the control goes with it, which is why there is no unfold on it.
+/// Pressing the fold grip collapses its bay and hides the grip control.
 #[test]
 fn a_press_on_the_grip_folds_that_bay_and_takes_the_control_with_it() {
     for name in gripped() {
@@ -429,8 +428,7 @@ fn the_window_edge_is_a_boundary_only_while_the_pane_is_closed() {
     }
 }
 
-/// A closed pane gives its width to the centre and keeps the divider it costs,
-/// and the width it was storing survives the fold.
+/// Closing a pane transfers its width to the center panel and preserves stored width across folds.
 #[test]
 fn a_closed_pane_gives_its_width_to_the_centre_and_keeps_its_divider() {
     for name in ["left-pane", "right-pane"] {
@@ -570,10 +568,7 @@ fn one_drag_closes_or_opens_once_and_then_does_neither() {
     }
 }
 
-/// A drag past a stop folds nothing that does not keep its edge, however far
-/// past it goes: every other boundary on the console is dragged to both ends
-/// and the arrangement comes back folded exactly as much as it was, which is
-/// not at all.
+/// Dragging boundaries past stops does not trigger folding for non-edge-keeping elements.
 #[test]
 fn a_drag_past_a_stop_folds_nothing_that_does_not_keep_its_edge() {
     let probe = console(PLAUSIBLE);

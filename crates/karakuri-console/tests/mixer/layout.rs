@@ -70,9 +70,7 @@ fn a_strip_is_the_mocks_own_boxes() {
     assert!(near(size::MINI_SIZE, 9.0), "`.mini` is `font-size: 9px`");
     assert!(near(size::MINI_PAD_X, 6.0), "`.mini` is `padding: 0 6px`");
 
-    // **And the sum of them is the 215.5 the arrangement was written from.**
-    // `lib.rs` derives the mixer's 316 as a bay head, `.mixer-strips`'s 6 + 6
-    // around a strip, and `.xfade`'s 61.
+    // The components sum to STRIP_H (215.5) as used by the layout arrangement.
     assert!(
         near(size::STRIP_H, 215.5),
         "a strip is {} tall",
@@ -365,8 +363,7 @@ fn a_console_with_no_deck_draws_nothing_in_the_bay() {
         );
     }
 
-    // And taking the deck away again empties it: the bay keeps nothing from
-    // the frame it was drawn with.
+    // Clearing mixer strips resets rendered wells with no retained state.
     view.mixer.clear();
     assert!(
         shapes_inside(&mut view, &mut panel, row).is_empty(),
