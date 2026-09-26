@@ -21,13 +21,36 @@ impl Readout {
         // Evaluate claim before acting to preserve drag state consistency across events.
         let mut claim = claim(&mut self.panel, ctx, &self.view, at);
         let mut did = Acted::Nothing;
-        if matches!(event, Pointer::Down)
+        if matches!(event, Pointer::Down | Pointer::DoubleDown)
             && !self.panel.dragging()
             && !self.view.has_modal_overlay()
         {
             if let Some(bay) = karakuri_console::focus::bay_at(self.panel.layout(), at) {
                 self.view.focus_bay(&self.panel, bay.name);
             }
+        }
+        if matches!(event, Pointer::DoubleDown)
+            && !self.panel.dragging()
+            && !self.view.has_modal_overlay()
+        {
+            self.panel.solve();
+            if let Some(bay) = karakuri_console::focus::bay_head_at(self.panel.layout(), at) {
+                let is_pill = program_head(ctx, self.panel.layout(), self.view.opening)
+                    .is_some_and(|head| head.hit(at))
+                    || Class::ALL.iter().any(|class| {
+                        mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)
+                            .is_some_and(|pill| pill.hit(at))
+                    })
+                    || bay_grip(self.panel.layout(), bay.name).is_some_and(|grip| grip.hit(at));
+                if !is_pill {
+                    if let karakuri_console::focus::Asked::Panel(op) =
+                        karakuri_console::focus::fold(&self.panel, bay)
+                    {
+                        return (Claim::Panel, Acted::Operated(self.folded(op)));
+                    }
+                }
+            }
+            return (Claim::Panel, Acted::Nothing);
         }
         match (event, claim) {
             // Update pointer coordinates and emit operation if dragging an active fader.
@@ -123,7 +146,7 @@ impl Readout {
                     did = self.menued(ask);
                 }
             }
-            (Pointer::Down | Pointer::Up | Pointer::Secondary, _) => {}
+            (Pointer::Down | Pointer::DoubleDown | Pointer::Up | Pointer::Secondary, _) => {}
         }
         (claim, did)
     }

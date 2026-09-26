@@ -434,10 +434,11 @@ impl Readout {
             return Some(Acted::Operated(self.soloed(head.op())));
         }
 
-        if let Some(grip) = REGIONS.iter().find_map(|region| {
-            bay_grip(self.panel.layout(), region.name).filter(|grip| grip.hit(at))
+        // Bay grip clicks are reserved for the upcoming Bay Context Menu (ADR-0364).
+        if REGIONS.iter().any(|region| {
+            bay_grip(self.panel.layout(), region.name).is_some_and(|grip| grip.hit(at))
         }) {
-            return Some(Acted::Operated(self.folded(grip.op())));
+            return Some(Acted::Nothing);
         }
 
         if let Some(pill) = Class::ALL.iter().find_map(|class| {

@@ -140,7 +140,23 @@ impl App {
         state: ElementState,
     ) {
         let which = match state {
-            ElementState::Pressed => Pointer::Down,
+            ElementState::Pressed => {
+                let now = std::time::Instant::now();
+                let cursor = self.readout.panel.cursor();
+                let is_double = if let Some((prev_time, prev_pos)) = self.last_click {
+                    now.duration_since(prev_time).as_millis() <= 400
+                        && (cursor.x - prev_pos.x).hypot(cursor.y - prev_pos.y) <= 5.0
+                } else {
+                    false
+                };
+                if is_double {
+                    self.last_click = None;
+                    Pointer::DoubleDown
+                } else {
+                    self.last_click = Some((now, cursor));
+                    Pointer::Down
+                }
+            }
             ElementState::Released => Pointer::Up,
         };
         if state == ElementState::Pressed {

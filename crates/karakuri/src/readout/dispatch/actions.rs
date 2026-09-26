@@ -285,10 +285,15 @@ impl Readout {
 
     /// Dispatches program bay solo pill press, toggling program view solo state (ADR-0295, ADR-0300).
     pub(crate) fn folded(&mut self, op: Op) -> Outcome {
-        let Op::Fold(id) = op else {
-            unreachable!("a fold control asked for {op:?}")
-        };
-        println!("fold: {} folds away — `z` brings it back", self.label(id));
+        match op {
+            Op::Fold(id) => {
+                println!("fold: {} folds away — `z` brings it back", self.label(id));
+            }
+            Op::Unfold(id) => {
+                println!("unfold: {} restored", self.label(id));
+            }
+            other => unreachable!("a fold control asked for {other:?}"),
+        }
         self.op(op)
     }
 
