@@ -1,0 +1,5 @@
+{"t":"set","id":"quasi_crystal","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"quasi_crystal.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"amp","signal":"energy","curve":"smooth","range":[0.4,1.8]}

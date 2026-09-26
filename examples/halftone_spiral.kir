@@ -1,0 +1,56 @@
+// A black-and-white halftone: a fixed, tilted grid of round dots whose sizes
+// follow a spiral wave turning around the centre, so fat and thin dots sweep
+// round and outward; toward the middle the dots swell until they merge.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/halftone_spiral.kir
+
+proc halftone_spiral {
+  kind  L4
+  blend additive
+
+  // Dot cells across the frame's half-height.
+  param density : float [4.0, 60.0] = 22.0
+
+  // Tilt of the grid, in radians.
+  param angle   : float [0.0, 1.5707963] = 0.7853982
+
+  // Arms of the spiral, floored.
+  param arms    : float [1.0, 8.0] = 3.0
+
+  // Radians per second the size wave turns; negative turns it the other way.
+  param speed   : float [-4.0, 4.0] = 1.2
+
+  // Width of a dot's edge as a fraction of its cell; 0.01 is crisp.
+  param soft    : float [0.01, 0.3] = 0.04
+
+  // 0 draws white dots on black, 1 black dots on white.
+  param invert  : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // Into the grid's frame, then back out for the cell centre, so the size
+    // is taken at the centre and every dot stays round.
+    let ca = cos(angle);
+    let sa = sin(angle);
+    let g  = vec2(ca * p.x + sa * p.y, ca * p.y - sa * p.x) * density;
+    let gc = floor(g) + vec2(0.5);
+    let cc = vec2(ca * gc.x - sa * gc.y, sa * gc.x + ca * gc.y) / density;
+
+    let r  = length(cc);
+    let a  = atan2(cc.y, cc.x);
+    let w  = 0.5 + 0.5 * sin(floor(arms) * a + r * 7.0 - t * speed);
+    let rad = 0.08 + 0.34 * w * (0.45 + 0.55 * smoothstep(1.9, 0.0, r)) + 0.35 * smoothstep(0.55, 0.0, r);
+    let d  = length(g - gc);
+    let dotv = 1.0 - smoothstep(rad - soft, rad + soft, d);
+    let v  = mix(dotv, 1.0 - dotv, invert);
+    color = vec4(vec3(v * 0.9), 1.0);
+  }
+}

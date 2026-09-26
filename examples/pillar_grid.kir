@@ -1,0 +1,55 @@
+// An endless grid of tall round pillars standing on square floor slabs, lit by
+// how many march steps each ray needed rather than by any light, so silhouettes
+// and grazing edges glow while flat faces stay dark; the colour mix cycles
+// slowly and the camera drifts and sways across the grid. Reads `ray` against a
+// camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/pillar_grid.kir --param turn=0
+
+proc pillar_grid {
+  kind  L4
+  blend additive
+
+  // Distance between pillar centres in world units.
+  param spacing : float [2.0, 8.0] = 4.0
+
+  // Pillar radius as a fraction of `spacing`.
+  param girth   : float [0.03, 0.3] = 0.1
+
+  // Camera drift speed in world units per second.
+  param drift   : float [0.0, 3.0] = 0.8
+
+  // Brightness per march step.
+  param gain    : float [0.0, 4.0] = 1.3
+
+  // Colour cycle rate in cycles per second.
+  param cycle   : float [0.0, 0.5] = 0.05
+
+  fragment {
+    let o  = vec3(sin(t * 0.21) * spacing * 0.22, 1.6 + 0.5 * sin(t * 0.23), -t * drift);
+    let rd = rot_y(rot_x(ray, -0.18 + 0.08 * sin(t * 0.17)), 0.35 * sin(t * 0.11));
+    let hs = spacing * 0.5;
+    let pr = spacing * girth;
+
+    var p   = o;
+    var n   = 0.0;
+    var hit = 0.0;
+
+    for i in 0..46 {
+      let q  = (p.xz % vec2(spacing)) - vec2(hs);
+      let pl = max(length(q) - pr, p.y - 7.0);
+      let sl = sd_box(vec3(q.x, p.y + 0.2, q.y), vec3(hs * 0.88, 0.2, hs * 0.88));
+      let d  = min(pl, sl);
+      if d < 0.003 { hit = 1.0; }
+      n += 1.0 - hit;
+      p = p + rd * max(d, 0.003) * (1.0 - hit);
+    }
+
+    let k   = n / 46.0;
+    let ph  = t * cycle * 6.2831853;
+    let pal = vec3(0.5) + vec3(0.5) * cos(vec3(ph, ph + 2.1, ph + 4.2) + vec3(k * 3.0));
+    let dist = length(p - o);
+    let glowv = k * k * k * gain * 3.0 * exp(-dist * 0.02) * (0.25 + 0.75 * hit);
+    color = vec4(pal * glowv, 1.0);
+  }
+}

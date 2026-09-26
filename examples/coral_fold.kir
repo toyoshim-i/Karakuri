@@ -1,0 +1,64 @@
+// A mirror-symmetric fractal of lacy filaments and nested bulbs in warm
+// yellows and oranges over deep blue, morphing as its constant wanders on a
+// closed path. Each point is folded and inverted repeatedly, and coloured by
+// the nearest and farthest its orbit came to the origin.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/coral_fold.kir
+
+proc coral_fold {
+  kind  L4
+  blend additive
+
+  // Radians per second along the constant's path.
+  param drift  : float [0.0, 0.5] = 0.05
+
+  // How far the constant strays from the middle of its path.
+  param reach  : float [0.0, 0.4] = 0.12
+
+  // Fold-and-invert steps, floored; at most 24.
+  param depth  : float [4.0, 24.0] = 16.0
+
+  // Frame half-heights per unit of the fractal's plane; larger shows less.
+  param zoom   : float [0.3, 4.0] = 1.0
+
+  // 0 folds only across the vertical axis; 1 folds across both axes, giving a
+  // four-way mirror.
+  param fold   : float [0.0, 1.0] = 0.0
+
+  // Brightness of the warm filaments against the blue ground.
+  param warmth : float [0.0, 4.0] = 1.0
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let a  = t * drift;
+    let k  = vec2(-0.85, -0.45) + reach * vec2(sin(a), sin(a * 1.618 + 1.0));
+    let n  = floor(depth);
+    var z  = p / zoom + vec2(0.0, 0.75);
+    var lo = 100.0;
+    var hi = 0.0;
+    for i in 0..24 {
+      let on = step(float(i), n - 0.5);
+      let w  = vec2(abs(z.x), mix(z.y, abs(z.y), fold));
+      let m  = dot(w, w);
+      let zn = w / max(m, 0.0001) + k;
+      z  = mix(z, zn, vec2(on));
+      let r = dot(z, z);
+      lo = mix(lo, min(lo, r), on);
+      hi = mix(hi, max(hi, r), on);
+    }
+
+    let e  = clamp(exp(-lo * 16.0), 0.0, 1.0);
+    let f  = clamp(log(1.0 + hi) * 0.12, 0.0, 1.0);
+    let bg = vec3(0.01, 0.03, 0.18) * (0.4 + 1.2 * f);
+    let hot = mix(vec3(0.9, 0.2, 0.01), vec3(1.0, 0.75, 0.05), vec3(e)) * e * 0.7;
+    color = vec4(bg * (1.0 - e) + hot * warmth, 1.0);
+  }
+}

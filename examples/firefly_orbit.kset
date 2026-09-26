@@ -1,0 +1,7 @@
+{"t":"set","id":"firefly_orbit","v":1}
+{"t":"part","layer":"L1","path":"firefly_orbit.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"halo_points.kir"}
+{"t":"param","layer":"L4","key":"point_scale","value":0.16}
+{"t":"param","layer":"L4","key":"exposure","value":0.15}
+{"t":"param","layer":"L4","key":"core","value":40.0}

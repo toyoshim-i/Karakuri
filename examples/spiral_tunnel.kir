@@ -1,0 +1,65 @@
+// An endless tunnel seen head-on: interlaced spiral and ring stripes in pale
+// pinks, lavenders and white rushing toward the viewer around a dark centre,
+// with a quick red pulse, and a burst of glowing stars streaming out of the
+// vanishing point and speeding up as they near. Reads `ray` against a camera
+// facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/spiral_tunnel.kir --param turn=0
+
+proc spiral_tunnel {
+  kind  L4
+  blend additive
+
+  // Travel speed along the tunnel.
+  param rush    : float [0.0, 4.0] = 1.2
+
+  // Turns of the spiral stripes per unit of depth; negative twists the other way.
+  param twist   : float [-3.0, 3.0] = 1.5
+
+  // Stripe counts around the wall (x) and rings per unit of depth (y).
+  param stripes : vec2 [1.0, 24.0] = vec2(6.0, 3.0)
+
+  // Red pulse rate in pulses per second.
+  param pulse   : float [0.0, 6.0] = 1.6
+
+  // How many stars are drawn, out of 32.
+  param stars   : float [0.0, 32.0] = 24.0
+
+  // Star flight rate in depth cycles per second.
+  param flight  : float [0.0, 2.0] = 0.45
+
+  fragment {
+    let q  = ray.xy / max(-ray.z, 0.0001);
+    let r  = length(q);
+    let a  = atan2(q.y, q.x) / 6.2831853;
+    let u  = 0.35 / max(r, 0.001) + t * rush;
+
+    let sp = 0.5 + 0.5 * cos(6.2831853 * (a * floor(stripes.x) + u * twist));
+    let rg = 0.5 + 0.5 * cos(6.2831853 * u * stripes.y * 0.5);
+    let sq = 0.5 + 0.5 * cos(6.2831853 * (a * floor(stripes.x) - u * twist * 0.5));
+    let pink = vec3(1.0, 0.45, 0.66);
+    let lav  = vec3(0.55, 0.45, 1.0);
+    let ks = smoothstep(0.35, 0.65, sp);
+    let kr = smoothstep(0.3, 0.7, rg);
+    let kq = smoothstep(0.6, 0.9, sq * rg);
+    let base = mix(pink, lav, vec3(ks)) * (0.25 + 0.75 * kr) + vec3(0.6 * kq);
+
+    let pr   = pow(0.5 + 0.5 * sin(t * pulse * 6.2831853), 6.0);
+    let tinted = base * mix(vec3(1.0), vec3(1.4, 0.35, 0.4), vec3(pr * 0.7));
+    let hole = smoothstep(0.02, 0.35, r);
+    var col  = tinted * hole * 0.8;
+
+    for i in 0..32 {
+      let h  = hash3(uint(i) * 7919u + 13u);
+      let z  = 1.0 - fract(h.y + t * flight);
+      let ang = h.x * 6.2831853;
+      let at = vec2(cos(ang), sin(ang)) * (0.08 + 0.25 * h.z) / max(z * z, 0.01);
+      let d  = length(q - at);
+      let on = step(float(i) + 0.5, stars);
+      let sz = 0.012 / max(z, 0.08);
+      col += vec3(0.9, 0.95, 1.0) * on * sz * sz / (d * d + sz * sz * 0.5) * (1.0 - z) * 0.6;
+    }
+
+    color = vec4(col, 1.0);
+  }
+}

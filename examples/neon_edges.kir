@@ -1,0 +1,48 @@
+// Traces the outlines of the picture in neon: a Sobel filter on brightness
+// finds the edges, which glow in a hue that follows the edge's direction and
+// turns with the beat, over a darkened copy of the picture.
+
+proc neon_edges {
+  kind L5
+
+  // Distance between the filter's taps as a fraction of the frame's height.
+  param reach   : float [0.0005, 0.01] = 0.0015
+
+  // Gain on the edge strength before it glows.
+  param gain    : float [0.0, 16.0] = 4.0
+
+  // Brightness of the original picture under the edges.
+  param under   : float [0.0, 1.0] = 0.15
+
+  // Saturation of the edge colour: 0 is white.
+  param chroma  : float [0.0, 1.0] = 0.9
+
+  // Turns of the edge hue per beat.
+  param cycle   : float [-1.0, 1.0] = 0.125
+
+  frame {
+    let d = frame_step(reach);
+    let w = vec3(0.2126, 0.7152, 0.0722);
+
+    let l00 = dot(tap(src, point_coord + vec2(-d.x, -d.y)).xyz, w);
+    let l10 = dot(tap(src, point_coord + vec2(0.0, -d.y)).xyz, w);
+    let l20 = dot(tap(src, point_coord + vec2(d.x, -d.y)).xyz, w);
+    let l01 = dot(tap(src, point_coord + vec2(-d.x, 0.0)).xyz, w);
+    let l21 = dot(tap(src, point_coord + vec2(d.x, 0.0)).xyz, w);
+    let l02 = dot(tap(src, point_coord + vec2(-d.x, d.y)).xyz, w);
+    let l12 = dot(tap(src, point_coord + vec2(0.0, d.y)).xyz, w);
+    let l22 = dot(tap(src, point_coord + vec2(d.x, d.y)).xyz, w);
+
+    let gx = (l20 + 2.0 * l21 + l22) - (l00 + 2.0 * l01 + l02);
+    let gy = (l02 + 2.0 * l12 + l22) - (l00 + 2.0 * l10 + l20);
+
+    // Edge strength compressed so bright material does not blow out.
+    let e   = length(vec2(gx, gy)) * gain;
+    let k   = e / (1.0 + e);
+    let hue = fract(atan2(gy, gx) / 6.2831853 + beats * cycle);
+    let neo = hsv_to_rgb(vec3(hue, chroma, 1.0));
+
+    let s = texel(src);
+    color = vec4(s.xyz * under + neo * k * 2.0, s.w);
+  }
+}

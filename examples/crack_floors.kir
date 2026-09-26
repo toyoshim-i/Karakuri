@@ -1,0 +1,76 @@
+// A dark void over a bright horizon, with a stack of transparent floors below
+// the camera seen through one another; each floor is a web of thin glowing
+// cracks around irregular, roughly rectangular cells, the top floor's cells
+// light up in travelling waves, and a blocky band of sky drifts above the
+// horizon. The camera glides sideways, circles slowly and bobs, and the whole
+// picture breathes. Reads `ray` against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/crack_floors.kir --param turn=0
+
+proc crack_floors {
+  kind  L4
+  blend additive
+
+  // Sideways glide speed in world units per second.
+  param glide   : float [0.0, 4.0] = 0.8
+
+  // Vertical distance between floors in world units.
+  param gap     : float [0.2, 3.0] = 0.9
+
+  // Cell size on a floor in world units.
+  param cells   : float [0.3, 4.0] = 1.8
+
+  // Crack sharpness; larger draws thinner lines.
+  param sharp   : float [4.0, 80.0] = 45.0
+
+  // Breathing rate in cycles per second.
+  param breathe : float [0.0, 1.0] = 0.1
+
+  // Tint of the cracks; near white with a faint blue cast by default.
+  param ice     : vec3 [0.0, 1.0] = vec3(0.8, 0.9, 1.0)
+
+  fragment {
+    let yaw = t * 0.04;
+    let rd  = rot_y(rot_x(ray, -0.28 + 0.04 * sin(t * 0.3)), yaw);
+    let o   = vec3(t * glide, 0.3 * sin(t * 0.5), 0.0);
+    let down = max(-rd.y, 0.0001);
+    let below = step(0.0, -rd.y);
+    var col = vec3(0.0);
+
+    for k in 0..5 {
+      let fk = float(k);
+      let dist = (1.0 + fk * gap + o.y) / down;
+      let hp = (o.xz + rd.xz * dist) / cells + vec2(fk * 3.7, fk * 1.9);
+      let base = floor(hp);
+      let fr = hp - base;
+
+      // Nearest and second-nearest feature point under the square metric.
+      var d1 = 9.0;
+      var d2 = 9.0;
+      for j in 0..9 {
+        let nb = vec2(float(j % 3) - 1.0, float(j / 3) - 1.0);
+        let c  = base + nb;
+        let h  = fract(vec2(43758.547, 21783.131) * sin(dot(c, vec2(127.1, 311.7))));
+        let r  = abs(nb + h * 0.8 + vec2(0.1) - fr);
+        let dm = max(r.x, r.y);
+        d2 = min(d2, max(d1, dm));
+        d1 = min(d1, dm);
+      }
+      let line = exp(-(d2 - d1) * sharp);
+      let wave = step(0.0, -fk + 0.5) * pow(0.5 + 0.5 * sin(base.x * 0.7 + base.y * 0.3 - t * 2.5), 6.0) * 0.35;
+      let fade = exp(-dist * 0.09) * (1.0 - fk * 0.15);
+      col += ice * (line * 0.6 + wave) * fade * below;
+    }
+
+    // Horizon line and a coarse drifting band of sky above it.
+    let hz  = exp(-abs(rd.y) * 60.0) * 1.2 + exp(-abs(rd.y) * 8.0) * 0.15;
+    let ang = atan2(rd.x, -rd.z) * 12.0 + t * 0.3;
+    let sc  = vec2(floor(ang), floor(rd.y * 40.0));
+    let sn  = fract(sin(dot(sc, vec2(12.9898, 78.233))) * 43758.547);
+    let band = step(0.0, rd.y) * smoothstep(0.2, 0.0, rd.y) * sn * sn * 0.06;
+    col += ice * (hz + band);
+
+    let bre = 0.75 + 0.25 * sin(t * breathe * 6.2831853);
+    color = vec4(col * bre, 1.0);
+  }
+}

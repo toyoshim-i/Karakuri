@@ -1,0 +1,12 @@
+{"t":"set","id":"ring_meter","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"ring_meter.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"level0","signal":"band0","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level1","signal":"band1","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level2","signal":"band2","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level3","signal":"band3","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level4","signal":"band4","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level5","signal":"band5","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level6","signal":"band6","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L4","key":"level7","signal":"band7","curve":"lin","range":[0.0,1.0]}

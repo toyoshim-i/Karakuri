@@ -1,0 +1,6 @@
+{"t":"set","id":"meta_blobs","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"meta_blobs.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"swell","signal":"band0","curve":"pow2","range":[0.0,0.12]}
+{"t":"bind","layer":"L4","key":"rings","signal":"energy","curve":"lin","range":[0.1,0.6]}

@@ -1,0 +1,43 @@
+// A black-and-white checker plane running to a horizon, scrolling toward the
+// viewer, pinched toward the centre by a lens and fading to black at depth; the
+// horizontal tile scale swings through zero so the pattern stretches and flips.
+// Reads `ray` against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/checker_floor.kir --param turn=0
+
+proc checker_floor {
+  kind  L4
+  blend additive
+
+  // Scroll speed toward the viewer, in tiles per second.
+  param scroll  : float [0.0, 8.0] = 1.5
+
+  // Height of the horizon in view-plane units; 0 is the middle of the frame.
+  param horizon : float [-0.6, 0.6] = 0.0
+
+  // Tiles per world unit along the floor.
+  param tiles   : float [0.25, 4.0] = 1.0
+
+  // Radial lens pinch toward the centre; 0 is a straight perspective.
+  param pinch   : float [0.0, 1.5] = 0.45
+
+  // Swing rate of the horizontal tile scale, in radians per second.
+  param swing   : float [0.0, 2.0] = 0.35
+
+  // Depth, in world units, over which the floor fades to black.
+  param fade    : float [2.0, 60.0] = 8.0
+
+  fragment {
+    let q0 = ray.xy / max(-ray.z, 0.0001);
+    let q  = q0 * (1.0 + pinch * dot(q0, q0));
+    let dy = horizon - q.y;
+    let on = step(0.0, dy);
+    let z  = 1.0 / max(dy, 0.0001);
+    let sx = sin(t * swing) * 1.6;
+    let u  = q.x * z * sx * tiles;
+    let v  = z * tiles + t * scroll;
+    let c  = step(0.5, fract(floor(u) * 0.5 + floor(v) * 0.5));
+    let f  = exp(-z / fade) * on;
+    color = vec4(vec3(c * f), 1.0);
+  }
+}

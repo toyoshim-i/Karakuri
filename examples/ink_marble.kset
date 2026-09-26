@@ -1,0 +1,6 @@
+{"t":"set","id":"ink_marble","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"ink_marble.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"exposure","signal":"energy","curve":"sqrt","range":[0.8,1.5]}
+{"t":"bind","layer":"L4","key":"warp","signal":"band0","curve":"smooth","range":[3.2,4.2]}

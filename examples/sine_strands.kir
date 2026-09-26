@@ -1,0 +1,71 @@
+// Thin glowing sine curves scrolling along their own axes. At `tangle` 0 every
+// strand runs horizontally through the middle and they bunch into a bright
+// knot; at 1 each has its own tilt and offset and the strands weave across the
+// frame like layered oscilloscope traces.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/sine_strands.kir
+
+proc sine_strands {
+  kind  L4
+  blend additive
+
+  // How many strands, floored; at most 12.
+  param count  : float [1.0, 12.0] = 10.0
+
+  // Scroll rate in radians per second, before each strand's own factor.
+  param scroll : float [0.0, 4.0] = 0.8
+
+  // Wave height, in frame half-heights, before each strand's own factor.
+  param amp    : float [0.0, 1.0] = 0.35
+
+  // Waves per frame half-height, before each strand's own factor.
+  param freq   : float [0.2, 8.0] = 1.6
+
+  // Width of a strand's glow, in frame half-heights.
+  param width  : float [0.0005, 0.02] = 0.003
+
+  // 0 lays every strand horizontally through the centre; 1 gives each its own
+  // tilt and offset.
+  param tangle : float [0.0, 1.0] = 1.0
+
+  // Hue of the first strand, and how far round the wheel the others spread.
+  param hue    : float [0.0, 1.0] = 0.5
+  param spread : float [0.0, 1.0] = 0.8
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let n = floor(count);
+    var c = vec3(0.0);
+    for i in 0..12 {
+      let fi = float(i);
+      let h  = hash3(uint(i) * 2971u + 41u);
+      let on = step(fi, n - 0.5);
+
+      // The strand's own frame: `u` along it, `v` across it.
+      let an = tangle * (floor(h.x * 4.0) * 0.7853982 + (h.y - 0.5) * 0.3);
+      let ca = cos(an);
+      let sa = sin(an);
+      let u  = ca * p.x + sa * p.y;
+      let v  = ca * p.y - sa * p.x - tangle * (h.z - 0.5) * 1.2;
+
+      let k  = freq * (0.5 + h.y) * 3.1415927;
+      let a  = amp * (0.35 + 0.65 * h.z) * (0.6 + 0.4 * sin(t * 0.21 + fi * 1.7));
+      let ph = t * scroll * (0.4 + h.x) * (step(0.5, h.z) * 2.0 - 1.0) + fi * 2.1;
+      let wv = u * k + ph;
+      let dv = abs(v - a * sin(wv)) / sqrt(1.0 + a * a * k * k * cos(wv) * cos(wv));
+
+      let gl = width / (dv + width);
+      let col = hsv_to_rgb(vec3(fract(hue + spread * fi / max(n, 1.0)), 0.45, 1.0));
+      c += col * gl * gl * on;
+    }
+    color = vec4(c * 1.5, 1.0);
+  }
+}

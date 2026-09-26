@@ -1,0 +1,62 @@
+// A never-repeating interference pattern of rosettes and stars with high
+// rotational symmetry, in moss, lime, cream, ochre and rust. Plane waves at
+// evenly spaced angles are summed and folded with a triangle wave, and the
+// rosettes bloom and collapse as the waves' phase cycles. `amp` sets how many
+// bands the sum folds into; bind it to loudness.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/quasi_crystal.kir
+
+proc quasi_crystal {
+  kind  L4
+  blend additive
+
+  // Wave directions, floored; 5 and 7 give the classic quasicrystals. At most 12.
+  param order : float [3.0, 12.0] = 7.0
+
+  // Wave crests per frame half-height.
+  param scale : float [1.0, 40.0] = 12.0
+
+  // Radians per second of the phase cycle.
+  param speed : float [0.0, 4.0] = 0.8
+
+  // Gain on the summed waves before folding; more gain, more bands.
+  param amp   : float [0.1, 3.0] = 0.8
+
+  // Offset along the colour ramp, as a fraction of it.
+  param shift : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let n = floor(order);
+    let q = p * scale;
+    var s = 0.0;
+    for i in 0..12 {
+      let a = 3.1415927 * float(i) / n;
+      s += cos(q.x * cos(a) + q.y * sin(a) + t * speed) * step(float(i), n - 0.5);
+    }
+
+    // Triangle-wave fold of the sum into [0, 1].
+    let v = abs(fract(s * amp * 0.25 + shift) * 2.0 - 1.0);
+
+    // Five-stop ramp: moss, lime, cream, ochre, rust.
+    let x  = v * 4.0;
+    let c0 = vec3(0.16, 0.26, 0.08);
+    let c1 = vec3(0.55, 0.72, 0.16);
+    let c2 = vec3(0.95, 0.92, 0.72);
+    let c3 = vec3(0.80, 0.56, 0.16);
+    let c4 = vec3(0.55, 0.20, 0.08);
+    var c  = mix(c0, c1, vec3(clamp(x, 0.0, 1.0)));
+    c = mix(c, c2, vec3(clamp(x - 1.0, 0.0, 1.0)));
+    c = mix(c, c3, vec3(clamp(x - 2.0, 0.0, 1.0)));
+    c = mix(c, c4, vec3(clamp(x - 3.0, 0.0, 1.0)));
+    color = vec4(srgb_to_linear(c), 1.0);
+  }
+}

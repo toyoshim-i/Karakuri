@@ -1,0 +1,123 @@
+// Dozens of small point clusters hanging around the origin, each easing in turn
+// through a cube's faces, a sphere shell, a solid ball, a box's edges, a filled
+// cube, a starburst of rays and a flat fan. Points shimmer between two blues
+// every frame; a cluster shows as loud as its band and burns red on peaks.
+// Seed / (capacity / clusters) is the cluster.
+//
+//     cargo run -p karakuri-cli -- --set examples/shape_swarms.kir,examples/bob_orbit.kir,examples/halo_points.kir
+
+proc shape_swarms {
+  kind     L1
+  topology points
+  capacity [4096, 262144] = 32768
+
+  // How many clusters share the capacity.
+  param clusters : float [4.0, 64.0] = 28.0
+
+  // Shape changes per second; each change eases over the last third of its
+  // hold.
+  param morph    : float [0.0, 2.0]  = 0.3
+
+  // Levels of four bands; cluster k follows level k % 4.
+  param level0   : float [0.0, 1.0]  = 0.8
+  param level1   : float [0.0, 1.0]  = 0.6
+  param level2   : float [0.0, 1.0]  = 0.88
+  param level3   : float [0.0, 1.0]  = 0.5
+
+  // Level below which a cluster is nearly invisible, and level above which it
+  // turns red.
+  param gate     : float [0.0, 1.0]  = 0.2
+  param redline  : float [0.5, 1.0]  = 0.92
+
+  emit position, tint
+
+  element {
+    let kc  = uint(clamp(clusters, 1.0, 64.0));
+    let per = uint(max(float(capacity / kc), 1.0));
+    let ci  = seed / per;
+
+    // Cluster home: spread evenly over directions on a spiral, at a hashed
+    // distance; and the cluster's size.
+    let hc   = hash3(ci * 977u + 11u);
+    let cz   = 1.0 - 2.0 * (float(ci) + 0.5) / float(kc);
+    let ca   = float(ci) * 2.3999632;
+    let cr   = sqrt(max(1.0 - cz * cz, 0.0));
+    let home = vec3(cos(ca) * cr, cz * 0.8, sin(ca) * cr) * (1.5 + 1.8 * hc.z);
+    let rc   = 0.4 + 0.25 * hash1(ci * 977u + 5u);
+
+    let sh = max(t * morph + hash1(ci * 977u + 3u) * 7.0, 0.0);
+    let k  = uint(floor(sh));
+    let f  = smoothstep(0.66, 1.0, fract(sh));
+
+    let u = hash3(seed * 3u + 1u);
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    for j in 0..2 {
+      let s = (k + uint(j)) % 7u;
+      var p = vec3(0.0);
+      if s == 0u {
+        // Cube faces: one coordinate pinned to +-1.
+        let face = uint(floor(u.x * 5.999));
+        let sg   = step(0.5, fract(u.x * 12.0)) * 2.0 - 1.0;
+        let a    = u.y * 2.0 - 1.0;
+        let b    = u.z * 2.0 - 1.0;
+        p = vec3(sg, a, b);
+        if face % 3u == 1u { p = vec3(a, sg, b); }
+        if face % 3u == 2u { p = vec3(a, b, sg); }
+        p = p * 0.75;
+      }
+      if s == 1u {
+        p = sphere_point(u.x, u.y);
+      }
+      if s == 2u {
+        p = sphere_point(u.x, u.y) * pow(u.z, 0.3333);
+      }
+      if s == 3u {
+        // Box edges: two coordinates pinned to +-1, the third free.
+        let e  = uint(floor(u.x * 11.999));
+        let s1 = step(0.5, fract(u.x * 24.0)) * 2.0 - 1.0;
+        let s2 = step(0.5, u.y) * 2.0 - 1.0;
+        let a  = u.z * 2.0 - 1.0;
+        p = vec3(a, s1, s2);
+        if e % 3u == 1u { p = vec3(s1, a, s2); }
+        if e % 3u == 2u { p = vec3(s1, s2, a); }
+        p = p * vec3(0.9, 0.6, 0.75);
+      }
+      if s == 4u {
+        p = (u * 2.0 - vec3(1.0)) * 0.7;
+      }
+      if s == 5u {
+        // Starburst: points strung along a dozen rays.
+        let arm = uint(floor(u.x * 12.0));
+        let hr  = hash2(ci * 131u + arm);
+        p = sphere_point(hr.x, hr.y) * pow(u.z, 0.7) * 1.3;
+      }
+      if s == 6u {
+        // Fan: rays spread across a half circle in the cluster's own plane.
+        let arm = floor(u.x * 9.0);
+        let a   = (arm / 8.0 - 0.5) * 3.1415927;
+        p = vec3(sin(a), cos(a), 0.0) * pow(u.z, 0.7) * 1.3;
+      }
+      if j == 0 { pa = p; } else { pb = p; }
+    }
+
+    let spin = t * (0.2 + 0.3 * hc.x) + hc.y * 6.2831853;
+    let local = rot_y(rot_x(mix(pa, pb, vec3(f)), spin * 0.6), spin);
+    position = home + local * rc;
+
+    var lv = level0;
+    if ci % 4u == 1u { lv = level1; }
+    if ci % 4u == 2u { lv = level2; }
+    if ci % 4u == 3u { lv = level3; }
+    let vis = 0.03 + smoothstep(gate, min(gate + 0.35, 1.0), lv);
+
+    // Two blues, swapped every sixtieth of a second, half the points each.
+    let tick  = uint(floor(max(t, 0.0) * 60.0));
+    let flip  = (tick + seed) % 2u;
+    var col   = vec3(0.05, 0.25, 1.0);
+    if flip == 1u { col = vec3(0.2, 0.55, 1.0); }
+    if lv > redline { col = vec3(1.0, 0.08, 0.04); }
+    tint = col * vis * 0.12;
+  }
+}

@@ -1,0 +1,81 @@
+// A round spectrum meter: spokes of LED segments radiate from a ring, mirrored
+// left and right, with the lowest band at the bottom and the highest at the
+// top; each spoke lights outward to the level of the bands around its angle,
+// green near the ring through amber to red at the tips. The centre disc glows
+// with `level0`. Draws the whole frame and reads no geometry; a camera looking
+// at the origin sets the frame's aspect.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/ring_meter.kir
+
+proc ring_meter {
+  kind  L4
+  blend additive
+
+  // Fill of each band, lowest first.
+  param level0   : float [0.0, 1.0] = 0.85
+  param level1   : float [0.0, 1.0] = 0.7
+  param level2   : float [0.0, 1.0] = 0.55
+  param level3   : float [0.0, 1.0] = 0.65
+  param level4   : float [0.0, 1.0] = 0.45
+  param level5   : float [0.0, 1.0] = 0.35
+  param level6   : float [0.0, 1.0] = 0.3
+  param level7   : float [0.0, 1.0] = 0.2
+
+  // Spokes on each side, floored.
+  param spokes   : float [4.0, 48.0] = 24.0
+
+  // Radius of the inner ring, as a fraction of the frame's half-height.
+  param inner    : float [0.05, 0.8] = 0.3
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let fw  = normalize(-eye);
+    let rt  = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let upv = cross(rt, fw);
+    let sc  = vec2(dot(ray, rt), dot(ray, upv)) / (dot(ray, fw) * 0.57735);
+
+    let r  = length(sc);
+    let a  = abs(atan2(sc.x, -sc.y)) / 3.1415927;
+    let ns = floor(spokes);
+
+    // Which spoke, and where across it.
+    let sp = a * ns;
+    let si = min(floor(sp), ns - 1.0);
+    let sx = fract(sp);
+    let u  = (si + 0.5) / ns * 7.0;
+    let i0 = floor(u);
+    let fu = u - i0;
+
+    var la = level0;
+    var lb = level1;
+    if i0 > 0.5 { la = level1; lb = level2; }
+    if i0 > 1.5 { la = level2; lb = level3; }
+    if i0 > 2.5 { la = level3; lb = level4; }
+    if i0 > 3.5 { la = level4; lb = level5; }
+    if i0 > 4.5 { la = level5; lb = level6; }
+    if i0 > 5.5 { la = level6; lb = level7; }
+    let lv = mix(la, lb, smoothstep(0.0, 1.0, fu));
+
+    // Twelve segments per spoke from the ring outward.
+    let span = 0.95 - inner * 0.5;
+    let rr   = (r - inner) / span;
+    let seg  = rr * 12.0;
+    let sf   = fract(seg);
+    let onr  = step(0.0, rr) * step(rr, 1.0);
+    let lit  = step(floor(seg) + 0.5, lv * 12.0);
+
+    let bar  = smoothstep(0.1, 0.25, sx) * smoothstep(0.1, 0.25, 1.0 - sx)
+             * smoothstep(0.1, 0.25, sf) * smoothstep(0.1, 0.25, 1.0 - sf);
+    let h    = clamp(rr, 0.0, 1.0);
+    let led  = hsv_to_rgb(vec3(0.33 - 0.33 * h * h, 0.9, 1.0));
+    let meter = led * bar * onr * (0.04 + 1.2 * lit);
+
+    let ringl = exp(-abs(r - inner * 0.85) * 120.0) * 0.6;
+    let disc  = (1.0 - smoothstep(inner * 0.5, inner * 0.8, r)) * level0;
+    let core  = hsv_to_rgb(vec3(0.55, 0.6, 1.0)) * (ringl + disc * 0.8);
+
+    color = vec4((meter + core) * exposure, 1.0);
+  }
+}

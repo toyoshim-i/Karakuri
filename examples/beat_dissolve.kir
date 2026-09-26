@@ -1,0 +1,45 @@
+// Breaks the picture into square blocks that drop out in random order after
+// every `every` beats and come back before the next, like a digital dissolve.
+// Dropped blocks can hold a flat colour instead of black, and the surviving
+// blocks can shift sideways.
+
+proc beat_dissolve {
+  kind L5
+
+  // Size of one block as a fraction of the frame's height.
+  param block  : float [0.005, 0.2] = 0.04
+
+  // Beats between dissolves.
+  param every  : float [0.25, 8.0] = 1.0
+
+  // Share of the blocks gone at the depth of a dissolve.
+  param depth  : float [0.0, 1.0] = 0.7
+
+  // Sideways shift of the surviving blocks at the depth, as a fraction of
+  // a block.
+  param shear  : float [0.0, 4.0] = 0.5
+
+  // Colour of a dropped block, linear.
+  param fill   : vec3 [0.0, 1.0] = vec3(0.0, 0.0, 0.0)
+
+  frame {
+    let d  = frame_step(block);
+    let g  = floor(point_coord / d);
+    let bt = max(beats, 0.0) / every;
+    let n  = floor(bt);
+    let ph = bt - n;
+
+    // Deepest just after the beat, clear again by the next.
+    let env = pow(1.0 - ph, 2.0) * depth;
+
+    let h1 = fract(sin(dot(g, vec2(127.1, 311.7)) + n * 17.3) * 43758.547);
+    let h2 = fract(sin(dot(g, vec2(269.5, 183.3)) + n * 5.7) * 43758.547);
+    let gone = step(h1, env);
+
+    let dx = (h2 - 0.5) * 2.0 * shear * env * d.x;
+    let s  = tap(src, point_coord + vec2(dx, 0.0));
+    let c  = texel(src);
+
+    color = vec4(mix(s.xyz, fill, vec3(gone)), c.w);
+  }
+}

@@ -1,0 +1,60 @@
+// Soft light beams fanning out from one point, each a wedge that fades with
+// distance, in pale blues, cyans and lilacs, with a bright glow at the source.
+// The beams turn at their own slow rates, some against the others, so they
+// cross and fan like searchlights.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/sun_beams.kir
+
+proc sun_beams {
+  kind  L4
+  blend additive
+
+  // How many beams, floored; at most 40.
+  param count  : float [4.0, 40.0] = 28.0
+
+  // Turns per second of the fastest beam; half turn each way.
+  param spin   : float [0.0, 0.2] = 0.03
+
+  // Half-width of a beam, in radians.
+  param width  : float [0.005, 0.3] = 0.05
+
+  // Where the source is, in frame half-heights from the centre, y up.
+  param spot   : vec2 [-2.0, 2.0] = vec2(-0.4, 0.35)
+
+  // How far round the wheel the beam hues spread from pale cyan.
+  param spread : float [0.0, 0.5] = 0.22
+
+  // Distance over which a beam fades, in frame half-heights.
+  param reach  : float [0.1, 4.0] = 1.4
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let d  = p - spot;
+    let r  = length(d);
+    let a  = atan2(d.y, d.x) / 6.2831853;
+    let n  = floor(count);
+    let c0 = hsv_to_rgb(vec3(0.53, 0.35, 1.0));
+    let c1 = hsv_to_rgb(vec3(0.53 + spread, 0.35, 1.0));
+    var c  = vec3(0.0);
+    for i in 0..40 {
+      let h  = hash3(uint(i) * 3571u + 9u);
+      let on = step(float(i), n - 0.5);
+      let ba = h.x + t * spin * (h.y * 2.0 - 1.0);
+      let da = abs(fract(a - ba + 0.5) - 0.5) * 6.2831853;
+      let w  = width * (0.4 + 1.2 * h.z);
+      let b  = exp(-da * da / (w * w)) * (0.3 + 0.7 * h.y);
+      c += mix(c0, c1, vec3(h.z)) * b * on;
+    }
+    let fade = exp(-r / reach);
+    let core = 0.04 / (r + 0.01);
+    color = vec4(c * fade * 0.35 + vec3(0.9, 0.95, 1.0) * core * 0.5, 1.0);
+  }
+}

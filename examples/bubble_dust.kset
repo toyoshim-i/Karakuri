@@ -1,0 +1,8 @@
+{"t":"set","id":"bubble_dust","v":1}
+{"t":"part","layer":"L1","path":"bubble_dust.kir"}
+{"t":"part","layer":"L4","path":"halo_points.kir"}
+{"t":"capacity","layer":"L1","value":131072}
+{"t":"param","layer":"L1","key":"pastel","value":0.7}
+{"t":"param","layer":"L1","key":"bright","value":0.09}
+{"t":"param","layer":"L4","key":"point_scale","value":0.03}
+{"t":"param","layer":"L4","key":"core","value":3.0}

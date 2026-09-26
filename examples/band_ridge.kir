@@ -1,0 +1,92 @@
+// A mountain range drawn by the spectrum: every `1 / rows` seconds a new profile
+// line takes the front, its height at each point following the band levels
+// (lowest band in the middle, highest at both ends) roughened by noise, and it
+// keeps following them until the next line replaces it; then it freezes and
+// slides away into the distance, fading, so the music's recent past stands
+// behind it as a ridge of lines. The lines lie along z and recede towards -x,
+// for a camera on the +x axis. Seed / 64 is the line, reused round-robin, and
+// seed % 64 the segment within it.
+//
+//     cargo run -p karakuri-cli -- --set examples/band_ridge.kir,examples/high_orbit.kir,examples/tint_strokes.kir --param speed=0
+
+proc band_ridge {
+  kind     L1
+  topology lines
+  capacity [1024, 16384] = 4096
+
+  // New lines per second.
+  param rows   : float [2.0, 30.0] = 10.0
+
+  // Height of each band's peak, lowest band first.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.75
+  param level2 : float [0.0, 1.0] = 0.6
+  param level3 : float [0.0, 1.0] = 0.65
+  param level4 : float [0.0, 1.0] = 0.5
+  param level5 : float [0.0, 1.0] = 0.4
+  param level6 : float [0.0, 1.0] = 0.3
+  param level7 : float [0.0, 1.0] = 0.2
+
+  // Tallest peak, in world units.
+  param tall   : float [0.1, 3.0] = 1.6
+
+  // Speed the lines slide away, in world units per second.
+  param recede : float [0.2, 6.0] = 1.8
+
+  // Hue of the lines at the foot; peaks turn from it.
+  param hue    : float [0.0, 1.0] = 0.5
+
+  emit position, velocity, tint
+
+  element {
+    let i  = seed % 64u;
+    let n  = float(capacity / 64u);
+    let ln = float(seed / 64u);
+    let x0 = float(i) / 64.0;
+    let x1 = float(i + 1u) / 64.0;
+
+    // Lines laid so far, which line is at the front, and how long ago this one
+    // took the front.
+    let clock = max(t, 0.0) * rows;
+    let cur   = floor(clock);
+    let front = cur - floor(cur / n) * n;
+    let back  = cur - ln - floor((cur - ln) / n) * n;
+    let since = (back + fract(clock)) / rows;
+
+    // The front line follows the levels; every other line keeps its heights.
+    var hy = vec2(position.y, position.y - velocity.y) + vec2(0.6);
+    if front == ln {
+      for j in 0..2 {
+        let x  = mix(x0, x1, float(j));
+        let v  = abs(x * 2.0 - 1.0) * 7.0;
+        let i0 = floor(v);
+        var la = level0;
+        var lb = level1;
+        if i0 > 0.5 { la = level1; lb = level2; }
+        if i0 > 1.5 { la = level2; lb = level3; }
+        if i0 > 2.5 { la = level3; lb = level4; }
+        if i0 > 3.5 { la = level4; lb = level5; }
+        if i0 > 4.5 { la = level5; lb = level6; }
+        if i0 > 5.5 { la = level6; lb = level7; }
+        if i0 > 6.5 { la = level7; lb = level7; }
+        let lv    = mix(la, lb, smoothstep(0.0, 1.0, v - i0));
+        let rough = 0.55 + 0.45 * fbm(vec3(x * 9.0, t * 0.6, 0.0), 3);
+        let env   = smoothstep(0.0, 0.2, x) * smoothstep(1.0, 0.8, x);
+        let h     = tall * lv * rough * env;
+        if j == 0 { hy = vec2(h, hy.y); } else { hy = vec2(hy.x, h); }
+      }
+    }
+
+    let xd = 2.5 - since * recede;
+    let a  = vec3(xd, hy.x - 0.6, 3.5 - x0 * 7.0);
+    let b  = vec3(xd, hy.y - 0.6, 3.5 - x1 * 7.0);
+
+    let fade = exp(-since * 0.35);
+    let peak = max(hy.x, hy.y) / tall;
+    let lift = 0.35 + 0.9 * peak;
+
+    position = a;
+    velocity = a - b;
+    tint     = hsv_to_rgb(vec3(fract(hue - 0.4 * peak), 0.7, 1.0)) * lift * fade;
+  }
+}

@@ -1,0 +1,64 @@
+// A teal field, brightest in the middle, with close pairs of pale rings
+// expanding from the centre like a sonar ping, and fine white streaks rushing
+// outward along hundreds of angular lanes like stars at warp speed.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/sonar_warp.kir
+
+proc sonar_warp {
+  kind  L4
+  blend additive
+
+  // Ring pairs leaving the centre per second.
+  param ping   : float [0.0, 2.0] = 0.35
+
+  // Ring pairs on screen at once, measured across the frame's half-height.
+  param rings  : float [0.5, 6.0] = 1.5
+
+  // Streak passes per second, before each lane's own factor.
+  param warp   : float [0.0, 2.0] = 0.3
+
+  // Angular lanes around the centre, floored.
+  param lanes  : float [32.0, 720.0] = 360.0
+
+  // Hue of the background.
+  param hue    : float [0.0, 1.0] = 0.52
+
+  // Brightness of the streaks.
+  param streak : float [0.0, 8.0] = 2.0
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let r  = length(p);
+    let bg = hsv_to_rgb(vec3(hue, 0.8, 0.55)) * (1.0 - 0.3 * smoothstep(0.0, 2.0, r));
+
+    // A pair of thin rings every `1 / rings` of the half-height.
+    let f  = fract(r * rings - t * ping);
+    let e1 = f * 90.0;
+    let e2 = (f - 0.035) * 90.0;
+    let rg = (exp(-e1 * e1) + exp(-e2 * e2)) * smoothstep(0.02, 0.2, r);
+
+    // Streaks: one per lane, each at its own depth, thrown outward by a
+    // perspective divide so it speeds up and brightens as it nears the edge.
+    let n  = floor(lanes);
+    let u  = (atan2(p.y, p.x) / 6.2831853 + 0.5) * n;
+    let li = floor(u);
+    let h  = hash2(uint(li) * 2654435761u + 7u);
+    let z  = fract(h.x - t * warp * (0.6 + 0.8 * h.y));
+    let hd = 0.06 / max(z, 0.01);
+    let tl = hd * 0.75;
+    let along = smoothstep(tl, hd, r) * (1.0 - step(hd, r));
+    let across = abs(fract(u) - 0.5) * r * 6.2831853 / n;
+    let wd = 0.0015 + 0.004 * r;
+    let st = along * (1.0 - smoothstep(0.0, wd, across)) * min(r, 1.5) * step(0.35, h.y);
+
+    color = vec4(bg + vec3(0.55, 0.8, 1.0) * rg * 0.6 + vec3(st * streak), 1.0);
+  }
+}

@@ -1,0 +1,74 @@
+// Particles carried along the Aizawa attractor: a sphere-like shell wound by
+// spiralling tracks, pierced by a tube along its axis. Each particle is born
+// near the attractor and lives a few seconds; its colour follows its height.
+// The attractor's own state is carried in `normal`.
+//
+//     cargo run -p karakuri-cli -- --set examples/aizawa_flow.kir,examples/tint_strokes.kir
+
+proc aizawa_flow {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 131072
+
+  // Particles born per second, and seconds each one lives.
+  param spawn_rate : float [0.0, 100000.0] = 18000.0
+  param lifetime   : float [0.5, 20.0]     = 7.0
+
+  // Attractor time per second of simulation time.
+  param rate       : float [0.0, 4.0]      = 1.2
+
+  // The system's `a`; lower values open the shell, higher ones close it.
+  param a          : float [0.7, 1.0]      = 0.95
+
+  // World units per attractor unit.
+  param scale      : float [0.5, 3.0]      = 1.6
+
+  // Hue at the bottom of the shell, and the hue added from bottom to top.
+  param hue        : float [0.0, 1.0]      = 0.52
+  param spread     : float [0.0, 1.0]      = 0.45
+
+  // Turns per second of the whole shape about the vertical.
+  param spin       : float [-0.5, 0.5]     = 0.03
+
+  emit position, velocity, age, normal, tint
+
+  spawn {
+    let h = hash3(seed * 3u + 1u);
+    normal   = sphere_point(h.x, h.y) * (0.3 + 0.9 * h.z) + vec3(0.0, 0.0, 0.4);
+    position = vec3(0.0);
+    velocity = vec3(0.0);
+    age      = 0.0;
+    tint     = vec3(0.0);
+  }
+
+  element {
+    var p = normal;
+    let h = dt * rate * 0.25;
+    for i in 0..4 {
+      let r2 = p.x * p.x + p.y * p.y;
+      let d = vec3((p.z - 0.7) * p.x - 3.5 * p.y,
+                   3.5 * p.x + (p.z - 0.7) * p.y,
+                   0.6 + a * p.z - p.z * p.z * p.z / 3.0 - r2 * (1.0 + 0.25 * p.z) + 0.1 * p.z * p.x * p.x * p.x);
+      p = p + d * h;
+    }
+
+    let w = rot_y(vec3(p.x, p.z - 0.6, p.y) * scale, t * spin * 6.2831853);
+
+    if age > 0.0 {
+      velocity = (w - position) / max(dt, 0.0001);
+    } else {
+      velocity = vec3(0.0);
+    }
+    position = w;
+    normal   = p;
+    age      = age + dt;
+
+    let hz = clamp((p.z + 0.5) / 2.2, 0.0, 1.0);
+    let fade = smoothstep(0.0, 0.4, age) * (1.0 - smoothstep(lifetime - 1.0, lifetime, age));
+    tint = hsv_to_rgb(vec3(fract(hue + spread * hz), 0.75, 1.0)) * fade;
+
+    if age > lifetime {
+      kill();
+    }
+  }
+}

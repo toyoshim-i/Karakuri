@@ -1,0 +1,6 @@
+{"t":"set","id":"moire_rings","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"moire_rings.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"apart","signal":"band0","curve":"smooth","range":[0.3,0.55]}
+{"t":"bind","layer":"L4","key":"exposure","signal":"energy","curve":"sqrt","range":[0.6,1.2]}

@@ -1,0 +1,7 @@
+{"t":"set","id":"sky_bursts","v":1}
+{"t":"part","layer":"L1","path":"sky_bursts.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.003}
+{"t":"param","layer":"L4","key":"taper","value":0.8}
+{"t":"camera","kind":"orbit","radius":9.0,"speed":0.05,"height":0.5}
+{"t":"bind","layer":"L1","key":"glow","signal":"energy","curve":"sqrt","range":[0.7,1.6]}

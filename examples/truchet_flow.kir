@@ -1,0 +1,83 @@
+// A drifting plane of Truchet tiles: every square cell holds two quarter-circle
+// arcs joining the midpoints of its edges, in one of two orientations, so the
+// arcs link into endless winding neon paths. Pulses of light run along the
+// paths, and on every `every` beats a share of the tiles turns over and the
+// paths re-route. Draws the whole frame and reads no geometry; a camera looking
+// at the origin sets the frame's aspect.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/truchet_flow.kir
+
+proc truchet_flow {
+  kind  L4
+  blend additive
+
+  // Tiles across the frame's height.
+  param tiles    : float [2.0, 40.0] = 9.0
+
+  // Half-width of a path's bright core, as a fraction of a tile.
+  param width    : float [0.005, 0.2] = 0.035
+
+  // Speed of the pulses along the paths, in arc lengths per second.
+  param rush     : float [-4.0, 4.0] = 0.9
+
+  // Beats between re-routings.
+  param every    : float [0.25, 8.0] = 1.0
+
+  // Share of the tiles that turn over at each re-routing.
+  param share    : float [0.0, 1.0] = 0.3
+
+  // Hue at the frame centre; the hue turns with distance from it.
+  param hue      : float [0.0, 1.0] = 0.52
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let fw  = normalize(-eye);
+    let rt  = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let upv = cross(rt, fw);
+    let sc  = vec2(dot(ray, rt), dot(ray, upv)) / (dot(ray, fw) * 0.57735);
+
+    let g    = sc * tiles * 0.5 + vec2(t * 0.21, t * 0.13) + vec2(512.0);
+    let cell = floor(g);
+    var f    = g - cell;
+    let key  = uint(cell.x) * 73856093u + uint(cell.y) * 19349663u;
+
+    // Each re-routing is a fresh draw per tile; a tile turns over when it is
+    // among `share` of that draw.
+    let k    = floor(max(beats, 0.0) / every);
+    var flip = step(0.5, hash1(key));
+    if hash1(key + uint(k) * 2654435761u) < share {
+      flip = 1.0 - flip;
+    }
+    if flip > 0.5 {
+      f = vec2(1.0 - f.x, f.y);
+    }
+
+    // Distance to the nearer of the two arcs, and the angle along it.
+    let pa = f;
+    let pb = vec2(1.0) - f;
+    let ra = length(pa);
+    let rb = length(pb);
+    var d  = abs(ra - 0.5);
+    var a  = atan2(pa.y, pa.x);
+    if abs(rb - 0.5) < d {
+      d = abs(rb - 0.5);
+      a = atan2(pb.y, pb.x);
+    }
+
+    // The checkerboard parity and the flip together keep the pulse running
+    // the same way along a joined path.
+    let par  = (cell.x + cell.y) % 2.0;
+    let dir  = mix(1.0, -1.0, abs(par - flip));
+    let dash = 0.5 + 0.5 * cos(a * 4.0 * dir - t * rush * 6.2831853);
+
+    let core = exp(-d / width);
+    let halo = exp(-d / (width * 5.0)) * 0.25;
+    let hsh  = hue + length(sc) * 0.12 + t * 0.01;
+    let col  = hsv_to_rgb(vec3(fract(hsh), 0.75, 1.0));
+
+    let l = core * (0.35 + 1.4 * pow(dash, 6.0)) + halo * (0.4 + 0.6 * dash);
+    color = vec4(col * l * exposure, 1.0);
+  }
+}

@@ -1,0 +1,48 @@
+// Bends the picture through a lens: positive `bulge` swells the centre like a
+// fisheye, negative pinches it; `polar` unrolls the frame into a ring, so its
+// top edge wraps round the centre and its bottom edge becomes the outer rim.
+// The two blend. The warp can breathe with the beat.
+
+proc lens_warp {
+  kind L5
+
+  // Barrel distortion: positive swells the centre, negative pinches it.
+  param bulge  : float [-1.0, 2.0] = 0.8
+
+  // Blend from the plain frame (0) to the frame unrolled round the centre (1).
+  param polar  : float [0.0, 1.0] = 0.0
+
+  // Turns per beat of the unrolled ring.
+  param spin   : float [-1.0, 1.0] = 0.0
+
+  // Extra bulge at each beat, decaying through the beat.
+  param breath : float [0.0, 1.0] = 0.0
+
+  // Magnification about the frame centre.
+  param zoom   : float [0.5, 4.0] = 1.0
+
+  frame {
+    let fs     = frame_step(1.0);
+    let aspect = fs.y / fs.x;
+    let ph     = fract(max(beats, 0.0));
+    let k      = bulge + breath * exp(-ph * 4.0);
+
+    // Centred coordinates with y up, 1 at the top edge.
+    let p  = vec2((point_coord.x * 2.0 - 1.0) * aspect, 1.0 - point_coord.y * 2.0) / zoom;
+    let r  = length(p);
+    let rw = r / (1.0 + k * r * r * 0.25);
+    let pw = p * (rw / max(r, 0.00001));
+    let lens = vec2(pw.x / aspect * 0.5 + 0.5, 0.5 - pw.y * 0.5);
+
+    // Unrolled: angle across the frame, radius down it.
+    let a  = atan2(p.x, p.y) / 6.2831853 + 0.5 + beats * spin;
+    let rr = clamp(r / (aspect * 1.05), 0.0, 1.0);
+    let ring = vec2(fract(a), rr);
+
+    let at = mix(lens, ring, vec2(polar));
+    let inside = step(0.0, at.x) * step(at.x, 1.0) * step(0.0, at.y) * step(at.y, 1.0);
+    let s = tap(src, clamp(at, vec2(0.0), vec2(1.0)));
+
+    color = s * inside;
+  }
+}

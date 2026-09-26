@@ -1,0 +1,159 @@
+// A banded gas giant of rust and cream, girdled by pale golden rings with gaps,
+// lit by a distant sun: the planet's shadow falls across the rings and the
+// rings' shadow across the planet. Three small grey moons circle it and a
+// starfield surrounds it all. Everything fades in over the first seconds.
+// The first 40% of seeds are the planet, the next 50% the rings, then 3% the
+// moons and the rest the stars.
+//
+//     cargo run -p karakuri-cli -- --set examples/ringed_giant.kir,examples/high_orbit.kir,examples/sun_sky.kir,examples/facing_dots.kir
+
+proc ringed_giant {
+  kind     L1
+  topology points
+  capacity [16384, 524288] = 131072
+
+  // Planet radius in world units; the rings and moons scale with it.
+  param globe  : float [0.5, 2.5]  = 1.45
+
+  // Tilt of the planet's axis and ring plane from the vertical, in radians.
+  param tilt   : float [0.0, 1.2]  = 0.42
+
+  // The sun's direction as turns around the vertical axis, at a fixed height
+  // of 0.18 above the horizontal. Match `sun_sky`'s value.
+  param sun_az : float [0.0, 1.0]  = 0.62
+
+  // Turns per second of the planet about its axis; the rings and moons turn
+  // at their own orbital rates relative to it.
+  param spin   : float [0.0, 0.2]  = 0.01
+
+  // How much of each gap in the rings is emptied: 0 is one plain disc.
+  param gaps   : float [0.0, 1.0]  = 0.9
+
+  // Brightness of the sunlit surfaces.
+  param sun    : float [0.0, 4.0]  = 1.3
+
+  emit position, normal, tint, size
+
+  element {
+    let n    = float(capacity);
+    let f    = (float(seed) + 0.5) / n;
+    let fade = smoothstep(0.0, 4.0, t);
+
+    let a  = sun_az * 6.2831853;
+    let sw = normalize(vec3(cos(a), 0.18, sin(a)));
+    let sl = rot_z(sw, -tilt);
+    let rg = globe;
+
+    var p   = vec3(0.0);
+    var nrm = vec3(0.0);
+    var col = vec3(0.0);
+    var rad = 0.0;
+    var local = 1.0;
+
+    if f < 0.4 {
+      // Planet: a Fibonacci sphere turning about its axis.
+      let np = n * 0.4;
+      let i  = float(seed) + 0.5;
+      let y  = 1.0 - 2.0 * i / np;
+      let r  = sqrt(max(1.0 - y * y, 0.0));
+      let ph = float(seed * 2654435769u) / 4294967296.0 * 6.2831853;
+      let th = ph + t * spin * 6.2831853;
+      let u  = vec3(cos(th) * r, y, sin(th) * r);
+
+      let warp = fbm(vec3(cos(ph) * r * 3.0, y * 9.0, sin(ph) * r * 3.0), 3);
+      let band = 0.5 + 0.5 * sin(y * 15.0 + warp * 1.6 + sin(y * 5.0) * 1.5);
+      let fine = 0.5 + 0.5 * sin(y * 53.0 + warp * 3.0);
+      let dark = srgb_to_linear(vec3(0.36, 0.16, 0.08));
+      let mid  = srgb_to_linear(vec3(0.80, 0.46, 0.22));
+      let pale = srgb_to_linear(vec3(0.93, 0.80, 0.62));
+      var base = mix(dark, mid, vec3(smoothstep(0.0, 0.9, band)));
+      base = mix(base, pale, vec3(smoothstep(0.75, 1.0, band) * 0.55));
+      base = base * (0.9 + 0.2 * fine);
+
+      // Sunlight, and the rings' shadow where the path to the sun crosses them.
+      let lit = smoothstep(-0.08, 0.35, dot(u, sl));
+      var shade = 1.0;
+      let q = u * rg;
+      if abs(sl.y) > 0.001 {
+        let tau = -q.y / sl.y;
+        if tau > 0.0 {
+          let hit = length((q + sl * tau).xz) / rg;
+          let inr = smoothstep(1.28, 1.32, hit) * (1.0 - smoothstep(2.3, 2.34, hit));
+          shade = 1.0 - 0.75 * inr;
+        }
+      }
+
+      p   = q;
+      nrm = u;
+      col = base * (lit * shade * sun + 0.015);
+      rad = rg * 2.9 / sqrt(np);
+    } else {
+      if f < 0.90 {
+        // Rings: points scattered over the annulus, emptied in the gaps.
+        let h  = hash3(seed * 3u + 17u);
+        let rr = mix(1.3, 2.34, h.x);
+        let cg = 1.0 - smoothstep(0.0, 0.035, abs(rr - 1.97)) ;
+        let eg = 1.0 - smoothstep(0.0, 0.012, abs(rr - 2.2));
+        let ig = 1.0 - smoothstep(0.0, 0.05, abs(rr - 1.52));
+        let dens = (1.0 - gaps * max(max(cg, eg), ig * 0.7)) * mix(0.35, 1.0, smoothstep(1.4, 1.6, rr));
+        let orbit = h.y * 6.2831853 + t * 0.12 * pow(rr, -1.5);
+        let q = vec3(cos(orbit) * rr, (h.z - 0.5) * 0.01, sin(orbit) * rr) * rg;
+
+        // The planet's shadow: behind the planet as seen from the sun.
+        let along = dot(q, sl);
+        var shade = 1.0;
+        if along < 0.0 && length(q - sl * along) < rg {
+          shade = 0.06;
+        }
+
+        let ringlet = 0.75 + 0.25 * sin(rr * 95.0) * sin(rr * 37.0);
+        let gold    = srgb_to_linear(vec3(0.88, 0.78, 0.58));
+
+        p   = q;
+        col = gold * ringlet * shade * sun * 0.75;
+        rad = rg * 0.018 * step(hash1(seed + 99u), dens);
+      } else {
+        if f < 0.93 {
+          // Moons: three small grey spheres on inclined orbits.
+          let j  = seed % 3u;
+          let fj = float(j);
+          let hm = hash2(seed * 5u + 3u);
+          let u  = sphere_point(hm.x, hm.y);
+          let dist = rg * (2.9 + 1.25 * fj + 0.2 * fj * fj);
+          let mr   = rg * (0.085 + 0.03 * fract(fj * 0.618 + 0.3));
+          let ang  = t * 0.25 / (1.0 + fj * 1.2) + fj * 2.1;
+          let inc  = 0.08 * (fj - 1.0);
+          let c    = rot_x(vec3(cos(ang), 0.0, sin(ang)) * dist, inc);
+          let lit  = smoothstep(-0.05, 0.3, dot(u, sl));
+
+          p   = c + u * mr;
+          nrm = u;
+          col = vec3(0.32, 0.31, 0.3) * (lit * sun + 0.01);
+          rad = mr * 0.12;
+        } else {
+          // Stars: a shell far outside everything else, not tilted.
+          let hs = hash3(seed * 7u + 1u);
+          let dir = sphere_point(hs.x, hs.y);
+          let mag = pow(hs.z, 6.0);
+          let hue = hash1(seed + 5u);
+          let tc  = mix(vec3(1.0, 0.75, 0.55), vec3(0.65, 0.78, 1.0), vec3(hue));
+
+          p     = dir * 45.0;
+          col   = tc * (0.15 + 3.0 * mag);
+          rad   = 0.06 + 0.1 * mag;
+          local = 0.0;
+        }
+      }
+    }
+
+    if local > 0.5 {
+      p   = rot_z(p, tilt);
+      nrm = rot_z(nrm, tilt);
+    }
+
+    position = p;
+    normal   = nrm;
+    tint     = col * fade;
+    size     = rad;
+  }
+}

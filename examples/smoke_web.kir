@@ -1,0 +1,72 @@
+// A milky fly-through of an endless diagonal lattice of struts, softened by fog
+// and a gentle warp so its forms read blurred and dreamy; the tint drifts
+// through pinks and blues and periodically blows out into saturated, clipped
+// extremes before settling. Reads `ray` against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/smoke_web.kir --param turn=0
+
+proc smoke_web {
+  kind  L4
+  blend additive
+
+  // Forward speed in world units per second.
+  param fly     : float [0.0, 3.0] = 0.5
+
+  // Spacing of the lattice planes in world units.
+  param mesh    : float [0.8, 4.0] = 2.2
+
+  // How far the lattice is bent out of true.
+  param warp    : float [0.0, 0.6] = 0.1
+
+  // Fog density per world unit travelled.
+  param fog     : float [0.0, 0.6] = 0.22
+
+  // Tint cycle rate in cycles per second.
+  param cycle   : float [0.0, 0.5] = 0.07
+
+  // How far the tint blows out at the peak of its cycle; the output is clipped
+  // at this many times its settled level.
+  param clip_at : float [1.0, 6.0] = 3.0
+
+  fragment {
+    let o  = vec3(0.3, 0.2, -t * fly);
+    let rd = rot_z(rot_y(ray, 0.15 * sin(t * 0.13)), t * 0.05);
+    let hm = mesh * 0.5;
+    let th = mesh * 0.07;
+
+    var p   = o;
+    var dep = 0.0;
+    var d   = 1.0;
+
+    for i in 0..40 {
+      let w = p + sin(p.yzx * 1.1 + vec3(t * 0.3)) * warp;
+      // Three families of diagonal planes; a strut is where two families meet.
+      let a = abs((dot(w, vec3(0.7071, 0.7071, 0.0)) % mesh) - hm);
+      let b = abs((dot(w, vec3(0.0, 0.7071, 0.7071)) % mesh) - hm);
+      let c = abs((dot(w, vec3(0.7071, 0.0, 0.7071)) % mesh) - hm);
+      d = min(min(max(a, b), max(b, c)), max(a, c)) - th;
+      let s = max(d * 0.8, 0.01);
+      p = p + rd * s;
+      dep += s;
+    }
+
+    // One offset sample toward the light gives a soft highlight on the side of
+    // a strut that faces it.
+    let lp = p + normalize(vec3(0.4, 0.8, 0.3)) * 0.12;
+    let lw = lp + sin(lp.yzx * 1.1 + vec3(t * 0.3)) * warp;
+    let la = abs((dot(lw, vec3(0.7071, 0.7071, 0.0)) % mesh) - hm);
+    let lb = abs((dot(lw, vec3(0.0, 0.7071, 0.7071)) % mesh) - hm);
+    let lc = abs((dot(lw, vec3(0.7071, 0.0, 0.7071)) % mesh) - hm);
+    let ld = min(min(max(la, lb), max(lb, lc)), max(la, lc)) - th;
+    let hi = clamp((ld - d) / 0.12, 0.0, 1.0);
+
+    let f   = exp(-dep * fog);
+    let ph  = t * cycle * 6.2831853;
+    let hue = mix(vec3(1.0, 0.62, 0.8), vec3(0.55, 0.7, 1.0), vec3(0.5 + 0.5 * cos(ph)));
+    let blow = 1.0 + (clip_at * 2.0) * pow(0.5 + 0.5 * sin(ph * 2.3), 40.0);
+    let milk = vec3(0.5, 0.48, 0.55);
+    let base = mix(milk, (vec3(0.08) + vec3(0.6 * hi)) * vec3(1.05, 1.0, 1.1), vec3(f));
+    let col  = clamp(base * hue * hue * blow, vec3(0.0), vec3(clip_at * 0.3));
+    color = vec4(col, 1.0);
+  }
+}

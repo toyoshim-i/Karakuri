@@ -1,0 +1,112 @@
+// A city block of wireframe towers on a square grid, each tower's height
+// following one of eight band levels so the skyline pumps with the music, the
+// eight bands laid out in rings from the centre outward. A band of light climbs
+// every tower on each beat. Every fourth row and column of the grid is a street.
+// Seed / 16 is the lot, row-major on a 16-by-16 grid; seed % 16 picks one of
+// its tower's twelve edges or four scan-ring sides.
+//
+//     cargo run -p karakuri-cli -- --set examples/wire_city.kir,examples/tint_strokes.kir
+
+proc wire_city {
+  kind     L1
+  topology lines
+  capacity [4096, 16384] = 4096
+
+  // Height of each band's towers, lowest band at the centre.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.75
+  param level2 : float [0.0, 1.0] = 0.6
+  param level3 : float [0.0, 1.0] = 0.65
+  param level4 : float [0.0, 1.0] = 0.5
+  param level5 : float [0.0, 1.0] = 0.4
+  param level6 : float [0.0, 1.0] = 0.3
+  param level7 : float [0.0, 1.0] = 0.25
+
+  // Tallest a tower can be, in world units.
+  param tall   : float [0.2, 5.0] = 3.0
+
+  // Half the width of the block, in world units.
+  param wide   : float [0.5, 6.0] = 3.0
+
+  // Hue of the lowest band; the others step round the wheel from it.
+  param hue    : float [0.0, 1.0] = 0.55
+
+  emit position, velocity, tint
+
+  element {
+    let tw  = seed / 16u;
+    let e   = seed % 16u;
+    let gx  = float(tw % 16u);
+    let gz  = float(tw / 16u);
+    let key = tw * 2654435761u + 17u;
+
+    // Footprint: a cell of the grid, shrunk by a random setback.
+    let cell = 2.0 * wide / 16.0;
+    let cx   = -wide + (gx + 0.5) * cell;
+    let cz   = -wide + (gz + 0.5) * cell;
+    let hw   = cell * (0.22 + 0.18 * hash1(key));
+    let hd   = cell * (0.22 + 0.18 * hash1(key + 1u));
+
+    // Band ring by distance from the centre in cells.
+    let ring = clamp(floor(length(vec2(gx - 7.5, gz - 7.5)) / 1.4), 0.0, 7.0);
+    var lv = level0;
+    if ring > 0.5 { lv = level1; }
+    if ring > 1.5 { lv = level2; }
+    if ring > 2.5 { lv = level3; }
+    if ring > 3.5 { lv = level4; }
+    if ring > 4.5 { lv = level5; }
+    if ring > 5.5 { lv = level6; }
+    if ring > 6.5 { lv = level7; }
+    let h = tall * (0.08 + 0.92 * lv) * (0.45 + 0.55 * hash1(key + 2u)) - 1.0;
+
+    // Corner c of the footprint at height y, counter-clockwise.
+    let c0 = vec3(cx - hw, 0.0, cz - hd);
+    let c1 = vec3(cx + hw, 0.0, cz - hd);
+    let c2 = vec3(cx + hw, 0.0, cz + hd);
+    let c3 = vec3(cx - hw, 0.0, cz + hd);
+    let bot = vec3(0.0, -1.0, 0.0);
+    let top = vec3(0.0, h, 0.0);
+
+    // The scan ring: one climb per beat.
+    let ph   = fract(max(beats, 0.0));
+    let scan = vec3(0.0, mix(-1.0, h, ph), 0.0);
+
+    var pa = c0;
+    var pb = c1;
+    var up = bot;
+    var ub = bot;
+    let k  = e % 4u;
+    if k == 1u { pa = c1; pb = c2; }
+    if k == 2u { pa = c2; pb = c3; }
+    if k == 3u { pa = c3; pb = c0; }
+    if e < 4u {
+      up = bot; ub = bot;
+    } else {
+      if e < 8u {
+        up = top; ub = top;
+      } else {
+        if e < 12u {
+          pb = pa; up = bot; ub = top;
+        } else {
+          up = scan; ub = scan;
+        }
+      }
+    }
+
+    let a = pa + up;
+    let b = pb + ub;
+
+    let col  = hsv_to_rgb(vec3(fract(hue + ring * 0.07), 0.8, 1.0));
+    var l    = 0.45;
+    if e >= 4u && e < 8u { l = 1.0; }
+    if e >= 12u { l = 1.6 * (1.0 - ph); }
+
+    // Every fourth row and column is a street and holds no tower.
+    var lot = 1.0;
+    if tw % 4u == 3u || (tw / 16u) % 4u == 3u { lot = 0.0; }
+
+    position = a;
+    velocity = (a - b) * lot;
+    tint     = col * l * lot;
+  }
+}

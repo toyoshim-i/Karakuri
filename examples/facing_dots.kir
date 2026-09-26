@@ -1,0 +1,70 @@
+// One soft-edged disc per element, `size` world units in radius and sized in
+// perspective, coloured by `tint`. An element with a unit `normal` that faces
+// away from the camera is not drawn, so a sphere of points shows only its near
+// side; an element whose `normal` is zero is always drawn. An opaque sphere of
+// radius `occluder` at the origin hides every element behind it.
+//
+//     cargo run -p karakuri-cli -- --set examples/ringed_giant.kir,examples/high_orbit.kir,examples/sun_sky.kir,examples/facing_dots.kir
+
+proc facing_dots {
+  kind  L4
+  blend weighted
+
+  consumes position, normal, tint, size
+
+  // Multiplier on the world radius each element carries in `size`.
+  param scale    : float [0.0, 4.0] = 1.0
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.0
+
+  // Width of the soft edge as a fraction of the radius.
+  param soft     : float [0.02, 1.0] = 0.35
+
+  // How much of what is behind a disc it hides.
+  param opacity  : float [0.0, 1.0] = 1.0
+
+  // Radius of the opaque sphere at the origin; 0 hides nothing.
+  param occluder : float [0.0, 8.0] = 0.0
+
+  vertex {
+    let c  = camera * vec4(position, 1.0);
+    let cu = camera * vec4(position + vec3(0.0, size * scale, 0.0), 1.0);
+    let cn = camera * vec4(position + normal * 0.01, 1.0);
+
+    // A normal that moves the point away from the eye faces away from it.
+    var keep = 1.0;
+    if dot(normal, normal) > 0.25 && cn.w > c.w {
+      keep = 0.0;
+    }
+
+    // Behind the centre of the occluding sphere and inside its outline on
+    // the frame. The outline's half-extents are the largest projected
+    // offsets of the three axis radii.
+    if occluder > 0.0 {
+      let o  = camera * vec4(0.0, 0.0, 0.0, 1.0);
+      let on = o.xy / o.w;
+      let ax = camera * vec4(occluder, 0.0, 0.0, 1.0);
+      let ay = camera * vec4(0.0, occluder, 0.0, 1.0);
+      let az = camera * vec4(0.0, 0.0, occluder, 1.0);
+      let dx = abs(ax.xy / ax.w - on);
+      let dy = abs(ay.xy / ay.w - on);
+      let dz = abs(az.xy / az.w - on);
+      let rr = max(max(dx, dy), dz);
+      let e  = (c.xy / c.w - on) / max(rr, vec2(0.00001));
+      if c.w > o.w && dot(e, e) < 1.0 {
+        keep = 0.0;
+      }
+    }
+
+    clip       = c;
+    point_rate = abs(cu.y / cu.w - c.y / c.w) * keep;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = 1.0 - smoothstep(1.0 - soft, 1.0, d);
+
+    color = vec4(tint * exposure, a * opacity);
+  }
+}

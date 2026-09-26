@@ -1,0 +1,48 @@
+// Reduces the picture to a few flat tones per channel, like a screen print,
+// with an ordered four-by-four dither across each step so gradients break into
+// a regular pattern of dots instead of bands. At one level it is a hard
+// threshold; the level count can jump on the beat.
+
+proc poster_dither {
+  kind L5
+
+  // Tones per channel above black, floored.
+  param levels : float [1.0, 8.0] = 3.0
+
+  // Size of one dither cell as a fraction of the frame's height.
+  param cell   : float [0.001, 0.02] = 0.003
+
+  // Strength of the dither: 0 gives flat bands, 1 a full ordered dither.
+  param dither : float [0.0, 1.0] = 1.0
+
+  // Brightness mapped to the top tone; brighter input clips to it.
+  param white  : float [0.25, 4.0] = 1.0
+
+  // Chance per beat that the tone count drops to one for that beat.
+  param snap   : float [0.0, 1.0] = 0.0
+
+  frame {
+    let s = texel(src);
+    let d = frame_step(cell);
+    let g = floor(point_coord / d);
+
+    // A four-by-four ordered threshold built from two nested two-by-two ones.
+    let a  = g - floor(g / 2.0) * 2.0;
+    let b  = floor(g / 2.0) - floor(g / 4.0) * 2.0;
+    let ia = a.x * 2.0 + a.y * 3.0 - a.x * a.y * 4.0;
+    let ib = b.x * 2.0 + b.y * 3.0 - b.x * b.y * 4.0;
+    let th = (ia * 4.0 + ib + 0.5) / 16.0 - 0.5;
+
+    let beat = floor(max(beats, 0.0));
+    let roll = fract(sin(beat * 12.9898 + 78.233) * 43758.547);
+    var n = floor(levels);
+    if roll < snap {
+      n = 1.0;
+    }
+
+    let v = clamp(s.xyz / white, vec3(0.0), vec3(1.0)) * n + vec3(th * dither);
+    let q = clamp(floor(v + vec3(0.5)), vec3(0.0), vec3(n)) / n;
+
+    color = vec4(q * white, s.w);
+  }
+}

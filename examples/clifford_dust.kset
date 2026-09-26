@@ -1,0 +1,7 @@
+{"t":"set","id":"clifford_dust","v":1}
+{"t":"part","layer":"L1","path":"clifford_dust.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"plain_points.kir"}
+{"t":"param","layer":"L4","key":"point_scale","value":0.0019}
+{"t":"param","layer":"L4","key":"exposure","value":0.35}
+{"t":"bind","layer":"L1","key":"wander","signal":"energy","curve":"smooth","range":[0.1,0.35]}

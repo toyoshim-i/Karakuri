@@ -1,0 +1,75 @@
+// A spiral galaxy of points: a warm central bulge, a thin disc wound into
+// logarithmic arms of blue-white stars studded with pink knots, and a faint
+// yellow haze between the arms. Inner stars orbit faster than outer ones, so
+// the arms wind as they turn. The disc is tilted by `tilt` about the x axis.
+//
+//     cargo run -p karakuri-cli -- --set examples/spiral_galaxy.kir,examples/high_orbit.kir,examples/halo_points.kir
+
+proc spiral_galaxy {
+  kind     L1
+  topology points
+  capacity [16384, 1048576] = 131072
+
+  // Number of arms, and how tightly they wind: turns of angle per unit of
+  // log radius.
+  param arms   : float [1.0, 6.0]  = 2.0
+  param wind   : float [0.5, 6.0]  = 2.6
+
+  // Radius of the disc's scale length, in world units, and the fraction of
+  // stars that belong to the bulge.
+  param extent : float [0.3, 3.0]  = 0.8
+  param bulge  : float [0.0, 0.5]  = 0.18
+
+  // How far stars scatter off their arm, in radians.
+  param scatter : float [0.0, 1.5] = 0.4
+
+  // Orbital speed at unit radius, in radians per second.
+  param spin   : float [0.0, 1.0]  = 0.12
+
+  // Tilt of the disc about the x axis, in radians.
+  param tilt   : float [0.0, 1.5]  = 0.35
+
+  // Brightness of every star.
+  param bright : float [0.0, 2.0]  = 0.12
+
+  emit position, tint
+
+  element {
+    let h  = hash3(seed * 3u + 7u);
+    let h2 = hash3(seed * 5u + 11u);
+
+    var p   = vec3(0.0);
+    var col = vec3(0.0);
+
+    if h2.z < bulge {
+      // Bulge: a squashed gaussian ball, warm and dense.
+      let dir = sphere_point(h.x, h.y);
+      let r   = extent * 0.45 * sqrt(-2.0 * log(max(h.z, 0.0001))) * 0.5;
+      let ang = t * spin * 1.5;
+      p   = rot_y(dir * vec3(1.0, 0.6, 1.0) * r, ang);
+      col = vec3(1.0, 0.7, 0.4) * (0.9 - 0.6 * min(r / extent, 1.0));
+    } else {
+      // Disc: exponential in radius, placed about one of the arms.
+      let r    = extent * (0.15 - log(max(1.0 - h.x * 0.98, 0.0001)));
+      let k    = floor(h.y * floor(arms));
+      let off  = (h2.x - 0.5) + (h2.y - 0.5);
+      let arm  = k / floor(arms) * 6.2831853 + wind * log(r / extent + 0.2);
+      // A quarter of the disc is haze spread evenly round it.
+      let haze = step(0.75, hash1(seed + 43u));
+      let th   = arm + off * scatter * 2.0 + haze * h2.x * 6.2831853 - t * spin / (0.3 + r * 0.7);
+      let y    = (hash1(seed + 31u) - 0.5) * 0.08 * extent;
+      p = vec3(cos(th) * r, y, sin(th) * r);
+
+      let onarm = (1.0 - smoothstep(0.0, 0.6, abs(off))) * (1.0 - haze);
+      let young = mix(vec3(1.0, 0.8, 0.5), vec3(0.5, 0.68, 1.0), vec3(onarm));
+      var c = young * (0.3 + 0.9 * onarm);
+      if hash1(seed + 57u) < 0.02 * onarm {
+        c = vec3(1.0, 0.35, 0.6) * 2.5;
+      }
+      col = c * exp(-r / (extent * 4.0));
+    }
+
+    position = rot_x(p, tilt);
+    tint = col * bright;
+  }
+}

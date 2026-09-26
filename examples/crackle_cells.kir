@@ -1,0 +1,92 @@
+// A dark field netted with bright crack lines around irregular cells at
+// several scales, from large plates to fine crazing. The cell points jitter
+// every frame so the net crackles, sparks run along the finest cracks, and the
+// largest plates flicker. Molten orange at `ice` 0, mint-white at 1.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/crackle_cells.kir
+
+proc crackle_cells {
+  kind  L4
+  blend additive
+
+  // Largest cells across the frame's half-height.
+  param scale   : float [0.5, 6.0] = 1.6
+
+  // Scales of cells, floored; each is 2.3 times finer than the last. At most 3.
+  param octaves : float [1.0, 3.0] = 3.0
+
+  // Speed of the cell points' drift, and how far they jump from frame to frame.
+  param crackle : float [0.0, 1.0] = 0.35
+
+  // How far the largest cells' brightness drops on a flicker.
+  param flicker : float [0.0, 1.0] = 0.5
+
+  // Palette: 0 is molten orange and yellow, 1 is mint and teal-white.
+  param ice     : float [0.0, 1.0] = 0.0
+
+  // Width of a crack as a fraction of its cell; smaller is sharper.
+  param edge    : float [0.01, 0.2] = 0.05
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let fr = uint(floor(t * 30.0));
+    let jt = crackle * 0.12;
+    let sp = t * crackle * 2.0;
+    let no = floor(octaves);
+    var v  = 0.0;
+    var fine = 0.0;
+    for o in 0..3 {
+      let fo = float(o);
+      let q  = p * scale * pow(2.3, fo) + vec2(fo * 17.3, fo * 9.1);
+      let b  = floor(q);
+      var f1 = 9.0;
+      var f2 = 9.0;
+      for j in -1..2 {
+        for k in -1..2 {
+          let c  = b + vec2(float(j), float(k));
+          let cid= uint(c.x + 4096.0) * 73856093u + uint(c.y + 4096.0) * 19349663u + uint(o) * 83492791u;
+          let h  = hash2(cid);
+          let jj = hash2(cid + fr * 2246822519u) - vec2(0.5);
+          let fp = c + vec2(0.5) + 0.38 * sin(h * 6.2831853 + vec2(sp) * (vec2(0.5) + h.yx)) + jj * jt;
+          let dd = abs(fp - q);
+          let d  = max(dd.x, dd.y);
+          f2 = min(f2, max(f1, d));
+          f1 = min(f1, d);
+        }
+      }
+      let on = step(fo, no - 0.5);
+      let ln = 1.0 - smoothstep(0.0, edge, f2 - f1);
+      let fl = mix(1.0, 1.0 - flicker * hash1(fr + 911u), step(fo, 0.5));
+      v += ln * on * fl * (1.0 - 0.25 * fo);
+      fine = ln * on;
+    }
+
+    // Sparks: a coarser set of points moving fast, lighting the finest cracks
+    // where they pass.
+    let eq = p * scale * 2.0 + vec2(t * 0.7, t * -0.4) * (0.5 + crackle);
+    let eb = floor(eq);
+    var e1 = 9.0;
+    for j in -1..2 {
+      for k in -1..2 {
+        let c  = eb + vec2(float(j), float(k));
+        let h  = hash2(uint(c.x + 4096.0) * 2654435761u + uint(c.y + 4096.0) * 40503u + 5u);
+        let fp = c + vec2(0.5) + 0.45 * sin(h * 6.2831853 + vec2(t * 3.0));
+        e1 = min(e1, distance(fp, eq));
+      }
+    }
+    v += fine * 3.0 * (1.0 - smoothstep(0.0, 0.3, e1));
+
+    let vg  = 1.0 - 0.35 * dot(p * vec2(0.55, 0.85), p * vec2(0.55, 0.85));
+    let x   = clamp(v * 0.5 * vg, 0.0, 2.0);
+    let gam = mix(vec3(1.0, 2.2, 5.0), vec3(3.5, 1.1, 1.5), vec3(ice));
+    color = vec4(pow(vec3(x), gam) * 1.5, 1.0);
+  }
+}

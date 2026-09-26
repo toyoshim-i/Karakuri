@@ -1,0 +1,56 @@
+// A dark volume threaded with thin glowing blue veins and sheets that brighten
+// to white where they cross, seen from a camera orbiting slowly outside it. A
+// vein is where two noise fields are both near zero at once. Reads `ray`
+// against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/vein_nebula.kir --param turn=0
+
+proc vein_nebula {
+  kind  L4
+  blend additive
+
+  // Orbit rate of the camera in radians per second.
+  param orbit   : float [-0.5, 0.5] = 0.05
+
+  // Noise features per world unit.
+  param detail  : float [0.3, 3.0] = 1.1
+
+  // Filament thinness; larger draws finer veins.
+  param thin    : float [10.0, 400.0] = 140.0
+
+  // Brightness of the accumulated veins.
+  param gain    : float [0.0, 6.0] = 1.6
+
+  // Colour of the veins; crossings run toward white.
+  param ink     : vec3 [0.0, 1.0] = vec3(0.1, 0.35, 1.0)
+
+  // Depth of the volume marched, in world units.
+  param reach   : float [1.0, 8.0] = 5.0
+
+  fragment {
+    let a  = t * orbit;
+    let o  = rot_y(vec3(0.0, 0.6, 4.2), a);
+    let rd = rot_y(rot_x(ray, -0.12), a);
+    let ds = reach / 28.0;
+    let j  = fract(sin(dot(point_coord, vec2(127.1, 311.7))) * 43758.547);
+
+    var acc = 0.0;
+    var hot = 0.0;
+    var dep = 1.6 + j * ds * 0.5;
+
+    for i in 0..28 {
+      let p  = (o + rd * dep) * detail;
+      let n1 = value_noise(p);
+      let n2 = value_noise(vec3(p.y + p.z, p.z - p.x, p.x + p.y) * 0.83 + vec3(5.2, 1.3, 7.7));
+      let s1 = exp(-n1 * n1 * thin);
+      let s2 = exp(-n2 * n2 * thin);
+      let fall = exp(-dot(p, p) / (detail * detail * 5.0));
+      acc += (s1 * s2 * 3.0 + (s1 + s2) * 0.015) * fall * ds;
+      hot += s1 * s2 * fall * ds;
+      dep += ds;
+    }
+
+    let col = ink * acc * gain + vec3(hot * hot * gain * gain * 1.5);
+    color = vec4(col, 1.0);
+  }
+}

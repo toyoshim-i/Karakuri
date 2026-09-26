@@ -1,0 +1,60 @@
+// A three-dimensional harmonograph: one long line traced by three pairs of
+// damped pendulums, one pair per axis, winding inward from a wide loop to a
+// still point. The pendulums' phases drift, so the drawing slowly re-forms,
+// and its colour runs along the line from the outer loops to the centre.
+// Seed is the segment along the line.
+//
+//     cargo run -p karakuri-cli -- --set examples/pendulum_trace.kir,examples/tint_strokes.kir
+
+proc pendulum_trace {
+  kind     L1
+  topology lines
+  capacity [1024, 65536] = 8192
+
+  // Frequency of the second pendulum of each pair relative to the first,
+  // x, y and z. Near-whole ratios give closed rosettes, detuned ones rotate.
+  param ratio  : vec3  [1.0, 4.0]  = vec3(2.0, 3.0, 1.5)
+
+  // How far each second pendulum is detuned from its ratio.
+  param detune : float [0.0, 0.05] = 0.012
+
+  // Decay of the swing over the whole line; higher values wind in faster.
+  param damp   : float [0.0, 8.0]  = 1.6
+
+  // Radians per second the phases drift.
+  param drift  : float [0.0, 1.0]  = 0.15
+
+  // Half the size of the outermost loop, in world units.
+  param reach  : float [0.5, 4.0]  = 3.4
+
+  // Hue at the start of the line, and the hue range along it.
+  param hue    : float [0.0, 1.0]  = 0.08
+  param spread : float [0.0, 1.0]  = 0.6
+
+  emit position, velocity, tint
+
+  element {
+    let n = float(capacity);
+    let turns = 40.0;
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    for k in 0..2 {
+      let u = (float(seed) + float(k)) / n;
+      let s = u * turns * 6.2831853;
+      let e = exp(-damp * u);
+      let r = ratio + vec3(detune, -detune, detune * 0.5);
+      let x = sin(s + t * drift) + 0.7 * sin(s * r.x + t * drift * 1.3 + 1.0);
+      let y = sin(s * 1.01 + t * drift * 0.7 + 2.0) + 0.7 * sin(s * r.y + t * drift * 1.1);
+      let z = sin(s * 0.99 + t * drift * 0.9 + 4.0) + 0.7 * sin(s * r.z + t * drift * 0.8 + 3.0);
+      let p = vec3(x, y, z) * e * reach * 0.6;
+      if k == 0 { pa = p; } else { pb = p; }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+
+    let u = float(seed) / n;
+    tint = hsv_to_rgb(vec3(fract(hue + spread * u), 0.75, 1.0)) * (0.5 + 0.5 * exp(-damp * u));
+  }
+}

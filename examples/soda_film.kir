@@ -1,0 +1,58 @@
+// Translucent tinted bubbles of very different sizes rising over pale paper
+// and wrapping round, darkening each other where they overlap like layers of
+// coloured film; each is densest in the middle and clears toward its rim.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/soda_film.kir
+
+proc soda_film {
+  kind  L4
+  blend additive
+
+  // Rise speed in frame half-heights per second, before each bubble's own factor.
+  param rise  : float [0.0, 1.0] = 0.05
+
+  // Side-to-side sway, in frame half-heights.
+  param sway  : float [0.0, 0.4] = 0.03
+
+  // Radius of the largest bubble, in frame half-heights; most are far smaller.
+  param large : float [0.1, 1.2] = 0.65
+
+  // How much light a bubble's middle takes away.
+  param ink   : float [0.0, 1.0] = 0.6
+
+  // Filter colours of the two bubble families, in sRGB.
+  param warm  : vec3 [0.0, 1.0] = vec3(1.0, 0.55, 0.2)
+  param cool  : vec3 [0.0, 1.0] = vec3(0.25, 0.55, 1.0)
+
+  // Brightness of the paper.
+  param paper : float [0.0, 1.0] = 0.8
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let ga = vec3(1.0) - srgb_to_linear(warm);
+    let gb = vec3(1.0) - srgb_to_linear(cool);
+    var c  = vec3(1.0);
+    for i in 0..30 {
+      let h  = hash3(uint(i) * 7919u + 17u);
+      let r  = 0.025 + large * h.z * h.z * h.z;
+      let y  = fract(h.y + t * rise * (0.6 + h.x)) * (2.0 + 4.0 * r) - 1.0 - 2.0 * r;
+      let x  = (h.x * 2.0 - 1.0) * 2.0 + sway * sin(t * (1.0 + h.y) + h.z * 9.0);
+      let q  = (p - vec2(x, y)) / r;
+      let a  = ink * sqrt(max(1.0 - dot(q, q), 0.0));
+      let g  = mix(ga, gb, vec3(float(i % 2)));
+      c *= vec3(1.0) - g * a;
+    }
+
+    let v  = 1.0 - 0.18 * dot(p * vec2(0.5, 0.9), p * vec2(0.5, 0.9));
+    let bg = vec3(paper) * (0.92 + 0.08 * p.y) * v;
+    color = vec4(bg * c, 1.0);
+  }
+}

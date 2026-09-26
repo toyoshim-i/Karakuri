@@ -1,0 +1,94 @@
+// An audio monitor in the xy plane: a thin green waveform across the middle,
+// built as a sum of eight sines whose amplitudes are the eight band levels,
+// and a magenta-red spectrum hanging from the top edge, its depth the band
+// levels interpolated across the width. Seeds 0-511 are the waveform, 512-1023
+// the spectrum's columns, and any seed above that draws nothing.
+//
+//     cargo run -p karakuri-cli -- --set examples/scope_wave.kir,examples/flat_eye.kir,examples/scope_field.kir,examples/tint_strokes.kir
+
+proc scope_wave {
+  kind     L1
+  topology lines
+  capacity [1024, 4096] = 1024
+
+  // Band levels, lowest first. Band k is a sine of about 1.5 * 1.8^k cycles
+  // across the waveform, and the spectrum's depth at column k / 7 of the width.
+  param level0 : float [0.0, 1.0] = 0.8
+  param level1 : float [0.0, 1.0] = 0.65
+  param level2 : float [0.0, 1.0] = 0.55
+  param level3 : float [0.0, 1.0] = 0.5
+  param level4 : float [0.0, 1.0] = 0.4
+  param level5 : float [0.0, 1.0] = 0.3
+  param level6 : float [0.0, 1.0] = 0.22
+  param level7 : float [0.0, 1.0] = 0.15
+
+  // Height of the waveform's swing, and of the spectrum's deepest point, in
+  // world units.
+  param gain   : float [0.0, 1.0] = 0.45
+  param depth  : float [0.0, 2.0] = 0.9
+
+  // Half the width of the monitor in world units.
+  param wide   : float [0.5, 4.0] = 1.96
+
+  emit position, velocity, tint
+
+  element {
+    let top  = 1.1;
+    var pa   = vec3(0.0);
+    var pb   = vec3(0.0);
+    var col  = vec3(0.0);
+
+    if seed < 512u {
+      // Waveform: a polyline of 512 segments.
+      var ya = 0.0;
+      var yb = 0.0;
+      for k in 0..8 {
+        let fk = float(k);
+        var lv = level0;
+        if k == 1 { lv = level1; }
+        if k == 2 { lv = level2; }
+        if k == 3 { lv = level3; }
+        if k == 4 { lv = level4; }
+        if k == 5 { lv = level5; }
+        if k == 6 { lv = level6; }
+        if k == 7 { lv = level7; }
+        let fr = 1.5 * pow(1.8, fk);
+        let ph = t * (2.3 + fk * 1.7) + hash1(uint(k) + 40u) * 6.2831853;
+        let sa = float(seed) / 512.0;
+        let sb = float(seed + 1u) / 512.0;
+        ya += lv * sin(sa * fr * 6.2831853 + ph) / (1.0 + fk * 0.35);
+        yb += lv * sin(sb * fr * 6.2831853 + ph) / (1.0 + fk * 0.35);
+      }
+      let xa = (float(seed) / 512.0 * 2.0 - 1.0) * wide;
+      let xb = (float(seed + 1u) / 512.0 * 2.0 - 1.0) * wide;
+      pa  = vec3(xa, ya * gain * 0.4, 0.0);
+      pb  = vec3(xb, yb * gain * 0.4, 0.0);
+      col = vec3(0.12, 1.0, 0.25);
+    } else {
+      if seed < 1024u {
+        // Spectrum: 512 vertical columns hanging from the top edge.
+        let i   = float(seed - 512u);
+        let s   = (i + 0.5) / 512.0;
+        let pos = s * 7.0;
+        let h = level0 * max(0.0, 1.0 - abs(pos))
+              + level1 * max(0.0, 1.0 - abs(pos - 1.0))
+              + level2 * max(0.0, 1.0 - abs(pos - 2.0))
+              + level3 * max(0.0, 1.0 - abs(pos - 3.0))
+              + level4 * max(0.0, 1.0 - abs(pos - 4.0))
+              + level5 * max(0.0, 1.0 - abs(pos - 5.0))
+              + level6 * max(0.0, 1.0 - abs(pos - 6.0))
+              + level7 * max(0.0, 1.0 - abs(pos - 7.0));
+        let grain = 0.8 + 0.2 * value_noise(vec3(s * 60.0, t * 9.0, 0.0));
+        let x = (s * 2.0 - 1.0) * wide;
+        let d = max(h * grain * depth, 0.002);
+        pa  = vec3(x, top, 0.0);
+        pb  = vec3(x, top - d, 0.0);
+        col = vec3(0.9, 0.03, 0.2);
+      }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = col;
+  }
+}

@@ -1,0 +1,4 @@
+{"t":"set","id":"moire_plasma","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"moire_plasma.kir"}
+{"t":"capacity","layer":"L1","value":256}

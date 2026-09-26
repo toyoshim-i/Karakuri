@@ -1,0 +1,63 @@
+// An endless lattice of fine crystalline filaments that the camera drifts
+// forward through; each strand glows softly by distance, the three strand
+// directions carry their own tints, and depth dissolves into pale haze.
+// The lattice is a repeated cell folded and turned a few times. Reads `ray`
+// against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/glass_lattice.kir --param turn=0
+
+proc glass_lattice {
+  kind  L4
+  blend additive
+
+  // Forward speed in world units per second.
+  param fly     : float [0.0, 3.0] = 0.6
+
+  // Edge of the repeated cell in world units; smaller packs the strands tighter.
+  param cell    : float [1.0, 6.0] = 2.6
+
+  // Strand radius in world units.
+  param strand  : float [0.002, 0.08] = 0.012
+
+  // Brightness of the accumulated glow.
+  param glow    : float [0.0, 4.0] = 1.0
+
+  // Tint of strands along x, y and z; each component is a hue from 0 to 1.
+  param hues    : vec3 [0.0, 1.0] = vec3(0.56, 0.08, 0.66)
+
+  // Sideways and vertical offset of the flight path from the lattice axis.
+  param steer   : vec2 [-2.0, 2.0] = vec2(0.4, 0.3)
+
+  fragment {
+    let o  = vec3(steer.x, steer.y, -t * fly);
+    let rd = rot_z(ray, 0.35);
+    var p  = o;
+    var g  = vec3(0.0);
+    var travelled = 0.0;
+
+    for i in 0..28 {
+      // Fold a repeated cell and turn it by a fixed angle about two axes, so
+      // each cell holds a small crystal of strands at odd angles.
+      let c0 = abs((p % vec3(cell)) - vec3(cell * 0.5)) - vec3(cell * 0.2);
+      let c1 = vec3(c0.x * 0.82 - c0.y * 0.57, c0.x * 0.57 + c0.y * 0.82, c0.z);
+      let c2 = abs(vec3(c1.x, c1.y * 0.88 - c1.z * 0.47, c1.y * 0.47 + c1.z * 0.88)) - vec3(cell * 0.08);
+
+      let dd = vec3(length(c2.yz), length(c2.xz), length(c2.xy)) - vec3(strand);
+      let d  = max(min(dd.x, min(dd.y, dd.z)), strand * 0.5);
+
+      g += vec3(0.00003) / (dd * dd + vec3(0.00004));
+
+      let stepd = max(d * 0.7, 0.025);
+      p = p + rd * stepd;
+      travelled += stepd;
+    }
+
+    let tx = hsv_to_rgb(vec3(hues.x, 0.45, 1.0));
+    let ty = hsv_to_rgb(vec3(hues.y, 0.40, 1.0));
+    let tz = hsv_to_rgb(vec3(hues.z, 0.45, 1.0));
+    let lit = (tx * g.x + ty * g.y + tz * g.z) * glow;
+    let haze = 1.0 - exp(-travelled * 0.12);
+    let col = vec3(1.0) - exp(-(lit + vec3(0.55, 0.6, 0.7) * haze * 1.3));
+    color = vec4(col, 1.0);
+  }
+}

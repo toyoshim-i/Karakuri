@@ -1,0 +1,8 @@
+{"t":"set","id":"torus_knot","v":1}
+{"t":"part","layer":"L1","path":"torus_knot.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L3","key":"frame","value":3.3}
+{"t":"param","layer":"L4","key":"width","value":0.002}
+{"t":"param","layer":"L4","key":"exposure","value":0.7}
+{"t":"bind","layer":"L1","key":"girth","signal":"energy","curve":"smooth","range":[0.1,0.3]}

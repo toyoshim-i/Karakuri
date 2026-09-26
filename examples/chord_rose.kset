@@ -1,0 +1,7 @@
+{"t":"set","id":"chord_rose","v":1}
+{"t":"part","layer":"L1","path":"chord_rose.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L3","key":"frame","value":1.15}
+{"t":"param","layer":"L4","key":"width","value":0.0018}
+{"t":"bind","layer":"L1","key":"bright","signal":"energy","curve":"smooth","range":[0.25,0.6]}
