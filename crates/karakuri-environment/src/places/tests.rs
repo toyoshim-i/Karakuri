@@ -411,7 +411,11 @@ fn plugin_directory_search_peels_off_candidates_in_order() {
     let workspace = tmp.path().join("tree");
 
     let bundle = exe_dir.join("..").join("PlugIns");
-    let prefix = exe_dir.join("..").join("lib").join("karakuri").join("plugins");
+    let prefix = exe_dir
+        .join("..")
+        .join("lib")
+        .join("karakuri")
+        .join("plugins");
     let beside = exe_dir.join("plugins");
     let ws = workspace.join("plugins");
 
@@ -448,4 +452,25 @@ fn given_plugins_directory_is_respected_or_refused() {
     let res = plugins(Some(&dir)).expect("valid dir").expect("found");
     assert_eq!(res.found, Found::Given);
     assert_eq!(res.dir, dir);
+}
+
+#[test]
+fn workspace_plugins_directory_discovers_syphon_and_ignores_link() {
+    let resolved = plugins(None).expect("places::plugins succeeds");
+    let Some(plugins) = resolved else {
+        return;
+    };
+    if plugins.found != Found::Workspace {
+        return;
+    }
+    let discovered = crate::output_plugin::discovery::discover_plugins(&plugins);
+    #[cfg(target_os = "macos")]
+    {
+        let syphon = discovered.iter().find(|p| p.name == "syphon");
+        assert!(syphon.is_some(), "karakuri-syphon should be discovered");
+        let s = syphon.unwrap();
+        assert!(s.supports_surface("iosurface"));
+        // karakuri-link should not be registered as an output plugin
+        assert!(discovered.iter().all(|p| p.name != "ableton-link"));
+    }
 }

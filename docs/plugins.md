@@ -1,155 +1,159 @@
-# Plugins
+# Plugins & Extensions
 
-Two things Karakuri wants — **output routing** (Syphon on macOS, Spout on Windows, NDI on a
+Two things Karakuri interfaces with — **output routing** (Syphon on macOS, Spout on Windows, NDI on a
 network) and **Ableton Link** — would each drag a non-Rust toolchain into a workspace that
 is otherwise cleanly closed. Syphon needs Objective-C interop; Link needs cmake and a C++
-compiler. Neither cost is paid once: it is paid by everyone who builds the repository,
-including on platforms where the feature does not exist.
+compiler; Spout requires Windows DirectX / DXGI shared memory interop. Neither cost is paid once: it
+is paid by everyone who builds the repository, including on platforms where the feature does not exist.
 
-This document draws the line they hang off. **The input half is built** — `--tempo-source`
-runs and Ableton Link is what it was tested against — and **the sink half is built** on the
-host's side of the boundary. What does not exist is any output plugin, and the distribution
-machinery below is a design rather than a description: nothing fetches anything yet.
+This document specifies how out-of-process plugins are architecturalized, discovered, communicated
+with, and managed for development.
 
-## Why these two and not other things
+## Design Principles
 
-**Because neither is on the deterministic path**, and that is the whole test.
-
-- An **output** plugin is downstream of everything. It consumes the composited frame and
-  writes no record, so a session replays identically whether one was attached or not.
-- An **input** plugin produces **records** — the same records a key press writes. Link's
-  contribution is a tempo, and `tempo` already goes through a record every frame, so a
-  session recorded with Link replays without it.
-
-A generator, a blend mode, or a tone map operator could not be plugins on these terms: what
-they do reaches the pixels a replay has to reproduce. The line is *not* "platform-dependent
-things go outside" — Link runs everywhere and is out here for its toolchain, not its OS.
-That distinction survives into what the host says when something is missing; see the table
-below.
-
-## The input side is built
-
-`--tempo-source COMMAND` runs a program and follows the beat it reports. The wire format is
-specified in `crates/karakuri-environment/src/tempo_source.rs`: versioned ndjson over a pipe, an
-**anchor** rather than a sample — a beat, a tempo, and the source's own clock reading at
-which both were true — so the transport's delay never becomes phase error. Karakuri
-estimates the offset between that clock and its own as the minimum over a sliding window,
-which filters out delivery delay and forgets a bad reading.
-
-**How far a source may move the grid is bounded**, and that bound is the interface's, not
-the source's. The first anchor aligns; every one after it trims by at most a twentieth of a
-beat; three consecutive anchors disagreeing by more than a beat re-align and say so. An
-in-process beat tracker has had gates and evidence counters since it was written, and the
-out-of-process program is the one that most needs them.
-
-## The other input side already exists
-
-`karakuri-midi` plus `karakuri-environment`'s `Router` and `Surface` are the shape, working, in tree:
-every mapped MIDI message is an `Operation` and ends in the record a key press ends in, so a
-controller can do nothing a key cannot and a session recorded from one replays with neither
-controller nor map attached. **A Link plugin is another `Surface`.** The input half of the interface is
-therefore extracted from something that runs rather than invented, which is the only reason
-to specify it before a second instance exists.
-
-## The output side is where the design content is
-
-Syphon and Spout are both **zero-copy GPU texture sharing** — IOSurface on macOS, a DXGI
-shared handle on Windows. NDI encodes, so it wants CPU pixels.
-
-An interface that passes **pixels** makes NDI happy and makes Syphon and Spout pointless: it
-would add a full-frame readback per frame purely to hand the result back to the GPU. So what
-crosses is a **native handle**, and the plugin and the host negotiate at open time — the
-plugin declares what kinds of surface it accepts, the host declares what it can produce, and
-an empty intersection means the plugin does not load.
-
-The consequence for this repository is small and worth stating exactly: the host needs
-`wgpu-hal`'s `as_hal` to get at the underlying Metal texture or D3D12 resource, which is
-`unsafe`. **It does not need Objective-C, and it does not need cmake.**
-
-### One constraint, free today, that keeps a door open
+### Why out of process
 
 Loading foreign code into the render process means a bad plugin can take the show down mid
 performance, and the boundary cannot catch it — a panic or a C++ exception crossing FFI is
-undefined behaviour. Running a plugin **out of process** is nearly free for exactly these
-plugins, because IOSurface and DXGI handles are already shareable across processes; that is
-how Syphon works in the first place.
+undefined behaviour. Running plugins **out of process** over standard pipes and OS-native zero-copy
+GPU handles isolates failure: if a plugin crashes, it takes down only its own process, while
+Karakuri's engine continues rendering uninterrupted ([P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 
-That is not worth building now. It is worth not foreclosing: **the interface may only pass
-things that survive a process boundary.** A shareable handle and a frame index do. A
-`wgpu::Texture` pointer or a callback into the host do not.
+### Determinism boundary
 
-### The window never waits
+Plugins sit strictly outside the deterministic replay core ([P-0092](principles/0092-the-same-inputs-produce-the-same-frame.md)):
 
-The window is the default sink and plugins are additional ones, so the composited frame goes
-to *n* sinks rather than being handed to one. A plugin that is slow or wedged gets its frame
-dropped; presenting is never delayed for it. The per-frame call is non-blocking by
-specification, not by convention.
+- An **output** plugin is downstream of everything. It consumes completed frame surfaces and
+  records no journal events. A session replays identically whether an output plugin was attached or not.
+- An **input** plugin produces **records** — identical to physical keyboard, pointer, or MIDI
+  events. Link's contribution is a tempo grid anchor, and `tempo` passes through journal records every
+  frame, so a session recorded with Link replays without it.
 
-**The in-repo half of this is built.** `karakuri-engine`'s `frame` module has a `Sink` trait —
-acquire a target, draw into it, present — with the window behind it, `karakuri-environment`'s PNG
-writer (`render.rs`'s `PngSink`) behind it, and one frame loop over both. That was worth doing on its own account, because the two loops it
-replaced had drifted apart and every replay defect this project has found came from the
-difference. What it means here is that a plugin is a third sink rather than a change to how
-a frame works, and that the interface a plugin needs already has two implementations to be
-extracted from rather than one to be guessed at.
+A generator, a blend mode, or a tone map operator cannot be plugins on these terms: what they do
+reaches the pixels a replay has to reproduce. The line is *not* "platform-dependent things go
+outside" — Link runs everywhere and is out here for its toolchain, not its OS.
 
-## What a surface offers, not only what it accepts
+---
 
-MCP taught this the moment it was first used: a model with no worked example spent four
-failed compiles learning what the language allows. **A control surface for a model is half
-tools and half things to read**, and the reading half is the cheaper of the two to get
-wrong — a keyboard needs no curriculum and a model does.
+## Output Plugins
 
-The rule that falls out is worth stating before anyone builds the library version: **the
-resource list is a curriculum, not an index.** Four procedures chosen to span what the
-language can do beat two thousand, and searching a large library is a tool call rather than
-a list a client reads in full. See M4 in `docs/roadmap.md`.
+Output plugins receive composited video frames using zero-copy GPU texture sharing.
 
-## Distribution
+### GPU Surface Protocols
 
-Plugins live in their own repositories, and **this one prescribes nothing about where a
-checkout of them goes** — not a submodule, not a directory, not a gitignore entry. Whoever
-develops one puts it wherever they keep repositories. A layout invented here would be this
-project's answer to somebody else's question, and it would outlive the reason for it.
+The host engine (`crates/karakuri/src/bridge/plugin_sink.rs`) negotiates native hardware surface
+handles over an IPC pipe:
 
-Keeping the source out entirely is also the simplest thing to explain, and the Link helper
-gives that a second reason the first draft of this document did not know: it is
-**GPL-2.0-or-later**, because Ableton Link is, where this workspace is MIT. The combination
-is permitted and would mean a binary linking it is distributed under the GPL, so the
-boundary that matters is between two *programs*. Nothing about a directory changes that, and
-nothing about a directory has to.
+- **macOS (`iosurface`)**: Passes 64-bit `IOSurfaceID` handles backed by Metal textures.
+- **Windows (`dxgi`)**: Passes NT shared handles (`HANDLE`) backed by Direct3D 11 / Direct3D 12
+  textures, interoperating with Vulkan (`VK_KHR_external_memory_win32`) and DX12 backends.
 
-**The built artifacts will not be committed here either.** What will be committed is a
-manifest — per plugin: name, interface version, the plugin repository's tag, and per target
-triple an asset name and a sha256. `cargo xtask plugins` will fetch the current triple's
-assets, verify them, and drop them in a gitignored directory that is also the default plugin
-search path, so the development flow and the installed flow use the same lookup. **None of
-this exists yet**: there is no manifest file and no `xtask` crate in the workspace. It is
-written down now because the shape decides what the host can say when a plugin is missing,
-which is the table below.
+The host never reads back CPU pixels for zero-copy sinks. The window is the default sink and plugins
+are additional non-blocking sinks: a slow or wedged plugin has its frame dropped without delaying
+presentation on the main window.
 
-**`cargo build` must never touch the network.** A fetch inside `build.rs` would break
-offline and sandboxed builds, run for people who do not want plugins, and destroy the
-property being bought. Because plugins are optional, a failed fetch is "the feature is
-absent" rather than "the build is broken" — an escape an ordinary vendored dependency does
-not have.
+### Dynamic Discovery & Wire Handshake
 
-The manifest earns its place twice. Besides provenance, it is the only thing that can tell
-these three states apart:
+The engine and console do not hardcode specific plugin binary names or relative paths. Instead,
+plugins are **dynamically discovered** at startup via [`karakuri_environment::output_plugin::discovery`](crates/karakuri-environment/src/output_plugin/discovery.rs):
 
-| State | What the host says |
-|---|---|
-| No entry for this target triple | this platform does not have that feature |
-| An entry, but nothing fetched | run `cargo xtask plugins` (once that exists) |
-| Fetched, interface version mismatch | refuse to load, and name both versions |
+1. The plugins directory is resolved deterministically (see below).
+2. The engine scans the directory for executable binaries and launches each candidate with piped standard I/O.
+3. The child process immediately greets on stdout with an ndjson `Hello` greeting:
+   ```json
+   {"t":"hello","v":1,"kind":"output","name":"syphon","surfaces":["iosurface"]}
+   ```
+4. The host inspects the greeting:
+   - Protocol version (`v`) must match the host's `PROTOCOL_VERSION` (currently `1`).
+   - `kind` must be `"output"`.
+   - The plugin's reported `surfaces` list must contain the host platform's required surface mechanism (`iosurface` on macOS, `dxgi` on Windows).
+5. Discovered plugins are registered on the console GUI. The UI dynamically presents the plugin's self-reported name (capitalized, e.g. `Syphon`, `Spout`) in the Outputs bay row.
+6. The host politely closes stdin (`{"t":"close"}`) and ensures candidate probing terminates within 1.5 seconds. Non-output binaries (such as tempo sources) or unresponsive processes are discarded cleanly without error.
 
-Without it, all three are "the file is not there", and a Windows user cannot tell whether
-Syphon is impossible or merely un-fetched.
+### Plugin Directory Resolution (`places::plugins`)
 
-## Rot moves; it does not disappear
+Karakuri follows the hierarchical search tier established by [`karakuri_environment::places::plugins`](crates/karakuri-environment/src/places.rs):
 
-A Cargo feature that nobody exercises rots **loudly, at compile time**. A shared library
-against a C interface rots **quietly, at run time** — a mismatched struct layout is a
-segfault, mid-show. So the first call across the boundary is a version handshake, and a
-mismatch is refused with a message rather than loaded. It is cheap, and it is the whole
-difference.
+1. **Given (`Found::Given`)**: Explicit CLI parameter `--plugins <DIR>`
+2. **Environment (`Found::Given`)**: `KARAKURI_PLUGINS_DIR` environment variable
+3. **App Bundle (`Found::Bundle`)**: `<exe_dir>/../PlugIns` (macOS `.app` bundle)
+4. **Unix Prefix (`Found::Prefix`)**: `<exe_dir>/../lib/karakuri/plugins` or `<exe_dir>/../share/karakuri/plugins`
+5. **Beside (`Found::Beside`)**: `<exe_dir>/plugins` (portable distribution)
+6. **Workspace (`Found::Workspace`)**: `<workspace_root>/plugins` (development repository root; ignored in `.gitignore`)
+
+Startup diagnostics printed to stderr or the console HUD identify which candidate directory was discovered and how many plugins were registered.
+
+---
+
+## Input Plugins (Tempo Sources)
+
+Input plugins report timing and synchronization signals to the engine.
+
+### Protocol (`tempo_source`)
+
+Specified in `crates/karakuri-environment/src/tempo_source.rs`.
+- Started via CLI option: `--tempo-source <COMMAND>` (e.g., `--tempo-source ./plugins/karakuri-link`)
+- Communicates versioned ndjson over standard I/O pipes.
+- Emits **anchors** (`{"t":"grid","bpm":128.0,"beat":1024.25,"clock_us":...}`) rather than instantaneous samples.
+- The host filters network jitter and pipe delivery latency through a sliding-window running minimum clock offset estimator.
+- Bound-limited phase alignment protects the render loop against jarring phase jumps: the first anchor aligns, subsequent anchors trim by at most 1/20th of a beat, and three consecutive disagreements re-align with diagnostics.
+
+---
+
+## Current Plugin Implementations
+
+| Name | Role | Protocol / Surface | Repository | Supported Platforms | License |
+|---|---|---|---|---|---|
+| `link` | Tempo Source (Ableton Link) | Input (`tempo_source`) | `toyoshim-i/Karakuri-link` | macOS, Linux, Windows | GPL-2.0-or-later |
+| `syphon` | Frame Server (Syphon) | Output (`iosurface`) | `toyoshim-i/Karakuri-syphon` | macOS | MIT |
+| `spout` | Frame Server (Spout2) | Output (`dxgi`) | `toyoshim-i/Karakuri-spout` | Windows | MIT |
+
+---
+
+## Developer Workflow & Setup Script
+
+Plugins live in standalone sibling repositories alongside Karakuri:
+
+```text
+parent_directory/
+  ├── Karakuri/           # Main workspace
+  │   └── plugins/        # Resolved by Found::Workspace (gitignored)
+  ├── Karakuri-link/      # Input plugin
+  ├── Karakuri-syphon/    # macOS output plugin
+  └── Karakuri-spout/     # Windows output plugin
+```
+
+### Management Script: `scripts/plugins.sh`
+
+A developer utility script is provided at `scripts/plugins.sh` to clone, build, install, and check plugin statuses:
+
+```bash
+# Check current checkout, build, and installation status
+./scripts/plugins.sh status
+
+# Clone, build, and install all plugins compatible with your current OS
+./scripts/plugins.sh setup all
+
+# Or set up a specific plugin by name (shortcut syntax)
+./scripts/plugins.sh syphon
+./scripts/plugins.sh link
+./scripts/plugins.sh spout
+
+# Individual operations
+./scripts/plugins.sh clone syphon
+./scripts/plugins.sh build syphon --release
+./scripts/plugins.sh install syphon
+
+# Clean up plugins from workspace plugins/ directory
+./scripts/plugins.sh clean syphon
+```
+
+The script symlinks (or copies on Windows) compiled binaries directly into `<workspace_root>/plugins/`. When you launch Karakuri:
+
+```bash
+# Karakuri console automatically discovers plugins in plugins/
+cargo run -p karakuri
+
+# Run with tempo source
+cargo run -p karakuri-cli -- --tempo-source ./plugins/karakuri-link
+```
