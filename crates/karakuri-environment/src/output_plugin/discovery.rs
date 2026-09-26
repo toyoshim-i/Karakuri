@@ -1,8 +1,5 @@
 //! Dynamic discovery and probing of out-of-process output plugins.
-//!
-//! Scans a plugins directory (resolved via [`crate::places::plugins`]), launches candidates
-//! to read their `Hello` greeting, and captures self-reported plugin name and supported
-//! surface types.
+//! Scans plugin directories, runs Hello handshake, and captures plugin metadata.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};

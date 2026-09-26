@@ -290,13 +290,7 @@ fn a_wipe_leaves_a_mode_the_operator_chose_and_a_deck_already_on_air() {
     );
 }
 
-/// A deck already under `over` is told it is live and nothing else, which
-/// is the pair one at a time rather than together.
-///
-/// The two conditions are independent and this is what says so: a deck
-/// wearing the mode the wipe wants but sitting off air needs the put-on-air
-/// and nothing else. Five records, and the one that is missing is the one
-/// that would have restated a mode.
+/// Verifies that a wipe on a deck already under over-layering emits put-on-air only.
 #[test]
 fn a_wipe_writes_the_put_on_air_alone_for_a_deck_already_under_over() {
     let current = Current {

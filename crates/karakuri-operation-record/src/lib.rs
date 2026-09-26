@@ -1,24 +1,6 @@
 //! Operation-to-Record translation layer for Karakuri.
-//!
 //! Converts high-level surface [`Operation`] commands into content-addressed
 //! journal [`Record`] entries for session persistence and replay.
-//!
-//! # Architecture and Guarantees
-//!
-//! - **Contextual Completeness**: Converts operations like `SetExposure` or
-//!   `SetMaskShape` into complete records ([`Record::Look`], [`Record::Mask`])
-//!   by reading existing engine state via [`Current`].
-//! - **Surface Independence**: All surfaces (GUI, CLI, MIDI, MCP) produce
-//!   identical journal records for identical actions.
-//! - **Deterministic Classification**: [`written`] performs an exhaustive match
-//!   over every operation, classifying it into [`Written::Records`],
-//!   [`Written::Silent`], [`Written::Owed`], or [`Written::Refused`].
-//! - **Refusal Before Records**: a scheduled move on a control an unmuted lane
-//!   of the armed pattern holds is refused here, before any record is written,
-//!   so that a replay — which runs no sequencer — sees exactly what the live run
-//!   did (ADR-0323).
-//! - **Zero GPU Dependency**: Keeps dependencies limited to `karakuri_operation`
-//!   and `karakuri_store`.
 
 use karakuri_operation::Operation;
 use karakuri_store::record::{DeckSlot, Record};

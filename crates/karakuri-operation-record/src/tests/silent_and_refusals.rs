@@ -92,11 +92,6 @@ fn nothing_written_is_never_the_same_as_nothing_decided() {
     );
 }
 
-/// A walk asks and changes nothing, and it answers here rather than in
-/// `Owed(Undecided)` because the payload it was waiting for arrived: it
-/// names the Set it is a walk of
-/// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
-///
 /// Verifies that query operations (e.g. WalkHistory) emit Written::Silent(Question) (ADR-0342).
 #[test]
 fn a_walk_asks_and_a_landing_writes() {
