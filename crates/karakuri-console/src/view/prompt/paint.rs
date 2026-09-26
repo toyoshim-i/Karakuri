@@ -133,7 +133,13 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
 pub const PROMPT_FONT_SIZE: f32 = 10.0;
 
 /// Paints the internal body of the Prompt bay with interactive cursor-anchored terminal.
-pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) {
+pub fn prompt_into(
+    ui: &mut Ui,
+    pal: &Palette,
+    bay_rect: Rect,
+    state: &PromptState,
+    is_focused: bool,
+) {
     let head = head_box(bay_rect);
     let body_top = head.max.y;
     if body_top >= bay_rect.max.y {
@@ -202,23 +208,31 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                                     .text_color(pal.text)
                                     .frame(egui::Frame::NONE)
                                     .desired_width(f32::INFINITY)
-                                    .lock_focus(true);
+                                    .lock_focus(true)
+                                    .return_key(None);
 
                                 let response = ui.add(edit);
 
+                                if is_focused && !response.has_focus() {
+                                    response.request_focus();
+                                }
+
                                 // Enter submission: send buffer content (or empty CR to accept/advance)
                                 let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                                if enter_pressed && response.has_focus() {
+                                if enter_pressed
+                                    && (response.has_focus() || response.lost_focus() || is_focused)
+                                {
                                     let text = std::mem::take(&mut **buf);
                                     if text.is_empty() {
                                         let _ = session.send_bytes(b"\r");
                                     } else {
                                         let _ = session.send_line(&text);
                                     }
+                                    response.request_focus();
                                 }
 
                                 // Interactive terminal shortcuts while focused
-                                if response.has_focus() {
+                                if response.has_focus() || is_focused {
                                     let ctrl = ui.input(|i| i.modifiers.ctrl);
                                     if ctrl && ui.input(|i| i.key_pressed(egui::Key::C)) {
                                         let _ = session.send_bytes(b"\x03");
@@ -237,11 +251,11 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                                     }
                                 }
 
-                                // Auto-focus on click in terminal body
+                                // Auto-focus on click in prompt bay
                                 let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
                                 if pointer_clicked {
                                     if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                        if body_rect.contains(pos) {
+                                        if bay_rect.contains(pos) {
                                             response.request_focus();
                                         }
                                     }

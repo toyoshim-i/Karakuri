@@ -28,8 +28,17 @@ impl App {
                 return;
             }
 
-            // If an egui text edit widget (e.g. Prompt bay) is focused, egui consumes keystrokes.
-            if gfx.egui.egui_ctx().egui_wants_keyboard_input() {
+            let is_tab = matches!(key.logical_key, Key::Named(NamedKey::Tab));
+            let prompt_focused = self
+                .readout
+                .view
+                .focused(&self.readout.panel)
+                .map(|b| b.name)
+                == Some("prompt");
+
+            // If an egui text edit widget or Prompt bay is focused, egui consumes keystrokes
+            // (except Tab / Shift-Tab which navigates the bay ring).
+            if !is_tab && (gfx.egui.egui_ctx().egui_wants_keyboard_input() || prompt_focused) {
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
                 return;
             }
