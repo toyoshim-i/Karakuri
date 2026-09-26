@@ -27,6 +27,13 @@ impl Readout {
         {
             if let Some(bay) = karakuri_console::focus::bay_at(self.panel.layout(), at) {
                 self.view.focus_bay(&self.panel, bay.name);
+                if bay.name == "prompt" {
+                    self.view.prompt.set_captured(true);
+                } else {
+                    self.view.prompt.set_captured(false);
+                }
+            } else {
+                self.view.prompt.set_captured(false);
             }
         }
         if matches!(event, Pointer::DoubleDown)
