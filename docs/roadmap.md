@@ -52,25 +52,33 @@ Karakuri is a real-time visual performance system where human performers and aut
   - Workflow and validation tools (`get_permissions`, `read_slot`, `copy_slot`, `check_procedure`, `check_set`) published in `tools/list` schema.
   - Enforced slot policy write checks across all deck-mutating operations in `operate`.
   - Atomic file staging, session policy persistence, Master Chain in-flight build indicator, and structured Tooltip HUD cards.
+- **[M8: Musical Synchronization & Hardware Integration](history/m8.md)** (Closed 2026-09-27):
+  - Low-latency real-time FFT audio bus with 8 log-spaced semantic spectral bands and transient onset detection.
+  - Decoupled GPU output plugin sinks (Syphon on macOS, Spout on Windows) with self-reporting discovery protocol (`Hello { name, kind, surfaces }`) and dynamic Outputs row integration.
+  - Hardened bay-scoped keyboard navigation model with interactive tooltip key learning and global promotion.
+  - Unified bay header interaction: retained 27px header bars on fold, 6-dot menu dice reservation, and double-click folding across all 7 bays (ADR-0364).
+  - Dynamic MIDI controller map editing and wipe mask geometry carried forward to M10.
 
 ---
 
 ## 3. The Path to MVP
 
-The remaining open work is structured into two sequential milestones: anchoring musical synchronization and hardware (M8), and final release polish (M9).
+The remaining open work is structured into two sequential milestones: integrated agent terminal and prompt bay (M9, active), and final release polish (M10).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ M8: Musical Synchronization & Hardware Integration (Active / In Prog)  │
-│ - Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation (Done)│
-│ - External Output Plugin Sinks (Syphon on macOS, Spout on Windows; Done)│
-│ - Live MIDI & Keyboard Surface Mapping & Profile Persistence            │
-│ - Wipe Mask Geometry & Edge Softness Control                            │
+│ M9: Integrated Agent Terminal & Prompt Bay (Active Milestone)           │
+│ - Left-Pane Prompt Bay & Layout Integration (Foldable, 27px Bar)        │
+│ - Multi-Session Detached PTY Multiplexer & Process Lifecycle Manager   │
+│ - Alphabetical CLI Selector (agy, aider, claude, codex, deepseek, ...)  │
+│ - Cursor-Anchored Native Multiline Input with Full Japanese IME Support │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ M9: MVP Polish & Release Readiness                                      │
+│ M10: MVP Polish & Release Readiness                                     │
+│ - In-App Dynamic MIDI Controller Map Editing & 14-Bit CC Support         │
+│ - Wipe Mask Geometry & Edge Softness Control                            │
 │ - Master Chain Reordering & Custom Chain Persistence                    │
 │ - Library Free-Text Search & Thumbnail Generation                       │
 │ - Multi-Hour Continuous Rehearsal Stress Testing                        │
@@ -80,61 +88,76 @@ The remaining open work is structured into two sequential milestones: anchoring 
 
 ---
 
-### M8 — Musical Synchronization & Hardware Integration (Active Milestone)
+### M9 — Integrated Agent Terminal & Prompt Bay (Active Milestone)
 
-**Objective**: Anchor Karakuri's procedural animation and transitions to live musical structure and professional DJ/VJ hardware.
+**Objective**: Embed an interactive agent terminal (Prompt Bay) directly into the console to seamlessly execute, monitor, and collaborate with autonomous AI coding agents and local/remote LLM CLIs side-by-side with live visual performance.
 
 #### Key Deliverables:
-1. **Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation** *(Completed — M8-4)*:
-   - Low-latency real-time FFT processing with multi-band energy extraction (8 log-spaced semantic bands: `sub`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `air`) and transient `onset` detection feeding `.kir` shader parameter bindings.
-2. **Output Plugin Sinks & Decoupled Discovery Architecture** *(Completed — Syphon on macOS, Spout on Windows)*:
-   - **Principled Plugin Location Resolution (`places::plugins`)**: Follow the proven `places.rs` pattern (`Found::Given`, `Found::Bundle`, `Found::Prefix`, `Found::Beside`, `Found::Workspace`) used for preset libraries to resolve the plugin directory consistently across development checkouts (`WORKSPACE/plugins`), macOS app bundles (`../Resources/plugins`), unix prefix installs (`../share/karakuri/plugins`), portable/Windows deployments (`<exe_dir>/plugins`), and explicit configuration (`--plugins DIR` / `KARAKURI_PLUGINS_DIR`), preventing path drift between development and installation.
-   - **Dynamic Plugin Discovery & Self-Reporting**: Scan the resolved plugin directory for executable binaries and query their capabilities through the standard ndjson wire protocol (`Hello { name, kind, surfaces }`). Eliminate hardcoded plugin names ("Syphon", "Spout", "NDI") and ad-hoc relative paths from the core engine, operations, and console outputs row: the console dynamically discovers and presents chips based on the plugin's self-reported identity.
-   - **Decoupled GPU Surface Specifications & Vulkan Interop**: The host engine (`plugin_sink.rs`) strictly implements generic surface protocols (`iosurface` on macOS, `dxgi` on Windows) rather than binding to specific external plugins. Preserve Karakuri's 3.5x faster default Vulkan backend on Windows (ADR-0169); support `dxgi` shared handles in Vulkan via `wgpu-hal`'s `texture_from_d3d11_shared_handle` (`VK_KHR_external_memory_win32`) as well as in DX12 via committed resource shared handles.
-   - **Platform Plugin Binaries & Automation**: macOS `karakuri-syphon` (completed) and Windows `karakuri-spout` (completed via Spout2 named shared memory sender over `dxgi` handle in standalone repo `Karakuri-spout`, supporting DX12 and Vulkan via D3D11 NT interop); developer setup and automated build/install script (`scripts/plugins.sh`) provided; future NDI deferred post-MVP. Architecture and operational guide documented in [plugins.md](plugins.md) ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md)).
-3. *(Cancelled)* **Quantized Transition Engine**:
-   - Cancelled for MVP: Live visual performance prioritizes immediate, expressive manual control via MIDI faders and real-time audio-reactive modulation over pre-scheduled, rigid bar/phrase-quantized transition queues. Direct fader sweeps, immediate wipe triggers, and live audio spectral onset modulation provide musical alignment without artificial quantization latency.
-4. **Live MIDI & Keyboard Surface Mapping & Profile Management** *(Keyboard Model & Tooltip Learning Completed)*:
-   - **Keyboard Architecture Hardened**: Global scope is strictly navigation-only (`Tab`, `Shift-Tab`, `Esc`, symmetric ladder descent via `Enter`), preventing misoperation in live performance.
-   - **Active Bay Selection on Mouse Click**: Clicking within any bay immediately sets it as the active/focused bay, pairing mouse selection with bay-scoped keyboard shortcuts.
-   - **Bay-Scoped Operations**: All operational and mutation shortcuts are scoped to individual bays (`transport`, `mixer`, `inspector`, etc.) or `any bay` for region folding.
-   - **Customizable Keymaps & Explicit Globalization**: Default mappings are provided and can be customized via keymap files (`<store>/keymaps/default.keymap`), with explicit user promotion to global (`globalize: true`) and permissive collision warning detection.
-   - **Interactive Key Learn from Tooltips**: Hovering over any interactive control reveals its bound key shortcut (`Key: [k] ✎`). Clicking the key pill activates "Key Learn Mode" (`● Press key (Esc)`), capturing the next pressed key, binding it to the action, persisting it to `<store>/keymaps/default.keymap`, and updating the tooltip in real time. A `[ ] Global` / `[✓] Global` toggle lets operators explicitly promote bay shortcuts to global scope with collision warnings.
-   - **Bidirectional Specification Sync**: Key column tests enforce 100% mutual consistency between keymap code, tooltips, and `docs/manual/operations.html`.
-   - **Bay Header Interaction & Menu Grip Reservation**: Double-clicking any bay header bar toggles folding/unfolding while preserving the header bar size (27px) so title and controls stay visible and hit-testable in-place. The 6-dot grip icon (`⋮⋮` / dice) is uniformly rendered across all 7 bay heads (`library`, `staging`, `program`, `inspector`, `mixer`, `master`, `sequencer`) and reserved for the upcoming Bay Context Menu ([ADR-0364](adr/0364-every-bay-head-renders-the-menu-dice-and-double-clicking-the-header-toggles-folding.md)).
-   - Provide an in-app interface to load, edit, and persist MIDI controller maps (`.map` files) dynamically during performance.
-   - Support 14-bit high-resolution MIDI CC mappings for ultra-smooth parameter sweeps.
-5. **Wipe Mask Geometry Control**:
-   - Expose explicit wipe front position and edge softness parameters on mixer strips.
-6. *(Cancelled)* **Ableton Link Out-of-Process Synchronization**:
-   - Cancelled for MVP: Live DJ testing confirmed Pioneer rekordbox does not publish deck BPM over Ableton Link (link fader is independent and does not follow the playing track; see [manual.md](manual.md#with-rekordbox-this-is-much-less-useful-than-it-sounds-and-the-reason-is-rekordboxs)), making Link ineffective for unattended DJ tempo tracking without manual intervention. Real-time audio spectral/beat tracking is already operational and serves as the primary live tempo follower.
+1. **Left-Pane Prompt Bay Architecture & Layout Integration**:
+   - Introduce `prompt` bay at the bottom of the left pane beneath Library and Staging (`library`, `staging`, `prompt`).
+   - Default height ~240px, minimum height ~120px, flex expansion alongside Library; bounded Staging (~125px).
+   - Retain full compliance with ADR-0343 and ADR-0364 (27px header bar preserved when folded, 6-dot menu dice affordance, header double-click to fold/unfold, and keyboard `Space` folding).
+2. **Multi-Session Background Terminal Multiplexer**:
+   - Process manager spawning agent CLI tools in detached pseudo-terminals (PTY via `portable-pty` or OS PTY).
+   - Background output reader and scrollback ring buffer per session (configurable buffer, defaulting to 1024 lines).
+   - Multi-session concurrency: switching active CLI sessions keeps background processes alive without termination (e.g. running Claude while inspecting configs via a custom shell).
+   - Session lifecycle handling: automatic cleanup upon process exit, resetting the selection to unselected state and clearing the terminal screen.
+3. **Alphabetically Sorted CLI Selection Menu & Executable Detection**:
+   - Header selector pill displaying active session (or `[ Prompt ▾ ]` when unselected).
+   - Dropdown presenting sorted agent presets with `custom...` pinned at the end:
+     1. `agy` (Google Antigravity CLI)
+     2. `aider` (Open-source AI pair programmer)
+     3. `claude` (Anthropic Claude Code CLI)
+     4. `codex` (OpenAI Codex CLI)
+     5. `deepseek` (DeepSeek CLI)
+     6. `minimax` (MiniMax CLI)
+     7. `ollama` (Local LLM runner for offline live venues)
+     8. `pi` (Pi CLI)
+     9. `qwen` (Alibaba Qwen CLI)
+     10. `custom...` (Arbitrary user command and arguments)
+   - Dynamic PATH resolution (`which` lookup): unavailable binaries are rendered with strikethrough (`~~...~~`) and disabled; running sessions display active status badges (`●`).
+4. **Dynamic Cursor-Anchored Native Input with Japanese IME & Multi-Line Support**:
+   - Web-terminal-inspired architecture: dynamic, borderless `egui::TextEdit::multiline` positioned precisely at the terminal cursor coordinates `(cursor_x, cursor_y)`.
+   - Native OS IME integration (macOS/Windows): candidate selection and preedit composition attach accurately to the cursor, enabling seamless Japanese and multilingual prompting.
+   - Rich multi-line instruction input: supports line breaks, long prompt drafting, and multi-line code/shader pasting prior to submission to PTY `stdin`.
+   - Raw key forwarding: single-character confirmations (`[y/N]`), arrow keys, and control sequences (`Ctrl+C`, `Ctrl+D`) forwarded cleanly to PTY.
+5. **Console Focus Ladder & Bay Escaping**:
+   - Smooth focus transition between console navigation and terminal input.
+   - `Enter` on Prompt bay enters terminal prompt edit mode; `Esc` un-focuses the terminal back to bay level for global navigation and bay switching.
 
-**Exit Condition**: The console responds to hot-plugged MIDI hardware, modulates visuals via live audio spectral bus, outputs video to external sinks (Syphon/Spout), and executes real-time transitions and wipes.
+**Exit Condition**: Prompt bay renders stably in the left pane, switches between running agent sessions without process interruption, accepts Japanese IME and multi-line prompts via cursor-anchored input, and interacts directly with Karakuri via local MCP.
 
 ---
 
-### M9 — MVP Polish & Release Readiness
+### M10 — MVP Polish & Release Readiness
 
 **Objective**: Final integration, usability refinement, multi-hour stress testing, and packaging for initial 1.0 release.
 
 #### Key Deliverables:
-1. **Master Chain & Library Refinements**:
+1. **Live MIDI Surface Mapping & Profile Management** *(Carried from M8)*:
+   - Provide an in-app interface to load, edit, and persist MIDI controller maps (`.map` files) dynamically during performance.
+   - Support 14-bit high-resolution MIDI CC mappings for ultra-smooth parameter sweeps.
+2. **Wipe Mask Geometry Control** *(Carried from M8)*:
+   - Expose explicit wipe front position and edge softness parameters on mixer strips.
+3. **Master Chain & Library Refinements**:
    - Master chain slot reordering (drag-and-drop handles) and arbitrary slot insertion.
    - Named master chain presets saved to and loaded from the Library store.
-2. **Library Search & Caching**:
+4. **Library Search & Caching**:
    - Interactive free-text search filtering across set names, procedure types, and metadata tags.
    - Cached off-screen thumbnail previews for rapid visual identification in the library browser.
-3. **Session Last-State Recall & Slot Startup Initialization**:
+5. **Session Last-State Recall & Slot Startup Initialization**:
    - Persist and recall each slot's last-played set/procedure across sessions so the performer re-opens into their exact live setup.
    - First-launch default starts with clean state, loading demo visuals per slot through the standard Load path, with Decks B–D muted under the unified Solo/Mute mixer architecture.
-4. **Comprehensive Live Rehearsal Stress Test**:
+6. **Comprehensive Live Rehearsal Stress Test**:
    - 4-hour continuous burn-in test running multi-slot decks, active audio input, periodic set hotswaps, and concurrent MCP generation.
    - Memory leak audit (`#[global_allocator]` allocation tracking) confirming zero unbounded heap growth.
-5. **Documentation Audit & Release Distribution**:
+7. **Documentation Audit & Release Distribution**:
    - Complete synchronization of `docs/manual/` with all implemented operations.
    - Production build packaging for macOS and Linux.
 
-#### Carried from M6 (closed 2026-09-14), status:
+#### Carried from M6 (closed 2026-09-14) and M8 (closed 2026-09-27), status:
+- In-app dynamic MIDI map editing and 14-bit CC resolution deferred to M10; basic MIDI input binding and live learned maps are active.
+- Mixer wipe edge softness and front position control deferred to M10; baseline wipe transitions and shape selection are fully operational.
 - Master Chain in-flight build badge was landed in M7 (`Head::building` pill). `MasterChain::resize` still frees on the render thread. A `SlotError` arrives a frame later as `ChainEvent::Refused`.
 - A value ridden on a non-head slot before the press is not in the session head (needs a per-slot parameter table `karakuri-cli` does not hold); the GUI records the canvas at the press and never again.
 - The build worker's two rungs are taken on a host clock while the render thread draws, so an estimate can refuse under load and the slot falls to its measurement; a param write does not invalidate the estimate.
