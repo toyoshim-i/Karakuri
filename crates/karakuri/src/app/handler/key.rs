@@ -106,8 +106,8 @@ impl App {
             let op = match key.logical_key.as_ref() {
                 // Dispatch focus grammar keys (digits, arrows, space, enter) to the focused bay.
                 // The console resolves the target address while this loop names the operation (ADR-0259, ADR-0265, ADR-0333).
-                named if grammar(&named).is_some() => {
-                    let press = grammar(&named).expect("the arm this is in");
+                named if grammar(&named, self.alt, self.ctrl).is_some() => {
+                    let press = grammar(&named, self.alt, self.ctrl).expect("the arm this is in");
                     // Record cursor position before the move so the console can distinguish a movement from an in-place action.
                     let was = self.readout.view.cursor_row();
                     // Read active deck state on demand to prevent cycling from stale strip frame snapshots.

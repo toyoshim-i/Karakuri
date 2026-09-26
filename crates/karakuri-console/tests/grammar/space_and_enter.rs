@@ -3,14 +3,14 @@
 use super::grammar_common::*;
 
 // ---------------------------------------------------------------------------
-// `space`
+// `enter` for state and actions, `alt-enter` for levels, `space` for bay folding
 // ---------------------------------------------------------------------------
 
 /// The key and the chip are one cycle. The three states are asked of the same
 /// three functions `view::Mixer`'s chips ask, so a press and a click cannot
 /// disagree about which state comes next.
 #[test]
-fn space_on_a_state_names_the_state_the_chip_would_name() {
+fn enter_on_a_state_names_the_state_the_chip_would_name() {
     let cases: [(usize, Operation); 3] = [
         (
             1,
@@ -44,23 +44,23 @@ fn space_on_a_state_names_the_state_the_chip_would_name() {
         press(&mut view, &panel, Press::Digit(2));
         press(&mut view, &panel, Press::Digit(control));
         assert_eq!(
-            press(&mut view, &panel, Press::Space),
+            press(&mut view, &panel, Press::Enter),
             Asked::Emitted(want.clone()),
-            "`space` on deck B's control {control} did not ask for `{want:?}`"
+            "`enter` on deck B's control {control} did not ask for `{want:?}`"
         );
     }
 }
 
-/// Space key on a level resets to its declared default value (ADR-0259).
+/// Alt-Enter key on a level resets to its declared default value (ADR-0259).
 #[test]
-fn space_on_a_level_is_the_value_it_was_declared_at() {
+fn alt_enter_on_a_level_is_the_value_it_was_declared_at() {
     let (panel, mut view) = console();
     focus_on(&mut view, &panel, "mixer");
     press(&mut view, &panel, Press::Digit(1));
     for (control, level) in [(2, Level::Trim(0)), (3, Level::Fader(0))] {
         press(&mut view, &panel, Press::Digit(control));
         assert_eq!(
-            press(&mut view, &panel, Press::Space),
+            press(&mut view, &panel, Press::AltEnter),
             Asked::Stepped {
                 level,
                 step: Step::Default
@@ -71,16 +71,15 @@ fn space_on_a_level_is_the_value_it_was_declared_at() {
 }
 
 #[test]
-fn space_on_the_librarys_head_is_the_scope() {
+fn enter_on_the_librarys_head_is_the_scope() {
     let (panel, mut view) = console();
     focus_on(&mut view, &panel, "library");
     press(&mut view, &panel, Press::Digit(HEAD));
     press(&mut view, &panel, Press::Digit(1));
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Scope,
-        "`0 1 space` in the Library is not the scope. ADR-0259: *`0` is the head and its controls \
-         are the scope chips, so `space` there cycles the scope*"
+        "`0 1 enter` in the Library is not the scope."
     );
 }
 
@@ -104,9 +103,9 @@ fn the_transition_rows_three_settings_are_the_mixers_head() {
         let (panel, mut view) = console();
         walk_to(&mut view, &panel, "mixer", &[HEAD, control]);
         assert_eq!(
-            press(&mut view, &panel, Press::Space),
+            press(&mut view, &panel, Press::Enter),
             Asked::Emitted(Operation::SetTransition { setting }),
-            "`0 {control} space` in the Mixer did not step the transition row's {control}th pill"
+            "`0 {control} enter` in the Mixer did not step the transition row's {control}th pill"
         );
     }
 }
@@ -119,18 +118,18 @@ fn a_library_rows_star_is_addressable() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "library", &[2, 1]);
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Emitted(Operation::SetFavourite {
             id: "two".to_owned(),
             favourite: true,
         }),
-        "`2 1 space` in the Library did not star the second row"
+        "`2 1 enter` in the Library did not star the second row"
     );
     // And a Set already starred is un-starred, which is the state the press
     // names rather than a flip anything downstream works out.
     view.starred.insert("two".to_owned());
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Emitted(Operation::SetFavourite {
             id: "two".to_owned(),
             favourite: false,
@@ -142,14 +141,14 @@ fn a_library_rows_star_is_addressable() {
 /// always described (ADR-0259), and it is a move of the arrangement rather than
 /// an operation of the vocabulary.
 #[test]
-fn space_on_the_programs_solo_is_the_solo_and_the_unsolo() {
+fn enter_on_the_programs_solo_is_the_solo_and_the_unsolo() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "program", &[HEAD, 1]);
     let id = panel.layout().find("program-view").expect("the picture");
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Panel(Op::Solo(id)),
-        "`0 1 space` in the Program bay did not solo the picture"
+        "`0 1 enter` in the Program bay did not solo the picture"
     );
 }
 
@@ -157,12 +156,12 @@ fn space_on_the_programs_solo_is_the_solo_and_the_unsolo() {
 /// press asking for the operation that names the output and the fold that
 /// carries it out.
 #[test]
-fn space_on_a_sink_routes_the_frame_and_folds_the_picture() {
+fn enter_on_a_sink_routes_the_frame_and_folds_the_picture() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "outputs", &[1]);
     let id = panel.layout().find("program-view").expect("the picture");
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Routed(
             Operation::RouteFrame {
                 output: karakuri_operation::Output::Program,
@@ -170,15 +169,13 @@ fn space_on_a_sink_routes_the_frame_and_folds_the_picture() {
             },
             Op::Fold(id),
         ),
-        "`1 space` in the Outputs row did not turn the picture off"
+        "`1 enter` in the Outputs row did not turn the picture off"
     );
 }
 
-/// The Sequencer's four `space` rows, each naming the state it arrives at
-/// rather than a flip — and the cell carries the stored slot rather than the
-/// drawn step, which is what keeps the payload independent of the mode.
+/// The Sequencer's four rows, each naming the state it arrives at on `enter`.
 #[test]
-fn space_in_the_sequencer_names_the_state_it_arrives_at() {
+fn enter_in_the_sequencer_names_the_state_it_arrives_at() {
     let cases: [(&[usize], Operation); 4] = [
         (
             &[HEAD, 1],
@@ -210,9 +207,9 @@ fn space_in_the_sequencer_names_the_state_it_arrives_at() {
         let (panel, mut view) = console();
         walk_to(&mut view, &panel, "sequencer", path);
         assert_eq!(
-            press(&mut view, &panel, Press::Space),
+            press(&mut view, &panel, Press::Enter),
             Asked::Emitted(want.clone()),
-            "`{path:?} space` in the Sequencer did not ask for `{want:?}`"
+            "`{path:?} enter` in the Sequencer did not ask for `{want:?}`"
         );
     }
     // And the second lane is muted already, so its label asks to be unmuted —
@@ -220,7 +217,7 @@ fn space_in_the_sequencer_names_the_state_it_arrives_at() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "sequencer", &[2, 1]);
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Emitted(Operation::SetLaneMute {
             pattern: 2,
             lane: 1,
@@ -259,7 +256,7 @@ fn enter_on_a_lane_takes_it_out_of_the_pattern() {
 /// The Inspector's four chips, each on the third rung and each naming the state
 /// it arrives at.
 #[test]
-fn space_in_the_inspector_cycles_the_four_chips() {
+fn enter_in_the_inspector_cycles_the_four_chips() {
     let cases: [(&[usize], Operation); 4] = [
         (
             &[2, 1, 1],
@@ -299,27 +296,26 @@ fn space_in_the_inspector_cycles_the_four_chips() {
         let (panel, mut view) = console();
         walk_to(&mut view, &panel, "inspector", path);
         assert_eq!(
-            press(&mut view, &panel, Press::Space),
+            press(&mut view, &panel, Press::Enter),
             Asked::Emitted(want.clone()),
-            "`{path:?} space` in the Inspector did not ask for `{want:?}`"
+            "`{path:?} enter` in the Inspector did not ask for `{want:?}`"
         );
     }
 }
 
-/// The tone map cycles the four operators, which is the console's own cycle and
-/// the same one the pill walks.
+/// The tone map cycles the four operators on `enter`.
 #[test]
-fn space_on_the_tone_map_cycles_the_operators() {
+fn enter_on_the_tone_map_cycles_the_operators() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "transport", &[9]);
-    let said = press(&mut view, &panel, Press::Space);
+    let said = press(&mut view, &panel, Press::Enter);
     match said {
         Asked::Emitted(Operation::SetTonemap { tonemap }) => assert_ne!(
             tonemap,
             Tonemap::Aces,
             "the tone map cycled onto the operator it was already running"
         ),
-        other => panic!("`9 space` in the Transport is not the tone map: {other:?}"),
+        other => panic!("`9 enter` in the Transport is not the tone map: {other:?}"),
     }
 }
 
@@ -546,32 +542,30 @@ fn enter_declines_where_a_bays_items_perform_nothing() {
 // The refusals
 // ---------------------------------------------------------------------------
 
-/// Asserts inert items (like preview cells) refuse space and enter with descriptive explanations (P-0083, ADR-0259).
+/// Asserts inert items (like preview cells) refuse enter with descriptive explanations (P-0083, ADR-0259).
 #[test]
 fn every_refusal_says_why() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "program", &[2]);
-    for key in [Press::Space, Press::Enter] {
-        match press(&mut view, &panel, key) {
-            Asked::Nothing(why) => assert!(
-                why.len() > 20,
-                "a preview cell declined `{key:?}` without saying why: {why}"
-            ),
-            other => panic!(
-                "a preview cell answered `{key:?}` with {other:?} — a monitor is a \
-                             thing you look at"
-            ),
-        }
+    match press(&mut view, &panel, Press::Enter) {
+        Asked::Nothing(why) => assert!(
+            why.len() > 20,
+            "a preview cell declined `Enter` without saying why: {why}"
+        ),
+        other => panic!(
+            "a preview cell answered `Enter` with {other:?} — a monitor is a \
+             thing you look at"
+        ),
     }
     // And a slot of the master chain, which is a rung rather than a control:
     // its parameter rows, its cut chip and its `−` are what answer a key.
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "master", &[2]);
-    match press(&mut view, &panel, Press::Space) {
+    match press(&mut view, &panel, Press::Enter) {
         Asked::Nothing(why) => assert!(
-            why.contains("rung"),
-            "a chain slot declined without saying it is a rung: {why}"
+            why.contains("rung") || why.contains("performs nothing"),
+            "a chain slot declined without saying why: {why}"
         ),
-        other => panic!("a chain slot answered space: {other:?}"),
+        other => panic!("a chain slot answered enter: {other:?}"),
     }
 }

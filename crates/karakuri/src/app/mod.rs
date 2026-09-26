@@ -51,6 +51,10 @@ pub(crate) struct App {
     pub(crate) faulted: bool,
     /// Tracks Shift modifier state from `WindowEvent::ModifiersChanged` for reverse Tab navigation (ADR-0259).
     pub(crate) shift: bool,
+    /// Tracks Alt/Option modifier state for secondary actions (ADR-0259).
+    pub(crate) alt: bool,
+    /// Tracks Ctrl modifier state for secondary actions (ADR-0259).
+    pub(crate) ctrl: bool,
     pub(crate) keymap: crate::keymap::Keymap,
     pub(crate) readout: Readout,
     /// UI hover layer managing tooltip dwell timing and rendering over console panels.
@@ -128,9 +132,11 @@ impl App {
         Self::event_loop_action_for(is_main_window, event)
     }
 
-    /// Updates the shift modifier state from a `ModifiersChanged` event.
+    /// Updates modifier states from a `ModifiersChanged` event.
     pub(crate) fn update_modifiers(&mut self, state: &winit::event::Modifiers) {
         self.shift = state.state().shift_key();
+        self.alt = state.state().alt_key();
+        self.ctrl = state.state().control_key();
     }
     /// Initialize application state with pre-configured MCP handles and launch environment.
     #[allow(clippy::too_many_arguments)]
@@ -191,6 +197,8 @@ impl App {
             faulted: false,
             // Shift modifier key state initially clear.
             shift: false,
+            alt: false,
+            ctrl: false,
             keymap,
             readout,
             // Parse manual once at startup before window creation (P-0091).

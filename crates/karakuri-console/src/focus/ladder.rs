@@ -64,6 +64,8 @@ pub enum Press {
     Arrow(Arrow),
     Space,
     Enter,
+    AltEnter,
+    CtrlEnter,
 }
 
 impl Press {
@@ -73,7 +75,7 @@ impl Press {
             Press::Digit(_) => Grammar::Digit,
             Press::Arrow(_) => Grammar::Arrows,
             Press::Space => Grammar::Space,
-            Press::Enter => Grammar::Enter,
+            Press::Enter | Press::AltEnter | Press::CtrlEnter => Grammar::Enter,
         }
     }
 }

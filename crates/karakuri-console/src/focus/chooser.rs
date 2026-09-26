@@ -710,6 +710,38 @@ fn next_authority(level: Authority) -> Authority {
     crate::view::AUTHORITIES[(at + 1) % crate::view::AUTHORITIES.len()]
 }
 
+/// Dispatches primary or secondary activation on a control (`Enter`, `Alt+Enter`, `Ctrl+Enter`).
+pub fn entered(
+    view: &View,
+    panel: &Panel,
+    item: Option<usize>,
+    nth: usize,
+    control: Control,
+    key: Press,
+    held: impl FnOnce(u8) -> Option<Held>,
+) -> Asked {
+    match (control.answers(), key) {
+        (Answers::Level, Press::AltEnter | Press::CtrlEnter) => {
+            level(view, item, control, Step::Default)
+        }
+        (Answers::Level, Press::Enter) => {
+            Asked::Nothing("a level is stepped with arrows — alt-enter resets to default")
+        }
+        (Answers::Act(act), Press::Enter) => performed(view, item, act),
+        (Answers::Act(_), Press::AltEnter | Press::CtrlEnter) => {
+            Asked::Nothing("this action has no secondary operation")
+        }
+        (Answers::State | Answers::Cells { .. }, Press::Enter) => {
+            state(view, panel, item, nth, control, held)
+        }
+        (Answers::State | Answers::Cells { .. }, Press::AltEnter | Press::CtrlEnter) => {
+            state(view, panel, item, nth, control, held)
+        }
+        (Answers::Nothing(why) | Answers::Track(why), _) => Asked::Nothing(why),
+        _ => Asked::Nothing("nothing here answers this key"),
+    }
+}
+
 /// `enter` on a control, where the control is an act.
 pub fn act_of(view: &View, item: Option<usize>, control: Control) -> Asked {
     match control.answers() {
@@ -839,5 +871,33 @@ pub fn under_enter(
             "nothing is holding this control, so there is nothing to take back — the arrows \
              write it",
         ),
+    }
+}
+
+/// Handles activation keys (`Enter`, `Alt+Enter`, `Ctrl+Enter`) on the third rung (Inspector sub-controls).
+pub fn under_action(
+    view: &View,
+    item: usize,
+    through: usize,
+    nth: usize,
+    control: Control,
+    key: Press,
+) -> Asked {
+    match key {
+        Press::Enter => match control {
+            Control::Sync | Control::Composite | Control::Authority | Control::Renderer => {
+                under_space(view, item, through, nth, control)
+            }
+            Control::Param => under_enter(view, item, through, nth, control),
+            Control::Anchor => {
+                Asked::Nothing("an anchor is stepped with arrows — alt-enter resets to default")
+            }
+            _ => Asked::Nothing("nothing here answers enter"),
+        },
+        Press::AltEnter | Press::CtrlEnter => match control {
+            Control::Param => under_enter(view, item, through, nth, control),
+            _ => Asked::Nothing("this control has no secondary action"),
+        },
+        _ => Asked::Nothing("unsupported key"),
     }
 }

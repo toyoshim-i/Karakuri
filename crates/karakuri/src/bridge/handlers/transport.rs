@@ -1,10 +1,18 @@
 use super::*;
 
 /// Maps a keyboard event to a UI grammar press (space, enter, arrows, or digit; ADR-0333).
-pub(crate) fn grammar(key: &Key<&str>) -> Option<focus::Press> {
+pub(crate) fn grammar(key: &Key<&str>, alt: bool, ctrl: bool) -> Option<focus::Press> {
     match key {
         Key::Named(NamedKey::Space) => Some(focus::Press::Space),
-        Key::Named(NamedKey::Enter) => Some(focus::Press::Enter),
+        Key::Named(NamedKey::Enter) => {
+            if alt {
+                Some(focus::Press::AltEnter)
+            } else if ctrl {
+                Some(focus::Press::CtrlEnter)
+            } else {
+                Some(focus::Press::Enter)
+            }
+        }
         Key::Named(NamedKey::ArrowUp) => Some(focus::Press::Arrow(focus::Arrow::Up)),
         Key::Named(NamedKey::ArrowDown) => Some(focus::Press::Arrow(focus::Arrow::Down)),
         Key::Named(NamedKey::ArrowLeft) => Some(focus::Press::Arrow(focus::Arrow::Left)),

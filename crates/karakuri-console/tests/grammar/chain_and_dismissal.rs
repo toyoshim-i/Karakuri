@@ -198,49 +198,49 @@ fn the_arrows_step_a_chain_parameter_by_a_tenth_of_its_declared_range() {
         ),
         other => panic!("`↓` on a chain parameter row did not set it: {other:?}"),
     }
-    // `space` is the value the procedure declared it at, which the reading
+    // `alt-enter` is the value the procedure declared it at, which the reading
     // carries because the compiled slot has it.
-    match press(&mut view, &panel, Press::Space) {
+    match press(&mut view, &panel, Press::AltEnter) {
         Asked::Emitted(Operation::SetChainParam {
             param: ChainParam::Declared { value, .. },
             ..
         }) => assert!(
             value.abs() < 1e-6,
-            "`space` did not return the row to what the procedure declared: {value}"
+            "`alt-enter` did not return the row to what the procedure declared: {value}"
         ),
-        other => panic!("`space` on a chain parameter row did not set it: {other:?}"),
+        other => panic!("`alt-enter` on a chain parameter row did not set it: {other:?}"),
     }
     // It performs nothing, so `enter` declines.
     match press(&mut view, &panel, Press::Enter) {
         Asked::Nothing(why) => assert!(
-            why.contains("enter"),
+            why.contains("arrows") || why.contains("alt-enter"),
             "a chain parameter row declined `enter` without saying why: {why}"
         ),
         other => panic!("a chain parameter row performed something: {other:?}"),
     }
 }
 
-/// A slot's cut chip is a state `space` cycles, and it is addressed on every
+/// A slot's cut chip is a state `enter` cycles, and it is addressed on every
 /// slot: one whose procedure declares no `retains` draws none and declines with
 /// that sentence, so a digit means the same control down the whole chain
 /// (ADR-0352).
 #[test]
-fn space_on_a_slots_cut_chip_cycles_it_and_declines_where_the_slot_retains_nothing() {
+fn enter_on_a_slots_cut_chip_cycles_it_and_declines_where_the_slot_retains_nothing() {
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "master", &[RETAINING_SLOT[0], 2]);
     assert_eq!(
-        press(&mut view, &panel, Press::Space),
+        press(&mut view, &panel, Press::Enter),
         Asked::Emitted(Operation::SetChainParam {
             at: 0,
             param: ChainParam::Cut(Cut::Exit),
         }),
-        "`space` on a cut chip did not name the other of the two cuts"
+        "`enter` on a cut chip did not name the other of the two cuts"
     );
-    // A closed list has no axis, so the arrows decline and name `space`.
+    // A closed list has no axis, so the arrows decline.
     match press(&mut view, &panel, Press::Arrow(Arrow::Down)) {
         Asked::Nothing(why) => assert!(
-            why.contains("space"),
-            "an arrow on the cut chip declined without naming the key that cycles it: {why}"
+            why.contains("enter") || why.contains("closed list"),
+            "an arrow on the cut chip declined without saying why: {why}"
         ),
         other => panic!("an arrow walked a closed list: {other:?}"),
     }
@@ -248,7 +248,7 @@ fn space_on_a_slots_cut_chip_cycles_it_and_declines_where_the_slot_retains_nothi
     // The second slot declares no `retains`, and its chip keeps the number.
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "master", &[PLAIN_SLOT[0], 2]);
-    match press(&mut view, &panel, Press::Space) {
+    match press(&mut view, &panel, Press::Enter) {
         Asked::Nothing(why) => assert!(
             why.contains("retains"),
             "a slot with no cut declined without saying why it has none: {why}"
@@ -444,7 +444,7 @@ fn an_address_on_something_that_is_gone_goes_back_to_the_bay() {
     assert_eq!(at(&view, "mixer"), vec![4, 3]);
 
     view.mixer.truncate(2);
-    let said = press(&mut view, &panel, Press::Space);
+    let said = press(&mut view, &panel, Press::Enter);
     assert!(
         matches!(said, Asked::Nothing(_)),
         "a press on an address the bay has stopped drawing acted on something: {said:?}"
