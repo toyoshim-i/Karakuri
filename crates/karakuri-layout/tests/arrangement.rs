@@ -296,3 +296,51 @@ fn a_split_with_no_children_is_an_empty_region_rather_than_a_special_case() {
     assert_invariants(&lone);
     assert_eq!(lone.rect(lone.root()), Rect::new(0.0, 0.0, 640.0, 480.0));
 }
+
+#[test]
+fn a_collapsed_child_with_collapsed_size_retains_its_extent_and_divider() {
+    let mut l = Layout::new(karakuri_layout::Spec::column(
+        6.0,
+        vec![
+            karakuri_layout::Spec::view("library")
+                .flex(1.0)
+                .min(100.0)
+                .collapsed_size(27.0),
+            karakuri_layout::Spec::view("staging")
+                .fixed(120.0)
+                .min(50.0)
+                .collapsed_size(27.0),
+        ],
+    ));
+    at(&mut l, 300.0, 400.0);
+    assert_invariants(&l);
+
+    let lib = l.find("library").unwrap();
+    let stg = l.find("staging").unwrap();
+
+    // In normal state: library absorbs remaining flex space (400 - 6 - 120 = 274).
+    assert_eq!(l.rect(lib), Rect::new(0.0, 0.0, 300.0, 274.0));
+    assert_eq!(l.rect(stg), Rect::new(0.0, 280.0, 300.0, 120.0));
+
+    // Collapse library: it retains 27.0 extent and the divider stays.
+    l.collapse(lib);
+    l.solve();
+    assert_invariants(&l);
+    assert!(l.is_collapsed(lib));
+    assert!(!l.visible(lib));
+    assert!(l.is_placed(lib));
+    assert_eq!(l.rect(lib), Rect::new(0.0, 0.0, 300.0, 27.0));
+    // Staging gets the remaining space: 400 - 6 - 27 = 367.
+    assert_eq!(l.rect(stg), Rect::new(0.0, 33.0, 300.0, 367.0));
+
+    // Hit-testing inside library's 27px header returns library view hit.
+    assert_eq!(
+        l.hit(karakuri_layout::Point::new(100.0, 15.0), 3.0),
+        karakuri_layout::Hit::View(lib)
+    );
+    // Hit-testing inside staging returns staging view hit.
+    assert_eq!(
+        l.hit(karakuri_layout::Point::new(100.0, 50.0), 3.0),
+        karakuri_layout::Hit::View(stg)
+    );
+}

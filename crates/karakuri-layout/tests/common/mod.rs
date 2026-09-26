@@ -227,7 +227,7 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
             "child {c:?} does not span its parent across the axis: {r:?} in {parent:?}"
         );
 
-        if !laid_out(l, *c) {
+        if !laid_out(l, *c) && !l.is_retained(*c) {
             // A child that is out of the layout takes no space at all.
             assert!(near(e, 0.0), "child {c:?} is out and took {e} of extent");
         }

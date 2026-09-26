@@ -47,7 +47,7 @@ fn descend(layout: &Layout, id: NodeId, bays: &mut Vec<&'static Region>) {
     }
 }
 
-/// Finds the visible bay at point `p`, excluding divider grab margins to prevent resize gestures from stealing focus.
+/// Finds the visible or folded bay at point `p`, excluding divider grab margins to prevent resize gestures from stealing focus.
 pub fn bay_at(layout: &Layout, p: Point) -> Option<&'static Region> {
     if matches!(
         layout.hit(p, crate::panel::GRAB),
@@ -57,7 +57,10 @@ pub fn bay_at(layout: &Layout, p: Point) -> Option<&'static Region> {
     }
     for bay in ring(layout) {
         if let Some(id) = layout.find(bay.name) {
-            if layout.visible(id) && layout.rect(id).contains(p) {
+            let rect = layout.rect(id);
+            if (layout.visible(id) || (layout.is_collapsed(id) && rect.h > 0.0 && rect.w > 0.0))
+                && rect.contains(p)
+            {
                 return Some(bay);
             }
         }
@@ -93,6 +96,9 @@ pub fn folded_head(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> 
         return None;
     }
     let edge = crate::view::to_egui(layout.rect(id));
+    if edge.width() > 0.0 && edge.height() > 0.0 {
+        return Some(edge);
+    }
     let inside = crate::view::to_egui(layout.rect(parent));
     let width = match edge.width() > 1.0 {
         true => edge.width(),

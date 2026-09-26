@@ -21,7 +21,9 @@ pub fn plan_into(panel: &mut Panel, canvas: (u32, u32), out: &mut Vec<Placed>) {
     out.clear();
     let layout = panel.layout();
     for node in panel.nodes() {
-        if !layout.visible(node.id) {
+        let is_visible = layout.visible(node.id);
+        let is_retained = layout.is_collapsed(node.id) && positive(to_egui(layout.rect(node.id)));
+        if !is_visible && !is_retained {
             continue;
         }
         let Some(region) = layout.name(node.id).and_then(region) else {

@@ -83,9 +83,15 @@ fn left_pane() -> Spec {
         BAY_DIVIDER,
         vec![
             // Library minimum: head 27 + scope 31.5 + 3 result rows 73.5 + foot 26 = 158px.
-            Spec::view("library").flex(1.0).min(158.0),
+            Spec::view("library")
+                .flex(1.0)
+                .min(158.0)
+                .collapsed_size(size::HEAD_H),
             // Staging bay: natural height 125px (head 27 + padding 14 + 3 rows + gaps); min 66px (one candidate).
-            Spec::view("staging").fixed(125.0).min(66.0),
+            Spec::view("staging")
+                .fixed(125.0)
+                .min(66.0)
+                .collapsed_size(size::HEAD_H),
         ],
     )
     .named("left-pane")
@@ -131,6 +137,7 @@ fn program() -> Spec {
     .fixed(395.0)
     .min(217.0)
     .max(f32::INFINITY)
+    .collapsed_size(size::HEAD_H)
 }
 
 /// Centre inspector split configuring two side-by-side panes (`inspector-1`, `inspector-2`).
@@ -154,6 +161,7 @@ fn inspector() -> Spec {
             + size::NODE_HEAD_H
             + size::PARAM_H * 2.0,
     )
+    .collapsed_size(size::HEAD_H)
 }
 
 /// Right column specification: fixed mixer, flexible master chain, and fixed sequencer.
@@ -165,11 +173,18 @@ fn right_pane() -> Spec {
             Spec::view("mixer")
                 .fixed(316.0)
                 .min(316.0)
-                .max(f32::INFINITY),
+                .max(f32::INFINITY)
+                .collapsed_size(size::HEAD_H),
             // Master minimum height (94px): bay head 27, padding 18, out row 16.5, gap 8, and one fx slot 24.5.
-            Spec::view("master").flex(1.0).min(94.0),
+            Spec::view("master")
+                .flex(1.0)
+                .min(94.0)
+                .collapsed_size(size::HEAD_H),
             // Sequencer bay: natural height 178px; minimum 119.5px holding ruler, one lane, and footer.
-            Spec::view("sequencer").fixed(178.0).min(119.5),
+            Spec::view("sequencer")
+                .fixed(178.0)
+                .min(119.5)
+                .collapsed_size(size::HEAD_H),
         ],
     )
     .named("right-pane")

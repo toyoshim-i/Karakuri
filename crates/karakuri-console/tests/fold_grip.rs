@@ -621,3 +621,54 @@ fn a_drag_past_a_stop_folds_nothing_that_does_not_keep_its_edge() {
          almost nothing"
     );
 }
+
+/// Asserts that a folded bay retains its header bar in the layout, never overlaps sibling bays,
+/// and remains hit-testable and planned for rendering.
+#[test]
+fn folded_bay_retains_bar_size_without_overlapping_sibling() {
+    let mut panel = console(PLAUSIBLE);
+    let lib_id = id_of(panel.layout(), "library");
+    let stg_id = id_of(panel.layout(), "staging");
+
+    // Fold library
+    panel.op(Op::Fold(lib_id));
+    panel.solve();
+
+    let lib_rect = panel.layout().rect(lib_id);
+    let stg_rect = panel.layout().rect(stg_id);
+
+    // Library retains 27px header
+    assert_eq!(lib_rect.h, size::HEAD_H);
+    assert!(lib_rect.w > 0.0);
+
+    // Staging starts below library and the divider, never overlapping
+    assert!(stg_rect.y >= lib_rect.y + lib_rect.h);
+    assert!(stg_rect.h > 0.0);
+
+    // Both bays are planned for rendering
+    let mut placed = Vec::new();
+    karakuri_console::view::plan_into(&mut panel, (1920, 1080), &mut placed);
+    let placed_ids: Vec<NodeId> = placed.iter().map(|p| p.id).collect();
+    assert!(
+        placed_ids.contains(&lib_id),
+        "folded library should be placed for rendering"
+    );
+    assert!(
+        placed_ids.contains(&stg_id),
+        "staging should be placed for rendering"
+    );
+
+    // Hit-testing inside library header returns library
+    let lib_pt = Point::new(lib_rect.x + 10.0, lib_rect.y + 10.0);
+    assert_eq!(
+        karakuri_console::focus::bay_at(panel.layout(), lib_pt).map(|r| r.name),
+        Some("library")
+    );
+
+    // Hit-testing inside staging returns staging
+    let stg_pt = Point::new(stg_rect.x + 10.0, stg_rect.y + 10.0);
+    assert_eq!(
+        karakuri_console::focus::bay_at(panel.layout(), stg_pt).map(|r| r.name),
+        Some("staging")
+    );
+}

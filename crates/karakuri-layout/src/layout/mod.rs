@@ -203,6 +203,16 @@ impl Layout {
         self.arrangement.is_closed(id.0)
     }
 
+    /// Returns true if `id` is collapsed while retaining a positive extent (and no solo active).
+    pub fn is_retained(&self, id: NodeId) -> bool {
+        self.arrangement.is_retained(id.0)
+    }
+
+    /// Returns the extent `id` retains along its parent's split axis when collapsed.
+    pub fn collapsed_size(&self, id: NodeId) -> f32 {
+        self.node(id.0).collapsed_size
+    }
+
     /// Returns true if `id` is configured to preserve its divider edge when collapsed.
     pub fn keeps_its_edge(&self, id: NodeId) -> bool {
         self.node(id.0).edge
@@ -302,9 +312,9 @@ impl Layout {
             _ => return position,
         };
 
-        // A boundary adjacent to a closed node cannot be dragged. Closed nodes
-        // maintain zero extent and require explicit reopening.
-        if self.arrangement.is_closed(a) || self.arrangement.is_closed(b) {
+        // A boundary adjacent to a closed or collapsed node cannot be dragged. Closed nodes
+        // maintain zero extent and collapsed bays retain fixed extent, requiring explicit reopening.
+        if self.node(a).collapsed || self.node(b).collapsed {
             return axis.far(self.solved.rects[a]);
         }
 
@@ -370,6 +380,10 @@ impl Layout {
         for k in 0..self.arrangement.child_count(split) {
             let child = self.arrangement.child(split, k);
             if self.arrangement.out_of_layout(child) {
+                continue;
+            }
+            if self.arrangement.is_retained(child) {
+                fixed += self.node(child).collapsed_size;
                 continue;
             }
             match self.node(child).sizing {
@@ -461,13 +475,18 @@ impl Layout {
             let mut next = None;
             for k in 0..self.arrangement.child_count(cur) {
                 let c = self.arrangement.child(cur, k);
-                if !self.arrangement.out_of_layout(c) && self.solved.rects[c].contains(p) {
+                if self.arrangement.placed(c) && self.solved.rects[c].contains(p) {
                     next = Some(c);
                     break;
                 }
             }
             match next {
-                Some(c) => cur = c,
+                Some(c) => {
+                    if self.node(c).collapsed {
+                        return Hit::View(NodeId(c));
+                    }
+                    cur = c;
+                }
                 // Inside the split but claimed by no child: only reachable at a
                 // rounding-width seam, and a seam is nothing rather than a
                 // guess.
