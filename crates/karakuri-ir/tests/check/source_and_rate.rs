@@ -87,9 +87,7 @@ fn source_is_readable_in_a_generator_a_deformation_and_a_renderer() {
     assert!(vertex.contains("Ambient(Source)"), "{vertex}");
 }
 
-/// **A `uint`, and the checker types it as one.** `float(source)` is the
-/// spelling a colour wants and `source == only` is the one a mask wants;
-/// neither works if the read comes back the wrong width.
+/// `source` ambient is typed as `uint` by the type checker.
 #[test]
 fn source_is_a_uint() {
     assert_eq!(karakuri_ir::ast::Ambient::Source.ty(), Ty::Uint);
@@ -284,9 +282,7 @@ proc pair {
     );
 }
 
-/// **Legal on L1, L2 and L4 and refused on L3 and Field**, which is the
-/// ambient's rule stated one level up — a slot exists to be compared against
-/// `source`, so it belongs exactly where `source` does.
+/// Source comparison slots are valid on L1, L2, and L4 procedures.
 #[test]
 fn a_source_slot_follows_the_ambients_kinds() {
     // The three that may.
@@ -447,9 +443,7 @@ proc stale {
         hint.contains("fraction") && hint.contains("height"),
         "the hint does not say what the unit became: {hint}"
     );
-    // **No reference resolution in the hint.** The division is a fact about the
-    // file being migrated, not about the language, and a number here would
-    // become an anchor authors write against.
+    // Migration hints provide structural guidance without resolving runtime references.
     assert!(
         !hint.contains("720"),
         "the hint anchors the unit to a resolution: {hint}"

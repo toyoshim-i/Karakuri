@@ -263,7 +263,7 @@ mod gpu {
             2 * FRAMES as u64
         );
     }
-    /// The closed-form flag reaches the governor **off the Set**, through the check
+    /// The closed-form flag reaches the governor off the Set, through the check
     /// pass and `Set::build`, rather than being handed to it by a test. Two decks
     /// differing only in which L1 they hold, at a budget that fits either.
     #[test]

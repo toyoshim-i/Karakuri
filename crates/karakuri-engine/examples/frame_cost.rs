@@ -16,7 +16,7 @@ const OUTPUT: (u32, u32) = (1280, 720);
 const CELL: (u32, u32) = (252, 142);
 
 /// The pair a bare `cargo run -p karakuri` opens on (ADR-0271), which is what
-/// the panel's own reading is taken over — and **not** the workspace's
+/// the panel's own reading is taken over — and not the workspace's
 /// reference workload, which is `examples/drift_cloud.kset` at 1280x720
 /// (`docs/contributing.md` §1, ADR-0270).
 const L1: &str = "examples/coil_vortex.kir";
@@ -146,7 +146,7 @@ fn main() {
         }
         last = Some(began);
 
-        // **The CPU's half**: recording the deck's four slots and the
+        // CPU recording cost for deck slots and transport.
         // composite, and the submission that carries them. This is the
         // quantity `Cost::engine` is on the panel.
         let started = Instant::now();

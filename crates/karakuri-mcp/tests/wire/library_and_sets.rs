@@ -54,8 +54,7 @@ fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
         (0usize, "L4", Some("night01"), "beat_strokes", &b"one"[..]),
         (0, "L4", Some("night01"), "beat_strokes", &b"two"[..]),
         (1, "L1", Some("day02"), "drift_shell", &b"three"[..]),
-        // **Filed under no Set**, which is a run playing the pair it was
-        // launched with — the row no id matches.
+        // Material not filed under any named set.
         (2, "L2", None, "bend", &b"four"[..]),
     ] {
         snaps
@@ -94,8 +93,7 @@ fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
         "a version filed under no Set was folded into a Set's history, which is the \
          wildcard reading ADR-0276 refuses: {said}"
     );
-    // **A row is the name a landing names it back by**, which is the name
-    // less the `@<set>` every row of one walk shares.
+    // The row identifier matches the landing name.
     assert!(
         !said.contains("@night01") && !said.contains(".kir"),
         "a row is not the name `Revision::Picked` takes: {said}"
@@ -108,8 +106,7 @@ fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
         "the other Set's walk is not its own: {said}"
     );
 
-    // **A Set with no versions is an answer and not a failure**, and it is
-    // a different answer from a store with no history at all.
+    // A Set with no version history returns an empty list rather than an error.
     let (failed, said) = call(server.port, "walk_history", json!({"set":"nothing_here"}));
     assert!(!failed, "{said}");
     assert!(
@@ -117,8 +114,7 @@ fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
         "an empty walk does not say it is empty: {said}"
     );
 
-    // **And a call that names no Set is refused rather than answered with
-    // whatever the store holds.**
+    // A request specifying no set is refused rather than returning arbitrary entries.
     let (failed, said) = call(server.port, "walk_history", json!({}));
     assert!(failed, "a walk with no Set was answered: {said}");
     assert!(said.contains("`set` is required"), "{said}");
@@ -302,9 +298,7 @@ fn a_node_is_called_here_what_read_set_calls_it() {
         );
     }
 
-    // **The same names, from the tool that reads one set.** Two derivations
-    // that agree today are two answers that stop agreeing the day one is
-    // edited, and this is the assertion that would notice.
+    // Identical names reported by the single-set inspection tool.
     let (failed, read) = call(server.port, "read_set", json!({"id":"mixed"}));
     assert!(!failed, "{read}");
     for expected in [
@@ -368,10 +362,7 @@ fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
 
     let (failed, said) = call(server.port, "read_set", json!({"id":"keeper"}));
     assert!(!failed, "{said}");
-    // **The declaration, number for number.** Each of these is in the
-    // `.kir` above and in no other fixture, so a rendering that reached for
-    // the wrong end of a range, or that answered off a card it built itself,
-    // says a number that is not here.
+    // Parameter values match the set declaration exactly.
     for expected in [
         "probe_knobs",
         "L1:0",
@@ -510,9 +501,7 @@ fn a_set_id_on_the_way_to_a_card_cannot_name_a_path() {
     ] {
         let (failed, said) = call(server.port, "read_set", json!({"id": bad}));
         assert!(failed, "`{bad}` was accepted as a set id: {said}");
-        // **Refused before anything was opened.** The refusal names the rule
-        // rather than an errno, which is also how it is told apart from the
-        // one a real read of a missing file produces.
+        // Request rejected before accessing storage; refusal cites constraint rule.
         assert!(
             said.contains("path component") || said.contains("letters, digits"),
             "`{bad}` was refused for something other than being a path: {said}"

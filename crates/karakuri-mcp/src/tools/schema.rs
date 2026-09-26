@@ -330,7 +330,7 @@ pub(crate) fn tools() -> Value {
         },
         // Automatically generated schema for the vocabulary's `operate` tool.
         operate_tool(),
-        // **Agent workflow & co-performance tools (M7, ADR-0363)**
+        // Agent workflow and co-performance tools (M7, ADR-0363).
         {
             "name": "get_permissions",
             "description":

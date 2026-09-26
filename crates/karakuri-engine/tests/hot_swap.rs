@@ -1,5 +1,4 @@
-//! The third clause of the V1 assumption: **can we hot-swap it without
-//! dropping a frame?**
+//! Hot-swap verification: ensures pipeline replacement occurs without frame drops.
 //!
 //! Decomposed into submodules under `tests/hot_swap/`.
 

@@ -15,9 +15,7 @@ fn a_save_the_loop_does_not_answer_ends_and_says_something_true() {
     assert!(said.contains("Nothing was saved"), "{said}");
     drop(kept);
 
-    // Taken and named, then silence. **The id is in the answer** — that is
-    // what the first message is for — and the answer claims neither success
-    // nor failure.
+    // The id is returned in the initial response; subsequent news reports completion.
     let (tx, news) = mpsc::channel();
     tx.send(News::Accepted(
         "slot 0: saving 2 nodes as set `keeper` in <store>".to_string(),
@@ -71,9 +69,7 @@ fn a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out() {
         }]);
     let id = karakuri_environment::accepted_save(
         1,
-        // **A `Reply` exists only because a model asked**, so this is the
-        // arm this test has always been about — see
-        // `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`.
+        // Model-requested save reply (see P-0096).
         karakuri_environment::Asked::Model,
         Some("keeper".to_string()),
         &sources,

@@ -1,7 +1,5 @@
-//! Check-pass tests: the three complete `.kir` examples from `docs/ir-spec.md`
-//! must check clean and produce the resolved shape we expect, and a battery of
-//! invalid fixtures exercises every failure mode the check pass is
-//! responsible for.
+//! Check-pass tests: verifies example IR files check clean and produce expected
+//! resolved shapes, alongside failure mode tests for check-pass invariants.
 
 #[path = "check/common.rs"]
 mod common;

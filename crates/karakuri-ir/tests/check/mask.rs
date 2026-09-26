@@ -31,8 +31,7 @@ fn an_l2_may_carry_a_mask_beside_its_deform() {
     assert_eq!(kinds, vec![BlockKind::Mask, BlockKind::Deform]);
 }
 
-/// **`strength` is the whole of a mask**, so a block that never assigns it is
-/// one whose author meant to say where the deformation applies and did not.
+/// Mask blocks must assign the required `strength` attribute.
 #[test]
 fn a_mask_must_assign_a_strength() {
     let src = r#"
@@ -112,10 +111,7 @@ proc sneaky {
     );
 }
 
-/// **`weight` is a name the layer gives a meaning to**, on the same terms
-/// `spawn_rate` is one — so declaring it as something else is refused rather
-/// than silently scaling the modulation by a vector's first component or by
-/// nothing at all.
+/// Mask `weight` attribute must match the scalar float type convention.
 #[test]
 fn an_l2s_weight_must_be_a_float() {
     let src = r#"

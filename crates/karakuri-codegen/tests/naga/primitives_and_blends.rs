@@ -249,10 +249,7 @@ fn l1_emitting_every_attribute_compiles_and_validates() {
         shader.element_layout.slots.len(),
         2 + karakuri_ir::Attr::ALL.len()
     );
-    // **Every attribute at once, which is the widest element the language can
-    // ask for**, and the number is asserted rather than derived so that a
-    // layout change has to come here and say what it did. The padded layout
-    // made this `(2 + ALL) * 16`; WGSL's own placement makes it this.
+    // Maximum attribute element stride matches WGSL struct layout alignment.
     assert_eq!(shader.element_layout.stride, 96);
     // And it is smaller than the layout it replaced, which is the whole point.
     assert!(shader.element_layout.stride < (2 + karakuri_ir::Attr::ALL.len() as u32) * 16);

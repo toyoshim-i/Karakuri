@@ -11,10 +11,7 @@ pub(crate) fn follow_tempo_source(
         return audio::Grid::Owned;
     };
     let heard = source.poll();
-    // **Said once and then nothing changes.** The grid is not reset when a
-    // source dies: the last tempo it gave is still the best information anyone
-    // has, and a show whose beat jumped because a helper crashed would be worse
-    // off than one that simply stopped being corrected.
+    // Retain the last known tempo when a source disconnects rather than resetting the grid.
     if let Some(why) = source.unreported_end() {
         eprintln!("tempo source: {why} — the grid holds where it was");
     }
@@ -69,9 +66,7 @@ pub(crate) fn measure_audio(
     let (_audio_record, tempo) = audio.frame(&mut signals, interval, f32::from(steps) * DT, grid);
     deck.set_signals(signals);
 
-    // **Swapped, not cloned.** The record carries a `Vec` of bands and this is
-    // the frame path; `push_audio` takes this one and leaves an empty shell
-    // behind, so the buffer moves and nothing allocates.
+    // Buffer swapped into recorder to avoid allocations in frame loop.
     if let Some(recorder) = recorder.as_mut() {
         recorder.push_audio(audio.record_mut());
     }

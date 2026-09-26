@@ -16,16 +16,12 @@ pub struct L2Shader {
     /// Trailing `f32` pad slots after `uniform_layout`'s named fields — wire
     /// padding only, never a value the engine sets.
     pub uniform_pad_f32: u32,
-    /// What this node **writes**: everything that reached it, plus its own
-    /// `emit`. The layout every node downstream of it compiles against.
+    /// Attributes written by this node (upstream plus own emits).
     pub element_layout: ElementLayout,
     /// The attribute list behind [`L2Shader::element_layout`], for the next
     /// node in a chain to widen in turn.
     pub emits: Vec<Attr>,
-    /// The engine-written slots this node's **output** carries: what reached it,
-    /// plus `copy` if this node is the one that amplified. Travels with
-    /// [`L2Shader::emits`] for the same reason — the next node in the chain
-    /// compiles against this node's buffer and has to name the same fields.
+    /// Engine-managed synthetic slots carried in output layout.
     pub synthetic: Synthetic,
     /// Whether this node binds a second geometry (`uses <name> : Geometry`).
     ///
@@ -57,14 +53,11 @@ pub fn generate_l2(
     );
 
     let in_layout = ir_layout::generate_element_layout(upstream, synthetic, derived);
-    // **An amplifier is where `copy` starts existing**, and once it exists it
-    // is carried by every node below — so this is an `||`, not an assignment.
+    // Copy slot exists if upstream already had it or if this node amplifies.
     let out_synthetic = Synthetic {
         copy: synthetic.copy || checked.amplify.is_some(),
     };
-    // **The far geometry's own layout.** Two sources need not emit the same
-    // attributes — each chain instance is compiled against the source it runs
-    // over — so this is a second struct rather than a second view of the first.
+    // Far geometry element layout for cross-geometry deformation.
     debug_assert_eq!(
         checked.geometry_slot().is_some(),
         far.is_some(),
@@ -236,9 +229,7 @@ struct L2Resolver {
     /// Whether this node declares a geometry slot, so that a far read has a
     /// buffer to address.
     uses: bool,
-    /// Whether the **output** layout has a `copy` slot: this node amplifies, or
-    /// something above it did. Where it does not, `copy` is `0u` — the answer a
-    /// chain that never amplified gives at every position in it.
+    /// Whether the output layout includes a synthetic `copy` slot.
     has_copy: bool,
     /// Attributes readable here that have no slot, synthesised at the read
     /// site. See `karakuri_ir::Derivation::is_stored`.

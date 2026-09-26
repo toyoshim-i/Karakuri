@@ -94,9 +94,7 @@ pub(crate) fn parse_edge(value: &str) -> Result<karakuri_engine::set::Edge, Stri
              `field_lens.shape=melt_blob`",
         ));
     };
-    // **The last dot, not the first.** A node name may hold one — nothing
-    // refuses `--set my.morph=morph.kir` — and the slot is a `.kir` identifier,
-    // which cannot.
+    // Split on the last dot: node names may contain dots, but slot identifiers cannot.
     let Some((node, slot)) = from.rsplit_once('.') else {
         return Err(bad(
             "expected a `.` between the node and the slot it declares, e.g. \
@@ -117,10 +115,7 @@ pub(crate) fn parse_bind(value: &str) -> Result<Binding, String> {
     let bad = |what: &str| format!("`--bind {value}` — {what}");
 
     let mut layer = None;
-    // **Absent is a wildcard, not zero.** A binding with no `index` is the
-    // layer's — every node declaring the key — which is what `--bind` has
-    // always meant and what one published control would drive. See
-    // `Binding::index`.
+    // Absent index represents a wildcard matching all nodes in the layer (see `Binding::index`).
     let mut index: Option<u32> = None;
     let mut key = None;
     let mut signal = None;

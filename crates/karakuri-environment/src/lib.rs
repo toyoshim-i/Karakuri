@@ -202,10 +202,7 @@ pub fn accepted_save(
         if sources.len() == 1 { "" } else { "s" },
         match asked {
             Asked::Operator => root.display().to_string(),
-            // **Named rather than left as the root**, because this sentence is
-            // the one a model is handed and the directory is the whole of what
-            // changed for it: told only the root, a client would look under
-            // `sets/`, find nothing, and report the save as lost.
+            // Returns concrete subdirectory path for model-initiated saves.
             Asked::Model => root
                 .join(karakuri_store::store::Store::SANDBOX)
                 .display()

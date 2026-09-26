@@ -341,9 +341,7 @@ proc flat_sprite {{
         }
     }
 
-    /// **A texel nothing drew on stays exactly nothing**, which the resolve has to
-    /// arrange rather than inherit: its accumulation target is zero there and it
-    /// divides by that sum. A missing guard is a NaN, and `tests/deck.rs` has a
+    /// Unrendered background texels resolve cleanly without NaN artifacts.
     /// whole test about what one NaN does to a mix.
     #[test]
     fn an_untouched_texel_resolves_to_transparent_black() {

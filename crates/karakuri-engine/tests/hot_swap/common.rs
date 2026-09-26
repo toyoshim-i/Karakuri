@@ -261,8 +261,7 @@ impl Harness {
             .expect("poll");
     }
 
-    /// **Turn a knob on the Set that is playing**, which is what
-    /// `Deck::write_param` does for a surface: `begin_frame` is the public
+    /// Parameter update on currently playing set via `Deck::write_param`.
     /// road to a live `&mut Set` and the write is a uniform value, on screen
     /// at the next frame with no build.
     pub fn ride(&mut self, key: &str, value: f32) {

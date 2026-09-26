@@ -175,10 +175,7 @@ fn an_empty_store_says_so_rather_than_printing_nothing() {
         "an empty store printed something an operator cannot act on: {said:?}"
     );
 
-    // **And a path with no store at it is a different answer, and creates
-    // nothing.** `Store::open` would establish the layout under it, so a
-    // listing of a mistyped `--store` would answer "empty" and leave a
-    // directory behind saying so — a read-only flag that writes.
+    // Non-existent store path returns an error without creating directories.
     let missing = dir.path().join("nowhere");
     let said = listed_sets_at(&missing).expect("the listing");
     assert!(
@@ -239,9 +236,7 @@ fn package_takes_an_authoring_file_in_and_packages_it() {
         "the sources are inlined, which is what makes it a bundle: {said}"
     );
 
-    // **And an id is still an id.** The extension is the whole of what
-    // tells the two apart, so a value without one is looked up in the store
-    // and says so when it is not there.
+    // Identifiers without file extensions are looked up directly in the store.
     let refused = packaged_set(&root, "night").expect_err("no set is filed under that id");
     assert!(refused.contains("night"), "{refused}");
 }
@@ -322,9 +317,7 @@ color = vec4(1.0, 1.0, 1.0, 1.0);
         );
     }
 
-    // **And the id in the file is still somebody else's word.** Taking the
-    // same authoring file in twice is the refusal a `.kbset` gets, for the
-    // same reason: nothing here was typed by the operator.
+    // Duplicate import of existing identifier is rejected.
     let refused = taken_in_file(&root, &kset).expect_err("the id is taken");
     assert!(
         refused.contains("already in this store"),

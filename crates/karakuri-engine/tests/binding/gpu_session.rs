@@ -319,7 +319,7 @@ mod gpu {
 
         let gpu = Gpu::headless().expect("no GPU");
 
-        // **The same material the slot is already running**, which is what a
+        // Rebuilding the identical material currently executing in the slot.
         // save of an untouched `.kir` produces: nothing about the picture
         // changes across this rebuild except what the attachment does or does
         // not go on driving.
@@ -339,7 +339,7 @@ mod gpu {
             camera: karakuri_engine::camera::Orbit::default(),
             params: Vec::new(),
             published: Vec::new(),
-            // **The point of the test.** A watcher over a pair states no
+            // Verifies parameter override remains active across set rebuild.
             // binding, because a pair carries none — so this is what every
             // rebuild of the panel's own slots hands the engine.
             bindings: Vec::new(),
@@ -371,7 +371,7 @@ mod gpu {
             let mut deck = Deck::new(&gpu.device, vec![swap], WIDTH, HEIGHT);
             deck.set_signals(Signals::new(BPM, u64::from(SEED)));
 
-            // **The road a press takes**, and the one this test is about.
+            // Tracing live parameter write path through to GPU uniform.
             assert!(
                 deck.bind(
                     karakuri_engine::DeckSlot(0),

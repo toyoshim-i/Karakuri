@@ -34,7 +34,7 @@ fn estimate_of(a: f64, fragment_ms: f64, target: (u32, u32), floor: u32) -> Esti
     e
 }
 
-/// An estimate that **refuses**, and the refusal is a real one rather than a
+/// An estimate that refuses, and the refusal is a real one rather than a
 /// hand-built variant: the upper rung reads cheaper than the lower, so `b` is
 /// negative, which is a failed measurement and not a cheap Set.
 fn refused_estimate(target: (u32, u32), floor: u32) -> Estimate {
@@ -139,7 +139,7 @@ fn priming_slots_are_admitted_in_index_order_against_a_shrinking_headroom() {
     assert_eq!(cheaper_first.priming_ms, 7.0);
 }
 
-/// **Live slots over the budget are a warning and nothing else.**
+/// Live slots over the budget are a warning and nothing else.
 ///
 /// Four heavy Sets on air is the operator's decision. The governor says so and
 /// suspends priming; what it must never do is take one off air.
@@ -548,8 +548,7 @@ fn a_host_clock_under_an_estimate_reaches_the_reports_one_caveat() {
 /// Verifies that budgeted estimates provide valid numerical inputs for UI performance bands.
 #[test]
 fn a_governed_slot_now_has_a_number_a_band_can_be_predicted_from() {
-    /// The console's scale: 4, 8, 12 and 16 ms, and **a value on a boundary
-    /// rounds to the worse band**.
+    /// Governor latency bands (4, 8, 12, 16 ms); boundary values round conservatively.
     fn band(ms: f32) -> &'static str {
         match ms {
             _ if ms >= 16.0 => "purple",

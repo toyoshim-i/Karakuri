@@ -315,8 +315,7 @@ impl Hand {
                 label: Some("hand-written master chain"),
                 source: wgpu::ShaderSource::Wgsl(HAND_WRITTEN.into()),
             });
-        // **The chain's own layout**, which is what makes this a comparison
-        // rather than two arrangements: the same bindings in the same
+        // Preserves post-processing chain layout across comparison fixtures.
         // order, so the only thing that can differ is the body.
         let layout = present.chain_layout().clone();
         let pipeline_layout = gpu

@@ -103,9 +103,7 @@ fn a_name_the_file_recorded_comes_back_with_the_node() {
         [Some("veil".to_string())],
         "the name the file recorded is what the node is called"
     );
-    // **And an unnamed node stays unnamed** rather than being filled in
-    // here: a name nobody wrote is derived where the Set is built, and
-    // deriving it here as well would be the second place one fact lives.
+    // Unnamed nodes retain None in loaded names structure.
     assert_eq!(loaded.names.l4s, [None]);
     let notes = loaded.notes.join("\n");
     assert!(

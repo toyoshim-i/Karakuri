@@ -65,9 +65,7 @@ pub(crate) fn wire_input(
             },
             reply: Reply(tx),
         })
-        // **Answered rather than waited for**, in [`save_set`]'s two shapes and
-        // its words: a queue nobody is emptying and a loop that has ended are
-        // different facts, and neither of them may leave a model holding a call.
+        // Fail promptly if the channel is full or disconnected rather than blocking.
         .map_err(|e| match e {
             mpsc::TrySendError::Full(_) => format!(
                 "the render loop has {ASKED} edges queued and no room for another: it is \

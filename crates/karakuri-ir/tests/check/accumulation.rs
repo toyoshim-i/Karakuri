@@ -423,9 +423,7 @@ proc marcher {
     assert_eq!(checked.topology, Some(Topology::Fullscreen));
 }
 
-/// **The rule that makes skipping the paired L1's simulation provable.** With
-/// no vertex block there is nowhere to read an element from, so a `consumes`
-/// here is a claim the procedure cannot honour.
+/// Consumes declaration requires vertex stage element access.
 #[test]
 fn a_fullscreen_l4_that_consumes_attributes_is_rejected() {
     let src = r#"

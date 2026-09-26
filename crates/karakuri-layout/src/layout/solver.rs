@@ -174,9 +174,8 @@ pub(crate) fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
         let c = a.child(split, k);
         s.rects[c] = axis.slice(rect, cursor, s.sizes[k].max(0.0));
         cursor += s.sizes[k].max(0.0);
-        // A closed child is placed at zero extent and **still gets its
-        // divider**, which is the whole of the edge it keeps: the gap lands
-        // between the window's own edge and whatever took the pane's width.
+        // A closed child is placed at zero extent while retaining its divider
+        // boundary between the window edge and the expanded neighbour pane.
         if a.placed(c) {
             done += 1;
             if done < tiled {

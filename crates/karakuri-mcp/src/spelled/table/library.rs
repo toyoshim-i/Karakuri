@@ -95,9 +95,7 @@ pub(crate) const LIBRARY: &[Spelled] = &[
     Spelled {
         sample: || {
             (
-                // **A tool of its own, so `operate` does not spell it** — the
-                // sample is here to name the row and the schema is
-                // `walk_history`'s own, beside `read_set`'s and `list_sets`'.
+                // Sample row for walk_history tool schema generation.
                 Operation::WalkHistory {
                     set: Some("night01".to_string()),
                 },

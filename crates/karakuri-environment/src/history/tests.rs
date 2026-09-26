@@ -36,9 +36,7 @@ fn declared_kind_reads_back_every_layer_including_l5() {
         Some("L5"),
         "a trailing comment is not part of the answer"
     );
-    // **`L5` is not a prefix of another word and no other word is a prefix
-    // of it**, which is what lets a snapshot's `L41`/`Field` name be split
-    // into a layer and an index by trying each of these in turn.
+    // Layer prefix matching: layer kind names are distinct tokens without mutual prefix overlaps.
     assert_eq!(declared_kind(b"proc p {\n  kind L55\n}\n"), None);
     assert_eq!(declared_kind(b"proc p {\n  kind L6\n}\n"), None);
 }
@@ -346,9 +344,7 @@ fn two_ids_taken_off_one_millisecond_are_two_ids() {
              been kept"
     );
 
-    // **The control.** A different millisecond is left exactly as it is —
-    // an operator looks for the time they pressed the key, and an index on
-    // every id would be noise in the way of that.
+    // Control test: distinct millisecond timestamps require no discriminator index.
     assert_eq!(
         unused(&mut issued, "20260816-143052-272".to_string()),
         "20260816-143052-272"
@@ -480,10 +476,7 @@ fn a_rows_name_is_the_snapshots_own_name_without_the_suffix_or_the_set() {
             Some(set) => format!("@{set}.kir"),
             None => ".kir".to_string(),
         };
-        // **The date is the day directory and not the file's name**, which
-        // is what `Version::at` is: the two put back together, with the
-        // hyphen `stamped_id` spells them with. So the row is the file's
-        // name with those nine characters in front of it.
+        // Date is determined by day directory path rather than filename.
         let row = version.filed_as();
         let (date, rest) = row.split_at(9);
         let date = &date[..8];

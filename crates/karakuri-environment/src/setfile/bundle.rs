@@ -54,9 +54,7 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
         )
     })?;
 
-    // **Every path checked before any of them is read.** See this function's
-    // doc: a refusal in the middle of a file that had already stored three
-    // artifacts is a refusal with a mess behind it.
+    // Pre-validate all file paths before reading artifacts.
     let mut checked: Vec<PathBuf> = Vec::new();
     for line in &lines {
         if let Record::Part {
@@ -95,19 +93,14 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
                         path.display()
                     )
                 })?;
-                // **The bytes as they are on disk**, because the hash is of the
-                // bytes: reading the file as text and writing it back would put
-                // a re-encoding between what the operator has and what the
-                // address names.
+                // Hash is computed directly over file bytes on disk.
                 let proc_hash = store.put_artifact(&source).map_err(|e| {
                     format!(
                         "`{}`: {called} names `{include}` and storing it failed ({e})",
                         path.display()
                     )
                 })?;
-                // **The name is carried across**, because it is the same node:
-                // a `part` says what a `slot` says, and an `edge` in this same
-                // file points at it by that name.
+                // Node name is preserved across part and slot conversions.
                 out.push(Line::new(Record::Slot {
                     at: NodeAddress {
                         layer: *layer,
@@ -181,10 +174,7 @@ fn contained(file: &Path, root: &Path, include: &str, called: &str) -> Result<Pa
             }
         }
     }
-    // **The link check, and it is a second question rather than a stricter
-    // version of the first.** Nothing lexical can see a symlink, and nothing
-    // about the filesystem can be asked of a path that is not there — so the
-    // two run in this order and say different things.
+    // Sequential verification: lexical path check followed by symlink canonicalization.
     let real = std::fs::canonicalize(root.join(spelled)).map_err(|e| {
         format!(
             "`{}`: {called} names `{include}` and there is no such file beside the Set file \
@@ -362,10 +352,7 @@ pub fn unbundle(store: &Store, came: CameFrom, lines: &[Line]) -> Result<String,
              stored. Edit the `set` record's id, or move the set you have"
         ));
     }
-    // **Every inlined source hashes to the hash its `slot` record names**, or
-    // the file is refused whole. This is the check that makes a bundle
-    // trustworthy at all: without it a `src` run is a way to file arbitrary
-    // text under an address an operator recognises.
+    // Every inlined source must verify against the hash declared in its slot record.
     let mut sources = Vec::new();
     for (hash, run) in &inlined {
         let text = run.values().cloned().collect::<Vec<_>>().join("\n");
@@ -386,10 +373,7 @@ pub fn unbundle(store: &Store, came: CameFrom, lines: &[Line]) -> Result<String,
         }
         sources.push((*hash, text, called));
     }
-    // **A `slot` naming an artifact that is neither inlined nor already here**
-    // is a file that is not self-contained, and it is refused naming it. One
-    // that is already in the store and not inlined is fine — that is an
-    // ordinary partial bundle, and the store answers for it.
+    // Reject bundles referencing missing artifacts that are neither inlined nor stored.
     for slot in &slots {
         if inlined.contains_key(&slot.hash) || store.get_artifact(&slot.hash).is_ok() {
             continue;
@@ -413,9 +397,7 @@ pub fn unbundle(store: &Store, came: CameFrom, lines: &[Line]) -> Result<String,
                 "{called} is inlined and no `slot` record references it; it is stored anyway"
             ));
         }
-        // **The card is what a compile produces**, so it is written here and by
-        // `put_meta` — the one both compile paths already go through — rather
-        // than by a second writer of the same file.
+        // Card metadata produced by compile check is written to storage.
         match crate::compile::check(text) {
             Ok(checked) => {
                 if crate::meta::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none()
@@ -423,10 +405,7 @@ pub fn unbundle(store: &Store, came: CameFrom, lines: &[Line]) -> Result<String,
                     cards += 1;
                 }
             }
-            // **Stored, filed, and reported** — see this function's doc. The
-            // note carries the checker's own words, because "one source did not
-            // compile" is not something an operator can act on and a diagnostic
-            // with a span is.
+            // Compile diagnostics are recorded with error spans for reporting.
             Err(report) => notes.push(format!(
                 "{called} does not compile on this build, so it has no metadata card. It is \
                   stored and it keeps its slot; `--load-set {file_id}` will refuse it and say:\n{}",

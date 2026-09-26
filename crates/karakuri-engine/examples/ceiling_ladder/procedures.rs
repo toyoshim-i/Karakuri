@@ -215,7 +215,7 @@ proc pad_shell {{
     )
 }
 
-/// A per-element L4 that costs as little as a renderer can. **Not fullscreen:**
+/// Minimal-cost per-element L4 renderer (non-fullscreen).
 /// `Set::step` skips the simulation entirely when every renderer is fullscreen,
 /// so a fullscreen L4 would measure an element ladder that never ran.
 pub(crate) const TINY_DOTS: &str = r#"

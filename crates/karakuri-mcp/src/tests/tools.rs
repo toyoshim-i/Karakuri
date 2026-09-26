@@ -72,10 +72,7 @@ fn a_schema_states_the_constraints_its_tool_enforces() {
         );
     }
 
-    // **And the published rule is the one that is enforced.** The pattern
-    // above is a literal here on purpose: a `checked_id` that started
-    // accepting a dot, or stopped accepting a dash, would leave the schema
-    // describing a tool that no longer exists.
+    // Enforces published schema identifier regex constraints.
     assert!(checked_id("plain_id-9").is_ok());
     for refused in ["a.b", "a b", "../x", ""] {
         assert!(

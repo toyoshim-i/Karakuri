@@ -125,8 +125,7 @@ pub fn layer_ordinal(layer: Kind) -> u8 {
         Kind::L4 => 3,
         // Last, matching `Set::slot_of`.
         Kind::Field => 4,
-        // **After the fields, matching `Set::slot_of`** — placed at the end so
-        // that every address a Set file already carries keeps its number.
+        // L5 index placed after Field, matching `Set::slot_of` ordering.
         Kind::L5 => 5,
     }
 }
@@ -137,10 +136,7 @@ pub fn layer_from_ordinal(n: u8) -> Layer {
         1 => Layer::L2,
         2 => Layer::L3,
         3 => Layer::L4,
-        // **Not the `_` arm.** `Field` used to fall into `L4`'s catch-all, so a
-        // `--param Field:0:x` was saved as `L4:0:x` and reloaded onto renderer
-        // zero — silently dropped if that renderer had no such name, and
-        // silently wrong if it did.
+        // Explicit Layer mapping prevents Field falling into L4 catch-all.
         4 => Layer::Field,
         // And the sixth is named for the same reason, one kind later: a
         // catch-all here is how the fifth went wrong.

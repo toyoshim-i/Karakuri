@@ -182,7 +182,7 @@ proc {name} {{
     const GREEN: (f32, f32, f32) = (0.0, 1.0, 0.0);
 
     /// The two renderers used throughout: different colours, different sizes, and
-    /// **different defaults for the one param name they share**.
+    /// Distinct default values for shared parameter names.
     fn pair() -> (String, String) {
         (
             sprite("red", RED, 9.0, 1.0),
@@ -464,7 +464,7 @@ proc {name} {{
         // Measured at 1.4%, not the 6% one fragment of `alpha = 0.94` would leave:
         // the two sprites overlap, and two fragments give `1 - 0.06²`, so most of
         // the red sits under two veils rather than one. The floor is well under
-        // that and well over the **zero** a clear would leave.
+        // that and well above the zero value left by a clear pass.
         assert!(
             a[0] > red_alone[0] * 0.005,
             "a weighted node drawn second erased what was under it rather than \
@@ -511,9 +511,7 @@ proc {name} {{
     #[test]
     fn a_mixed_stack_still_simulates_because_one_renderer_reads_the_elements() {
         let gpu = Gpu::headless().expect("no GPU available");
-        // **No `vertex` block is how an L4 says it covers the frame** — see
-        // `examples/field_march.kir`. `consumes` must therefore be empty, which is
-        // exactly what makes this the node that would excuse the simulation if it
+        // L4 fullscreen passes omit vertex blocks and consumes declarations.
         // were the only one.
         let marcher = r#"
 proc wash {
@@ -571,8 +569,7 @@ proc wash {
         );
     }
 
-    /// **An address that names no node is refused rather than silently ignored**,
-    /// on the same terms `Set::bind` refuses a param a layer does not declare.
+    /// Unbound node address targets are rejected with explicit refusals.
     #[test]
     fn an_address_past_the_end_of_the_stack_is_refused() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -678,9 +675,7 @@ mod refused {
         .map(|_| ())
     }
 
-    /// **A Set with nothing to draw is refused rather than built.** A `Set` is a
-    /// video source, and a video source with no frame to give has no useful
-    /// behaviour to fall back on — and `all(is_fullscreen)` over an empty list is
+    /// Empty Sets with no renderable geometry are rejected at build time.
     /// vacuously true, which would silently stop the simulation as well.
     #[test]
     fn a_set_with_no_renderer_is_refused() {

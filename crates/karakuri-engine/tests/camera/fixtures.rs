@@ -60,7 +60,7 @@ pub fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
     set
 }
 
-/// The camera these tests measure against: **still**, so a frame is a frame and
+/// Stationary camera fixture providing deterministic viewpoint coordinates.
 /// not a moment in a sweep.
 pub fn pinned() -> Orbit {
     Orbit {
@@ -156,7 +156,7 @@ proc sweep {{
     )
 }
 
-/// **Sized by its own param**, so a picture that changes when the param does
+/// Visual fixture sized by parameter to verify camera uniform updates.
 /// proves three things at once: the L3's pass ran, its uniform reached it, and
 /// the state it wrote was what the derivation read.
 pub const GAIN_DOT: &str = r#"
@@ -201,8 +201,7 @@ pub fn with_camera(gpu: &Gpu, l3: Option<&str>, l4: &str, w: u32, h: u32) -> Set
     set
 }
 
-/// A camera on the `+x` axis or the `-x` axis, looking at the origin. **The two
-/// are mirror images**, so material off the view axis lands on opposite sides
+/// Mirror-image camera pair positioned on +/- X axes facing the origin.
 /// of the frame — which is a reading that cannot be produced by a Set that drew
 /// both renderers from one camera, whichever one it picked.
 pub fn from_x(name: &str, x: f32) -> String {

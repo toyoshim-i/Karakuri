@@ -135,9 +135,7 @@ position = vec3(1.0, 0.0, 0.0);
 }
 "#;
 
-/// **A second renderer, and every number in it different.** For the test
-/// that a write lands on the node its address names: two files that read
-/// the same would let a write to `L4:1` land on `L4:0` and pass.
+/// Second renderer fixture with distinct parameter configurations to verify addressed node writes.
 pub const PROBE_L4_B: &str = r#"
 proc probe_l4_b {
 kind  L4
@@ -272,7 +270,7 @@ pub fn raw(port: u16, request: &str) -> (u16, String) {
     stream.write_all(request.as_bytes()).expect("write");
     let mut reader = BufReader::new(stream);
     let mut status_line = String::new();
-    // **Named, because the interesting way for this to fail is a timeout.**
+    // Name specified to clarify timeout failure diagnostics.
     // A connection held up by another one reaches the client's own read
     // timeout and comes out here, and `expect("status")` reported that as an
     // errno rather than as what it is.

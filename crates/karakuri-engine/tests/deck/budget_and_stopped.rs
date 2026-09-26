@@ -97,9 +97,7 @@ mod gpu {
          it against — the test's own premise is gone, not the gate"
         );
 
-        // **And the deck says it is over its period, in the one place entitled
-        // to.** The window is a rolling median, so it needs filling before there
-        // is a number at all — `None` is not `false` (`P-0095`).
+        // Rolling median window must fill before period overrun is reported (P-0095).
         for _ in 0..PERIOD_WINDOW {
             slow_frame(&gpu, &mut deck, &present);
         }
@@ -119,10 +117,7 @@ mod gpu {
         );
         assert_eq!(report.frame_period_ms, Some(period));
         assert_eq!(report.frame_budget_ms, Some(OVER_A_SLOW_FRAME_MS));
-        // **And it is not the same flag as `over_budget`**, which is the Live
-        // slots' summed per-Set cost against the *compute* budget and is a
-        // different quantity. M5.14 item 3 is where the deck's total belongs;
-        // this measurement is what that item needs and is not an answer to it.
+        // Period overrun is independent from compute budget `over_budget` flag.
         assert!(
             report.to_string().contains("OVER its period"),
             "the report's line does not say the deck is over its period: {report}"
@@ -203,9 +198,7 @@ mod gpu {
             "a stopped slot's target changed, so something is still drawing into it"
         );
 
-        // **And the freeze is the version's**: a build that fits clears it and
-        // the slot runs again. The budget is what moves, because moving it is
-        // what makes the same machinery answer differently.
+        // Slot freeze state clears when a replacement build fits the budget.
         deck.set_frame_budget_ms(GENEROUS_MS);
         tx.send(candidate(2)).expect("worker alive");
         let started = Instant::now();
@@ -297,9 +290,7 @@ mod gpu {
             faded.iter().all(|&bits| bits == 0),
             "a fader at zero on a stopped slot left it in the picture"
         );
-        // **And the slot is still stopped**, because a fader is not a build. The
-        // operator took it out of the mix; nothing decided that ended the freeze
-        // for them.
+        // Fader adjustments do not clear slot budget freeze state.
         assert!(
             deck.overloaded(karakuri_engine::DeckSlot(1)),
             "the fader cleared the freeze, which is a state changing by itself"
@@ -408,7 +399,7 @@ mod gpu {
             );
         }
 
-        // **Not vacuous.** The two decks really were in different states, and the
+        // Verifies distinct alarm reporting between differing deck states.
         // one thing that is allowed to notice is the deck-level alarm.
         assert_eq!(
             idle_over,

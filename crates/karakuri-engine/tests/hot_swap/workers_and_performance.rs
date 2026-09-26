@@ -189,8 +189,7 @@ mod gpu {
             "the diagnostics did not survive the channel"
         );
 
-        // **Nothing was built, so nothing was replaced.** The capacity is what
-        // says which Set is live — see `FIRST` and `SECOND` — and a refusal
+        // Rejected builds leave incumbent slot state unchanged.
         // that had reached `install_if_ready` as a candidate would be a swap.
         assert_eq!(
             h.swap.set().capacity(),

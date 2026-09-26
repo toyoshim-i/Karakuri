@@ -44,8 +44,7 @@ fn id(l: &Layout, name: &str) -> NodeId {
         .unwrap_or_else(|| panic!("a node named {name}"))
 }
 
-/// **A closed node has zero extent and its divider is still beside it**, where
-/// an ordinary fold takes both.
+/// A closed node has zero extent while retaining its divider.
 #[test]
 fn a_closed_node_keeps_its_divider_and_an_ordinary_fold_does_not() {
     for (name, keeps) in [("left", true), ("centre", false), ("right", true)] {
@@ -89,8 +88,7 @@ fn a_closed_node_keeps_its_divider_and_an_ordinary_fold_does_not() {
     }
 }
 
-/// **The neighbour takes the extent and not the divider**, which is the whole
-/// price of the edge and is one divider's width.
+/// The neighbour takes the pane extent while preserving the divider width.
 #[test]
 fn a_closed_pane_gives_its_extent_to_the_centre_and_keeps_the_divider() {
     let mut l = panes();
@@ -129,8 +127,7 @@ fn a_closed_pane_gives_its_extent_to_the_centre_and_keeps_the_divider() {
     );
 }
 
-/// **The gap a closed pane keeps is at the split's own outer edge, and a
-/// pointer finds it there** — which is the whole point of keeping it.
+/// The boundary gap kept by a closed pane remains hit-testable at the split outer edge.
 #[test]
 fn a_pointer_finds_the_boundary_a_closed_pane_keeps() {
     const GRAB: f32 = 6.0;
@@ -154,9 +151,7 @@ fn a_pointer_finds_the_boundary_a_closed_pane_keeps() {
     }
 }
 
-/// **A closed fold is `is_collapsed` like any other**, so everything written
-/// about folds still holds: the stored size is untouched, `expand` restores it
-/// exactly, and `visible` says no.
+/// A closed fold reports `is_collapsed`, preserving its stored size for subsequent expansion.
 #[test]
 fn a_closed_fold_is_a_fold_and_expand_restores_the_size() {
     let mut l = panes();

@@ -135,7 +135,7 @@ impl Map {
         parametered(self.wide_target(message)?, Some(fine(value)))
     }
 
-    /// The target a 14-bit message's **pair** is on, whichever half arrived.
+    /// The target a 14-bit message's paired control maps to, whichever half arrived.
     fn wide_target(&self, message: crate::Message) -> Option<Target> {
         let crate::Message::ControlChange { channel, .. } = message else {
             return None;

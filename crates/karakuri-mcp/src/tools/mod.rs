@@ -71,10 +71,7 @@ pub(crate) fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, St
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
         },
-        // **The store's other listing**, beside `list_sets` for its reason: the
-        // walk is a directory read this thread can do and the render loop
-        // cannot afford, and its answer is rows rather than a report that
-        // something was performed (`docs/adr/0342-…`).
+        // Filesystem history walk performed off the render thread (ADR-0342).
         "walk_history" => match walked_history(args) {
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
@@ -325,9 +322,7 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
     }
 
     Ok(match asked(name, &args, &state.slots)? {
-        // **The gate, and there is one of it.** Named, then audited, then done
-        // — every tool crosses this seam because [`perform`] takes what
-        // [`audited`] returns and nothing else can make one.
+        // Unified operation gate: named, audited, and performed.
         Asked::Named(operation) => match audited(&operation, state) {
             Ok(allowed) => perform(&allowed, state),
             Err(detail) => Called::Answered(Err(refusal_payload(&detail))),

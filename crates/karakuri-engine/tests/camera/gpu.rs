@@ -82,7 +82,7 @@ fn the_canvas_shape_reaches_the_projection() {
     );
 }
 
-/// **A camera procedure produces the view**, and its params reach it. The whole
+/// Camera compute pass generates view and projection matrices from uniform parameters.
 /// path is on the GPU — a uniform write, a compute pass writing six numbers, a
 /// second deriving a matrix, and a bind group — so moving the eye and watching
 /// the material move is the only end-to-end proof there is.
@@ -110,7 +110,7 @@ fn a_camera_procedure_produces_the_view() {
     );
 }
 
-/// **And it can be addressed after the build**, like any other node's params.
+/// Post-build parameter addressing for camera nodes.
 #[test]
 fn a_cameras_parameters_are_addressed_as_a_nodes() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -546,7 +546,7 @@ fn a_write_to_the_cameras_radius_reaches_the_frame() {
     );
 }
 
-/// **A bare name does not reach it**, which is the other half of the row
+/// Unscoped bare parameter writes do not affect camera nodes without addressing.
 /// above and the one with a defect behind it: `drift_shell` declares a
 /// `radius` of its own, so a `--param radius=…` that also swung the camera
 /// would be a control doing something it does not draw.

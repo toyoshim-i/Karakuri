@@ -45,8 +45,7 @@ mod gpu {
             "the cheap path drew a different frame from the built one"
         );
 
-        // **And a different list is refused rather than half-applied**, which
-        // is what sends the caller to build one.
+        // Mismatched cut lists are rejected atomically without partial application.
         assert!(
             !moved.set_chain_params(&gpu.queue, &[("elsewhere".into(), None)], &[params(0.5)]),
             "a shape that is not running was taken as a parameter move"
@@ -212,9 +211,7 @@ mod gpu {
         );
     }
 
-    /// **What a slot is refused for**, and each refusal is about the chain
-    /// rather than about the language: a `kind` that is not L5, a cut answered
-    /// where the file declares no `retains` and the other way round, and a
+    /// Refusal classifications for invalid post-processing chain configurations.
     /// Texture slot the chain has no `edge` to bind.
     #[test]
     fn a_procedure_that_cannot_be_a_chain_slot_is_refused_with_the_reason() {
@@ -240,7 +237,7 @@ mod gpu {
         assert!(extra.contains("retains"), "{extra}");
     }
 
-    /// **Unified image pass and retention manager abstractions.**
+    /// Unified image pass and retention manager abstractions.
     #[test]
     fn unified_image_pass_and_retention_abstractions_record() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -405,8 +402,7 @@ mod gpu {
             "the superseded build was announced as well as retired"
         );
 
-        // **And nothing is left waiting**: a second boundary with no request
-        // behind it installs nothing.
+        // Frame boundary without pending requests installs nothing.
         swap.begin_frame(&mut present, &gpu.device, &gpu.queue);
         assert_eq!(swap.installs(), 1);
         assert!(swap.pending_events().is_empty());

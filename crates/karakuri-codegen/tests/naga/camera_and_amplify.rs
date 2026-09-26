@@ -109,10 +109,7 @@ fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
     assert!(src.contains("_far    = 100.0"), "{src}");
 }
 
-/// **One invocation, and no index.** A camera block runs once a frame and
-/// produces six numbers — there is nothing to be at index `i` of, so a bounds
-/// check or an alive flag here would be a transcription of another layer's
-/// entry point rather than this one's.
+/// Single-invocation camera entry point generating view and projection parameters.
 #[test]
 fn a_camera_shader_dispatches_one_invocation_over_nothing() {
     let src = karakuri_codegen::generate_l3(&sweep(), &[]).source;
@@ -194,10 +191,7 @@ fn an_amplifying_l2_lowers_to_valid_wgsl() {
     );
 }
 
-/// **An amplifier writes liveness and an endomorphism does not**, because an
-/// endomorphism shares the very buffer its input came with and an amplifier
-/// cannot — its own is `factor` times as long. The binding's presence is the
-/// observable half of that.
+/// Amplifiers write liveness buffers while in-place endomorphisms reuse input buffers.
 #[test]
 fn only_an_amplifying_l2_binds_a_liveness_buffer_to_write() {
     let amplifying = compiled_l2(
@@ -336,9 +330,7 @@ proc masked {
     validate(&shader.source);
 }
 
-/// **An L4 reads `copy` the way it reads `seed`** — off the element in the
-/// vertex stage, carried to the fragment as a flat varying. It is the other
-/// half of identity below an amplifier, and a renderer is downstream.
+/// L4 passes copy indices through vertex stage varyings to fragment stage.
 #[test]
 fn an_l4_reading_copy_lowers_to_valid_wgsl() {
     let src = r#"

@@ -26,9 +26,7 @@ pub(crate) fn session_head(
     };
     let material = format!("{id}-material");
     let camera = karakuri_engine::camera::Orbit::default();
-    // **Every source into the store before the file that references them.**
-    // The writer takes hashes now — see `setfile::Node` — and this is the
-    // caller whose paths are still exactly what the run compiled a moment ago.
+    // Persist sources before writing referencing Set file.
     let nodes = match saving_nodes(store, nodes) {
         Ok(nodes) => nodes,
         Err(e) => {
@@ -38,8 +36,7 @@ pub(crate) fn session_head(
     };
     if let Err(e) = setfile::save(
         store,
-        // **The operator's**: this is the material of a run they started, kept
-        // where they will look for it.
+        // Operator-initiated run material.
         Asked::Operator,
         &material,
         setfile::Saving {

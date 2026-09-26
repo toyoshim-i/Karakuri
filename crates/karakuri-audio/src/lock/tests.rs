@@ -133,8 +133,7 @@ fn a_locked_grid_does_not_hunt() {
     );
 }
 
-/// One estimate disagreeing must move the grid **not at all**. This is the
-/// failure mode that costs a visibly wrong bar.
+/// A single conflicting estimate must not perturb grid phase or tempo.
 #[test]
 fn a_single_wrong_estimate_does_not_move_the_grid() {
     let bpm = 128.0;

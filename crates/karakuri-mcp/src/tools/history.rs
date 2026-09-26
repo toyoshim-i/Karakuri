@@ -77,8 +77,7 @@ pub(crate) fn walk_history(set: Option<&str>, state: &State) -> Result<String, S
     } else {
         let shown = rows.len().min(LISTED);
         if rows.len() > shown {
-            // **Never a truncated list that reads as a whole one**, which is
-            // [`list_sets`]' rule on its own truncation.
+            // Truncation notice indicates matching rows exceeded the display limit.
             out.push_str(&format!(
                 "{} version{} of set `{id}` are in what this walk covered, and the {shown} \
                  most recent are below — **this is not all of them**: {} more matched and \
@@ -124,9 +123,7 @@ pub(crate) fn walk_history(set: Option<&str>, state: &State) -> Result<String, S
             }
         ));
     }
-    // **The closing paragraph is the rows' own and is not printed under an
-    // empty answer**, where every sentence in it would be about something that
-    // is not there.
+    // Append explanatory footer only when rows are present.
     if !rows.is_empty() {
         out.push_str(
             "\nEach row is the name the store filed a version under: when it was written, \
@@ -152,10 +149,7 @@ pub(crate) fn plural(n: usize) -> &'static str {
 
 /// Computes and formats the element memory storage required by a Set, node by node.
 pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
-    // **The same shape as the "no card" branch of [`node_block`]**: a Set this
-    // cannot cost is an ordinary thing to meet in a working store rather than a
-    // failed call, and what a model is owed is the sentence saying which half
-    // is missing.
+    // Follows the same pattern as `node_block` when cost estimates are unavailable.
     let unavailable = |why: &str| {
         format!(
             "element storage: not computed — {why}. This is the one figure here that \
@@ -240,10 +234,7 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
             entry.storage.per_element(),
         ));
     }
-    // **A repeated name is not a mistake and has to say so.** A set over two
-    // geometries instantiates its whole chain of deformations once per
-    // geometry, so one deform procedure is two nodes with buffers of their own
-    // — and they are different sizes whenever the geometries are.
+    // Multiple nodes may instantiate the same procedure across different geometries.
     if planned
         .iter()
         .enumerate()

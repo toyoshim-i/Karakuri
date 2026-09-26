@@ -101,9 +101,7 @@ impl Resolver for FieldResolver<'_> {
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
             Ambient::Point => POINT.to_string(),
-            // **`t` and `beats` are readable**, and a field that moves with the
-            // clock is a legitimate thing to write. They arrive as arguments
-            // rather than out of a uniform, for the reason above.
+            // Time ambients (`t`, `beats`) are passed as function parameters.
             Ambient::T => T.to_string(),
             Ambient::Beats => BEATS.to_string(),
             other => unreachable!("{other:?} is not available in a checked field block"),

@@ -247,9 +247,7 @@ fn the_flag_and_the_file_agree_about_compositing_in_either_order() {
         layering_for(&bare, 0, recorded_layering(&bare, 0)),
         Overdraw
     );
-    // **And the file is slot 0's.** `--load-set` fills that slot and every
-    // other comes from `--set`, so a composited file says nothing about
-    // slot 1 — where only the flag can.
+    // --load-set applies specifically to slot 0.
     assert_eq!(
         layering_for(&loaded, 1, recorded_layering(&loaded, 1)),
         Overdraw

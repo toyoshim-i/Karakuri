@@ -115,9 +115,7 @@ fn the_built_in_cameras_three_are_written_as_the_camera_record_and_not_as_params
         text.contains(r#"{"t":"camera","kind":"orbit","radius":12.0,"speed":0.15,"height":-4.0}"#),
         "the `camera` record does not carry the three:\n{text}"
     );
-    // **And the bare write is untouched**, which is the half that says this
-    // is about one node rather than about the layer or the key: `radius`
-    // written everywhere is the geometry's and still a `param` line.
+    // Unaddressed param line remains untouched.
     assert!(
         text.contains(r#"{"t":"param","layer":"L1","key":"radius","value":3.25}"#),
         "a bare write was dropped with the camera's:\n{text}"

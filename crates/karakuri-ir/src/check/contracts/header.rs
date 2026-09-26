@@ -189,9 +189,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                 );
             }
-            // **The one kind whose slot rules are written as filters rather
-            // than as a `match`**, so this refusal is a loop of its own rather
-            // than an arm. Same sentence as the other four.
+            // Validate that texture slots are not declared in non-L5 kinds.
             for u in proc.uses.iter().filter(|u| u.ty == SlotTy::Texture) {
                 errors.push(texture_slot_is_l5s(
                     u.span,
@@ -257,9 +255,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 }
             }
         }
-        // **An L3 declares nothing about geometry, because it has none.** It
-        // produces the six numbers a camera is; what is drawn with them is the
-        // renderer's business, and how many elements there are is the L1's.
+        // L3 produces camera view parameters without declaring geometry.
         Kind::L3 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
@@ -348,9 +344,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 );
             }
         }
-        // **A field declares nothing about geometry, because it is not
-        // geometry.** It takes a position and returns a distance; there are no
-        // elements to count, to draw, to emit or to consume.
+        // Field procedures evaluate spatial distances without geometry declarations.
         Kind::Field => {
             for (present, what, hint) in [
                 (
@@ -484,10 +478,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // Legal, and this is the kind it is most for: a marcher
                     // that contains no shape at all takes one here.
                     SlotTy::Field => {}
-                    // **The one kind that may declare one**, and the reason is
-                    // the reason the value exists: `clip`, `eye` and `ray` are
-                    // what a renderer projects and marches with, and no other
-                    // layer does either.
+                    // Camera slots are exclusive to renderers (`clip`, `eye`, `ray`).
                     SlotTy::Camera => {}
                     // Legal, and on a fullscreen renderer too: `source` is per
                     // *instance* rather than per element, so a procedure with
@@ -647,10 +638,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         }
     }
 
-    // **`retains` is refused on every kind but L5**, at the declaration rather
-    // than at the read, so that a procedure which declares it and never reads
-    // `held` is turned away too: what it asks the engine for is a frame-sized
-    // target, and nothing but a chain slot or a merge has a frame to retain.
+    // Retained textures require L5 target buffers; refused on all other kinds.
     if let Some(r) = &proc.retains {
         if proc.kind != Kind::L5 {
             errors.push(

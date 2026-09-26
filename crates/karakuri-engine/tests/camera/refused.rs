@@ -52,7 +52,7 @@ fn an_unbound_camera_slot_is_refused() {
     );
 }
 
-/// **And bound to a camera**, rather than to whatever node the edge happened to
+/// Edge bindings must target camera nodes rather than arbitrary nodes.
 /// name. The sentence says what the node it found actually is, because that is
 /// the half an operator cannot see from the edge.
 #[test]

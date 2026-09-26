@@ -181,9 +181,7 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
             place_procedure(record, &mut playing, &mut opened, &mut restated);
         }
     }
-    // **What every Set this replay builds is built against**, gathered once:
-    // the flags a replay was typed with for what the stream cannot say, and the
-    // *stream's* own table for everything it can.
+    // Base settings for replay builds: command flags supplemented by stream metadata.
     let settings = Settings {
         args,
         layering,

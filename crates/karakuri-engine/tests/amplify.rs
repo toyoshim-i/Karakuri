@@ -18,7 +18,7 @@ mod gpu {
     const W: u32 = 64;
     const H: u32 = 64;
 
-    /// **One element, at the origin, still.** Every count below is of things the
+    /// Single stationary element fixture at the origin for exact count assertions.
     /// amplifier made, so one parent is the whole of what they need — and it keeps
     /// the arithmetic exact: a band count is the factor rather than the factor
     /// times something.
@@ -209,7 +209,7 @@ proc dots {
             .sum()
     }
 
-    /// Total brightness after a frame that **draws without stepping** — the audition
+    /// Total brightness after a frame drawn without stepping (audition mode).
     /// path, where a deck shows an `Allocated` slot the still it stopped at.
     fn draw_only(gpu: &Gpu, set: &mut Set) -> f64 {
         render_frame(gpu, set, false)
@@ -295,7 +295,7 @@ proc dots {
         );
     }
 
-    /// **The factor is what decides the count**, so a different one gives a
+    /// Amplification factor directly determines element output count.
     /// different picture. Without this a hardcoded four anywhere in the lowering
     /// would pass the test above.
     #[test]

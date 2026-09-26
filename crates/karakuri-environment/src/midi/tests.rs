@@ -192,10 +192,7 @@ fn an_unmapped_control_and_a_missing_slot_are_each_reported_once() {
         said.extend(r.notices().iter().cloned());
     }
     assert_eq!(said.len(), 2, "{said:?}");
-    // **The keys' own sentence, word for word.** This asked only for
-    // `contains("no slot 9")`, which passed while this module said `no slot
-    // 9 — this deck holds slots 0-3` and every other surface said `no slot
-    // 9: …`. See [`crate::no_such_slot`].
+    // Standardized refusal format matching [`crate::no_such_slot`].
     assert!(
         said.iter().any(|s| *s == crate::no_such_slot(9, 4)),
         "{said:?}"
@@ -482,8 +479,7 @@ fn a_position_past_the_end_of_an_interface_is_said_once_and_not_as_a_missing_slo
     assert!(r.notices().is_empty(), "{:?}", r.notices());
     assert_eq!(out.len(), 1, "{out:?}");
 
-    // **And a deck the deck does not have gets the keys' own words**, not
-    // this one: two different facts, two sentences, two sets.
+    // Diagnostic reports non-existent deck slot matching standard formatting.
     let mut r = router("cc 30 -> param 9 1");
     over(&mut r, &[cc(30, 64)], 4, &deck);
     assert_eq!(
@@ -512,8 +508,7 @@ fn a_learn_appends_to_the_operators_map_and_seeds_it_from_what_is_playing() {
     assert_eq!(line, "cc 30 -> param 0 3");
     assert_eq!(map.bound("param 0 3").as_deref(), Some("cc 30"));
 
-    // **A learn cannot put a line in a map the map could not be loaded
-    // with**, which is what keeps the file editable by hand.
+    // Learning validation prevents generating unparseable mapping lines.
     assert!(
         map.learn(note(36), "param 0 3").is_err(),
         "a note was learned onto a control that takes a position"
@@ -565,10 +560,7 @@ fn a_learn_appends_and_seeds_a_file_that_is_not_there_with_what_is_playing() {
         "cc 30 -> tap\n"
     );
 
-    // **A re-learn replaces the knob's own line where it sits**, and
-    // leaves the comments, the blank lines and every other knob alone.
-    // Without this the file grows on a gesture made dozens of times a
-    // session, and `Map::parse` reports the shadowed line on every start.
+    // Re-learning replaces the existing binding line in place, preserving comments.
     let theirs = "# the strip\ncc 1  ->  gain 0\n\n# the pads\nnote 61 -> tap\n";
     assert_eq!(
         appended(Some(theirs.to_owned()), seed, "cc 1", "cc 1 -> gain 2"),
@@ -576,8 +568,7 @@ fn a_learn_appends_and_seeds_a_file_that_is_not_there_with_what_is_playing() {
         "a re-learn did not replace the line it was about"
     );
 
-    // **And what comes out loads with nothing to complain about**, which
-    // is the property the replacement buys.
+    // Verified that re-learned map file parses cleanly without duplicate warnings.
     let text = appended(Some(theirs.to_owned()), seed, "cc 1", "cc 1 -> gain 2");
     let (map, notes) = Map::parse(&text);
     assert!(
@@ -705,8 +696,7 @@ fn a_deck_change_shows_a_mapped_control_and_an_unmapped_one_shows_nothing() {
     r.shown(&held, &mut wire);
     assert_eq!(wire, vec![[0xb0, 1, 127]]);
 
-    // **An unmapped control moved is nothing.** `gain 1` and `opacity 0`
-    // are on the deck and on no line of this map.
+    // Moving unmapped controls produces no operations.
     held.set("gain 1", 1.0);
     held.set("opacity 0", 1.0);
     r.shown(&held, &mut wire);

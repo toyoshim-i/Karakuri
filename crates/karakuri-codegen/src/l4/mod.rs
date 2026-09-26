@@ -200,9 +200,7 @@ fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<At
         }
         TExprKind::Ambient(Ambient::Seed) => *seed = true,
         TExprKind::Ambient(Ambient::Copy) => *copy = true,
-        // **A Source slot's read is a uniform read and nothing else** — it is
-        // not per element, so it puts nothing in the varyings this scan
-        // decides. That is the point of the value being where it is.
+        // Source slot reads are uniform reads and do not require varying channels.
         TExprKind::Ambient(_)
         | TExprKind::Lit(_)
         | TExprKind::Local(_)
@@ -603,10 +601,7 @@ pub fn generate_l4(
         emit_stmts(&fragment_blk.stmts, &fragment, &mut req, 1, &mut out);
         out
     };
-    // **`weighted` counts as reading the camera**, because [`WEIGHTED_DEPTH`]
-    // does: a fragment's weight is normalised against the planes it was
-    // projected with, and that is the same camera whether or not the procedure
-    // ever mentioned one.
+    // Weighted blend modes implicitly depend on camera depth planes.
     let camera_group = (vertex.camera_used.get() || fragment.camera_used.get() || weighted)
         .then_some(CAMERA_GROUP);
 

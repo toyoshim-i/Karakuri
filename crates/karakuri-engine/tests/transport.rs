@@ -38,8 +38,7 @@ proc ring {
 }
 "#;
 
-    /// **Accumulating**, so it cannot be placed: `position` reads what it emits,
-    /// which is the disqualifier. Used only to check that beat sync is refused.
+    /// Accumulating procedure fixture (reads own emit); rejects beat sync.
     const CREEP: &str = r#"
 proc creep {
   kind     L1
@@ -56,8 +55,7 @@ proc creep {
 }
 "#;
 
-    /// Closed form **and** written against the grid, which is the combination that
-    /// takes beat sync and refuses tempo sync.
+    /// Closed-form grid procedure: supports beat sync and rejects tempo sync.
     const GRID_RING: &str = r#"
 proc grid_ring {
   kind     L1
@@ -183,9 +181,7 @@ proc plain_points {
 
     // ---------------------------------------------------------------------------
 
-    /// **A free slot is what it was before the transport existed.** The default,
-    /// and the property that lets everything else be opt-in: a deck nobody has
-    /// arranged records exactly the frame it used to.
+    /// Unsynced free slots step independently at engine frame rate.
     #[test]
     fn a_free_slot_advances_by_the_sessions_own_steps() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -270,9 +266,7 @@ proc plain_points {
         assert_ne!(&rewound, &seen[59].1);
     }
 
-    /// **Tempo sync changes the rate and nothing else.** The room at double the
-    /// anchor advances the slot twice a frame, and the picture is the picture that
-    /// slot would have drawn at that step under any other mode — the transport
+    /// Tempo synchronization scales playback rate without altering phase.
     /// decides *when*, never *what*.
     #[test]
     fn tempo_sync_scales_the_rate_and_leaves_the_material_alone() {

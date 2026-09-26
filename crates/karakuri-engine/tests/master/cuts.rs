@@ -33,8 +33,7 @@ mod gpu {
         assert_eq!(present.chain_retained(), vec![Cut::Exit]);
         assert_eq!(present.chain_targets(), 3);
 
-        // **Two slots reading the same cut read one frame**, so it is still one
-        // target.
+        // Multiple slots reading the same cut share a single target buffer.
         drop(present.set_chain(
             &gpu.device,
             &gpu.queue,

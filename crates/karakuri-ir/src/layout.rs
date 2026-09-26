@@ -208,10 +208,7 @@ pub fn generate_element_layout(
     // alignment — the rule WGSL applies to `array<Element>` and therefore the
     // one the host has to size a buffer by.
     let stride = align_up(at, align);
-    // **Only the rules a reader has to do arithmetic for.** Where the engine
-    // stores the attribute itself the slot above already carries it, and
-    // listing it here as well would make `offers` true twice and `is_stored`
-    // and `derived` disagree about the same attribute.
+    // Derived attributes: only computed rules requiring layout arithmetic are listed.
     let substituted = derived
         .iter()
         .copied()

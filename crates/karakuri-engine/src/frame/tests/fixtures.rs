@@ -173,7 +173,7 @@ impl Sink for TestSink {
             .expect("poll");
         self.pixels = slice.get_mapped_range().expect("map").to_vec();
         self.readback.unmap();
-        // **Colour only.** The present pass returns `vec4(rgb, 1.0)`, so
+        // Color comparison only: present pass normalizes alpha to 1.0.
         // every texel's alpha is 255 and a scan over all four channels
         // answers "lit" for a frame that is entirely black.
         self.lit = Some(

@@ -176,9 +176,7 @@ proc cool {
 
     // ---------------------------------------------------------------------------
 
-    /// **An empty interface publishes everything**, each control over the range its
-    /// own procedure declared. That is what happens today, so the feature is
-    /// additive and every Set file that predates it keeps working.
+    /// An empty interface publishes all controls over their declared ranges.
     #[test]
     fn a_set_with_no_interface_publishes_every_control_it_declares() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -214,9 +212,7 @@ proc cool {
         assert_eq!(held, vec![4.0, 4.0], "one knob did not move both renderers");
     }
 
-    /// **The first declaration makes the list the interface.** One sentence of rule,
-    /// and it means an author opts in by naming what they want rather than by hiding
-    /// the other twenty-four things.
+    /// Declaring interface controls opts in to explicit interface filtering.
     #[test]
     fn the_first_published_control_becomes_the_whole_interface() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -230,9 +226,7 @@ proc cool {
         assert_eq!(all[0].range, [1.0, 4.0]);
     }
 
-    /// **A published range narrows and never redefines.** A subset is what the
-    /// procedure's declaration allows; anything outside it is refused rather than
-    /// clamped, because the declared range is the procedure's statement about where
+    /// Published ranges may only narrow declared procedure ranges.
     /// it still looks like itself and a Set cannot make a claim on its behalf.
     #[test]
     fn a_published_range_must_be_inside_the_declared_one() {
@@ -295,9 +289,7 @@ proc cool {
         assert!(matches!(err, PublishError::DuplicateName(_)), "{err:?}");
     }
 
-    /// **A published control is set in the units the console shows it in**, and
-    /// clamped to the published range — which is the one place narrowing bites: a
-    /// console cannot ask for more than the Set offered.
+    /// Published controls clamp inputs to the published range.
     #[test]
     fn a_published_control_writes_the_param_it_names_and_is_clamped_to_its_range() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -329,9 +321,7 @@ proc cool {
         );
     }
 
-    /// **Publishing decides what is shown, never what is reachable.** A `param`
-    /// record — and `--param`, and an agent over MCP — still addresses any control
-    /// in any node, published or not. If publishing gated access, a Set's author
+    /// Publishing controls visibility; unpublished controls remain addressable.
     /// could lock an operator out of their own machine.
     #[test]
     fn an_unpublished_control_is_still_reachable_by_address() {
@@ -444,9 +434,7 @@ proc cool {
                 [0.0, 2.0],
             )
         };
-        // **And it says which of the two it missed.** The param is fine — it is
-        // the control that is not there — and a refusal that says "no L4 parameter
-        // named `exposure`" sends whoever reads it to the wrong half of their
+        // Refusal specifies whether parameter or control name was unresolved.
         // command line.
         assert_eq!(
             set.bind(bind("twst")),
@@ -486,8 +474,7 @@ proc cool {
             "not the order the procedures declare them in"
         );
 
-        // **The fixture is half the test.** Declaration order and alphabetical
-        // order have to differ, or a sort passes this and nothing was asserted.
+        // Fixture ensures declaration order differs from alphabetical order.
         let mut sorted = names.clone();
         sorted.sort_unstable();
         assert_eq!(
@@ -499,9 +486,7 @@ proc cool {
             "the fixture declares its parameters alphabetically, so it proves nothing"
         );
 
-        // **A repeated key is one control, where it first appears** — and still
-        // the intersection of what both renderers declared, which is the rule
-        // publishing a wildcard already follows.
+        // Duplicate control keys merge into first occurrence with intersected ranges.
         assert_eq!(
             all.iter().filter(|p| p.key == "exposure").count(),
             1,
@@ -515,9 +500,7 @@ proc cool {
             control("radius", Kind::L3, 0, "radius", [1.0, 40.0])
         );
 
-        // **It holds still.** Twice off one Set, and once off a second Set built
-        // the same way — the second is the one that catches an order read out of
-        // a map, since two maps in one process do not agree.
+        // Interface control order is stable and deterministic across builds.
         assert_eq!(
             set.published(),
             all,

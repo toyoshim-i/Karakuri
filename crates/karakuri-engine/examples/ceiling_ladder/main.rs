@@ -63,9 +63,7 @@ struct Rig {
 impl Rig {
     fn new() -> Rig {
         let gpu = Gpu::headless().expect("no GPU available");
-        // **One probe for the whole process.** `Probe::run` demotes itself to a
-        // host clock for life on the first failed sample, so figures from two
-        // probes are not comparable.
+        // Single probe shared across process to ensure consistent sample timing.
         let probe = Probe::new(&gpu.device, &gpu.queue, true, AT);
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("ceiling ladder warm target"),
@@ -641,7 +639,7 @@ fn main() {
 
 // ------------------------------------------------- repeatability (mode "r")
 
-/// **The spread within a rung**, which decides whether the spread between
+/// Intra-rung measurement spread threshold.
 /// rungs is a finding. Also interleaves the one pair of matched-estimate rungs
 /// whose order inverted at the top of ladder 1, to see whether that inversion
 /// survives repetition.

@@ -116,9 +116,7 @@ fn placed_children_skips_what_is_folded_and_that_is_what_an_index_counts() {
     assert_eq!(l.placed_children(id(&l, "library")).count(), 0);
 }
 
-/// A boundary is the **gap between a pair**: the rectangle from the far edge
-/// of one visible child to the near edge of the next, spanning the split
-/// across its axis and as thick as the split's divider.
+/// A boundary spans the gap between adjacent visible children across the split axis.
 #[test]
 fn a_boundary_is_the_gap_between_the_pair_it_is_between() {
     let l = solved();
@@ -322,7 +320,7 @@ fn sizing_says_which_regions_keep_their_size() {
     assert_eq!(l.sizing(ids.left), Sizing::Fixed(300.0));
 }
 
-/// `soloed` says **which** region a solo is holding, not merely that one is.
+/// Verifies `soloed` identifies the specific region held by a solo state.
 #[test]
 fn soloed_names_the_region_it_is_holding() {
     let mut l = solved();
@@ -352,9 +350,7 @@ fn soloed_names_the_region_it_is_holding() {
     assert_eq!(back.soloed(), Some(program));
 }
 
-/// Why the soloed node is **stored** rather than worked out from the collapsed
-/// flags: a split with a single child leaves exactly the flags its child does,
-/// so nothing in the arrangement tells the two apart afterwards.
+/// Verifies the soloed node identity is explicitly preserved rather than inferred from collapsed flags.
 #[test]
 fn a_solo_on_a_single_child_split_cannot_be_told_from_one_on_its_child() {
     let arrangement = || {
