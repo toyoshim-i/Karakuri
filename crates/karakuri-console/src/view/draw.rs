@@ -244,6 +244,9 @@ impl View {
                         head_into(ui, &pal, rect, placed.region, opening);
                         prompt::prompt_head_into(ui, &pal, rect, &self.prompt);
                         let is_focused = self.focused(panel).map(|r| r.name) == Some("prompt");
+                        if (!is_focused || self.prompt.menu_open) && self.prompt.is_captured() {
+                            self.prompt.set_captured(false);
+                        }
                         prompt::prompt_into(ui, &pal, rect, &self.prompt, is_focused);
                     }
                     // A pane draws nothing of its own. It has no card — it is

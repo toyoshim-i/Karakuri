@@ -52,9 +52,15 @@ impl App {
                     App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
                     return;
                 }
-            } else if gfx.egui.egui_ctx().egui_wants_keyboard_input() && !is_tab {
-                App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
-                return;
+            } else {
+                // When Prompt bay is not focused, ensure capture mode is released.
+                if self.readout.view.prompt.is_captured() {
+                    self.readout.view.prompt.set_captured(false);
+                }
+                if gfx.egui.egui_ctx().egui_wants_keyboard_input() && !is_tab {
+                    App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                    return;
+                }
             }
 
             // Interactive Tooltip Key Learn Mode: capture next key to bind to the active control.

@@ -263,11 +263,11 @@ pub fn prompt_into(
                                     }
                                 }
 
-                                // Activate capture mode and focus on click in prompt bay
+                                // Activate capture mode and focus on click inside console body
                                 let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
                                 if pointer_clicked {
                                     if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                        if bay_rect.contains(pos) {
+                                        if body_rect.contains(pos) {
                                             state.set_captured(true);
                                             response.request_focus();
                                         }
