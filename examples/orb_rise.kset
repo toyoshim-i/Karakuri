@@ -1,0 +1,4 @@
+{"t":"set","id":"orb_rise","v":1}
+{"t":"part","layer":"L1","path":"orb_rise.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"soft_discs.kir"}

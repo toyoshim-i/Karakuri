@@ -1,0 +1,61 @@
+// A slowly turning cube carved into nested boxes and cross-shaped voids, drawn
+// as volumetric glow rather than surfaces: deep blue, rising to cyan and near
+// white where the structure is dense, crossed by faint horizontal striations,
+// its glow periodically tightening to crisp edges and relaxing into haze under a
+// fine film grain. Reads `ray` against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/box_fractal.kir --param turn=0
+
+proc box_fractal {
+  kind  L4
+  blend additive
+
+  // Turn rate about the vertical axis in radians per second.
+  param spin    : float [-1.0, 1.0] = 0.15
+
+  // Carving depth: how many of two carving passes apply; a fractional value
+  // opens the last pass's voids part way.
+  param detail  : float [0.0, 2.0] = 2.0
+
+  // Rate at which the glow tightens and relaxes, in cycles per second.
+  param breathe : float [0.0, 1.0] = 0.12
+
+  // Strength of the horizontal striations.
+  param stripes : float [0.0, 1.0] = 0.2
+
+  // Strength of the film grain.
+  param flicker : float [0.0, 0.5] = 0.08
+
+  // Colour of the sparse glow; dense regions run toward white.
+  param deep    : vec3 [0.0, 1.0] = vec3(0.05, 0.2, 1.0)
+
+  fragment {
+    let a  = t * spin;
+    let o  = rot_y(vec3(0.0, 1.3, 3.0), a + 0.6);
+    let rd = rot_y(rot_x(ray, -0.4), a + 0.6);
+    let sharp = mix(6.0, 40.0, 0.5 + 0.5 * sin(t * breathe * 6.2831853));
+
+    var p   = o;
+    var acc = 0.0;
+
+    for i in 0..21 {
+      let ap = abs(p);
+      var d = max(ap.x, max(ap.y, ap.z)) - 1.0;
+      var s = 1.0;
+      for j in 0..2 {
+        let m = ((p * s) % vec3(2.0)) - vec3(1.0);
+        s = s * 3.0;
+        let r  = abs(vec3(1.0) - abs(m) * 3.0);
+        let c  = (min(max(r.x, r.y), min(max(r.y, r.z), max(r.z, r.x))) - 1.0) / s;
+        d = max(d, c - clamp(float(j) + 1.0 - detail, 0.0, 1.0));
+      }
+      acc += exp(-abs(d) * sharp) * (1.0 + stripes * sin(p.y * 30.0));
+      p = p + rd * max(abs(d) * 0.8, 0.06);
+    }
+
+    let g  = acc * sqrt(sharp) * 0.015;
+    let n  = fract(sin(dot(point_coord + vec2(t * 0.37, t * 0.61), vec2(127.1, 311.7))) * 43758.547);
+    let col = deep * g + vec3(0.3, 0.9, 1.0) * g * g * 0.8 + vec3(g * g * g * 0.5);
+    color = vec4(col * (1.0 + flicker * (n * 2.0 - 1.0)), 1.0);
+  }
+}

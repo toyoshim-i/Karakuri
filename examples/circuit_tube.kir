@@ -1,0 +1,93 @@
+// The inside of an endless tube whose wall is a glowing circuit board of
+// rectangles split again and again with bright traces, scrolling past along the
+// axis; dash-shaped packets of light race along the wall in lanes with a blue
+// halo, and the far end dissolves into haze. `palette` runs from deep blue and
+// white to dim teal and amber. Reads `ray` against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/circuit_tube.kir --param turn=0
+
+proc circuit_tube {
+  kind  L4
+  blend additive
+
+  // Travel speed along the tube in radii per second.
+  param speed   : float [0.0, 8.0] = 1.5
+
+  // How far the view swings and rolls away from the tube axis.
+  param tumble  : float [0.0, 1.0] = 0.35
+
+  // Subdivision depth of the circuit; fractional values fade the last split in.
+  param depth   : float [1.0, 5.0] = 4.0
+
+  // Packet speed along the wall in radii per second, relative to the wall.
+  param packets : float [0.0, 12.0] = 5.0
+
+  // 0 is deep blue into white; 1 is dim teal and amber.
+  param palette : float [0.0, 1.0] = 0.0
+
+  // Distance, in radii, at which the haze reaches half strength.
+  param haze    : float [2.0, 40.0] = 14.0
+
+  fragment {
+    let sw = t * 0.23;
+    let rd = rot_z(rot_x(rot_y(ray, sin(sw) * tumble), sin(sw * 1.3) * tumble * 0.6), t * tumble * 0.2);
+
+    // Cylindrical mapping: angle around the axis, and distance along it.
+    let rr   = max(length(rd.xy), 0.0001);
+    let dist = 1.0 / rr;
+    let along = -rd.z / rr;
+    let ang  = atan2(rd.y, rd.x) / 6.2831853 + 0.5;
+    let wuv   = vec2(ang * 10.0, (along + t * speed) * 10.0 / 6.2831853);
+
+    // Recursive split of one tile into rectangles; each level halves along the
+    // longer side at a hashed position, keeping the part this point is in.
+    let tile = floor(wuv);
+    let f  = fract(wuv);
+    var lo = vec2(0.0);
+    var hi = vec2(1.0);
+    var key = tile.x * 17.13 + tile.y * 91.7;
+    for k in 0..5 {
+      let h  = fract(sin(key * 1.731 + float(k) * 11.3) * 43758.547);
+      let on = clamp(depth - float(k), 0.0, 1.0);
+      let sz = hi - lo;
+      let sx = step(sz.y, sz.x);
+      let cut = mix(lo, hi, vec2(0.3 + 0.4 * h));
+      let right = step(cut.x, f.x);
+      let upper = step(cut.y, f.y);
+      let nlo = vec2(mix(lo.x, cut.x, sx * right), mix(lo.y, cut.y, (1.0 - sx) * upper));
+      let nhi = vec2(mix(hi.x, cut.x, sx * (1.0 - right)), mix(hi.y, cut.y, (1.0 - sx) * (1.0 - upper)));
+      lo = mix(lo, nlo, vec2(on));
+      hi = mix(hi, nhi, vec2(on));
+      key = key + (sx * right + (1.0 - sx) * upper) * 7.1 + 3.3;
+    }
+    let e2 = min(f - lo, hi - f);
+    let edge = min(e2.x, e2.y);
+    let inset = abs(edge - 0.06);
+    let fw = 0.012 * dist;
+    let trace = smoothstep(fw, 0.0, edge) + 0.6 * smoothstep(fw, 0.0, inset);
+    let pad = fract(sin(key * 3.1) * 9173.1);
+    let fill = step(0.8, pad) * step(0.1, edge) * 0.25;
+
+    // Packets: eight lanes around the wall, one dash per lane per 4 tiles.
+    let lane = fract(ang * 8.0) - 0.5;
+    let li   = floor(ang * 8.0);
+    let run  = fract((wuv.y + t * packets * 10.0 / 6.2831853 * (0.6 + 0.4 * fract(li * 0.37))) / 4.0 + li * 0.29) * 4.0 - 2.0;
+    let bx   = vec2(max(abs(run) - 0.35, 0.0), abs(lane) * 1.25);
+    let pd   = length(bx);
+    let core = smoothstep(0.08, 0.02, pd);
+    let halo = exp(-pd * 7.0) * 0.6;
+
+    let a0 = vec3(0.1, 0.35, 1.0);
+    let a1 = vec3(0.1, 0.5, 0.45);
+    let b0 = vec3(0.8, 0.9, 1.0);
+    let b1 = vec3(1.0, 0.6, 0.2);
+    let wallc = mix(a0, a1, vec3(palette));
+    let hotc  = mix(b0, b1, vec3(palette));
+    let bright = mix(1.0, 0.45, palette);
+
+    let wall = wallc * (trace * 0.9 + fill + 0.04) + hotc * core * 2.5 + vec3(0.2, 0.45, 1.0) * halo;
+    let fog  = 1.0 - exp(-dist * 0.69 / haze);
+    let far  = mix(vec3(0.85, 0.9, 1.0), vec3(0.35, 0.4, 0.35), vec3(palette));
+    color = vec4(mix(wall * bright, far * bright, vec3(fog)), 1.0);
+  }
+}

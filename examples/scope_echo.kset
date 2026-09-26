@@ -1,0 +1,8 @@
+{"t":"set","id":"scope_echo","v":1}
+{"t":"part","layer":"L1","path":"scope_echo.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L4","key":"width","value":0.003}
+{"t":"bind","layer":"L1","key":"low","signal":"band0","curve":"smooth","range":[0.05,1.0]}
+{"t":"bind","layer":"L1","key":"mid","signal":"band3","curve":"smooth","range":[0.05,1.0]}
+{"t":"bind","layer":"L1","key":"high","signal":"band6","curve":"smooth","range":[0.05,1.0]}

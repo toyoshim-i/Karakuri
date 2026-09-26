@@ -1,0 +1,57 @@
+// A wall of fire along the bottom of the frame: fractal noise stretched
+// upward and scrolled up faster than it churns, cut off by a height that
+// falls away with the noise so the top breaks into licking tongues. Coloured
+// by temperature from deep red through orange to a white-hot base. Draws the
+// whole frame and reads no geometry; a camera looking at the origin sets the
+// frame's aspect.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/flame_wall.kir
+
+proc flame_wall {
+  kind  L4
+  blend additive
+
+  // Height the flames reach, as a fraction of the frame's height.
+  param height   : float [0.1, 1.5] = 0.6
+
+  // Speed of the rising flow.
+  param rise     : float [0.0, 4.0] = 1.2
+
+  // How ragged the flames are.
+  param turb     : float [0.0, 2.0] = 1.2
+
+  // Size of the tongues: higher is narrower.
+  param grain    : float [0.5, 8.0] = 2.4
+
+  // Hue shift of the whole ramp: 0 is ordinary fire, higher turns it green
+  // and then blue.
+  param shift    : float [0.0, 1.0] = 0.0
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let fw  = normalize(-eye);
+    let rt  = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let upv = cross(rt, fw);
+    let sc  = vec2(dot(ray, rt), dot(ray, upv)) / (dot(ray, fw) * 0.57735);
+
+    // 0 at the bottom edge, 1 at `height` above it.
+    let h = (sc.y + 1.0) / (2.0 * height);
+
+    let p  = vec3(sc.x * grain, sc.y * grain * 0.55 - t * rise, t * 0.3);
+    let n1 = fbm(p, 5);
+    let n2 = fbm(p * 2.1 + vec3(3.1, -t * rise * 0.8, 1.7), 3);
+    let n  = n1 + 0.5 * n2;
+
+    let heat = clamp((1.0 - h) * 0.9 + n * turb * (0.3 + h), 0.0, 1.0);
+    let i    = smoothstep(0.2, 0.95, heat);
+
+    // The ramp is in sRGB; `hsv_to_rgb` returns it linear.
+    let fire = vec3(min(i * 1.8, 1.0), min(pow(i, 2.2) * 1.3, 1.0), pow(i, 5.0));
+    let hsv  = rgb_to_hsv(fire);
+    let rgb  = hsv_to_rgb(vec3(fract(hsv.x + shift), hsv.y, hsv.z));
+
+    color = vec4(rgb * (0.4 + 1.2 * i) * exposure, 1.0);
+  }
+}

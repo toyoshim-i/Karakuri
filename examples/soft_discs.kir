@@ -1,0 +1,35 @@
+// Additive flat discs of world diameter `size`, coloured by `tint`, whose edge
+// fades over the outer fraction `uv.x` of the radius.
+//
+//     cargo run -p karakuri-cli -- --set examples/orb_rise.kir,examples/flat_eye.kir,examples/soft_discs.kir
+
+proc soft_discs {
+  kind  L4
+  blend additive
+
+  consumes position, tint, size, uv
+
+  // Multiplier on every disc's diameter.
+  param scale    : float [0.0, 4.0] = 1.0
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.0
+
+  // Brightening toward the centre: 0 is a flat disc, 1 doubles the middle.
+  param dome     : float [0.0, 1.0] = 0.3
+
+  vertex {
+    let c  = camera * vec4(position, 1.0);
+    let cu = camera * vec4(position + vec3(0.0, size * scale, 0.0), 1.0);
+
+    clip       = c;
+    point_rate = abs(cu.y / cu.w - c.y / c.w);
+  }
+
+  fragment {
+    let r = length(point_coord * 2.0 - 1.0);
+    let a = 1.0 - smoothstep(1.0 - max(uv.x, 0.01), 1.0, r);
+
+    color = vec4(tint * exposure * (1.0 + dome * (1.0 - r * r)), a);
+  }
+}

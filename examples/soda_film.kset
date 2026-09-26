@@ -1,0 +1,4 @@
+{"t":"set","id":"soda_film","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"soda_film.kir"}
+{"t":"capacity","layer":"L1","value":256}

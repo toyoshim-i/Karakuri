@@ -1,0 +1,12 @@
+{"t":"set","id":"pulse_torus","v":1}
+{"t":"part","layer":"L1","path":"pulse_torus.kir"}
+{"t":"part","layer":"L4","path":"halo_points.kir"}
+{"t":"param","layer":"L4","key":"point_scale","value":0.025}
+{"t":"bind","layer":"L1","key":"level0","signal":"band0","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level1","signal":"band1","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level2","signal":"band2","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level3","signal":"band3","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level4","signal":"band4","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level5","signal":"band5","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level6","signal":"band6","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level7","signal":"band7","curve":"lin","range":[0.0,1.0]}

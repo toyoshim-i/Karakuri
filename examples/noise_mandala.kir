@@ -1,0 +1,62 @@
+// A kaleidoscope with no picture behind it: the frame is folded about its
+// centre into `folds` mirrored wedges, and each wedge shows the same patch of
+// coloured fractal noise drifting outward, so the noise closes into a slowly
+// blooming mandala. The whole figure turns, and colour cycles from the centre
+// outward. Draws the whole frame and reads no geometry; a camera looking at the
+// origin sets the frame's aspect.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/noise_mandala.kir
+
+proc noise_mandala {
+  kind  L4
+  blend additive
+
+  // Mirrored wedge pairs round the centre, floored.
+  param folds    : float [2.0, 16.0] = 6.0
+
+  // Size of the noise features: higher is finer.
+  param grain    : float [0.5, 8.0] = 2.2
+
+  // Speed of the outward drift.
+  param bloom    : float [-2.0, 2.0] = 0.35
+
+  // Rotation of the figure in radians per second.
+  param spin     : float [-2.0, 2.0] = 0.1
+
+  // Hue at the centre; the hue turns outward from it.
+  param hue      : float [0.0, 1.0] = 0.75
+
+  // Sharpness of the bright filaments: higher is thinner.
+  param crisp    : float [1.0, 40.0] = 12.0
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let fw  = normalize(-eye);
+    let rt  = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let upv = cross(rt, fw);
+    let sc  = vec2(dot(ray, rt), dot(ray, upv)) / (dot(ray, fw) * 0.57735);
+
+    let r   = length(sc);
+    let seg = 6.2831853 / floor(folds);
+    let a0  = atan2(sc.y, sc.x) + t * spin;
+    let aw  = a0 - floor(a0 / seg) * seg;
+    let a   = abs(aw - seg * 0.5);
+    let q   = vec2(cos(a), sin(a)) * r;
+
+    // The drift runs outward: the noise is sampled at a radius that lags time.
+    let p  = vec3(q * grain - vec2(t * bloom, 0.0), t * 0.07);
+    let n  = fbm(p, 5);
+    let m  = fbm(p * 1.7 + vec3(4.1, 2.3, 0.0), 3);
+
+    let fil  = exp(-abs(n) * crisp);
+    let body = smoothstep(-0.2, 0.5, m) * 0.22;
+    let hs   = fract(hue + r * 0.35 - t * 0.02 + m * 0.2);
+    let col  = hsv_to_rgb(vec3(hs, 0.8, 1.0));
+    let white = vec3(1.0) * pow(fil, 4.0) * 0.5;
+    let vign = 1.0 - smoothstep(1.2, 2.2, r);
+
+    color = vec4((col * (fil + body) + white) * vign * exposure, 1.0);
+  }
+}

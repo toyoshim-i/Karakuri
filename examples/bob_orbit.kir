@@ -1,0 +1,27 @@
+// A camera circling the origin while its height rises and falls, always
+// looking at the origin.
+//
+//     cargo run -p karakuri-cli -- --set examples/shape_swarms.kir,examples/bob_orbit.kir,examples/halo_points.kir
+
+proc bob_orbit {
+  kind L3
+
+  // Distance from the vertical axis, in world units.
+  param radius : float [1.0, 30.0] = 8.5
+
+  // Turns per second around the vertical axis.
+  param speed  : float [-1.0, 1.0] = 0.04
+
+  // Largest height above and below the horizontal, in world units, and how
+  // many times per second the height swings through one cycle.
+  param bob    : float [0.0, 10.0] = 3.0
+  param rate   : float [0.0, 1.0]  = 0.07
+
+  camera {
+    let a = t * speed * 6.2831853;
+    let h = sin(t * rate * 6.2831853) * bob;
+
+    eye    = vec3(cos(a) * radius, h, sin(a) * radius);
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}

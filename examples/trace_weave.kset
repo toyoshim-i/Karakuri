@@ -1,0 +1,6 @@
+{"t":"set","id":"trace_weave","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"sine_strands.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L4","key":"amp","value":0.22}
+{"t":"param","layer":"L4","key":"freq","value":2.0}

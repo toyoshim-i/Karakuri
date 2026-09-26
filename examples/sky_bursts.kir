@@ -1,0 +1,70 @@
+// Fireworks on the beat: every `every` beats a shell bursts at a random point
+// in the upper half of a box, throwing a sphere of sparks that slow under drag,
+// sag under gravity, flicker and fade in the shell's own colour. Up to `shells`
+// bursts overlap; each spark is a short streak along its motion. Seed % shells
+// is the shell slot and seed / shells the spark within it. Time runs in beats.
+//
+//     cargo run -p karakuri-cli -- --set examples/sky_bursts.kir,examples/tint_strokes.kir
+
+proc sky_bursts {
+  kind     L1
+  topology lines
+  capacity [1024, 65536] = 4096
+
+  // Beats between bursts.
+  param every  : float [0.25, 8.0] = 1.0
+
+  // Bursts alive at once, floored; each lasts `shells` times `every` beats.
+  param shells : float [1.0, 8.0] = 4.0
+
+  // Radius a shell's sparks reach, in world units.
+  param reach  : float [0.3, 4.0] = 2.0
+
+  // Downward pull on the sparks, in world units per beat squared.
+  param gravity : float [0.0, 2.0] = 0.35
+
+  // Length of a spark's streak, in beats of its motion.
+  param streak : float [0.0, 1.0] = 0.25
+
+  // Brightness of the sparks.
+  param glow   : float [0.0, 4.0] = 1.0
+
+  emit position, velocity, tint
+
+  element {
+    let k    = uint(floor(shells));
+    let slot = seed % k;
+    let sp   = seed / k;
+    let kf   = float(k);
+    let jf   = float(slot);
+
+    // The latest burst whose number is this slot modulo `k`.
+    let bt   = beats / every;
+    let bn   = floor((floor(bt) - jf) / kf) * kf + jf;
+    let tau  = (bt - bn) * every;
+    let life = kf * every;
+    let key  = uint(max(bn, 0.0) + 1.0) * 2654435761u;
+
+    let ctr = (hash3(key) - vec3(0.5)) * vec3(9.0, 3.0, 3.0) + vec3(0.0, 0.6, 0.0);
+    let hue = hash1(key + 7u);
+    let dirn = sphere_point(hash1(sp * 7919u + key), hash1(sp * 104729u + key + 3u));
+    let spd  = reach * (0.8 + 0.2 * hash1(sp * 31u + key + 5u)) * mix(0.7, 1.2, hash1(key + 9u));
+
+    // Drag with rate `dr`: the sparks travel `spd` in total before gravity.
+    let dr   = 2.2;
+    let ex   = exp(-dr * tau);
+    let away = dirn * spd * (1.0 - ex);
+    let sag  = vec3(0.0, -0.5 * gravity * tau * tau, 0.0);
+    let vel  = dirn * spd * dr * ex + vec3(0.0, -gravity * tau, 0.0);
+
+    let fade  = clamp(1.0 - tau / life, 0.0, 1.0);
+    let flick = mix(1.0, step(0.45, hash1(seed * 13u + uint(floor(t * 24.0)) * 977u)), 1.0 - fade);
+    let flash = exp(-tau * 10.0 / every) * 2.0;
+    let rgb   = hsv_to_rgb(vec3(hue, mix(0.2, 0.9, fade), 1.0)) * (fade * sqrt(fade) + flash) * flick;
+    let live  = step(0.0, bn);
+
+    position = ctr + away + sag;
+    velocity = vel * streak;
+    tint     = rgb * glow * live;
+  }
+}

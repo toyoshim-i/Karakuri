@@ -1,0 +1,5 @@
+{"t":"set","id":"julia_bloom","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"julia_bloom.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"exposure","signal":"energy","curve":"sqrt","range":[0.7,1.6]}

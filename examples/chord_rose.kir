@@ -1,0 +1,63 @@
+// String art on a circle in the xy plane: pin i is joined to the pin at
+// `factor` times its angle, so the chords' envelope draws a cardioid at 2, a
+// nephroid at 3 and more petals above; the multiplier swings slowly between
+// `factor` and `factor + span`.
+// Seeds 0-255 draw the circle itself; the rest are the chords, one per pin.
+//
+//     cargo run -p karakuri-cli -- --set examples/chord_rose.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc chord_rose {
+  kind     L1
+  topology lines
+  capacity [320, 8192] = 616
+
+  // The lowest multiplier, how far above it the swing reaches, and the
+  // swing's rate in radians per second.
+  param factor : float [1.0, 60.0] = 2.0
+  param span   : float [0.0, 30.0] = 8.0
+  param pace   : float [0.0, 0.5]  = 0.05
+
+  // Radius of the circle in world units.
+  param reach  : float [0.2, 2.0]  = 1.0
+
+  // Hue of the first pin, and the hue range round the circle.
+  param hue    : float [0.0, 1.0]  = 0.55
+  param spread : float [0.0, 1.0]  = 0.5
+
+  // Brightness of the chords and of the circle.
+  param bright : float [0.0, 2.0]  = 0.35
+
+  emit position, velocity, tint
+
+  element {
+    let tau = 6.2831853;
+    var pa  = vec3(0.0);
+    var pb  = vec3(0.0);
+    var col = vec3(0.0);
+
+    if seed < 256u {
+      let a0 = float(seed) / 256.0 * tau;
+      let a1 = float(seed + 1u) / 256.0 * tau;
+      pa  = vec3(cos(a0), sin(a0), 0.0) * reach;
+      pb  = vec3(cos(a1), sin(a1), 0.0) * reach;
+      col = vec3(0.6, 0.7, 0.9) * bright * 0.6;
+    } else {
+      let n  = float(capacity - 256u);
+      let i  = float(seed - 256u);
+      let k  = factor + span * (0.5 - 0.5 * cos(t * pace));
+      let a0 = i / n * tau + 1.5707963;
+      let a1 = i * k / n * tau + 1.5707963;
+      pa = vec3(cos(a0), sin(a0), 0.0) * reach;
+      pb = vec3(cos(a1), sin(a1), 0.0) * reach;
+
+      // Short chords sit on the envelope and pile up there; they are drawn
+      // dimmer so the envelope does not burn out.
+      let len = length(pa - pb) / (2.0 * reach);
+      col = hsv_to_rgb(vec3(fract(hue + spread * i / n), 0.7, 1.0)) * bright * (0.25 + 0.75 * len);
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = col;
+  }
+}

@@ -1,0 +1,29 @@
+// A dark blue monitor face covering the frame, with a faint graticule of
+// thin lines and a slight darkening toward the corners.
+//
+//     cargo run -p karakuri-cli -- --set examples/scope_wave.kir,examples/flat_eye.kir,examples/scope_field.kir,examples/tint_strokes.kir
+
+proc scope_field {
+  kind  L4
+  blend additive
+
+  // Colour of the face, in linear RGB.
+  param face  : vec3  [0.0, 0.2]  = vec3(0.004, 0.008, 0.045)
+
+  // Brightness of the graticule lines, and how many divisions it has along each
+  // side of the frame.
+  param grid  : float [0.0, 0.2]  = 0.02
+  param count : float [2.0, 24.0] = 8.0
+
+  // How much the corners darken.
+  param edge  : float [0.0, 1.0]  = 0.5
+
+  fragment {
+    let q  = point_coord - vec2(0.5);
+    let g  = abs(fract(q * count + vec2(0.5)) - vec2(0.5));
+    let ln = 1.0 - smoothstep(0.0, 0.015, min(g.x, g.y));
+    let v  = 1.0 - edge * dot(q, q) * 1.6;
+
+    color = vec4((face + vec3(0.2, 0.35, 0.6) * ln * grid) * v, 1.0);
+  }
+}

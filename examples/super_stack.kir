@@ -1,0 +1,86 @@
+// A stack of closed superformula curves in the xy plane, each a time-delayed
+// copy of the one inside it, so stars, flowers and spiky rosettes morph from
+// one to the next as a rainbow tunnel of thin lines. Seed / 192 is the copy,
+// newest and smallest first; seed % 192 the segment along it.
+//
+//     cargo run -p karakuri-cli -- --set examples/super_stack.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc super_stack {
+  kind     L1
+  topology lines
+  capacity [1920, 49152] = 12288
+
+  // Shape changes per second, and how far behind its inner neighbour each copy
+  // runs, in the same units.
+  param morph  : float [0.0, 2.0]  = 0.35
+  param delay  : float [0.0, 0.2]  = 0.05
+
+  // How far the sharpness exponent may fall; high values pass through spiky
+  // explosions, low values stay rounded.
+  param spike  : float [0.0, 1.0]  = 0.6
+
+  // Turns of hue per second.
+  param cycle  : float [0.0, 1.0]  = 0.08
+
+  // Radius of the outermost copy in world units.
+  param reach  : float [0.2, 3.0]  = 1.05
+
+  // Levels of the low, middle and high bands, laid round each curve from its
+  // right side (low) over the top (middle) to its left side (high); louder
+  // parts of the curve burn brighter and more saturated.
+  param low    : float [0.0, 1.0]  = 0.5
+  param mid    : float [0.0, 1.0]  = 0.4
+  param high   : float [0.0, 1.0]  = 0.3
+
+  emit position, velocity, tint
+
+  element {
+    let segs = 192u;
+    let n    = max(float(capacity / segs), 1.0);
+    let ci   = seed / segs;
+    let c    = float(ci);
+    let i    = float(seed % segs);
+
+    let tc = t * morph - c * delay;
+
+    // Symmetry order eased between whole numbers, so the curve closes except
+    // for a moment at each step.
+    let mr = 6.0 + 4.5 * sin(tc * 0.37);
+    let m  = floor(mr) + smoothstep(0.8, 1.0, fract(mr));
+
+    // n2 = n3, which keeps the curve closed for every whole `m`.
+    let o1 = 0.5 + 0.5 * sin(tc * 0.53 + 1.3);
+    let n1 = mix(3.0, 0.25, spike * o1 * o1) + 1.5 * (0.5 + 0.5 * sin(tc * 0.71));
+    let n2 = 0.4 + 9.0 * pow(0.5 + 0.5 * sin(tc * 0.29 + 0.4), 2.0);
+
+    let step = 6.2831853 / float(segs);
+    let spin = tc * 0.15;
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    for k in 0..2 {
+      let ph = (i + float(k)) * step;
+      let x  = m * ph * 0.25;
+      let sv = pow(abs(cos(x)), n2) + pow(abs(sin(x)), n2);
+      let r0 = pow(max(sv, 0.0001), -1.0 / n1);
+      let r  = 3.0 * r0 / (2.0 + r0);
+      let sc = reach * (0.2 + 0.8 * (c + 1.0) / n);
+      let p  = vec3(cos(ph + spin), sin(ph + spin), 0.0) * r * sc * 0.8;
+      if k == 0 { pa = p; } else { pb = p; }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+
+    // The three band levels, blended round the curve.
+    let a   = (i + 0.5) / float(segs);
+    let u   = abs(a * 2.0 - 1.0);
+    var lvl = mix(mid, low, clamp(u * 2.0 - 1.0, 0.0, 1.0));
+    if u < 0.5 { lvl = mix(high, mid, u * 2.0); }
+
+    let fade = pow(1.0 - c / n, 0.6);
+    let h    = fract(t * cycle + c / n * 0.85 + lvl * 0.12);
+    let col  = hsv_to_rgb(vec3(h, 0.45 + 0.55 * lvl, 1.0));
+    tint = col * (0.3 + 1.1 * lvl) * fade;
+  }
+}

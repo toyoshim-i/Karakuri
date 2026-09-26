@@ -1,0 +1,9 @@
+{"t":"set","id":"super_stack","v":1}
+{"t":"part","layer":"L1","path":"super_stack.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L3","key":"frame","value":1.3}
+{"t":"param","layer":"L4","key":"width","value":0.0025}
+{"t":"bind","layer":"L1","key":"low","signal":"band0","curve":"smooth","range":[0.1,1.0]}
+{"t":"bind","layer":"L1","key":"mid","signal":"band3","curve":"smooth","range":[0.1,1.0]}
+{"t":"bind","layer":"L1","key":"high","signal":"band6","curve":"smooth","range":[0.1,1.0]}

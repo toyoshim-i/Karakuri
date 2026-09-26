@@ -1,0 +1,9 @@
+{"t":"set","id":"string_bands","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"sine_strands.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L4","key":"count","value":12.0}
+{"t":"param","layer":"L4","key":"tangle","value":0.0}
+{"t":"param","layer":"L4","key":"hue","value":0.6}
+{"t":"param","layer":"L4","key":"spread","value":0.06}
+{"t":"param","layer":"L4","key":"scroll","value":0.5}

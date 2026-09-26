@@ -1,0 +1,60 @@
+// A sum-of-sines plasma: horizontal and vertical stripe fields at slowly
+// drifting frequencies beat against each other into shifting bands and blobs,
+// warm red and orange against violet-blue. On a long cycle the picture fades to
+// black and comes back with its colours inverted.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/moire_plasma.kir
+
+proc moire_plasma {
+  kind  L4
+  blend additive
+
+  // Rate at which the stripes scroll and their frequencies wander.
+  param drift : float [0.0, 2.0] = 0.3
+
+  // Stripes per frame half-height at the middle of the wander.
+  param freq  : float [1.0, 40.0] = 9.0
+
+  // Hue of the warm end of the palette; the cool end sits opposite it.
+  param hue   : float [0.0, 1.0] = 0.02
+
+  // Radians per second of the fade-to-black-and-invert cycle.
+  param pulse : float [0.0, 1.0] = 0.12
+
+  // Offset of the pattern, in frame half-heights.
+  param pan   : vec2 [-4.0, 4.0] = vec2(0.0, 0.0)
+
+  fragment {
+    // Isotropic frame coordinates from the camera ray: y runs -1..1 bottom to
+    // top, x spans the width at the same scale. Assumes the built-in 60 degree
+    // field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let q  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let p  = q + pan;
+    let s = t * drift;
+
+    let f1 = freq * (1.0 + 0.35 * sin(s * 0.31));
+    let f2 = freq * (1.0 + 0.35 * sin(s * 0.23 + 2.0));
+    let f3 = freq * (0.5 + 0.2 * sin(s * 0.17 + 4.0));
+    let v  = sin(p.x * f1 + s) + sin(p.y * f2 - s * 1.3)
+           + sin(p.x * f2 * 1.07 - s * 0.7) * sin(p.y * f1 * 0.93 + s * 0.9)
+           + sin((p.x + p.y) * f3 + s * 0.5);
+
+    let m  = 0.5 + 0.5 * sin(v * 1.5707963);
+    let wc = hsv_to_rgb(vec3(fract(hue + 0.08 * m - 0.03), 0.9, 1.0));
+    let cc = hsv_to_rgb(vec3(fract(hue + 0.72), 0.75, 0.6));
+    let c  = mix(cc, wc, vec3(m * m));
+
+    // `g` runs 1 to -1 and back: the picture fades out, returns inverted,
+    // fades out again and returns upright.
+    // The inversion is taken in display space, so it reads as a photographic
+    // negative.
+    let g  = cos(t * pulse);
+    let iv = srgb_to_linear(vec3(1.0) - linear_to_srgb(c));
+    let ci = mix(iv, c, vec3(step(0.0, g)));
+    color = vec4(ci * sqrt(abs(g)), 1.0);
+  }
+}

@@ -1,0 +1,72 @@
+// Three spirograph pens, each tracing a hypotrochoid (a wheel rolling inside a
+// ring) at its own depth, with a glowing tail that fades behind the pen. The
+// three drawings sit stacked and tilt together. Seed / 2048 is the pen, seed %
+// 2048 the segment along its tail, oldest first.
+//
+//     cargo run -p karakuri-cli -- --set examples/spiro_gears.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc spiro_gears {
+  kind     L1
+  topology lines
+  capacity [2048, 6144] = 6144
+
+  // Turns of the rolling wheel's centre per second.
+  param speed  : float [0.0, 2.0]  = 0.35
+
+  // Length of each pen's tail, in turns of the wheel's centre.
+  param tail   : float [0.5, 12.0] = 3.5
+
+  // How far the pen sits from the wheel's centre, as a fraction of the
+  // wheel's radius.
+  param reach  : float [0.2, 1.6]  = 0.7
+
+  // Radius of the outer ring in world units.
+  param ring   : float [0.3, 3.0]  = 1.0
+
+  // Hue of the first pen, and the hue step to the next.
+  param hue    : float [0.0, 1.0]  = 0.95
+  param step   : float [0.0, 0.5]  = 0.3
+
+  // Largest tilt of the stack about the x axis, in radians.
+  param sway   : float [0.0, 1.2]  = 0.5
+
+  emit position, velocity, tint
+
+  element {
+    let segs = 2048u;
+    let c    = seed / segs;
+    let fc   = float(c);
+    let i    = float(seed % segs);
+
+    // Ring and wheel sizes in teeth, per pen.
+    var big = 11.0;
+    var sml = 4.0;
+    if c == 1u { big = 13.0; sml = 5.0; }
+    if c == 2u { big = 7.0;  sml = 3.0; }
+
+    let rr = ring / big;
+    let a  = (big - sml) * rr;
+    let d  = reach * sml * rr;
+    let k  = (big - sml) / sml;
+
+    let head  = t * speed * 6.2831853 + fc * 2.1;
+    let delta = tail * 6.2831853 / float(segs);
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    for m in 0..2 {
+      let th = head - (float(segs) - i - float(m)) * delta;
+      let p  = vec3(a * cos(th) + d * cos(k * th), a * sin(th) - d * sin(k * th), (fc - 1.0) * 0.25);
+      let w  = rot_y(rot_x(p, sway * sin(t * 0.21)), sway * 0.6 * sin(t * 0.13));
+      if m == 0 { pa = w; } else { pb = w; }
+    }
+
+    position = pb;
+    velocity = pb - pa;
+
+    let fresh = i / float(segs);
+    let glow = 0.12 + 0.88 * fresh * fresh;
+    let pen  = exp((fresh - 1.0) * 200.0) * 3.0;
+    tint = hsv_to_rgb(vec3(fract(hue + fc * step), 0.75, 1.0)) * (glow + pen);
+  }
+}

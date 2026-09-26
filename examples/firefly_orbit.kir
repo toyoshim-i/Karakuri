@@ -1,0 +1,46 @@
+// Small coloured lights in the xy plane, each circling the origin on its own
+// orbit at its own rate; the orbit radii breathe at staggered rates, so the
+// swarm keeps gathering into spirals and rosettes and scattering again.
+//
+//     cargo run -p karakuri-cli -- --set examples/firefly_orbit.kir,examples/flat_eye.kir,examples/halo_points.kir
+
+proc firefly_orbit {
+  kind     L1
+  topology points
+  capacity [8, 4096] = 120
+
+  // Base orbit rate in turns per second; each light runs a little faster than
+  // the one inside it.
+  param spin     : float [0.0, 0.5] = 0.05
+
+  // How far each orbit radius swings in and out, as a fraction of the radius.
+  param breathe  : float [0.0, 1.0] = 0.55
+
+  // Radians per second of the radius breathing; lights further out breathe a
+  // little faster.
+  param pace     : float [0.0, 2.0] = 0.25
+
+  // Turns of the hue wheel per second; high values make the lights twinkle.
+  param hue_rate : float [0.0, 3.0] = 0.08
+
+  // Saturation of the lights.
+  param sat      : float [0.0, 1.0] = 0.7
+
+  // Radius of the outermost orbit, in world units.
+  param zoom     : float [0.2, 2.0] = 1.0
+
+  emit position, tint
+
+  element {
+    let n  = float(capacity);
+    let fi = float(seed);
+    let u  = (fi + 0.5) / n;
+
+    let br = 1.0 - breathe * 0.5 * (1.0 + sin(t * pace * (1.0 + 2.0 * u) + fi * 0.9));
+    let rr = zoom * (0.1 + 0.9 * u) * br;
+    let a  = fi * 2.3999632 + t * spin * 6.2831853 * (1.0 + u);
+
+    position = vec3(cos(a) * rr, sin(a) * rr, 0.0);
+    tint     = hsv_to_rgb(vec3(fract(fi * 0.137 + t * hue_rate), sat, 1.0));
+  }
+}

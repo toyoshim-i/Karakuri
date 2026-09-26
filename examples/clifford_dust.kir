@@ -1,0 +1,48 @@
+// A Clifford attractor in the xy plane as a quarter of a million points, each
+// the image of its own random start after 32 turns of the map, so the dust
+// settles on the attractor and slowly reshapes as the map's four coefficients
+// wander. A point's hue follows how far its last turn moved it.
+//
+//     cargo run -p karakuri-cli -- --set examples/clifford_dust.kir,examples/flat_eye.kir,examples/plain_points.kir
+
+proc clifford_dust {
+  kind     L1
+  topology points
+  capacity [16384, 1048576] = 262144
+
+  // The map's coefficients: x' = sin(a y) + c cos(a x), y' = sin(b x) + d cos(b y).
+  param a      : float [-2.0, 2.0] = -1.4
+  param b      : float [-2.0, 2.0] = 1.6
+  param c      : float [-2.0, 2.0] = 1.0
+  param d      : float [-2.0, 2.0] = 0.7
+
+  // How far each coefficient wanders from its value, and how fast.
+  param wander : float [0.0, 0.5]  = 0.18
+  param pace   : float [0.0, 1.0]  = 0.12
+
+  // Hue of the slowest points, and the hue range out to the fastest.
+  param hue    : float [0.0, 1.0]  = 0.58
+  param spread : float [0.0, 1.0]  = 0.45
+
+  emit position, tint
+
+  element {
+    let s  = t * pace;
+    let ca = a + wander * sin(s * 1.0);
+    let cb = b + wander * sin(s * 1.3 + 1.0);
+    let cc = c + wander * sin(s * 0.7 + 2.0);
+    let cd = d + wander * sin(s * 1.7 + 3.0);
+
+    var p = (hash2(seed) - vec2(0.5)) * 4.0;
+    var q = p;
+    for i in 0..32 {
+      q = p;
+      p = vec2(sin(ca * q.y) + cc * cos(ca * q.x), sin(cb * q.x) + cd * cos(cb * q.y));
+    }
+
+    let v = clamp(length(p - q) / 3.0, 0.0, 1.0);
+
+    position = vec3(p * 0.62, 0.0);
+    tint = hsv_to_rgb(vec3(fract(hue + spread * v), 0.8, 1.0)) * (0.35 + 0.65 * v);
+  }
+}

@@ -1,0 +1,9 @@
+{"t":"set","id":"spiral_galaxy","v":1}
+{"t":"part","layer":"L1","path":"spiral_galaxy.kir"}
+{"t":"part","layer":"L3","path":"high_orbit.kir"}
+{"t":"part","layer":"L4","path":"halo_points.kir"}
+{"t":"param","layer":"L3","key":"radius","value":6.5}
+{"t":"param","layer":"L3","key":"elevation","value":0.6}
+{"t":"param","layer":"L3","key":"speed","value":0.02}
+{"t":"param","layer":"L4","key":"point_scale","value":0.03}
+{"t":"bind","layer":"L1","key":"bright","signal":"energy","curve":"smooth","range":[0.1,0.17]}

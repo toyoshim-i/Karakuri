@@ -1,0 +1,79 @@
+// A (p, q) torus knot drawn as a tube of twisted strands, tumbling slowly, with
+// bands of colour running along it. Seed / 1024 is the strand, seed % 1024 the
+// segment along it; the strand count is capacity / 1024.
+//
+//     cargo run -p karakuri-cli -- --set examples/torus_knot.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc torus_knot {
+  kind     L1
+  topology lines
+  capacity [1024, 65536] = 12288
+
+  // Turns around the torus's axis and through its hole; whole numbers with
+  // no common factor give a single knotted loop.
+  param p      : float [1.0, 9.0]  = 3.0
+  param q      : float [1.0, 9.0]  = 5.0
+
+  // Radius of the torus the knot lies on, of its tube, and of the tube of
+  // strands around the knot, in world units.
+  param ring   : float [0.5, 3.0]  = 2.1
+  param tube   : float [0.1, 1.5]  = 0.9
+  param girth  : float [0.0, 0.5]  = 0.14
+
+  // Turns the strands twist about the knot over its length, and turns per
+  // second the colour bands travel along it.
+  param twist  : float [0.0, 40.0] = 12.0
+  param flow   : float [-1.0, 1.0] = 0.12
+
+  // Turns per second the knot tumbles.
+  param tumble : float [0.0, 0.3]  = 0.03
+
+  emit position, velocity, tint
+
+  element {
+    let segs  = 1024u;
+    let nstr  = max(float(capacity / segs), 1.0);
+    let j     = float(seed / segs);
+    let i     = float(seed % segs);
+    let pp    = floor(p);
+    let qq    = floor(q);
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    for k in 0..2 {
+      let s  = (i + float(k)) / float(segs) * 6.2831853;
+      var c  = vec3(0.0);
+      var c2 = vec3(0.0);
+      var nm = vec3(0.0);
+      for m in 0..2 {
+        let sm = s + float(m) * 0.001;
+        let u  = sm * pp;
+        let v  = sm * qq;
+        let rr = ring + tube * cos(v);
+        let pt = vec3(rr * cos(u), tube * sin(v), rr * sin(u));
+        if m == 0 {
+          c  = pt;
+          nm = vec3(cos(v) * cos(u), sin(v), cos(v) * sin(u));
+        } else {
+          c2 = pt;
+        }
+      }
+      let tg = normalize(c2 - c);
+      let sd = normalize(cross(tg, nm));
+      let ph = j / nstr * 6.2831853 + s * twist;
+      let pt = c + (nm * cos(ph) + sd * sin(ph)) * girth;
+      let spin = t * tumble * 6.2831853;
+      let w = rot_x(rot_y(pt, spin), 1.25 + 0.3 * sin(spin * 0.7));
+      if k == 0 { pa = w; } else { pb = w; }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+
+    let u    = i / float(segs);
+    let band = fract(u * pp - t * flow);
+    let h    = fract(u * 2.0 + t * flow * 0.5);
+    let glow = 0.35 + 0.65 * smoothstep(0.6, 1.0, band);
+    tint = hsv_to_rgb(vec3(h, 0.7, 1.0)) * glow;
+  }
+}

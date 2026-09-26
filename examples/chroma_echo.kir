@@ -1,0 +1,37 @@
+// Leaves colour-split trails behind moving material: the retained frame is
+// fed back with its red, green and blue channels each nudged a different way
+// and slightly zoomed, and faded, so trails fan out into rainbow fringes.
+
+proc chroma_echo {
+  kind L5
+  retains
+
+  // Share of the retained frame fed back each frame.
+  param decay  : float [0.0, 0.98] = 0.82
+
+  // How far apart the three channels drift per frame, as a fraction of the
+  // frame's height.
+  param split  : float [0.0, 0.01] = 0.002
+
+  // Zoom of the echo per frame: above 1 the trails stream outward.
+  param stream : float [0.98, 1.05] = 1.008
+
+  // Turns of the split's direction per beat.
+  param swirl  : float [-1.0, 1.0] = 0.125
+
+  frame {
+    let a  = beats * swirl * 6.2831853;
+    let dv = frame_step(split);
+    let c0 = vec2(cos(a), sin(a)) * dv;
+    let c1 = vec2(cos(a + 2.0943951), sin(a + 2.0943951)) * dv;
+    let c2 = vec2(cos(a + 4.1887902), sin(a + 4.1887902)) * dv;
+
+    let at = vec2(0.5) + (point_coord - vec2(0.5)) / stream;
+    let r  = tap(held, at + c0).x;
+    let g  = tap(held, at + c1).y;
+    let b  = tap(held, at + c2).z;
+
+    let s = texel(src);
+    color = vec4(max(s.xyz, vec3(r, g, b) * decay), s.w);
+  }
+}

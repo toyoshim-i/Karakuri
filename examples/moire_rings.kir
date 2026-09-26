@@ -1,0 +1,59 @@
+// Op-art moiré: two sets of fine concentric rings around two centres that
+// circle each other, combined so a point is lit where exactly one set is lit.
+// Where the rings cross they beat into large swimming interference fringes.
+// The stripes take a hue and its dark complement, and the rings can pulse
+// outward.
+// Draws the whole frame and reads no geometry; a camera looking at the origin
+// sets the frame's aspect.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/moire_rings.kir
+
+proc moire_rings {
+  kind  L4
+  blend additive
+
+  // Rings per unit of the frame's half-height.
+  param density  : float [2.0, 60.0] = 14.0
+
+  // Distance of each centre from the frame centre.
+  param apart    : float [0.0, 1.5] = 0.35
+
+  // Turns per minute of the two centres round each other.
+  param waltz    : float [-30.0, 30.0] = 4.0
+
+  // Outward travel of the rings, in rings per second.
+  param pulse    : float [-4.0, 4.0] = 0.5
+
+  // Hue of the lit stripes; the unlit ones take a dark complementary hue.
+  param hue      : float [0.0, 1.0] = 0.87
+
+  // Saturation of the lit stripes: 0 is black and white op art.
+  param chroma   : float [0.0, 1.0] = 0.65
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let fw  = normalize(-eye);
+    let rt  = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let upv = cross(rt, fw);
+    let sc  = vec2(dot(ray, rt), dot(ray, upv)) / (dot(ray, fw) * 0.57735);
+
+    let a  = t * waltz * 0.10471976;
+    let ca = vec2(cos(a), sin(a)) * apart;
+    let cb = vec2(cos(a * 1.3 + 3.1415927), sin(a * 0.8 + 3.1415927)) * apart;
+
+    let ph = t * pulse * 6.2831853;
+    let s1 = sin(length(sc - ca) * density * 6.2831853 - ph);
+    let s2 = sin(length(sc - cb) * density * 6.2831853 - ph);
+
+    // Anti-aliased stripe edges: the width tracks the stripe frequency.
+    let aa = 0.35;
+    let v  = smoothstep(-aa, aa, s1 * s2);
+
+    let lit  = hsv_to_rgb(vec3(hue, chroma, 0.95));
+    let dark = hsv_to_rgb(vec3(fract(hue + 0.5), 0.9, 0.12 * chroma));
+    let c    = mix(dark, lit, vec3(v));
+    color = vec4(c * exposure, 1.0);
+  }
+}

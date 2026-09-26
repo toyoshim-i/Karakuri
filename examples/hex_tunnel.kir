@@ -1,0 +1,61 @@
+// A tunnel tiled with flat hexagonal patches that stream toward the viewer from
+// a dark vanishing point; each tile pops through reds, greens, blues and purples
+// on its own phase, and the pattern is mirrored left to right. Reads `ray`
+// against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/hex_tunnel.kir --param turn=0
+
+proc hex_tunnel {
+  kind  L4
+  blend additive
+
+  // Travel speed along the tunnel.
+  param rush    : float [0.0, 4.0] = 0.8
+
+  // Tiles around the wall.
+  param density : float [3.0, 24.0] = 9.0
+
+  // Colour change rate of a tile.
+  param churn   : float [0.0, 6.0] = 1.5
+
+  // Radius, in view-plane units, of the dark region at the centre.
+  param gloom   : float [0.0, 1.0] = 0.35
+
+  // 1 mirrors the pattern left to right; 0 wraps it once around.
+  param mirror  : float [0.0, 1.0] = 1.0
+
+  fragment {
+    let q  = ray.xy / max(-ray.z, 0.0001);
+    let r  = length(q);
+    let a0 = atan2(q.x, q.y) / 3.1415927;
+    let a  = mix(a0 * 0.5 + 0.5, abs(a0), mirror);
+    let u  = 0.4 / max(r, 0.001) + t * rush;
+
+    // Tile space: `density` tiles around, square cells along the depth.
+    let p  = vec2(a * density, u * density * 0.25);
+
+    // Nearest centre of two offset rectangular lattices is the hexagon's centre.
+    let s  = vec2(1.0, 1.7320508);
+    let ga = floor(p / s) * s + s * 0.5;
+    let gb = floor((p - s * 0.5) / s) * s + s;
+    let da = p - ga;
+    let db = p - gb;
+    let pickb = step(dot(db, db), dot(da, da));
+    let cell = mix(ga, gb, vec2(pickb));
+    let off  = mix(da, db, vec2(pickb));
+
+    // Distance from the hexagon's edge, for a thin dark grout.
+    let h  = abs(off);
+    let e  = max(dot(h, vec2(0.5, 0.8660254)), h.x);
+    let grout = smoothstep(0.5, 0.44, e);
+
+    let ph = cell.x * 1.3 + cell.y * 2.1 + sin(cell.x * 0.7 + cell.y * 1.9) * 3.0;
+    let k  = t * churn + ph;
+    let c  = vec3(0.5) + vec3(0.5) * cos(vec3(k, k * 1.3 + 2.1, k * 0.7 + 4.2));
+    let pop = step(0.35, fract(k * 0.25 + ph * 0.1));
+    let tile = c * c * (0.35 + 0.65 * pop);
+
+    let dark = smoothstep(gloom * 0.2, max(gloom, 0.001) + 0.05, r);
+    color = vec4(tile * grout * dark * 1.4, 1.0);
+  }
+}

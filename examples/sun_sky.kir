@@ -1,0 +1,37 @@
+// A black sky with a warm sun low on the horizon: a hot disc, a soft glare
+// around it and a faint wash of light across the half of the sky that faces
+// it.
+//
+//     cargo run -p karakuri-cli -- --set examples/ringed_giant.kir,examples/high_orbit.kir,examples/sun_sky.kir,examples/facing_dots.kir
+
+proc sun_sky {
+  kind  L4
+  blend additive
+
+  // The sun's direction as turns around the vertical axis, at a fixed height
+  // of 0.18 above the horizontal.
+  param sun_az : float [0.0, 1.0]  = 0.62
+
+  // Brightness of the glare around the sun, and of the wash across the sky.
+  param glare  : float [0.0, 4.0]  = 1.0
+  param haze   : float [0.0, 1.0]  = 0.25
+
+  // Colour of the sunlight, in linear RGB.
+  param warm   : vec3  [0.0, 1.0]  = vec3(1.0, 0.72, 0.45)
+
+  fragment {
+    let a = sun_az * 6.2831853;
+    let s = normalize(vec3(cos(a), 0.18, sin(a)));
+    let k = max(dot(ray, s), 0.0);
+
+    let k2   = k * k;
+    let k4   = k2 * k2;
+    let k16  = k4 * k4 * k4 * k4;
+    let k64  = k16 * k16 * k16 * k16;
+    let disc = smoothstep(0.99985, 0.99993, k) * 30.0;
+    let glow = k64 * k64 * 2.0 + k16 * 0.08 + k4 * 0.012;
+    let wash = k2 * haze * 0.03;
+
+    color = vec4(warm * (disc + glow * glare + wash) + vec3(0.002, 0.003, 0.006), 1.0);
+  }
+}

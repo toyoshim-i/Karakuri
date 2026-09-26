@@ -1,0 +1,66 @@
+// A sparse city of towers, each a stack of three shrinking cubes on a thin
+// floor, seen as an x-ray: the ray integrates how much material it passes
+// through, so overlapping volumes and edges stack into luminous silhouettes with
+// no surface lighting. Monochrome; the camera slides forward, weaves and rises.
+// Reads `ray` against a camera facing negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/xray_city.kir --param turn=0
+
+proc xray_city {
+  kind  L4
+  blend additive
+
+  // Forward speed in world units per second.
+  param travel  : float [0.0, 4.0] = 1.2
+
+  // Distance between tower centres in world units.
+  param blocks  : float [2.0, 10.0] = 4.0
+
+  // Half-width of a tower's bottom cube as a fraction of `blocks`.
+  param tower   : float [0.05, 0.4] = 0.18
+
+  // Brightness per unit of material crossed.
+  param density : float [0.0, 8.0] = 0.9
+
+  // Colour of the glow; icy blue-white by default, radar green at (0.3, 1.0, 0.45).
+  param ink     : vec3 [0.0, 1.0] = vec3(0.6, 0.8, 1.0)
+
+  // Amplitude of the sideways weave and the vertical rise and fall.
+  param sway    : float [0.0, 2.0] = 0.7
+
+  fragment {
+    let o  = vec3(sin(t * 0.27) * sway, 2.6 + sin(t * 0.19) * sway, -t * travel);
+    let rd = rot_y(rot_x(ray, -0.3 + sin(t * 0.19) * 0.1), sin(t * 0.27 + 0.8) * 0.2);
+    let hs = blocks * 0.5;
+    let s  = blocks * tower;
+
+    var acc = 0.0;
+    // A per-pixel offset of the first sample hides the banding of the fixed steps.
+    var dep = 0.1 + 0.2 * fract(sin(dot(point_coord, vec2(127.1, 311.7))) * 43758.547);
+
+    for i in 0..34 {
+      let p  = o + rd * dep;
+      let q  = (p.xz % vec2(blocks)) - vec2(hs);
+      let sc = s;
+      let ax = max(abs(q.x), abs(q.y));
+      let b1 = max(ax - sc, abs(p.y - sc) - sc);
+      let b2 = max(ax - sc * 0.6, abs(p.y - sc * 2.6) - sc * 0.6);
+      let b3 = max(ax - sc * 0.36, abs(p.y - sc * 3.56) - sc * 0.36);
+      let d  = min(min(b1, b2), b3);
+
+      // Step length grows with depth; inside material each step deposits its
+      // own length, softened across the boundary.
+      let ds = 0.12 + dep * 0.06;
+      acc += clamp(0.5 - d * 2.0 / ds, 0.0, 1.0) * ds;
+      dep += ds;
+    }
+
+    // The floor is a thin slab crossed once, in closed form, and faded with the
+    // distance to the crossing.
+    let down = max(-rd.y, 0.0001);
+    let slab = min(0.06 / down, 3.0) * step(0.0, -rd.y) * exp(-o.y / down * 0.04);
+
+    let v = log(1.0 + (acc + slab * 0.4) * density) * 0.55;
+    color = vec4(ink * v, 1.0);
+  }
+}

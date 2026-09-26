@@ -1,0 +1,35 @@
+// Smears the picture outward from a point, as if the camera zoomed during the
+// exposure: sixteen taps along the line to the centre, averaged. The smear
+// can kick on every beat and relax before the next.
+
+proc zoom_blur {
+  kind L5
+
+  // Length of the smear as a fraction of the distance to the centre.
+  param amount : float [0.0, 0.5] = 0.08
+
+  // Extra smear at each beat, decaying through the beat.
+  param kick   : float [0.0, 0.5] = 0.12
+
+  // How fast the kick decays within a beat: higher is sharper.
+  param snap   : float [1.0, 16.0] = 5.0
+
+  // Centre of the smear in frame coordinates, x right and y down.
+  param origin : vec2 [0.0, 1.0] = vec2(0.5, 0.5)
+
+  frame {
+    let ph  = fract(max(beats, 0.0));
+    let len = amount + kick * exp(-ph * snap);
+    let off = point_coord - origin;
+
+    var sum = vec3(0.0);
+    for i in 0..16 {
+      let k = float(i) / 15.0;
+      let s = tap(src, origin + off * (1.0 - len * k));
+      sum = sum + s.xyz;
+    }
+
+    let c = texel(src);
+    color = vec4(sum / 16.0, c.w);
+  }
+}

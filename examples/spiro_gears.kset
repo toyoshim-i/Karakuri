@@ -1,0 +1,8 @@
+{"t":"set","id":"spiro_gears","v":1}
+{"t":"part","layer":"L1","path":"spiro_gears.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"param","layer":"L3","key":"frame","value":1.2}
+{"t":"param","layer":"L4","key":"width","value":0.003}
+{"t":"param","layer":"L4","key":"exposure","value":1.5}
+{"t":"bind","layer":"L1","key":"reach","signal":"energy","curve":"smooth","range":[0.55,1.1]}

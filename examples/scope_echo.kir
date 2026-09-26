@@ -1,0 +1,70 @@
+// A thin waveform across the middle of the xy plane, its colour cycling round
+// the hue wheel, with its own past drawn behind it: each older copy is the
+// waveform as it stood a moment earlier, enlarged, shifted and dimmer, so the
+// history spreads outward in rainbow echoes. The waveform is three pairs of
+// sines whose amplitudes are the low, middle and high band levels. Seed / 256
+// is the copy, newest first; seed % 256 the segment along it.
+//
+//     cargo run -p karakuri-cli -- --set examples/scope_echo.kir,examples/flat_eye.kir,examples/tint_strokes.kir
+
+proc scope_echo {
+  kind     L1
+  topology lines
+  capacity [256, 32768] = 12288
+
+  // Levels of the low, middle and high bands.
+  param low    : float [0.0, 1.0]  = 0.7
+  param mid    : float [0.0, 1.0]  = 0.5
+  param high   : float [0.0, 1.0]  = 0.35
+
+  // Height of the waveform's swing, in world units.
+  param gain   : float [0.0, 1.5]  = 0.5
+
+  // Enlargement from one copy to the next older one, and the brightness each
+  // older copy keeps.
+  param zoom   : float [1.0, 1.2]  = 1.035
+  param decay  : float [0.5, 1.0]  = 0.94
+
+  // Turns of hue per second.
+  param cycle  : float [0.0, 2.0]  = 0.45
+
+  // Upward shift of each older copy, in world units; negative drifts down.
+  param drift  : float [-0.1, 0.1] = 0.004
+
+  emit position, velocity, tint
+
+  element {
+    let segs = 256u;
+    let g    = float(seed / segs);
+    let i    = float(seed % segs);
+
+    // The waveform as it stood `g` thirtieths of a second ago.
+    let tg = t - g / 30.0;
+
+    var ya = 0.0;
+    var yb = 0.0;
+    for k in 0..2 {
+      let s  = (i + float(k)) / float(segs);
+      let x  = s * 6.2831853;
+      let lo = sin(x * 1.5 + tg * 2.1) + 0.6 * sin(x * 2.5 - tg * 3.3);
+      let md = sin(x * 5.0 + tg * 4.7) + 0.6 * sin(x * 7.5 - tg * 6.1);
+      let hi = sin(x * 17.0 + tg * 9.3) + 0.6 * sin(x * 26.0 - tg * 12.7);
+      let env = sin(s * 3.1415927);
+      let y = (low * lo + mid * md * 0.7 + high * hi * 0.5) * env * gain * 0.5;
+      if k == 0 { ya = y; } else { yb = y; }
+    }
+
+    let sc  = pow(zoom, g);
+    let off = vec3(0.0, drift * g, 0.0);
+    let xa  = (i / float(segs) * 2.0 - 1.0) * 1.6;
+    let xb  = ((i + 1.0) / float(segs) * 2.0 - 1.0) * 1.6;
+    let pa  = vec3(xa, ya, 0.0) * sc + off;
+    let pb  = vec3(xb, yb, 0.0) * sc + off;
+
+    position = pa;
+    velocity = pa - pb;
+
+    let h = fract(tg * cycle);
+    tint = hsv_to_rgb(vec3(h, 0.85, 1.0)) * pow(decay, g);
+  }
+}

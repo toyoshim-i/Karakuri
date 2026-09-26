@@ -1,0 +1,90 @@
+// A double helix turning about its own axis: two backbone strands with the
+// narrow and wide grooves between them, joined by base-pair rungs whose two
+// halves take one of two complementary colour pairs. A glow climbs the helix
+// once every four beats. Seeds 0-1023 are the backbones, 512 segments each;
+// 1024-1151 the rungs, two halves each; any seed above that draws nothing.
+//
+//     cargo run -p karakuri-cli -- --set examples/double_helix.kir,examples/flat_eye.kir,examples/laser_beams.kir
+
+proc double_helix {
+  kind     L1
+  topology lines
+  capacity [1152, 4096] = 1152
+
+  // Radius of the helix, and its height, in world units.
+  param radius : float [0.2, 2.0]  = 1.0
+  param height : float [1.0, 8.0]  = 6.4
+
+  // Turns of the helix over its height, and turns per second it spins.
+  param turns  : float [1.0, 8.0]  = 2.6
+  param spin   : float [-1.0, 1.0] = 0.08
+
+  // Angle between the two strands in turns; 0.5 makes the two grooves equal.
+  param groove : float [0.2, 0.5]  = 0.38
+
+  // Tilt of the axis from the vertical, in radians.
+  param lean   : float [-1.0, 1.0] = 0.35
+
+  // Brightness of the glow that climbs the helix.
+  param pulse  : float [0.0, 4.0]  = 1.5
+
+  emit position, velocity, tint, size
+
+  element {
+    let spinr = t * spin * 6.2831853;
+    let bt    = max(beats, 0.0);
+    let ph    = fract(bt * 0.25);
+
+    var pa  = vec3(0.0);
+    var pb  = vec3(0.0);
+    var col = vec3(0.0);
+    var w   = 1.0;
+    var u   = 0.0;
+
+    if seed < 1024u {
+      // Backbones: strand = seed / 512.
+      let strand = float(seed / 512u);
+      let i      = float(seed % 512u);
+      let off    = strand * groove * 6.2831853;
+      for k in 0..2 {
+        let uk = (i + float(k)) / 512.0;
+        let a  = uk * turns * 6.2831853 + off + spinr;
+        let p  = vec3(cos(a) * radius, (uk - 0.5) * height, sin(a) * radius);
+        if k == 0 { pa = p; } else { pb = p; }
+      }
+      u   = i / 512.0;
+      col = mix(vec3(0.25, 0.55, 1.0), vec3(0.7, 0.35, 1.0), vec3(strand));
+      w   = 1.0;
+    } else {
+      if seed < 1152u {
+        // Rungs: one half per element, meeting at the axis-side midpoint.
+        let r    = float((seed - 1024u) / 2u);
+        let half = float((seed - 1024u) % 2u);
+        let uk   = (r + 0.5) / 64.0;
+        let a    = uk * turns * 6.2831853 + spinr;
+        let e0   = vec3(cos(a) * radius, (uk - 0.5) * height, sin(a) * radius);
+        let a1   = a + groove * 6.2831853;
+        let e1   = vec3(cos(a1) * radius, (uk - 0.5) * height, sin(a1) * radius);
+        let mid  = (e0 + e1) * 0.5;
+        pa = mix(e0, e1, vec3(half));
+        pb = mid;
+
+        // Two colour pairs; which strand carries which half is hashed.
+        let pairb = step(0.5, hash1(uint(r) * 7u + 1u));
+        let flip  = step(0.5, hash1(uint(r) * 7u + 2u));
+        let side  = abs(half - flip);
+        let ca = mix(vec3(1.0, 0.3, 0.2), vec3(1.0, 0.85, 0.2), vec3(side));
+        let cb = mix(vec3(0.2, 1.0, 0.45), vec3(0.2, 0.8, 1.0), vec3(side));
+        u   = uk;
+        col = mix(ca, cb, vec3(pairb)) * 0.8;
+        w   = 0.6;
+      }
+    }
+
+    let glow = exp(-pow((u - ph) * 9.0, 2.0)) * pulse;
+    position = rot_z(pa, lean);
+    velocity = rot_z(pa, lean) - rot_z(pb, lean);
+    tint     = col * (1.0 + glow);
+    size     = w * (1.0 + glow * 0.3);
+  }
+}

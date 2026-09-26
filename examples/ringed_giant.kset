@@ -1,0 +1,9 @@
+{"t":"set","id":"ringed_giant","v":1}
+{"t":"part","layer":"L1","path":"ringed_giant.kir"}
+{"t":"part","layer":"L3","path":"high_orbit.kir"}
+{"t":"part","layer":"L4","path":"sun_sky.kir"}
+{"t":"part","layer":"L4","index":1,"path":"facing_dots.kir"}
+{"t":"param","layer":"L3","key":"radius","value":10.0}
+{"t":"param","layer":"L3","key":"elevation","value":0.3}
+{"t":"param","layer":"L3","key":"speed","value":0.02}
+{"t":"param","layer":"L4","index":1,"key":"occluder","value":1.42}

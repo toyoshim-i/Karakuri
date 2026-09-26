@@ -1,0 +1,6 @@
+{"t":"set","id":"pillar_grid","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"pillar_grid.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L3","key":"turn","value":0.0}

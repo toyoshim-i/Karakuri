@@ -1,0 +1,6 @@
+{"t":"set","id":"truchet_flow","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"truchet_flow.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"exposure","signal":"energy","curve":"sqrt","range":[0.7,1.8]}
+{"t":"bind","layer":"L4","key":"width","signal":"band0","curve":"pow2","range":[0.025,0.07]}

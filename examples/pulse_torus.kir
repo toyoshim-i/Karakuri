@@ -1,0 +1,70 @@
+// A torus of points turning about a tilted axis, its tube swelling in eight
+// sectors round the ring, each sector to the level of one band, with a ripple
+// running round the ring and twisting along the tube. Each sector takes its own
+// hue. Seed / 256 is the step round the ring and seed % 256 the step round the
+// tube.
+//
+//     cargo run -p karakuri-cli -- --set examples/pulse_torus.kir,examples/halo_points.kir --param point_scale=0.025
+
+proc pulse_torus {
+  kind     L1
+  topology points
+  capacity [16384, 262144] = 65536
+
+  // Swell of each sector's tube, lowest band first.
+  param level0 : float [0.0, 1.0] = 0.8
+  param level1 : float [0.0, 1.0] = 0.6
+  param level2 : float [0.0, 1.0] = 0.5
+  param level3 : float [0.0, 1.0] = 0.55
+  param level4 : float [0.0, 1.0] = 0.4
+  param level5 : float [0.0, 1.0] = 0.35
+  param level6 : float [0.0, 1.0] = 0.3
+  param level7 : float [0.0, 1.0] = 0.25
+
+  // Radius of the ring and of the resting tube, in world units.
+  param ring   : float [0.5, 4.0] = 2.4
+  param tube   : float [0.05, 1.5] = 0.35
+
+  // Rotation in radians per second.
+  param spin   : float [-2.0, 2.0] = 0.3
+
+  // Brightness of the points.
+  param glow   : float [0.0, 2.0] = 0.08
+
+  emit position, tint
+
+  element {
+    let steps = float(capacity / 256u);
+    let u  = float(seed / 256u) / steps * 6.2831853;
+    let v  = float(seed % 256u) / 256.0 * 6.2831853;
+
+    // Sector levels blended round the ring.
+    let su = u / 6.2831853 * 8.0;
+    let i0 = floor(su);
+    var la = level0;
+    var lb = level1;
+    if i0 > 0.5 { la = level1; lb = level2; }
+    if i0 > 1.5 { la = level2; lb = level3; }
+    if i0 > 2.5 { la = level3; lb = level4; }
+    if i0 > 3.5 { la = level4; lb = level5; }
+    if i0 > 4.5 { la = level5; lb = level6; }
+    if i0 > 5.5 { la = level6; lb = level7; }
+    if i0 > 6.5 { la = level7; lb = level0; }
+    let lv = mix(la, lb, smoothstep(0.0, 1.0, su - i0));
+
+    let rip = 0.5 + 0.5 * sin(u * 6.0 - t * 2.5 + v * 2.0);
+    let tr  = tube * (1.0 + 1.2 * lv + 0.3 * rip);
+
+    let ctr = vec3(cos(u), 0.0, sin(u)) * ring;
+    let p   = ctr + (vec3(cos(u), 0.0, sin(u)) * cos(v) + vec3(0.0, sin(v), 0.0)) * tr;
+
+    let q = rot_axis(p, normalize(vec3(0.3, 1.0, 0.5)), t * spin);
+    let r = rot_x(q, 0.5);
+
+    let hue = fract(su / 8.0 + 0.55);
+    let rim = 0.4 + 0.6 * (0.5 + 0.5 * cos(v));
+
+    position = r;
+    tint     = hsv_to_rgb(vec3(hue, 0.75, 1.0)) * glow * rim * (0.5 + lv + 0.4 * rip);
+  }
+}

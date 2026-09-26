@@ -1,0 +1,75 @@
+// A honeycomb of hexagonal cells with glowing rims. On every `every` beats a
+// wave rolls out from the frame centre and lights each cell as its front
+// passes; between waves, single cells flare and fade at random. Draws the whole
+// frame and reads no geometry; a camera looking at the origin sets the frame's
+// aspect.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/hex_pulse.kir
+
+proc hex_pulse {
+  kind  L4
+  blend additive
+
+  // Cells across the frame's height.
+  param cells    : float [3.0, 40.0] = 12.0
+
+  // Beats between waves.
+  param every    : float [0.25, 8.0] = 2.0
+
+  // Width of the wave front, in cells.
+  param front    : float [0.3, 6.0] = 1.5
+
+  // Share of the cells flaring at any moment between waves.
+  param sparkle  : float [0.0, 0.5] = 0.06
+
+  // Hue of the rims; a lit cell turns towards the complementary hue.
+  param hue      : float [0.0, 1.0] = 0.58
+
+  // Brightness multiplier.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  fragment {
+    let fw  = normalize(-eye);
+    let rt  = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let upv = cross(rt, fw);
+    let sc  = vec2(dot(ray, rt), dot(ray, upv)) / (dot(ray, fw) * 0.57735);
+
+    // Two offset rectangular lattices; the nearer centre is this hexagon's.
+    let p  = sc * cells * 0.5;
+    let rr = vec2(1.0, 1.7320508);
+    let hh = rr * 0.5;
+    let qa = p - (floor(p / rr) * rr) - hh;
+    let qb = (p - hh) - (floor((p - hh) / rr) * rr) - hh;
+    var gv = qa;
+    if dot(qb, qb) < dot(qa, qa) {
+      gv = qb;
+    }
+    let hc = p - gv;
+
+    // Distance from the hexagon's centre in units where the rim is at 0.5.
+    let ag   = abs(gv);
+    let hx   = max(dot(ag, vec2(0.5, 0.8660254)), ag.x);
+    let edge = 0.5 - hx;
+    let rim  = exp(-edge * 40.0) + exp(-edge * 8.0) * 0.25;
+
+    // The wave: a ring of radius growing through the interval.
+    let ph   = fract(max(beats, 0.0) / every);
+    let rad  = ph * (cells * 1.2);
+    let dw   = abs(length(hc) - rad) / front;
+    let wave = exp(-dw * dw) * (1.0 - ph);
+
+    // Random flares: each cell draws a new chance every half second.
+    let ci   = floor(hc * 2.0 + vec2(1024.0));
+    let key  = uint(ci.x) * 73856093u + uint(ci.y) * 19349663u;
+    let slot = floor(t * 2.0);
+    let roll = hash1(key + uint(slot) * 2654435761u);
+    let fl   = step(1.0 - sparkle, roll) * (1.0 - fract(t * 2.0));
+
+    let lit  = clamp(wave + fl, 0.0, 1.5);
+    let cr   = hsv_to_rgb(vec3(hue, 0.8, 1.0));
+    let cl   = hsv_to_rgb(vec3(fract(hue + 0.45 + 0.1 * lit), 0.65, 1.0));
+    let fill = smoothstep(0.0, 0.08, edge) * (0.03 + 0.6 * lit);
+
+    color = vec4((cr * rim * (0.35 + lit) + cl * fill) * exposure, 1.0);
+  }
+}

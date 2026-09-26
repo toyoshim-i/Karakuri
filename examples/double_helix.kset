@@ -1,0 +1,8 @@
+{"t":"set","id":"double_helix","v":1}
+{"t":"part","layer":"L1","path":"double_helix.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"laser_beams.kir"}
+{"t":"param","layer":"L3","key":"frame","value":3.8}
+{"t":"param","layer":"L4","key":"width","value":0.01}
+{"t":"param","layer":"L4","key":"exposure","value":0.12}
+{"t":"bind","layer":"L1","key":"pulse","signal":"band0","curve":"pow2","range":[0.5,3.0]}

@@ -1,0 +1,70 @@
+// A fast ride down the inside of a long pipe whose wall carries a checkerboard
+// that fades between strong and washed out, with coloured glowing blobs smeared
+// along it; the camera weaves and the cross-section breathes into an oval, under
+// a vignette and a scanline shimmer. Reads `ray` against a camera facing
+// negative z.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/checker_pipe.kir --param turn=0
+
+proc checker_pipe {
+  kind  L4
+  blend additive
+
+  // Forward speed in pipe radii per second.
+  param speed    : float [0.0, 20.0] = 6.0
+
+  // How far the camera weaves off the axis and turns, as a fraction of the radius.
+  param weave    : float [0.0, 0.8] = 0.35
+
+  // Checker squares around the pipe.
+  param checks   : float [4.0, 32.0] = 12.0
+
+  // Period in seconds of the checker's fade between strong and washed out.
+  param wash     : float [1.0, 20.0] = 6.0
+
+  // Brightness of the coloured blobs on the wall.
+  param blobs    : float [0.0, 3.0] = 1.0
+
+  // Depth of the scanline modulation.
+  param scan     : float [0.0, 1.0] = 0.25
+
+  fragment {
+    let s  = t * 0.7;
+    let o  = vec3(sin(s) * weave * 0.6, sin(s * 1.37 + 1.0) * weave * 0.5, 0.0);
+    let d  = rot_x(rot_y(ray, sin(s * 0.8) * weave * 0.5), sin(s * 1.1) * weave * 0.3);
+
+    // Elliptical cross-section: solve the unit circle in scaled coordinates.
+    let br = vec2(1.0 + 0.18 * sin(t * 0.9), 1.0 - 0.18 * sin(t * 0.9));
+    let os = o.xy / br;
+    let ds = d.xy / br;
+    let qa = max(dot(ds, ds), 0.00001);
+    let qb = dot(os, ds);
+    let qc = dot(os, os) - 1.0;
+    let hit = (-qb + sqrt(max(qb * qb - qa * qc, 0.0))) / qa;
+    let p  = o + d * hit;
+
+    let ang = atan2(p.y / br.y, p.x / br.x) / 6.2831853;
+    let z   = p.z - t * speed;
+    let n   = floor(checks);
+    let ck  = step(0.5, fract(floor(ang * n) * 0.5 + floor(z * n / 6.2831853) * 0.5));
+    let amt = 0.5 + 0.5 * cos(t * 6.2831853 / wash);
+    var col = vec3(mix(0.45, ck, amt)) * 0.8;
+
+    // Blobs: five lanes around the wall, one smeared spot per lane per 6 units.
+    for i in 0..5 {
+      let fi = float(i);
+      let la = fract(fi * 0.2 + 0.1 + sin(fi * 3.1) * 0.05);
+      let da = abs(fract(ang - la + 0.5) - 0.5) * 6.2831853;
+      let dz = fract((z + fi * 2.3) / 6.0) - 0.5;
+      let g  = exp(-da * da * 30.0 - dz * dz * 20.0);
+      let hue = hsv_to_rgb(vec3(fract(fi * 0.23 + 0.05), 0.85, 1.0));
+      col += hue * g * blobs * 1.5;
+    }
+
+    let fog = exp(-hit * 0.12);
+    let v   = point_coord * 2.0 - 1.0;
+    let vig = clamp(1.0 - dot(v, v) * 0.35, 0.0, 1.0);
+    let sl  = 1.0 - scan * (0.5 + 0.5 * sin(point_coord.y * 1130.0 + t * 7.0));
+    color = vec4(col * fog * vig * sl, 1.0);
+  }
+}
