@@ -6,6 +6,7 @@ impl View {
     /// hands the frame's closure.
     pub fn draw(&mut self, ui: &mut Ui, panel: &mut Panel) {
         self.mixer_dirty = false;
+        self.prompt.cleanup_if_exited();
         let pal = self.room.palette();
         // The bay arranges itself before any other layout reads this frame.
         plan_into(panel, self.canvas, &mut self.placed);

@@ -666,15 +666,15 @@ impl SessionManager {
         lock.get(&id).cloned()
     }
 
-    /// Resets / removes the session for the given selection so it can be restarted.
-    pub fn restart(&self, selection: &CliSelection) -> Option<Arc<TerminalSession>> {
+    /// Removes and cleans up the session for the given selection.
+    pub fn remove(&self, selection: &CliSelection) {
         let id = match selection {
-            CliSelection::Unselected => return None,
+            CliSelection::Unselected => return,
             CliSelection::Preset(preset) => preset.command().to_owned(),
             CliSelection::Custom(cmd) => {
                 let trimmed = cmd.trim();
                 if trimmed.is_empty() {
-                    return None;
+                    return;
                 }
                 format!("custom:{trimmed}")
             }
@@ -682,6 +682,11 @@ impl SessionManager {
         if let Ok(mut lock) = self.sessions.lock() {
             lock.remove(&id);
         }
+    }
+
+    /// Resets / removes the session for the given selection so it can be restarted.
+    pub fn restart(&self, selection: &CliSelection) -> Option<Arc<TerminalSession>> {
+        self.remove(selection);
         self.get_or_spawn(selection)
     }
 }

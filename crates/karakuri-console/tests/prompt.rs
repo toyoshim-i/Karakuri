@@ -496,3 +496,37 @@ fn session_manager_restarts_exited_session() {
         );
     }
 }
+
+#[test]
+fn prompt_state_cleans_up_and_resets_to_unselected_on_process_exit() {
+    #[cfg(unix)]
+    {
+        use karakuri_console::view::prompt::{CliSelection, PromptState, SessionStatus};
+
+        let mut state = PromptState::new();
+        state.select_custom("true".to_string());
+        state.set_captured(true);
+        state.set_input("lingering input");
+        assert!(!state.selection.is_unselected());
+        assert!(state.is_captured());
+
+        let session = state.active_session().expect("active session");
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if matches!(session.status(), SessionStatus::Exited(_)) {
+                break;
+            }
+        }
+        assert!(!session.is_running());
+
+        let cleaned = state.cleanup_if_exited();
+        assert!(cleaned);
+        assert_eq!(state.selection, CliSelection::Unselected);
+        assert!(!state.is_captured());
+        assert!(state.input().is_empty());
+        assert!(state
+            .sessions
+            .active_session(&CliSelection::Custom("true".to_string()))
+            .is_none());
+    }
+}
