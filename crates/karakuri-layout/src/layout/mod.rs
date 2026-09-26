@@ -340,9 +340,6 @@ impl Layout {
             let mut total_shrink_before = 0.0;
             for k in (0..=index).rev() {
                 let c = placed[k];
-                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let min_c = if self.node(c).collapsed {
                     current_sizes[k]
                 } else {
@@ -353,9 +350,6 @@ impl Layout {
             let mut total_grow_after = 0.0;
             for k in (index + 1)..placed.len() {
                 let c = placed[k];
-                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let max_c = if self.node(c).collapsed {
                     current_sizes[k]
                 } else {
@@ -370,9 +364,6 @@ impl Layout {
             let mut total_grow_before = 0.0;
             for k in (0..=index).rev() {
                 let c = placed[k];
-                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let max_c = if self.node(c).collapsed {
                     current_sizes[k]
                 } else {
@@ -383,9 +374,6 @@ impl Layout {
             let mut total_shrink_after = 0.0;
             for k in (index + 1)..placed.len() {
                 let c = placed[k];
-                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let min_c = if self.node(c).collapsed {
                     current_sizes[k]
                 } else {
@@ -405,9 +393,6 @@ impl Layout {
             let mut to_shrink = -actual_delta;
             for k in (0..=index).rev() {
                 let c = placed[k];
-                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let min_c = if self.node(c).collapsed {
                     new_sizes[k]
                 } else {
@@ -424,9 +409,6 @@ impl Layout {
             let mut to_grow = -actual_delta;
             for k in (index + 1)..placed.len() {
                 let c = placed[k];
-                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let max_c = if self.node(c).collapsed {
                     new_sizes[k]
                 } else {
@@ -444,9 +426,6 @@ impl Layout {
             let mut to_grow = actual_delta;
             for k in (0..=index).rev() {
                 let c = placed[k];
-                if k < index && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let max_c = if self.node(c).collapsed {
                     new_sizes[k]
                 } else {
@@ -463,9 +442,6 @@ impl Layout {
             let mut to_shrink = actual_delta;
             for k in (index + 1)..placed.len() {
                 let c = placed[k];
-                if k > index + 1 && !matches!(self.node(c).sizing, Sizing::Flex(_)) {
-                    continue;
-                }
                 let min_c = if self.node(c).collapsed {
                     new_sizes[k]
                 } else {

@@ -55,7 +55,7 @@ fn a_drag_out_and_back_reproduces_the_arrangement() {
 }
 
 #[test]
-fn a_drag_never_pushes_through_to_a_further_neighbour() {
+fn a_drag_cascades_through_to_further_neighbours_when_at_minimum() {
     let mut l = simple();
     l.set_viewport(Rect::new(0.0, 0.0, 1000.0, 400.0));
     l.solve();
@@ -64,14 +64,21 @@ fn a_drag_never_pushes_through_to_a_further_neighbour() {
     let centre = l.find("centre").unwrap();
     let right = l.find("right").unwrap();
 
-    // Boundary 1 is centre|right. Dragging it far left runs into `centre`'s
-    // minimum of 80 — and stops there, rather than carrying on into `left`.
+    // Boundary 1 is centre|right. Dragging it left to 150 compresses `centre` down to its
+    // minimum of 80, and then cascades through to push `left` from 100 down to 68.
     let landed = l.set_divider(root, 1, 150.0);
-    assert!(near(landed, 182.0), "landed at {landed}");
+    assert!(near(landed, 150.0), "landed at {landed}");
     assert!(near(l.rect(centre).w, 80.0));
-    assert!(near(l.rect(left).w, 100.0), "the far neighbour moved");
-    // The pair's combined extent is what it was: nothing else gave or took.
-    assert!(near(l.rect(centre).w + l.rect(right).w, 836.0 + 60.0));
+    assert!(near(l.rect(left).w, 68.0));
+    assert!(near(l.rect(right).w, 848.0));
+    assert_invariants(&l);
+
+    // Dragging even further left to 50 runs into the combined minima:
+    // left min 50 + divider 2 + centre min 80 = 132.
+    let stopped = l.set_divider(root, 1, 50.0);
+    assert!(near(stopped, 132.0), "stopped at {stopped}");
+    assert!(near(l.rect(centre).w, 80.0));
+    assert!(near(l.rect(left).w, 50.0));
     assert_invariants(&l);
 }
 
