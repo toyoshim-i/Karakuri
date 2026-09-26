@@ -1,33 +1,5 @@
 //! Console panel layout model: computes region bounds and resolves pointer hit tests.
-//!
 //! Evaluates tree hierarchies of view leaves and split containers under size constraints.
-//!
-//! ## Core Invariants
-//!
-//! - **Non-mutating solver**: Constraint solving evaluates rectangles into ephemeral buffers
-//!   without altering the stored arrangement model.
-//! - **Fold vs. Set-aside**:
-//!   - Collapsing ([`Layout::collapse`]) represents persistent user arrangement state.
-//!   - Setting aside ([`Layout::set_aside`]) is ephemeral runtime dismissal and is not serialized.
-//! - **Edge retention**: Nodes configured with [`Spec::keeps_its_edge`] retain their divider
-//!   and hit-test target when collapsed.
-//!
-//! ```
-//! use karakuri_layout::{Layout, Rect, Spec};
-//!
-//! let mut layout = Layout::new(Spec::row(
-//!     4.0,
-//!     vec![
-//!         Spec::view("library").fixed(240.0).min(160.0).max(400.0),
-//!         Spec::view("program").flex(1.0).min(200.0),
-//!     ],
-//! ));
-//! let program = layout.find("program").unwrap();
-//!
-//! layout.set_viewport(Rect::new(0.0, 0.0, 1280.0, 720.0));
-//! layout.solve();
-//! assert_eq!(layout.rect(program), Rect::new(244.0, 0.0, 1036.0, 720.0));
-//! ```
 
 mod layout;
 mod spec;

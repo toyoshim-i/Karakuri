@@ -160,18 +160,7 @@ fn records(parent: Option<usize>) -> String {
     }
 }
 
-/// Validates tree structure and invariants for deserialized arrangements in a single pass.
-///
-/// Ensures the following invariants:
-/// 1. The arena has at least one node and `root` addresses a valid node.
-/// 2. The root has no parent, and every other node's `parent` correctly matches the split holding it.
-/// 3. Every child index addresses a valid node in the arena.
-/// 4. No node is referenced more than once (preventing sharing and cycles).
-/// 5. Every node in the arena is reachable from the root.
-/// 6. A recorded solo target addresses a valid node.
-///
-/// Note that programmatic specs built via [`Layout::new`] guarantee these
-/// invariants by construction.
+/// Validates tree structure and invariants (connectivity, single-parent, cycle freedom) in one pass.
 pub(crate) fn check_structure(
     nodes: &[Node],
     root: NodeId,
