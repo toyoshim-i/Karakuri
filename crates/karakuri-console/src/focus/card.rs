@@ -1,22 +1,9 @@
 use super::*;
 
-/// One of the four cards the address descends into, and the whole of what one
-/// card does not share with the next.
+/// Specification for modal cards descended from controls (ADR-0350, ADR-0351, ADR-0352).
 ///
-/// A card is a rung hanging off a control: `enter` on the control puts the card
-/// down, a digit names the nth row of it, `↑↓` walk the rows from the one the
-/// card remembers — clamped, never wrapped — `←→` are refused, `enter` on a row
-/// performs that row, and `esc` or `Tab` takes the card away and leaves the
-/// address on the control it hangs from. That is written once, in
-/// [`open_card`], [`name_row`], [`walk_card`] and [`card_enter`]; a row of
-/// [`CARDS`] is what those four read.
-///
-/// The four are the audio-in pill's inputs and the arrangement pill's menu
-/// ([ADR-0350](../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)),
-/// the Sequencer's `+ lane` chooser
-/// ([ADR-0351](../../../docs/adr/0351-the-lane-chooser-is-a-rung-of-the-address.md))
-/// and the Master's `+ add` chooser
-/// ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+/// Defines behavior for audio inputs, arrangement menu, lane chooser, and master effect chooser.
+/// Cards open with `enter`, walk vertically via digits/arrows (clamped), execute via `enter`, and close via `esc`/`Tab`.
 pub(crate) struct Card {
     /// The control the card hangs from, and what [`card_of`] finds it by.
     pub(crate) control: Control,
@@ -282,15 +269,9 @@ pub(crate) fn card_rows(view: &View, control: Control) -> usize {
     card_of(control).map_or(0, |card| (card.rows)(view))
 }
 
-/// The card on the focused bay's address, and whether the address has descended
-/// into its rows — or `None` where the address is on no control that hangs a
-/// card, or where the card that control hangs is up.
+/// Returns the card on the focused bay's address and whether it has descended, or `None` (ADR-0332).
 ///
-/// The reading `esc` takes. A card on the address's path is a level of the
-/// address; a card that is down anywhere else is not, and `esc` leaves it alone
-/// ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
-///
-/// `panel` must be solved: the focused bay is read off the arrangement.
+/// Evaluates whether `esc` should dismiss an active card on the current address path. Requires solved `panel`.
 pub fn card_on_path(view: &View, panel: &Panel) -> Option<(Control, bool)> {
     let bay = view.focused(panel)?;
     let built = built(bay.name)?;
@@ -343,12 +324,9 @@ pub fn shut_cards(view: &mut View) {
 pub const NOTHING_BELOW: &str = "nothing below this control is drawn, so a digit here reaches \
                              nothing — esc goes back up";
 
-/// `enter` on the control a card hangs from: the card, put down.
+/// Opens the card hanging from the focused control on `enter`.
 ///
-/// Declines where the card is already down, and where it has nothing to offer —
-/// a card with no rows offers nothing to pick and nothing to leave by, which is
-/// [`crate::view::View::open_lane`]'s own rule. The address stays on the control;
-/// a digit or an arrow is what descends into the rows.
+/// Declines if already open or empty; the address remains on the parent control until a row is chosen.
 pub fn open_card(view: &mut View, control: Control) -> Asked {
     let Some(card) = card_of(control) else {
         return Asked::Nothing("this control puts no card down");
@@ -365,13 +343,9 @@ pub fn open_card(view: &mut View, control: Control) -> Asked {
     }
 }
 
-/// A digit below the control a card hangs from: the nth row of the card, with the
-/// address descended onto it.
+/// Navigates to the 1-indexed `nth` row of a card via digit key press.
 ///
-/// `under` is the path the card's rung is at — `[HEAD, through]` for a card on a
-/// head control and `[through]` for one on a headless row's own control. The
-/// digits count what the card drew, from one, and a digit past that declines with
-/// the card's own sentence.
+/// `under` specifies the parent path. Declines if the digit exceeds the drawn row count.
 pub fn name_row(
     view: &mut View,
     bay: &'static str,
@@ -393,17 +367,9 @@ pub fn name_row(
     }
 }
 
-/// An arrow on the control a card hangs from, or on one of the card's rows: the
-/// neighbouring row.
+/// Walks vertically between card rows using arrow keys (clamped, never wrapping).
 ///
-/// `from` is the row the address is on, or `None` where it is still on the
-/// control — and then the walk starts from the row the card remembers, which is
-/// [`walk`]'s rule at bay level one rung down: the arrows work with no digit
-/// pressed first. `under` is the path the card's rung is at, as [`name_row`]
-/// takes it.
-///
-/// A card is a column of rows, so `←→` are refused and the refusal names the pair
-/// that works. The walk is clamped at both ends and never wraps.
+/// Refuses horizontal arrows `←→`. If `from` is `None` (on parent control), resumes from the remembered row.
 pub fn walk_card(
     view: &mut View,
     bay: &'static str,
@@ -449,18 +415,9 @@ pub fn walk_card(
     }
 }
 
-/// `enter` on one of a card's rows: what that row performs, with the card taken
-/// away and the address back on the control it hangs from.
+/// Executes the action for `enter` on a card row and dismisses the card (ADR-0333).
 ///
-/// `above` is that control and `row` is the control the addressed row is. A row
-/// that declines performs nothing, so the card stays down and the address stays
-/// on the row.
-///
-/// A card this console owns is taken away here, before the answer leaves; a card
-/// the host owns leaves in the answer, and the host takes it away through the
-/// method a pointer press on that row already reaches (ADR-0333). `above` is
-/// allowed to hang no card — a slot of the master chain is a rung and not one —
-/// and then the row answers for itself and nothing is taken away.
+/// Returns focus to the parent control `above`. If execution declines, the card and address remain intact.
 pub fn card_enter(
     view: &mut View,
     bay: &'static str,
@@ -483,12 +440,9 @@ pub fn card_enter(
     asked
 }
 
-/// What `enter` on one row of a card asks for — the one thing the four cards do
-/// not share.
+/// Resolves the specific action requested by pressing `enter` on the 1-indexed `nth` card row.
 ///
-/// `nth` counts the rung from one and `verbs` is how many rows the card draws
-/// before the ones it lists, so the nth listed thing is at `nth - verbs - 1`. A
-/// control that is not a card's row answers with its own sentence.
+/// Adjusts index by `verbs` (preceding static action rows). Returns a refusal sentence for non-row controls.
 fn row_act(view: &View, row: Control, nth: usize, verbs: usize) -> Asked {
     match row {
         Control::Input => match view

@@ -4,15 +4,9 @@ use super::*;
 // The grammar: what the six keys reach inside a bay
 // ---------------------------------------------------------------------------
 
-/// The four keys of the grammar that are addressed to whatever the bay's
-/// address is on.
+/// The four grammar keys addressed to the current focus target (ADR-0259).
 ///
-/// `Tab` and `esc` are the other two of ADR-0259's six and are not here: they
-/// move the address rather than acting on it, so they reach the same thing in
-/// every bay and no bay has to declare them.
-///
-/// This is the classifier the table is written in and the check reads;
-/// [`Press`] is one press with what the key itself said.
+/// Excludes global navigation keys (`Tab` and `esc`). Classified for table dispatch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Grammar {
     /// A digit — the nth thing one level below the address, and `0` the head.
@@ -66,11 +60,7 @@ impl Arrow {
     }
 }
 
-/// One press of the grammar, with what the key itself said.
-///
-/// A digit carries which digit and an arrow carries which way; `space` and
-/// `enter` carry nothing, because the address is the whole of what they are
-/// addressed to.
+/// A grammar key press carrying key-specific parameters (digit index or arrow direction).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Press {
     Digit(usize),
@@ -91,14 +81,9 @@ impl Press {
     }
 }
 
-/// A control a bay draws, as the grammar addresses it.
+/// Interactive panel controls addressable by the focus ladder (ADR-0259).
 ///
-/// One variant per control the nine bays draw at a rung the address reaches, in
-/// the order the bay draws them — which is what makes a digit name the nth of
-/// them. It is not a list of every rectangle on the panel: a readout is not a
-/// control, and a control ADR-0259's walk does not name is not addressed — each
-/// of those is written down at the bay's row in [`BUILT`] rather than left to
-/// be noticed.
+/// Variants correspond to addressable elements in draw order, excluding non-interactive readouts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Control {
     // -- the Mixer ---------------------------------------------------------
@@ -248,16 +233,9 @@ pub enum Control {
     Back,
 }
 
-/// What a control answers to, which is the one thing the grammar has to know
-/// about a control and the whole of what decides which of the four keys act on
-/// it.
+/// Interaction semantics of a control defining which grammar keys act on it (ADR-0259).
 ///
-/// ADR-0259's kinds, as the grammar reads them: a state is a closed list
-/// `space` cycles, a level is a continuum the arrows step and `space` returns
-/// to its default, an act is a control that performs rather than sets, and the
-/// last three are what the walk found that the record's seven do not have a
-/// word for — a row of alike cells, a continuum with no value it was declared
-/// at, and a control that is drawn and answers nothing.
+/// Categorizes controls into cyclical states, stepped levels, actions, cell rows, uninitialized continuums, or inert items.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Answers {
     /// A closed list: `space` cycles it and the arrows decline, because the values
@@ -295,12 +273,7 @@ impl Control {
             Control::Scope => Answers::State,
             Control::Star => Answers::State,
             Control::Params => Answers::Act(Act::Read),
-            // **The figure is a track and not a level**: a press positions it
-            // inside a band that is a guard on a hand (ADR-0291) and the arrows
-            // step it by one beat a minute, which is
-            // [ADR-0350](../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md).
-            // What the grid runs at is not a value this row declares, so there
-            // is no state for `space` to return it to.
+            // Tempo track: stepped by 1 BPM via arrows within safety bounds (ADR-0291, ADR-0350); `space` is inert.
             Control::Tempo => Answers::Track(
                 "the tempo figure has no value it was declared at, so there is nothing for \
                  space to return it to — the arrows step it a beat a minute, a press names one \
@@ -378,16 +351,9 @@ impl Control {
         matches!(self.answers(), Answers::Level)
     }
 
-    /// What `enter` on this control performs, or `None` for one that sets rather
-    /// than performs.
+    /// Action executed by `enter`, or `None` for setter controls (ADR-0259).
     ///
-    /// It is [`Control::answers`] with one addition, and the addition is the one
-    /// place a control is two of ADR-0259's kinds at once: a parameter row is a
-    /// level and it also performs, because the sensitivity row under it carries
-    /// `take back` and that is the act of the control the row draws rather than a
-    /// control of its own — a parameter with nothing holding it draws no
-    /// sensitivity row at all. A fourth rung for one chip would be a rung whose
-    /// only inhabitant is sometimes there.
+    /// Parameter rows act as both levels and actions ("take back" sensitivity act).
     pub const fn acts(self) -> Option<Act> {
         match self.answers() {
             Answers::Act(act) => Some(act),
@@ -402,11 +368,7 @@ impl Control {
     pub const fn reached_by(self, key: Grammar) -> bool {
         match key {
             Grammar::Enter => self.acts().is_some(),
-            // **Two rungs are not controls**, and a digit descends through
-            // them — which is the only way the Inspector's third rung is
-            // reached at all. **`+ lane` is a control and a rung both**: it
-            // performs — `enter` puts the chooser down — and a digit then
-            // names the nth entry of the card it put there.
+            // Intermediate traversal rungs: allows digits to descend, and `+ lane` performs on `enter`.
             Grammar::Digit => matches!(
                 self,
                 Control::DeckHead
@@ -499,14 +461,7 @@ pub enum Act {
     Add,
 }
 
-/// What the things at one rung are made of: the controls drawn first, and the
-/// control every one after them is.
-///
-/// A fixed list is not enough for two of the nine. An Inspector pane draws one
-/// deck head and then a node group per node of the Set in the slot, and a
-/// Sequencer lane draws one label and then a cell per step of the mode — so a
-/// rung is *a prefix and a repeat*, and how many of the repeat there are is the
-/// bay's own reading rather than anything written here.
+/// Composition of controls at a rung: fixed prefix controls followed by repeating elements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Of {
     /// The controls drawn before the counted ones, in draw order.
@@ -514,14 +469,7 @@ pub struct Of {
     /// The control every thing after them is, or `None` where a thing draws only
     /// the controls above.
     pub then: Option<Control>,
-    /// The controls drawn *after* the counted ones, in draw order.
-    ///
-    /// The Master bay is what asks for it: its items are the out fader, then one
-    /// per slot of the chain, then `+ add`, and a rung that is a prefix and a
-    /// repeat cannot say that. Every entry here is drawn whenever the rung is, so
-    /// the count a bay reports includes all of them — which is what lets the nth
-    /// be resolved from the end
-    /// ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+    /// Suffix controls drawn after the repeating elements in draw order (ADR-0352, e.g. Master `+ add`).
     pub last: &'static [Control],
 }
 
@@ -542,12 +490,7 @@ impl Of {
         }
     }
 
-    /// The `nth` control of this rung, counting from one, against a rung drawing
-    /// `drawn` of them — or `None` past the end.
-    ///
-    /// `drawn` is the bay's reading and not this table's: a pane with two nodes
-    /// draws three things at its second rung and a pane with nine draws ten, and a
-    /// digit counts what was drawn.
+    /// Returns the 1-indexed `nth` control on this rung given `drawn` total elements, or `None` if out of bounds.
     pub fn nth(&self, nth: usize, drawn: usize) -> Option<Control> {
         if nth == HEAD || nth > drawn {
             return None;
@@ -585,34 +528,17 @@ impl Of {
     }
 }
 
-/// What a bay's items are.
-///
-/// Two shapes, and the split is ADR-0259's own: a headless row's *"items are
-/// the controls left to right"*, and every other bay's items are alike things
-/// with controls under them.
+/// Structural classification of bay items: direct controls vs. compound items with sub-controls (ADR-0259).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Items {
-    /// The bay's items are its controls, so a digit at bay level names one outright
-    /// and there is no item rung at all — the Transport, the Outputs row, the
-    /// Master chain and the Program bay.
-    ///
-    /// An [`Of`] and not a plain list, because the Master's items are the out
-    /// fader, one per slot of the chain, and `+ add`.
+    /// Bay items are direct controls without an intermediate item rung (Transport, Outputs, Master, Program).
     Controls(Of),
     /// The bay lists alike things and a digit names the nth of them; these are the
     /// controls one of them draws.
     Alike(Of),
 }
 
-/// One bay's grammar: what each level of its address is made of.
-///
-/// The table [`BUILT`] is written in, and the thing
-/// `crates/karakuri/src/main.rs`'s `key_column` reads in place of this
-/// program's `match` — a digit reaches a different row in every bay, so a scan
-/// of the arms cannot say which row a press lands on and a dispatch is what can
-/// ([ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md),
-/// [ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md),
-/// [ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)).
+/// Grammar specification defining address levels and dispatch for a bay (ADR-0259, ADR-0333, ADR-0343).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Built {
     /// The bay, by the name the arrangement gives it.
@@ -622,16 +548,7 @@ pub struct Built {
     pub head: &'static [Control],
     /// What the bay's items are.
     pub items: Items,
-    /// The third rung: the control the address descends *through*, and what is
-    /// under it. ADR-0259 calls the Inspector three deep and says it is *"what
-    /// proves the address has to be a path rather than two levels"*.
-    ///
-    /// Four bays have one, and which rung it hangs off is what differs. The
-    /// Inspector's is under an *item* — a pane's deck head and its node groups.
-    /// The Sequencer's is under a *head* control, `+ lane`. The Transport's two
-    /// and the Master's `+ add` are under a headless row's own controls, and the
-    /// Master's slots are there too. Every one of those but the slots is a card
-    /// the address descends into and `esc` takes away.
+    /// Sub-controls descended through the specified control (third rung / modal cards) (ADR-0259).
     pub under: &'static [(Control, Of)],
     /// What `enter` on an item performs, or `None` where an item is not an act.
     pub act: Option<Act>,
@@ -663,14 +580,7 @@ impl Built {
             .map_or(Of::NONE, |(_, of)| *of)
     }
 
-    /// Whether one of the four keys acts anywhere in this bay, derived from what
-    /// the bay is made of rather than listed beside it — a second list would be a
-    /// second answer to *what does `space` do here*.
-    ///
-    /// The fold is not counted here. `space` at bay level folds every one of the
-    /// nine, so counting it would make this answer `true` for `space` in a bay
-    /// whose controls answer nothing — and the page would then owe nine badges for
-    /// one rule. It is declared once, under [`ANY`], by [`reaches`].
+    /// Returns whether the grammar key acts within this bay (excluding global bay folding under [`ANY`]).
     pub fn reaches(&self, key: Grammar) -> bool {
         match key {
             // **A digit names the nth item, and `0` the head.** Every bay the
@@ -716,18 +626,7 @@ pub fn built(bay: &str) -> Option<&'static Built> {
     BUILT.iter().find(|found| found.bay == bay)
 }
 
-/// Every (bay, key) pair the grammar binds, flattened — the dispatch table as a
-/// check can read it.
-///
-/// `crates/karakuri/src/main.rs`'s `key_column` holds the *rows* each pair
-/// reaches, because a page heading is what a check reads and is not something
-/// this program says to anybody; this is the half that says which pairs exist,
-/// and the two are held against each other in both directions.
-///
-/// [`ANY`] is the first pair and is not a bay. `space` at bay level is the
-/// fold, and it works in every one of the nine — so it is one route naming all
-/// of them rather than nine routes naming one row, which is what a badge
-/// reading `space &middot; in any bay` says.
+/// Flattened (bay, key) bindings in the grammar dispatch table, including [`ANY`] for global bay fold.
 pub fn reaches() -> Vec<(&'static str, Grammar)> {
     let mut found = vec![(ANY, Grammar::Space)];
     for bay in BUILT {

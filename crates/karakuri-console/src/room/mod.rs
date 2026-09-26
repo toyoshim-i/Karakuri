@@ -5,11 +5,7 @@
 use egui::epaint::Shadow;
 use egui::Color32;
 
-/// Which room the panel is in.
-///
-/// Two, because a room is either lit or it is not. The mock's third button —
-/// *follow you* — chooses between these from the reader's system theme rather
-/// than being a third set of colours.
+/// Which room (theme) the panel is in: Day or Night.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Room {
     #[default]
@@ -76,19 +72,8 @@ pub struct Palette {
     pub glow: Color32,
     /// `--c-glowp`: the same on a pink one.
     pub glow_pink: Color32,
-    /// `--c-band-green`: the first of the risk badge's five, and the only one of
-    /// the five that is not a warning of some degree.
-    ///
-    /// These five are the one group here that is not a mood. Every colour above
-    /// says what a thing *is* — armed, on air, an address — and each is used
-    /// wherever that thing is drawn. The bands say where one number fell on one
-    /// scale, they are used in exactly one place
-    /// ([`view::caption_into`](crate::view::caption_into)), and the mock gives them
-    /// custom properties of their own rather than reaching for `--c-mint` and
-    /// `--c-pink`: a green dot is not *live in the good sense* and a red one is not
-    /// *on air*. Transcribed as five because the stylesheet states five, and read
-    /// through [`view::Band`](crate::view::Band), which is where the number becomes
-    /// one of them.
+    /// `--c-band-green`: risk badge base band (read through [`view::Band`](crate::view::Band)).
+    /// Used by [`view::caption_into`](crate::view::caption_into) for scale-based status indication.
     pub band_green: Color32,
     /// `--c-band-blue`.
     pub band_blue: Color32,
@@ -188,11 +173,6 @@ const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Color32 {
     )
 }
 
-/// The type sizes and the boxes they sit in, in the same logical pixels the
-/// arrangement is stated in.
-///
-/// A row's height is the rule `karakuri_console`'s module documentation gives
-/// for the arrangement's own numbers — padding, plus the font size times
-/// `.console`'s `line-height: 1.5` — so the two are derived the same way and a
-/// bay head is 27 in both places or in neither.
+/// Type sizes and box dimensions in logical pixels, derived matching arrangement rules
+/// (`padding + font_size * line_height`).
 pub mod size;

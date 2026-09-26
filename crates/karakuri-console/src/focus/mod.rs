@@ -1,78 +1,6 @@
-//! The bay a key press is addressed to, and what each bay remembers.
+//! Focus ring traversal and keyboard navigation grammar (ADR-0259, ADR-0332, ADR-0333, ADR-0343).
 //!
-//!
-//! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-//! decided that a key press is addressed to whatever holds focus, that `Tab`
-//! and `shift-Tab` move focus between bays along the arrangement's own walk,
-//! and that a bay's address is a path — a digit names the nth thing one level
-//! below it and `0` names the bay's head. This module is the whole of that: the
-//! ring, the pointer that walks it and the address each bay remembers
-//! ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
-//! and the four keys that act inside a bay, in the Mixer and the Library
-//! ([ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md))
-//! and then in the seven that were left
-//! ([ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)).
-//!
-//! # The three pointers are three readings of one thing
-//!
-//! `View::selection`, `View::cursor_row` and `View::scope` were three private
-//! fields with the same paragraph written at each of them — *nothing downstream
-//! can be the model of record for it*. They are three readings of [`Address`]
-//! now, on two bays:
-//!
-//! | pointer | bay | where in the address | | --- | --- | --- | |
-//! `View::selection` | `mixer` | the item the bay was last on — a strip | |
-//! `View::cursor_row` | `library` | the item the bay was last on — a row | |
-//! `View::scope` | `library` | the control last named under the head |
-//!
-//! Nothing about what any of them means changes, which is the record's own
-//! clause: what each of them *refuses* — a deck the mixer draws no strip for, a
-//! row past the listing, a scope with no chip — stays at the method that
-//! refuses it. What moved is where the number is kept.
-//!
-//! # The head is `0` and is not remembered
-//!
-//! [`Address::remembered`] answers *the nth item last named under a path*, and
-//! `0` is never one of them. The head is where a bay keeps the controls that
-//! are about the bay rather than about anything in it, so there is one of it
-//! and there is nothing to remember; a bay that remembered *the head* under the
-//! same key as *the third strip* would lose the deck selection the first time
-//! an operator pressed `0`. The head is still a rung the address descends
-//! through — which is exactly how the Library's scope is reached, at `[HEAD]` —
-//! and it is [`Address::at`] that says so.
-//!
-//! # The ring is derived and `REGIONS` is what it is checked against
-//!
-//! [`ring`] walks the arrangement: a column's children top to bottom, a row's
-//! left to right, and it stops at the first node that is a bay rather than
-//! descending into it. ADR-0259 asks for exactly that — *"a ring derived from
-//! the solved tree is the honest implementation and the constant is a thing to
-//! check against, not the source"* — because an operator who has dragged a
-//! divider or folded a pane has moved the traversal with it and nothing has to
-//! be told. `tests/focus.rs` is where the constant does the checking.
-//!
-//! A folded bay stays in the ring, and the reason is the narrow one: it is in
-//! the ring so that there is something to press to open it, not so that it can
-//! be operated. So [`ring`] asks [`Layout::children`] and never
-//! [`Layout::placed_children`] — the visible half is the paint's question and
-//! not the walk's.
-//!
-//! # What this module does not do
-//!
-//! It binds no key. `crates/karakuri/src/main.rs` is where `Tab` and `esc`
-//! reach these methods, for [`crate::panel`]'s reason: a surface is where the
-//! buck stops and this crate is asked rather than asking.
-//!
-//! The six keys are all here. A digit, the arrows, `space` and `enter` are the
-//! grammar ADR-0259 designs; [`press`] resolves an address against what a bay
-//! is drawing and answers what the host has to do about it, and [`BUILT`] is
-//! the table it is written in — one row per bay, all nine of them since
-//! [ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md).
-//!
-//! `space` on a bay is the fold, and it is the one press that means the same
-//! thing wherever focus is. So it is declared once, under [`ANY`], rather than
-//! nine times over — which is what lets *Fold a bay away* carry one key badge
-//! saying `space · in any bay`.
+//! Traverses arrangement bays (`Tab`/`shift-Tab`) using hierarchical address paths and keyboard grammar.
 
 use std::collections::BTreeMap;
 
@@ -116,14 +44,7 @@ pub fn press(
     let Some(bay) = view.focused(panel) else {
         return Asked::Nothing("this arrangement draws no bay to address a key to");
     };
-    // **A folded bay answers `space` and nothing else.** That is the narrow
-    // reason it keeps its place in the ring — it is there so that there is
-    // something to press to open it, not so that it can be operated — and a
-    // digit, `enter` and the arrows decline *whatever the address had reached*
-    // inside it, because nothing is drawn for them to land on (ADR-0259).
-    //
-    // **`space` opens it from wherever the address was**, for the same reason:
-    // the press is about the bay and not about what is under it.
+    // A folded bay accepts only `space` (to unfold) and rejects all inner navigation (ADR-0259).
     if panel
         .layout()
         .find(bay.name)

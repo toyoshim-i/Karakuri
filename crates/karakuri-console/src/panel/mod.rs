@@ -1,83 +1,7 @@
-//! The panel's model: the arrangement, the drag in progress, and the
-//! operations, each of which names what it acts on ([`Op`]).
+//! The panel model managing arrangement, active drags, and operations ([`Op`]).
 //!
-//! This is what a view drives. It holds a [`Layout`] and a pointer, and nothing
-//! else: no window, no device, no toolkit. Everything here runs on a machine
-//! with no graphics adapter, which is what lets *what a pointer does to a
-//! divider* be answered by a test rather than by looking at it.
-//!
-//! # An operation returns what happened, not a line to print
-//!
-//! [`press`](Panel::press), [`moved`](Panel::moved),
-//! [`released`](Panel::released) and [`op`](Panel::op) each return a value
-//! saying what they did — [`Pressed`], [`Dragged`], [`Released`], [`Outcome`] —
-//! and none of them formats a sentence. That is the one thing the model
-//! deliberately does not do: `examples/layout.rs` turns a [`Dragged`] into the
-//! line it prints, an egui view turns the same value into whatever it draws,
-//! and neither has to parse the other's English. It is also what lets a test
-//! assert that a stop held a drag, rather than counting the strings a drag
-//! produced.
-//!
-//! # Nothing here shadows the layout
-//!
-//! Every question [`Layout`] can answer is asked of it, and it now answers
-//! every one this file used to answer for itself. A folded region is
-//! [`Layout::is_collapsed`], a solo is [`Layout::soloed`], the split enclosing
-//! a region is [`Layout::parent`], the children a divider index counts are
-//! [`Layout::placed_children`], where a boundary is is [`Layout::boundary`],
-//! every boundary is [`Layout::boundaries`], and where a drag landed is what
-//! [`Layout::set_divider`] returned.
-//!
-//! Nothing here stores a fact about the arrangement. [`Node`] is the tree
-//! flattened for a caller that iterates it, and the only thing it carries that
-//! the arena does not is how deep the flattening got.
-//!
-//! The two things held across events are the pointer and the drag — what is in
-//! hand and where along it the pointer took hold. Both are the pointer's state
-//! and not the layout's.
-//!
-//! # Three kinds of drag, and one thing in hand
-//!
-//! A boundary is one of them; a mixer strip's fader is the second; a Set
-//! carried out of the Library bay is the third, and they are one `Option`
-//! ([`Drag`], private) rather than three. That is not tidiness:
-//! [`crate::input`]'s rule 1 — *a drag in hand keeps its claim, wherever the
-//! pointer has wandered to* — asks [`dragging`](Panel::dragging), and a second
-//! `Option` beside the first would be four states with two of them impossible
-//! and one rule that had to remember to ask about both. One thing in hand means
-//! rule 1 covers a fader by construction on the day it is written, and it
-//! covered the carry the same way.
-//!
-//! What the three disagree about is what a drag moves. A boundary drag moves
-//! the arrangement, which is this crate's, so [`moved`](Panel::moved) writes it
-//! and reports where it landed — including a fold: a pane pulled out past its
-//! own minimum is closed, and one whose closed edge is pulled back in is
-//! opened, both performed here and reported as [`Dragged::Pane`] (ADR-0300). A
-//! fader drag moves the engine's value, which this crate does not have and
-//! cannot reach (ADR-0156) — so it writes nothing at all and reports a
-//! [`karakuri_operation::Operation`], which is the whole of what a GUI
-//! component is for: pointer motion into a number, sent to a target, and the
-//! value read back and drawn (ADR-0180). Nothing here remembers what the value
-//! became. The strip is drawn from what the deck says on the next frame, and a
-//! number kept here would be a second copy of the deck's state.
-//!
-//! A carry moves nothing at all until it is let go, and it is the one of the
-//! three whose *destination* is part of what it asks for. A fader knows which
-//! deck at the press — the knob is on a strip — so [`Released::Let`] carries no
-//! value and no target. A carry knows only what it picked up; which deck it
-//! lands on is whatever strip the pointer is over when the button comes up, so
-//! [`released`](Panel::released) is handed that answer the way
-//! [`grab`](Panel::grab) is handed a [`Grab`]: derived by [`crate::view`],
-//! which is where a strip's geometry is, and never re-derived here. See
-//! [`Released::Dropped`] and [`Released::Nowhere`].
-//!
-//! # Solve once, then read
-//!
-//! [`Layout::rect`], [`Layout::hit`] and [`Layout::boundary`] each carry a
-//! `debug_assert!` that the layout is not dirty, so an operation followed by a
-//! read is a panic in a debug build. Everything here that reads calls
-//! [`solve`](Panel::solve) first, which on a frame where nothing moved is a
-//! flag test, and every operation leaves the layout clean behind it.
+//! Operations emit outcomes rather than formatted text. Boundary drags update layout (ADR-0300),
+//! fader drags emit engine operations (ADR-0156, ADR-0180), and queries require clean layouts ([`Panel::solve`]).
 
 pub mod types;
 pub use types::*;
@@ -127,40 +51,12 @@ impl Panel {
         self.cursor
     }
 
-    /// Whether anything is in hand — a boundary or a fader.
-    ///
-    /// It exists for [`crate::input::claim`]: a drag in progress keeps the pointer
-    /// whatever the pointer is currently over, so the rule has to be able to ask.
-    /// It answers for both kinds because there is one thing in hand, which is why
-    /// rule 1 covers a fader held against its top while the pointer runs on across
-    /// two bays without a word being added to it.
+    /// Returns true if any drag gesture is active (boundary, fader, or carry).
     pub fn dragging(&self) -> bool {
         self.in_hand().is_some()
     }
 
-    /// What the pointer has hold of, or `None` where nothing is in hand.
-    ///
-    /// # It replaced a `drag_axis() -> Option<Axis>`, and the second drag is why
-    ///
-    /// That method answered *the axis of the boundary in hand*, and it had one
-    /// caller: [`crate::view::View`]'s cursor, which draws a resize cursor from it.
-    /// A fader drag runs along an axis too and must not produce one — a resize
-    /// cursor over a gesture that resizes nothing — so its honest answer there is
-    /// `None`.
-    ///
-    /// And a `None` that means *not a boundary* cannot be told from a `None` that
-    /// means *nothing at all*, which is the distinction both of its readers need.
-    /// The cursor has to know that a fader in hand suppresses the hit test, or it
-    /// flicks a resize cursor on the moment a fader held against its top lets the
-    /// pointer wander across a boundary; and a window loop has to know that a move
-    /// which emitted no operation was a fader that did not change rather than a
-    /// pointer with nothing in hand, or every mouse move on the panel answers a
-    /// repaint question meant for a drag. One question with three answers, rather
-    /// than a predicate beside an `Option`.
-    ///
-    /// Which fader it is stays private, on [`Panel::cursor`]'s terms: a caller
-    /// holding it would be shadowing the drag, and it is not needed — the operation
-    /// a move emits carries the deck and the control already.
+    /// Returns the currently active drag item ([`InHand`]), or `None` if idle.
     pub fn in_hand(&self) -> Option<InHand> {
         Some(match self.drag.as_ref()? {
             Drag::Boundary(b) => InHand::Boundary(b.axis),
@@ -204,18 +100,9 @@ impl Panel {
         moved
     }
 
-    /// The two regions a boundary is between. A split is often unnamed — the
-    /// console's body row is, deliberately — so a split and an index alone do not
-    /// say which boundary a pointer has hold of, and the pair does.
+    /// Returns the pair of regions flanking the boundary at `index` of `split`.
     ///
-    /// [`Layout::placed_children`] is what an index counts, and this is that twice:
-    /// the readout wants both names, and asking for the pair is what every caller
-    /// of it was doing.
-    ///
-    /// A closed pane is one of them, which is the whole of how a drag reaches a
-    /// region that has no rectangle: the pane is placed at zero extent with its
-    /// divider still beside it, so the pair either side of that divider names it
-    /// (ADR-0300).
+    /// Supports referencing closed zero-extent panes beside dividers (ADR-0300).
     pub fn pair(&self, split: NodeId, index: usize) -> Option<(NodeId, NodeId)> {
         let mut children = self.layout.placed_children(split).skip(index);
         Some((children.next()?, children.next()?))
@@ -274,11 +161,7 @@ impl Panel {
         self.drag = Some(Drag::Carry(Carrying { set, procedure }));
     }
 
-    /// What is in hand, by the name the Library row was listed under, or `None`
-    /// where the gesture in progress is not a carry.
-    ///
-    /// For a caller building the [`Landing`] a release takes, which needs the
-    /// payload.
+    /// Returns the carried item name for constructing a [`Landing`], or `None` if not carrying.
     pub fn carried(&self) -> Option<&str> {
         match self.drag.as_ref()? {
             Drag::Carry(carrying) => Some(&carrying.set),
@@ -286,22 +169,9 @@ impl Panel {
         }
     }
 
-    /// A move with something in hand, and what it did — see [`Dragged`]. `None`
-    /// where nothing is in hand, and `None` where this move changed nothing.
+    /// Updates the active drag with pointer position `p`, returning the resulting [`Dragged`] change.
     ///
-    /// Absolute, both ways. A boundary takes the pointer's coordinate along the
-    /// split's axis, less the offset it grabbed at, straight into
-    /// [`Layout::set_divider`]; a fader takes the same coordinate through
-    /// [`Grab::value`]. Nothing accumulates in either, which is what makes a drag
-    /// past a stop — or past the end of a track — and back come home exactly.
-    ///
-    /// A carry answers `None` to every move, and that is the third kind of drag
-    /// rather than a case this forgot: nothing has happened, because nothing
-    /// happens until the Set is let go somewhere. [`Dragged`] has no arm for it and
-    /// is not owed one — an arm meaning *a hand is carrying something and nothing
-    /// happened* is `None` with a name on it, and a caller that wants to draw the
-    /// carry asks [`in_hand`](Panel::in_hand), which is the question *is a gesture
-    /// in progress* and already exists.
+    /// Returns `None` if idle, if the move caused no state change, or during carry gestures.
     pub fn moved(&mut self, p: Point) -> Option<Dragged> {
         self.cursor = p;
         match self.drag.as_ref()? {
@@ -311,22 +181,7 @@ impl Panel {
         }
     }
 
-    /// A move with a boundary in hand.
-    ///
-    /// # A pane is closed by pulling its boundary out, and opened by pulling it in
-    ///
-    /// The overshoot a stop keeps — `landed - asked` — is the whole of what this
-    /// reads. Its sign says which side of the boundary the pointer is pressing
-    /// into, its size says how far past the stop the hand has gone on, and whether
-    /// that side is already [`Layout::is_closed`] says whether the drag is closing
-    /// it or opening it. See [`PULLED_THROUGH`] for the distance and
-    /// [`Boundary::acted`] for why it happens once.
-    ///
-    /// Only a region whose arrangement says a fold leaves its edge behind is closed
-    /// this way ([`Layout::keeps_its_edge`]), and only one that is at its own
-    /// minimum — a boundary held by a *neighbour's* maximum is not one that has run
-    /// this region out of room, and folding it there would be a fold nobody was
-    /// asking for.
+    /// Handles boundary motion, triggering pane fold/unfold if overshoot exceeds [`PULLED_THROUGH`].
     fn moved_boundary(&mut self, p: Point) -> Option<Dragged> {
         let Some(Drag::Boundary(drag)) = self.drag.as_ref() else {
             return None;
@@ -355,14 +210,7 @@ impl Panel {
                 .map(|gap| axis.origin(gap));
             if let Some(Drag::Boundary(drag)) = self.drag.as_mut() {
                 drag.acted = true;
-                // **Where the boundary is now, said once** — by this very
-                // value. The fold moved it to the pane's own edge, or out to
-                // the pane's minimum, and [`Dragged::Pane`] is this drag
-                // saying so; a second report of the same position, from the
-                // next of sixty pointer events a second, would be the flood
-                // [`Boundary::said`] exists to stop. `held`, because the
-                // boundary is not following the pointer and will not until
-                // the hand comes back to it.
+                // Record new boundary position and mark held to suppress duplicate events.
                 drag.said = at;
                 drag.held = true;
             }
@@ -392,22 +240,7 @@ impl Panel {
         })
     }
 
-    /// Put a pane a drag has just brought back at the smallest extent it declares,
-    /// whichever side of the boundary it is on.
-    ///
-    /// *"A pane reopened by dragging inward comes back at its declared minimum, not
-    /// at whatever it was before"* — because the hand that opened it is at the
-    /// window's edge, and a pane that sprang back to the 340 it was months ago
-    /// would jump out from under the pointer. What it was is still stored, and `z`
-    /// still brings that back.
-    ///
-    /// The ask is the far end and the layout's own clamp is what stops it.
-    /// [`Layout::set_divider`] clamps a drag to the pair's combined bounds, so
-    /// asking for the boundary to go all the way to the pane's own side lands it at
-    /// exactly the pane's minimum — or at the most the pair can give it, where the
-    /// neighbour's own bounds allow less. Working the position out here instead
-    /// would be a second copy of that clamp, one term of which is the *other*
-    /// region's.
+    /// Sets a newly reopened pane to its minimum declared extent via layout clamping.
     fn open_at_minimum(&mut self, split: NodeId, index: usize, pane: NodeId) {
         self.solve();
         let Some((a, _)) = self.pair(split, index) else {
@@ -465,40 +298,15 @@ impl Panel {
         Some(Dragged::Fader(fading.grab.knob.operation(value)))
     }
 
-    /// The pointer went up. `None` where nothing was in hand.
+    /// Handles pointer release, returning the [`Released`] outcome.
     ///
-    /// # `onto` is the destination, resolved by whoever can resolve it
-    ///
-    /// What the rectangle under the pointer is — a deck, by a mixer strip or one of
-    /// the four deck preview cells, or the master chain's list — or `None` for
-    /// none of them, and `None` for every release that is not a carry, because the
-    /// other two drags have no destination to name. See [`Landing`]. A boundary
-    /// comes to rest where the layout put it and the layout is
-    /// asked; a fader's rest is the deck's and nobody is asked at all
-    /// ([`Released::Let`]).
-    ///
-    /// It is an argument for the reason [`Grab`] is one. A strip's geometry is
-    /// [`crate::view::mixer`]'s answer — it depends on the values the harness
-    /// handed in and on a text shaper for the words in the same strip — and this
-    /// module has neither and takes neither. The alternative is the toolkit inside
-    /// the model. So the view is asked, as [`crate::view::Outputs::op`] is asked,
-    /// at a release instead of at a press: [`crate::view::Mixer::dropped`] is the
-    /// derivation, and it is the same laid-out bay the frame drew.
-    ///
-    /// One door and not two. A carry could have had a `dropped(onto)` of its own
-    /// beside a `released()` that never takes a destination, and then a caller that
-    /// reached for the wrong one would cancel every drop in silence. Here a caller
-    /// that cannot answer passes `None`, which is the honest outcome for a release
-    /// that landed on nothing anyway.
+    /// `onto` is the view-resolved drop destination when releasing a carry gesture ([`Landing`]).
     pub fn released(&mut self, onto: Option<Landing>) -> Option<Released> {
         match self.drag.take()? {
             Drag::Boundary(drag) => {
                 self.solve();
                 let (split, index) = (drag.split, drag.index);
-                // `Gone` is what an operation during the drag leaves behind:
-                // fold either side of the boundary and there is no longer a
-                // pair for this index, which is [`Layout::boundary`] returning
-                // `None` rather than a coordinate for something else.
+                // `Gone` indicates an operation during drag removed this boundary pair.
                 Some(match self.layout.boundary(split, index) {
                     Some(gap) => Released::Rests {
                         split,
@@ -544,19 +352,7 @@ impl Panel {
         }
     }
 
-    /// What the pointer is over, for a caller about to name an [`Op`]'s target.
-    ///
-    /// The resolution [`op`](Panel::op) used to do for itself, out where it
-    /// belongs: *the region under the pointer* is how a keyboard chooses what to
-    /// fold, and it is not part of what folding means — see [`Op`]. A caller with a
-    /// control under the pointer instead of a region, or with no pointer at all,
-    /// never asks this.
-    ///
-    /// No grab, which is [`Layout::hit`] with a zero-width divider: this answers
-    /// *what did the operator mean*, and a boundary's six pixels either side exist
-    /// so that a hand can find a nine-pixel gap. An operation that took them would
-    /// fold the wrong region six pixels from every edge. [`press`](Panel::press) is
-    /// the other one and it uses [`GRAB`], because that one is the hand.
+    /// Resolves the layout element under the pointer without grab tolerance.
     pub fn under(&mut self) -> Hit {
         self.solve();
         self.layout.hit(self.cursor, 0.0)
@@ -652,34 +448,9 @@ impl Panel {
         outcome
     }
 
-    /// Put a saved arrangement in, at the viewport this window already has.
+    /// Restores a saved arrangement into the existing viewport and resets active drag state.
     ///
-    /// It is [`Op::Reset`]'s arm with the arrangement handed in rather than built:
-    /// the viewport is carried across, the tree is flattened again and any drag in
-    /// hand is dropped, because the node a hand had hold of is not a node of this
-    /// arrangement. The viewport in `layout` is discarded, and that is the decision
-    /// rather than an omission — an arrangement carries the window it was saved at,
-    /// and a console arranged on a laptop would otherwise come back on a projector
-    /// with the laptop's margin round it.
-    ///
-    /// # Why this is a method and not a ninth [`Op`]
-    ///
-    /// An [`Op`] names a [`NodeId`] or nothing at all, and it is `Copy` and `Eq`
-    /// because every one of its eight variants is a handle or a word. A restore's
-    /// payload is a whole arrangement, which no key press, no map line and no
-    /// pointer can produce — only a third party holding a store can, and this crate
-    /// has no store and cannot have one (ADR-0156). So the operator's operation is
-    /// `karakuri_operation::Operation::RestoreArrangement { name }`, whoever holds
-    /// the store turns that name into a `Layout`, and this is where the `Layout`
-    /// lands. `tests/vocabulary.rs` records the same thing from the other side: the
-    /// row is in its `NO_OP` list, with the reason.
-    ///
-    /// Nothing here reads or refuses the bytes. A file that disagrees with itself
-    /// never becomes a `Layout` at all — `karakuri_layout::Layout`'s own
-    /// `TryFrom<Wire>` refuses it
-    /// (`docs/adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md`)
-    /// — so by the time one arrives here it is an arrangement, and a second check
-    /// would be a second answer to a question that has one.
+    /// Accepts a validated `Layout` from the store (ADR-0156, ADR-0158).
     pub fn restore(&mut self, layout: Layout) -> Outcome {
         let viewport = self.layout.viewport();
         self.layout = layout;

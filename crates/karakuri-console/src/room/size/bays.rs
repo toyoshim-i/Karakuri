@@ -21,16 +21,8 @@ pub const SCOPE_PAD_X: f32 = 8.0;
 /// is [`PILL_H`]'s number and not [`REND_H`]'s. 16.5.
 pub const SCOPE_H: f32 = BASE * LINE;
 
-/// The scope row's box: one chip inside [`SCOPES_PAD_Y`], plus the one pixel of
-/// the rule under it — [`HAIRLINE`], which is `.scopes`'s own border-bottom and
-/// the same pixel every other rule in the mock is drawn at. 31.5, which is what
-/// `lib.rs`'s minimum for this bay counts now: that sum said 31 while this row
-/// was undrawn — the rule left out and what was left rounded up — and it is
-/// written from this constant's own terms now, as [`LIB_FOOT_H`] is.
-///
-/// One row and not a wrap, which is [`REND_ROW_H`]'s rule one bay along:
-/// `.scopes` carries a wrapping flex and this console draws the chips that fit
-/// in one row of it.
+/// Scope row box height: single chip inside [`SCOPES_PAD_Y`] plus [`HAIRLINE`] rule
+/// (`SCOPES_PAD_Y * 2.0 + SCOPE_H + HAIRLINE` = 31.5px).
 pub const SCOPES_H: f32 = SCOPES_PAD_Y * 2.0 + SCOPE_H + HAIRLINE;
 
 // -- the library's path row ---------------------------------------------
@@ -48,25 +40,12 @@ pub const PATH_PAD_Y: f32 = 4.0;
 /// named by in.
 pub const PATH_SIZE: f32 = 10.0;
 
-/// The path row's box: [`PATH_SIZE`] at [`LINE`] inside [`PATH_PAD_Y`], plus
-/// the one pixel of the rule under it — [`HAIRLINE`], which is `.path`'s own
-/// border-bottom and the same pixel every other rule in the mock is drawn at.
-/// 24, which is shorter than the two rows either side of it because the type in
-/// it is the foot's 10 rather than the console's [`BASE`].
+/// Path row box height: `PATH_PAD_Y * 2.0 + PATH_SIZE * LINE + HAIRLINE` (24px).
 pub const PATH_H: f32 = PATH_PAD_Y * 2.0 + PATH_SIZE * LINE + HAIRLINE;
 
 // -- the library's filter field and its kind chips ------------------------
 
-/// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row under the
-/// scope row, which narrows what the marked library answers where the chips
-/// above it say *which* library is being read.
-///
-/// The gap is kept and nothing is drawn either side of it, which is worth a
-/// sentence rather than a deletion: the row held two fields until 2026-09-10,
-/// and ADR-0338 retired `layer…` for the six toggles in [`LIB_KINDS_H`]'s own
-/// row. `.lib-filters` still declares `gap: 5px` and still would space a second
-/// field, so the number stays where the page's own declaration is rather than
-/// being taken out of a transcription of it.
+/// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: filter row padding and gap (ADR-0338).
 pub const LIB_FILTERS_PAD_X: f32 = 9.0;
 pub const LIB_FILTERS_PAD_Y: f32 = 6.0;
 pub const LIB_FILTERS_GAP: f32 = 5.0;
@@ -76,41 +55,18 @@ pub const LIB_FILTERS_GAP: f32 = 5.0;
 /// own height and its border and nothing else.
 pub const FIELD_PAD_X: f32 = 9.0;
 
-/// One field's box: [`BASE`] at [`LINE`] inside its `border: 1px solid
-/// var(--c-line)` — 18.5, which is [`XPILL_H`]'s arithmetic one bay along and
-/// for the same reason, a bordered capsule round one line of type. The border
-/// is counted because the mock's box model is the browser default
-/// (`content-box`) and this one is a real border — [`MINI_H`]'s own sentence,
-/// at the console's own type size.
+/// Filter field box height: `BASE * LINE + HAIRLINE * 2.0` (18.5px, including 1px border).
 pub const FIELD_H: f32 = BASE * LINE + HAIRLINE * 2.0;
 
-/// The filter row's box: one field inside [`LIB_FILTERS_PAD_Y`], plus the one
-/// pixel of the rule under it — [`HAIRLINE`], which is `.lib-filters`'s own
-/// border-bottom and the same pixel every other rule in the mock is drawn at.
-/// 31.5, which is [`SCOPES_H`]'s number one row up and reached by different
-/// arithmetic: a field is two pixels of border taller than a chip and stands
-/// inside a pixel less padding above and below, so the two rows land on the
-/// same height without either being read off the other.
+/// Filter row total height: `LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + HAIRLINE` (31.5px).
 pub const LIB_FILTERS_H: f32 = LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + HAIRLINE;
 
-/// `.lib-kinds`'s `padding: 5px 9px` and its `gap: 4px`: the row of six toggles
-/// under the filter field, which says which kinds of row the listing holds
-/// (ADR-0338).
-///
-/// Its own band and not room made beside the field, which is `style.css`'s own
-/// note: `.field` carries `flex: 1`, and six chips sharing one row with it in a
-/// bay this narrow would leave the chips a few pixels each — a chip nobody can
-/// hit is not a control.
+/// `.lib-kinds`'s `padding: 5px 9px` and its `gap: 4px`: kind toggle chips row (ADR-0338).
 pub const LIB_KINDS_PAD_X: f32 = 9.0;
 pub const LIB_KINDS_PAD_Y: f32 = 5.0;
 pub const LIB_KINDS_GAP: f32 = 4.0;
 
-/// `.kind`'s `font-size: 9px` and its `padding: 0 6px`, around the word in it.
-/// The vertical half of that padding is zero, which is why the box below is the
-/// type's own height and nothing else — [`FIELD_H`]'s own sentence at a smaller
-/// size, and with the border not counted for the reason a `.kind.on` has none
-/// to count: the lit chip trades its border for a wash, so a height that
-/// included one would move six chips whenever one was pressed.
+/// `.kind`'s `font-size: 9px` and its `padding: 0 6px`, around the kind name.
 pub const KIND_SIZE: f32 = 9.0;
 pub const KIND_PAD_X: f32 = 6.0;
 
@@ -146,11 +102,7 @@ pub const BADGE_RADIUS: f32 = 3.0;
 
 // -- the library's list -------------------------------------------------
 
-/// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside, under
-/// the bay head and the scope row. The library's minimum of 158 in `lib.rs` is
-/// written from the same 3 — *"a list of three rows (3 + 3 of `.lib-list`
-/// padding, plus 3 x 22.5)"* — so the padding a rectangle is inset by here and
-/// the minimum the bay declares are one number or neither.
+/// `.lib-list`'s `padding: 3px`: card margin enclosing library listing rows.
 pub const LIB_LIST_PAD: f32 = 3.0;
 
 /// `.lib-row`'s `padding: 3px 7px`, around a Set's name at [`BASE`]. The rows
@@ -178,12 +130,7 @@ pub const LIB_FOOT_PAD_Y: f32 = 5.0;
 /// are, and the only type in the row.
 pub const LIB_FOOT_SIZE: f32 = 10.0;
 
-/// The foot's box: [`LIB_FOOT_SIZE`] at [`LINE`] inside that padding, plus the
-/// one pixel of the rule above it — [`HAIRLINE`], which is `.lib-foot`'s own
-/// border-top and the same pixel every other rule in the mock is drawn at. 26,
-/// and the library's minimum of 158 in `lib.rs` is written from it — as it is
-/// from [`SCOPES_H`], and as it was from neither while this row and that one
-/// were undrawn.
+/// Library footer box height: `LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE` (26px).
 pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 
 /// `.lib-foot`'s `gap: 8px`, between the count, the `params` chip and the
@@ -217,20 +164,7 @@ pub const ROW_MENU_INSET: f32 = 22.0;
 
 // -- the library's reading ----------------------------------------------
 
-/// The box a reading stands in, opened under the row the cursor is on:
-/// `docs/manual/console.html`'s `margin: 2px 2px 3px`, inline on the one
-/// element in that bay the stylesheet carries no rule for.
-///
-/// Three numbers and not two, which is [`STAGE_LIST_PAD_BOTTOM`]'s shape one
-/// bay along: the box stands a pixel further off the row under it than off the
-/// row above it, because what is under it is the next Set and what is above it
-/// is the Set this reading is of.
-///
-/// Cited to the markup rather than to a selector, which is [`PILL_GAP`]'s case
-/// and the second of two: the mock sets this box's whole appearance inline, and
-/// `style.css` genuinely carries no `.reading` rule to point at. The note
-/// *Reading a Set before you spend a load on it* says why there is none — *"No
-/// new CSS: every class it uses is already in the stylesheet"*.
+/// `docs/manual/console.html`'s `margin: 2px 2px 3px`: inline margins around a Set reading card.
 pub const READING_MARGIN_X: f32 = 2.0;
 pub const READING_MARGIN_TOP: f32 = 2.0;
 pub const READING_MARGIN_BOTTOM: f32 = 3.0;
@@ -241,22 +175,12 @@ pub const READING_MARGIN_BOTTOM: f32 = 3.0;
 /// every well it draws — `.cand` and `.fx` are both 8.
 pub const READING_RADIUS: f32 = 8.0;
 
-/// A reading's row is a `.lib-row` with its left padding overridden —
-/// `docs/manual/console.html`'s `padding-left: 18px`, inline on each of them.
-/// The indent is the whole of what says these rows are not Sets: they are drawn
-/// in the same box at the same height inside the same list, so a reading drawn
-/// flush with the names above it would read as Sets nested under a Set.
+/// `docs/manual/console.html`'s `padding-left: 18px`: indent distinguishing reading rows from Sets.
 pub const READING_PAD_X: f32 = 18.0;
 
 // -- the staging lane's candidates --------------------------------------
 
-/// `.stage-list`'s `padding: 6px 9px 8px`: the ring of card the candidate rows
-/// sit inside, under the bay head. Three numbers and not two — the lane is the
-/// one list in the mock whose bottom padding is not its top — so the list's box
-/// is asymmetric down the column and even across it. `lib.rs`'s 125 for this
-/// bay is written from the same 6 and 8 — *"6 + 8 of `.stage-list` padding"* —
-/// so the padding a rectangle is inset by here and the height the arrangement
-/// reserves are one derivation or neither.
+/// `.stage-list`'s `padding: 6px 9px 8px`: asymmetric card padding enclosing candidate rows.
 pub const STAGE_LIST_PAD_TOP: f32 = 6.0;
 pub const STAGE_LIST_PAD_X: f32 = 9.0;
 pub const STAGE_LIST_PAD_BOTTOM: f32 = 8.0;
@@ -386,11 +310,7 @@ pub const PARAM_VAL_W: f32 = 58.0;
 /// interface, and the only type in the row that is not the pane's own size.
 pub const PARAM_ORD_SIZE: f32 = 9.5;
 
-/// A parameter row's box: [`BASE`] at [`LINE`] inside that padding — 22.5,
-/// which is the 22.5 the inspector's minimum of 151.5 is written from in
-/// `lib.rs`, so a row is this tall in both places or in neither. The fader in
-/// the middle of it is [`FADER_H`] and its knob [`FADER_KNOB_H`], both shorter
-/// than the type either side.
+/// Parameter row box height: `PARAM_PAD_Y * 2.0 + BASE * LINE` (22.5px).
 pub const PARAM_H: f32 = PARAM_PAD_Y * 2.0 + BASE * LINE;
 
 /// Scroll step distance in pixels for one notch of mouse wheel, set to three parameter rows.
@@ -415,11 +335,7 @@ pub const REND_PAD_X: f32 = 7.0;
 /// rather than a mini's, so 18.5.
 pub const REND_H: f32 = BASE * LINE + HAIRLINE * 2.0;
 
-/// The renderer row's box: one chip inside [`REND_ROW_PAD_T`] and
-/// [`REND_ROW_PAD_B`] — 27.5. One row and not a wrap: `.rend-row` carries
-/// `flex-wrap: wrap` and the console draws the chips that fit, which is
-/// [`crate::view::inspector`]'s rule about a pane that overflows stated one row
-/// along.
+/// Renderer row box height: `REND_ROW_PAD_T + REND_H + REND_ROW_PAD_B` (27.5px), for single-row chips.
 pub const REND_ROW_H: f32 = REND_ROW_PAD_T + REND_H + REND_ROW_PAD_B;
 
 /// `.sens`'s `padding: 2px 10px 6px 12px` — the sensitivity row stands on the
@@ -504,11 +420,7 @@ pub const SEQ_HEAD_GAP: f32 = 6.0;
 /// rows are one pattern read against itself, which is why they share a ruler.
 pub const SEQ_BODY_GAP: f32 = 3.0;
 
-/// `.seq-row`'s `grid-template-columns: 30px 1fr auto` and its `gap: 5px`: the
-/// label column every lane's name is right-aligned into, the gap before the
-/// cells, and the same gap again before the minus at the end of the row —
-/// `auto` is as wide as the glyph, which is measured rather than written
-/// down.
+/// `.seq-row`'s `grid-template-columns: 30px 1fr auto` and its `gap: 5px`: label column and cell gap.
 pub const SEQ_LABEL_W: f32 = 30.0;
 pub const SEQ_ROW_GAP: f32 = 5.0;
 
@@ -519,22 +431,11 @@ pub const SEQ_LABEL_SIZE: f32 = 10.0;
 /// `.seq-lane`'s `gap: 2px`, between two cells.
 pub const SEQ_CELL_GAP: f32 = 2.0;
 
-/// `.seq-lane i`'s `height: 15px` and its `border-radius: 3px`: one cell, which
-/// is one step of one lane.
-///
-/// The width is not here and cannot be: `.seq-lane` is `repeat(16, 1fr)`, so a
-/// cell is as wide as the row divided by the count, and the count follows the
-/// mode — which is why an eighth's cells are twice this one's width and the
-/// same height (ADR-0306).
+/// `.seq-lane i`'s `height: 15px` and its `border-radius: 3px`: step cell in a lane (ADR-0306).
 pub const SEQ_CELL_H: f32 = 15.0;
 pub const SEQ_CELL_RADIUS: u8 = 3;
 
-/// `.seq-ruler`'s `font-size: 9px` and its `margin-left: 35px`: the count a
-/// pattern is read against, inset so its numbers stand over the cells rather
-/// than over the labels. 35 and not [`SEQ_LABEL_W`] plus [`SEQ_ROW_GAP`], which
-/// is the same number arrived at twice: the stylesheet writes the inset and the
-/// row writes the columns, and this transcribes the one the ruler is actually
-/// laid out by.
+/// `.seq-ruler`'s `font-size: 9px` and its `margin-left: 35px`: ruler count over cells.
 pub const SEQ_RULER_SIZE: f32 = 9.0;
 pub const SEQ_RULER_INSET: f32 = 35.0;
 

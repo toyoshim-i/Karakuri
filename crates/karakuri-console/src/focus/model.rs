@@ -1,36 +1,18 @@
 use super::*;
 
-/// The digit that names a bay's head, which is the one digit that is not an
-/// item.
-///
-/// A constant rather than a literal, because two very different things are
-/// spelled `0` in this module — the head, and the first element of a path — and
-/// only one of them is this.
+/// The digit (`0`) that names a bay's head rather than an item.
 pub const HEAD: usize = 0;
 
-/// The Mixer bay, by the name the arrangement gives it — whose remembered item
-/// is the deck selection.
-///
-/// A constant rather than a literal at the two methods that read it, for
-/// [`crate::view::REGIONS`]' own reason: a bay nobody can find by name is a
-/// pointer that silently stops pointing, and `tests/focus.rs` is what asserts
-/// the ring holds it.
+/// Name of the Mixer bay, whose remembered item tracks deck selection.
 pub const MIXER: &str = "mixer";
 
 /// The Library bay — whose remembered item is the row under the cursor and
 /// whose head's remembered control is the marked scope. [`MIXER`]'s reason.
 pub const LIBRARY: &str = "library";
 
-/// Whether a region is one of the nine bays.
+/// Returns whether a region is one of the nine top-level focusable bays (ADR-0259).
 ///
-/// The four that are not are what a bay *contains*: the Program bay's picture
-/// and preview row and the Inspector's two panes are its items, which is
-/// ADR-0259's own finding — *"for two of the nine bays the arrangement's own
-/// tree is the item list"*. So the walk stops at the bay and the four are
-/// reached by a digit rather than by `Tab`.
-///
-/// A `match` with no wildcard, so a tenth kind is a compile error here rather
-/// than a region that quietly never takes focus.
+/// Sub-regions within Program and Inspector are treated as items reached via digits rather than `Tab`.
 pub const fn is_bay(kind: Kind) -> bool {
     match kind {
         Kind::Bay { .. }
@@ -65,12 +47,7 @@ fn descend(layout: &Layout, id: NodeId, bays: &mut Vec<&'static Region>) {
     }
 }
 
-/// The bay of `layout` that contains `p`, or `None` if `p` is outside all visible bays
-/// or on a divider grab margin.
-///
-/// Clicking inside a bay selects it as the active bay for keyboard shortcuts.
-/// Divider grab margins are excluded so that divider resize gestures do not change
-/// the focused bay.
+/// Finds the visible bay at point `p`, excluding divider grab margins to prevent resize gestures from stealing focus.
 pub fn bay_at(layout: &Layout, p: Point) -> Option<&'static Region> {
     if matches!(
         layout.hit(p, crate::panel::GRAB),
@@ -88,27 +65,9 @@ pub fn bay_at(layout: &Layout, p: Point) -> Option<&'static Region> {
     None
 }
 
-/// Where the dashed focus ring goes on `bay`, or `None` where the arrangement
-/// gives that bay no rectangle to put one on.
+/// Calculates the bounding rectangle for a bay's dashed focus ring, or `None` if folded/hidden (ADR-0159, ADR-0259).
 ///
-/// The head, or the whole row for a bay that draws none. The mock draws
-/// `.wfocus` as a dashed sun outline and the deck selection as a solid lavender
-/// ring, on purpose — *"drawing them the same way would erase which of the two
-/// a reader is looking at"* — and `console.html`'s mark for a focused bay is
-/// the head wearing it. The Transport and the Outputs row are headless
-/// (ADR-0159), and ADR-0259 reads them the same way it reads their `0`: *"a
-/// headless row, so `0` names the row itself"*, so the row stands in for the
-/// head and the ring goes round the row.
-///
-/// `None` for a folded bay, and that is the drawing ADR-0259 leaves open. A
-/// folded region has no rectangle and no divider is drawn beside it
-/// ([ADR-0204](../../../docs/adr/0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md)),
-/// so there is nothing on the panel to ring; `console.html` draws the mark that
-/// is owed — the head alone — beside the note that defines it, and no bay is
-/// folded in the panel it draws. The bay stays in the ring either way, which is
-/// what `space` is for.
-///
-/// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
+/// Covers the bay head, or the entire row for headless bays (Transport, Outputs). Requires solved `layout`.
 pub fn mark(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> {
     let id = layout.find(bay.name)?;
     if !layout.visible(id) {
@@ -121,31 +80,9 @@ pub fn mark(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> {
     })
 }
 
-/// Where the mark for a *folded* bay goes, or `None` for a bay that is not
-/// folded, or one the arrangement is not drawing an edge for.
+/// Calculates the focus mark rectangle for a collapsed/folded bay (ADR-0259).
 ///
-/// A folded bay keeps its place in the ring so that it can be opened, not so
-/// that it can be operated — so it has to be markable, and a folded region has
-/// no rectangle to mark. `docs/manual/console.html` draws what is owed: *the
-/// head alone*, wearing the dashed ring, saying two things and no more — there
-/// is a bay here, and `space` opens it.
-///
-/// The head is grown from the edge the fold leaves. A closed child keeps its
-/// divider ([`Layout::is_placed`]), so it still solves to a rectangle — one
-/// with no extent along its parent's axis, sitting exactly where the bay was.
-/// This is that edge given a head's height, held inside the parent so that a
-/// bay folded against the bottom of a column marks upward instead of off the
-/// end of it. Every bay of this arrangement hangs in a column, so the width is
-/// the edge's own; the parent's is the fallback for an arrangement whose bays
-/// are a row, and it is written rather than assumed.
-///
-/// `None` unless the operator folded *this* bay. A bay inside a folded pane is
-/// invisible and is not collapsed, and there is nothing of it on the panel to
-/// mark — [`Layout::is_collapsed`] is the bit this asks and [`Layout::visible`]
-/// is the one it does not.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one.
+/// Projects the residual edge of the collapsed child into a head-height indicator. Requires solved `layout`.
 pub fn folded_head(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> {
     let id = layout.find(bay.name)?;
     if layout.visible(id) || !layout.is_collapsed(id) {
@@ -176,48 +113,18 @@ pub fn folded_head(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> 
 /// `console.html` draws exactly this string.
 pub const OPENS: &str = "space opens";
 
-/// The bay a press that acts the same in every bay is addressed in, which is
-/// not one of the nine.
-///
-/// `space` at bay level is the fold, and folding is a rule about *a bay* — so
-/// the route it names is not the Mixer's or the Master's but every bay's, and
-/// the page spells it `space &middot; in any bay`. It is a constant rather than
-/// a literal for [`MIXER`]'s reason, and `crates/karakuri/src/main.rs`'s
-/// `key_column` resolves the page's spelling to it.
-///
-/// It is a route and not a region, so nothing looks it up in
-/// [`crate::view::REGIONS`]: a badge that named a bay here would be naming one
-/// of nine places a press works.
+/// Pseudo-bay routing key for grammar actions shared across all bays (e.g., `space` to fold).
 pub const ANY: &str = "any";
 
-/// A bay's remembered address: where the address is inside this bay, and the
-/// nth thing it last named at each level.
+/// Bay address tracking both current focus path and remembered selection per level (ADR-0259).
 ///
-/// The path is the record's own: `[]` is the bay itself, `[2]` is its second
-/// item, `[2, 3]` is that item's third control, and [`HEAD`] in place of an
-/// item names the bay's head. Digits count from one because they count what the
-/// bay drew, which is ADR-0259's change from the four deck keys.
-///
-/// # Two fields, because they answer two questions
-///
-/// [`Address::at`] is *where the address is now* — the dashed ring, moved by a
-/// digit and by `esc`. [`Address::remembered`] is *where it was* — the solid
-/// ring, which is what makes the deck selection survive your hands being in the
-/// library. One field could not be both: `esc` from deck B's fader leaves the
-/// address at the Mixer and the selection on deck B, and a path that had been
-/// popped would have taken the selection with it.
+/// Maintains current location (`at`, dashed focus ring) separately from persistent memory (`remembered`, solid ring).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Address {
     /// Where the address is now, from the bay down. Empty is the bay itself, which
     /// is where every bay starts and where `esc` stops.
     at: Vec<usize>,
-    /// The nth item last named under each path, and never [`HEAD`] — see the module
-    /// documentation, which is where that is argued.
-    ///
-    /// A map rather than one number, because a bay has more than one place to
-    /// remember: the Library remembers which row it was on *and* which chip of its
-    /// head is marked, and those are two levels of one address rather than two
-    /// pointers.
+    /// The 1-indexed element last selected under each path prefix (excluding [`HEAD`]).
     memory: BTreeMap<Vec<usize>, usize>,
 }
 
@@ -227,29 +134,12 @@ impl Address {
         &self.at
     }
 
-    /// The nth item last named under `under`, or `None` for a path nothing has been
-    /// named under.
-    ///
-    /// One-based, which is the digit that named it: `1` is the first thing the bay
-    /// drew at that level. A caller that wants a position subtracts one, and the
-    /// three places that arithmetic is written all subtract with a floor — never
-    /// because zero is reachable, which it is not ([`Address::remember`] refuses
-    /// [`HEAD`] and nothing else writes here), but because a wrapped `usize` in a
-    /// paint path is a panic in an event handler and this crate's rule is the guard
-    /// rather than the message.
+    /// Returns the 1-indexed element last selected under path `under`, or `None`.
     pub fn remembered(&self, under: &[usize]) -> Option<usize> {
         self.memory.get(under).copied()
     }
 
-    /// Remember that the `nth` thing under `under` was named, and answer whether
-    /// that moved anything.
-    ///
-    /// [`HEAD`] is refused rather than stored, which is the module's own rule: the
-    /// head is not one of the things a bay lists, so there is nothing to remember
-    /// about it and remembering it would overwrite the item this bay was on.
-    ///
-    /// The `bool` is `View::select`'s: a caller repaints on a move and not on a
-    /// press.
+    /// Records the 1-indexed selection `nth` under `under`, returning `true` if changed (refuses [`HEAD`]).
     pub fn remember(&mut self, under: &[usize], nth: usize) -> bool {
         if nth == HEAD {
             return false;
@@ -257,12 +147,7 @@ impl Address {
         self.memory.insert(under.to_vec(), nth) != Some(nth)
     }
 
-    /// Descend to the `nth` thing below where the address is, remembering it on the
-    /// way — which is what a digit does.
-    ///
-    /// Nothing here says the nth thing exists: the bay that draws it is what
-    /// refuses a digit past its end, exactly as `View::select` refuses a deck the
-    /// mixer has no strip for. This is the path and not the panel.
+    /// Descends focus path to `nth` child below current address and remembers the selection.
     pub fn down(&mut self, nth: usize) {
         self.remember(&self.at.clone(), nth);
         self.at.push(nth);
@@ -273,33 +158,18 @@ impl Address {
         self.at.pop().is_some()
     }
 
-    /// Back to the bay, without forgetting where it was.
-    ///
-    /// `esc` repeated is the ordinary way there and this is the other one: an
-    /// address on something the bay has stopped drawing names nothing, and acting
-    /// on whatever has taken that position is the failure
-    /// [`crate::view::View::point_at`] refuses one level down. The memory is left
-    /// alone, for [`Address::up`]'s reason — what a bay *was* on is the solid ring
-    /// and is not what went stale.
+    /// Resets address to bay root (`[]`) while preserving remembered selections.
     pub fn to_the_bay(&mut self) {
         self.at.clear();
     }
 
-    /// Put the address on the `nth` item, remembering it — what an arrow does when
-    /// the address had already descended to one.
-    ///
-    /// It is [`Address::down`] with the level replaced rather than pushed: a walk
-    /// moves along a level and never into one.
+    /// Replaces the current item-level address with `nth` and remembers it.
     pub fn to_item(&mut self, nth: usize) {
         self.at.clear();
         self.down(nth);
     }
 
-    /// Put the address on the `nth` thing at the level it has already reached,
-    /// remembering it — [`Address::to_item`] at any depth, which is what an arrow
-    /// does inside a card.
-    ///
-    /// `false` at the bay, where there is no level to walk along.
+    /// Replaces the deepest step of the address with `nth` and remembers it; returns `false` at bay root.
     pub fn to_row(&mut self, nth: usize) -> bool {
         if self.at.pop().is_none() {
             return false;
@@ -315,16 +185,7 @@ impl Address {
 /// draws; an address is the solid one, seen once per bay.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Focus {
-    /// The bay focus is on, or `None` for a console nobody has tabbed on yet —
-    /// which resolves to *the first bay the traversal reaches* rather than to a bay
-    /// named here.
-    ///
-    /// There is no unfocused state and this is not one. ADR-0259 rejected starting
-    /// focus on a named bay because that is a second rule to keep in step with the
-    /// walk — *"the first divider dragged would have parted them"* — so the start
-    /// is the walk's own answer and [`Focus::bay`] is where it is asked. The same
-    /// reading is what puts focus back in the ring when a bay leaves the
-    /// arrangement.
+    /// Name of currently focused bay, or `None` to default to first traversal bay (ADR-0259).
     at: Option<&'static str>,
     /// Every bay that has ever been addressed, and what it remembers. A bay with no
     /// entry has been addressed by nobody, which is where a run starts.
@@ -332,15 +193,7 @@ pub struct Focus {
 }
 
 impl Focus {
-    /// The bay focus is on, resolved against `layout`.
-    ///
-    /// The first bay of the ring where nothing has been focused yet, and again
-    /// where what was focused is no longer a bay of this arrangement — a pointer at
-    /// a region that is not there is a ring drawn nowhere, which is
-    /// `View::select`'s rule read at the bay instead of at a strip.
-    ///
-    /// `None` only for an arrangement with no bay in it at all, which no
-    /// arrangement this crate builds is.
+    /// Resolves the currently focused bay against `layout`, falling back to first ring bay if unset or removed.
     pub fn bay(&self, layout: &Layout) -> Option<&'static Region> {
         let bays = ring(layout);
         match self.at {
@@ -353,11 +206,7 @@ impl Focus {
         }
     }
 
-    /// Put focus on `bay`, and answer whether it moved.
-    ///
-    /// Resolved against `layout` for [`Focus::bay`]'s reason: a bay this
-    /// arrangement does not hold is refused rather than stored, so nothing here can
-    /// name a ring drawn nowhere.
+    /// Sets focus to `bay` if present in `layout`, returning `true` if focus moved.
     pub fn put(&mut self, layout: &Layout, bay: &str) -> bool {
         let Some(found) = ring(layout).into_iter().find(|found| found.name == bay) else {
             return false;
@@ -367,22 +216,9 @@ impl Focus {
         was != Some(found.name)
     }
 
-    /// `Tab`, and `shift-Tab` at `step` of `-1`: the next bay of the ring,
-    /// wrapping.
+    /// Steps focus across bays in tree order (`Tab` / `shift-Tab`, wrapping).
     ///
-    /// It always moves between bays, whatever depth the address had reached inside
-    /// the one it leaves, and it never descends — which is why nothing here touches
-    /// an [`Address`]. The bay it leaves keeps where it was, and that is the whole
-    /// of what a remembered address is for.
-    ///
-    /// `shift-Tab` is this walk run backwards and nothing else. One key is the walk
-    /// and the other is the walk reversed, so an operator who overshoots gets back
-    /// exactly where they were — which is what a second rule for the backward
-    /// direction would have cost.
-    ///
-    /// `false` where there is nothing to move to: an arrangement with one bay or
-    /// none. A ring of one that wrapped onto itself would be a press that changed
-    /// nothing and asked for a frame.
+    /// Preserves internal bay addresses; returns `false` if layout has <= 1 bay.
     pub fn tab(&mut self, layout: &Layout, step: i32) -> bool {
         let bays = ring(layout);
         if bays.len() < 2 {
@@ -412,12 +248,7 @@ impl Focus {
         self.addresses.entry(bay).or_default()
     }
 
-    /// `esc`: up one level of the focused bay's address.
-    ///
-    /// `false` at bay level, which is the refusal ADR-0259 asks to be said out
-    /// loud: there is no rung below the bay and no unfocused state to fall out
-    /// into, and a key that declines silently is indistinguishable from one that is
-    /// not bound. It never leaves the ring and it never quits.
+    /// Ascends one level up the focused bay's address on `esc`, returning `false` at bay root (ADR-0259).
     pub fn up(&mut self, layout: &Layout) -> bool {
         let Some(bay) = self.bay(layout) else {
             return false;
@@ -429,14 +260,7 @@ impl Focus {
     }
 }
 
-/// Where a bay's address has actually got to, resolved against what the bay is
-/// drawing now.
-///
-/// A path is a list of digits and the bay is what says whether they name
-/// anything: a listing that shrank between two frames leaves an address on a
-/// row that is gone, exactly as it leaves the library cursor past the end.
-/// `None` is that case, and the press says so rather than acting on the nearest
-/// thing.
+/// Location reached by an address, validated against current bay contents (`None` if stale).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Addressed {
     /// The bay itself, which is where every bay starts and where `esc` stops.
@@ -481,13 +305,7 @@ pub enum Addressed {
     },
 }
 
-/// Where `at` has got to in `built`, against a bay whose rungs draw what
-/// `drawn` says.
-///
-/// `drawn` is asked for a path and answers how many things the bay draws under
-/// it: `[]` is how many items, `[n]` how many controls the nth item draws, and
-/// `[n, c]` how many things are under that control. It is a closure rather than
-/// a count because a bay is three deep and one number cannot say that.
+/// Resolves address `at` against bay specification `built` and element counts from `drawn`.
 pub fn addressed(
     built: &Built,
     at: &[usize],
@@ -566,15 +384,7 @@ pub fn addressed(
     }
 }
 
-/// What the deck is holding right now, read at the press rather than off the
-/// strip a frame copied.
-///
-/// The three states a strip's chips cycle, and the angle the mask is wearing.
-/// This crate owns the cycle and not the reading: a scheduled fade landing
-/// between the frame and the press would leave `view::Strip` a value the deck
-/// has already left behind, which is `crates/karakuri/src/main.rs`'s own rule
-/// at the three keys this replaces — *"read off the deck and not off the
-/// strip"*.
+/// Live deck state read directly at press time to avoid stale frame cache races.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Held {
     /// What the deck was last asked for, which is what the tally cycles from — see
@@ -596,15 +406,7 @@ pub enum Step {
     Default,
 }
 
-/// Which level a press landed on, since the host names a different operation
-/// for each and reads a different thing to step from.
-///
-/// The four here are the levels whose value is the world's — a deck's, the
-/// engine's, the audio session's — so the host reads them and does the
-/// arithmetic, which is ADR-0333's seam and `karakuri-cli`'s parity argument.
-/// The two the console steps itself are the Inspector's, and they are not here
-/// for `view::ParamGrip`'s reason: a parameter's address, range and value are
-/// all on the pane the frame drew, and there is no second reading to take.
+/// Identifies host-managed continuous levels stepped by grammar arrow keys (ADR-0333).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Trim(u8),
@@ -619,11 +421,7 @@ pub enum Level {
     Offset,
 }
 
-/// What a press of one of the four keys asks for.
-///
-/// The console resolves the address and says what was landed on; the window
-/// loop names the operation, because the levels above need the world in front
-/// of them and two of the answers reach the store (ADR-0333).
+/// Host operations requested by grammar key actions (ADR-0333).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Asked {
     /// Nothing there answers this key, and the sentence that says why — a key that
