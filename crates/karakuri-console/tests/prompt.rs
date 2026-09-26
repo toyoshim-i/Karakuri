@@ -280,3 +280,75 @@ fn prompt_menu_flips_upward_when_near_viewport_bottom() {
     assert!(menu_up.max.y <= pill_bottom.min.y);
     assert!(menu_up.min.y >= viewport.min.y);
 }
+
+// ---------------------------------------------------------------------------
+// 6. Interactive Terminal Session & PTY Execution (M9 Phase 2)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn terminal_session_spawns_and_captures_pty_output() {
+    #[cfg(unix)]
+    {
+        use karakuri_console::view::prompt::TerminalSession;
+        let session =
+            TerminalSession::spawn("test-sh".to_string(), "sh", &["-c", "echo hello from pty"]);
+
+        let mut found = false;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let lines = session.lines();
+            if lines.iter().any(|l| l.contains("hello from pty")) {
+                found = true;
+                break;
+            }
+        }
+        assert!(
+            found,
+            "expected PTY output to contain 'hello from pty', got: {:?}",
+            session.lines()
+        );
+    }
+}
+
+#[test]
+fn session_manager_manages_presets_and_custom() {
+    let mut state = PromptState::new();
+    assert!(state.active_session().is_none());
+
+    state.select_custom("echo karakuri".to_string());
+    assert!(state.active_session().is_some());
+
+    state.set_input("test input");
+    assert_eq!(state.input(), "test input");
+}
+
+#[test]
+fn terminal_session_stdin_writing_and_reading() {
+    #[cfg(unix)]
+    {
+        use karakuri_console::view::prompt::TerminalSession;
+        let session = TerminalSession::spawn("test-cat".to_string(), "cat", &[]);
+
+        // Wait briefly for cat to start
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(session.is_running());
+
+        // Send a line through PTY stdin
+        session.send_line("hello from stdin").expect("send line");
+
+        let mut found = false;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let lines = session.lines();
+            if lines.iter().any(|l| l.contains("hello from stdin")) {
+                found = true;
+                break;
+            }
+        }
+        assert!(
+            found,
+            "expected PTY echo to contain 'hello from stdin', got: {:?}",
+            session.lines()
+        );
+    }
+}

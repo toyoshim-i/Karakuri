@@ -47,6 +47,7 @@ impl ApplicationHandler for App {
         self.scale = window.scale_factor();
 
         let instance = Gpu::instance();
+        window.set_ime_allowed(true);
         // Report surface and adapter errors instead of panicking across the winit/OS boundary (ADR-0168).
         let surface = match instance.create_surface(window.clone()) {
             Ok(surface) => surface,
@@ -416,6 +417,12 @@ impl App {
             }
             WindowEvent::KeyboardInput { .. } => {
                 self.handle_keyboard_event(event_loop, event);
+            }
+            WindowEvent::Ime(_) => {
+                if let Some(gfx) = self.gfx.as_mut() {
+                    App::to_egui(gfx, &mut self.costs, &event);
+                    App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                }
             }
             WindowEvent::RedrawRequested => {
                 self.handle_redraw_requested(event_loop);

@@ -3,6 +3,7 @@
 mod cli;
 mod head;
 mod paint;
+mod session;
 mod state;
 
 pub use cli::{is_executable_on_path, CliPreset, CliSelection};
@@ -12,4 +13,5 @@ pub use head::{
     MENU_ROWS_PER_COL, PROMPT_TITLE,
 };
 pub use paint::{prompt_head_into, prompt_into, prompt_menu_into};
+pub use session::{Scrollback, SessionManager, SessionStatus, TerminalSession};
 pub use state::PromptState;

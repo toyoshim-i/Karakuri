@@ -129,8 +129,8 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
     }
 }
 
-/// Paints the internal body of the Prompt bay (terminal area).
-pub fn prompt_into(ui: &Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) {
+/// Paints the internal body of the Prompt bay (terminal area with scrollback and prompt bar).
+pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) {
     let head = head_box(bay_rect);
     let body_top = head.max.y;
     if body_top >= bay_rect.max.y {
@@ -138,63 +138,108 @@ pub fn prompt_into(ui: &Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) 
     }
 
     let body_rect = Rect::from_min_max(Pos2::new(bay_rect.min.x, body_top), bay_rect.max);
+    let input_h = 24.0;
+    let sep_y = (body_rect.max.y - input_h).max(body_rect.min.y);
 
-    let painter = ui.painter().with_clip_rect(body_rect);
+    let output_rect = Rect::from_min_max(body_rect.min, Pos2::new(body_rect.max.x, sep_y));
+    let input_rect = Rect::from_min_max(Pos2::new(body_rect.min.x, sep_y), body_rect.max);
+
     let font_id = FontId::new(size::BASE, FontFamily::Monospace);
-    let pad_x = size::HEAD_PAD_X;
-    let pad_y = 10.0;
-    let mut cursor_y = body_rect.min.y + pad_y;
 
-    // Terminal header info line
-    let title = "karakuri agent terminal (m9)";
-    let title_galley = painter.layout_no_wrap(title.to_owned(), font_id.clone(), pal.faint);
-    painter.galley(
-        Pos2::new(body_rect.min.x + pad_x, cursor_y),
-        title_galley,
-        pal.faint,
+    // 1. Output scrollback area
+    let mut output_ui = ui.new_child(egui::UiBuilder::new().max_rect(output_rect));
+    egui::ScrollArea::vertical()
+        .stick_to_bottom(true)
+        .auto_shrink([false, false])
+        .show(&mut output_ui, |ui| {
+            ui.add_space(4.0);
+            match &state.selection {
+                CliSelection::Unselected => {
+                    ui.label(
+                        egui::RichText::new("karakuri agent terminal (m9)")
+                            .color(pal.faint)
+                            .monospace(),
+                    );
+                    ui.label(
+                        egui::RichText::new("select an agent cli above to start")
+                            .color(pal.faint)
+                            .monospace(),
+                    );
+                }
+                CliSelection::Preset(preset) => {
+                    if let Some(session) = state.active_session() {
+                        let lines = session.lines();
+                        if lines.is_empty() {
+                            let label = if session.is_running() {
+                                format!("session: {} (running)", preset.display_name())
+                            } else {
+                                format!("session: {} (ready)", preset.display_name())
+                            };
+                            ui.label(egui::RichText::new(label).color(pal.pink).monospace());
+                        } else {
+                            for line in lines {
+                                ui.label(egui::RichText::new(line).color(pal.text).monospace());
+                            }
+                        }
+                    }
+                }
+                CliSelection::Custom(cmd) => {
+                    if let Some(session) = state.active_session() {
+                        let lines = session.lines();
+                        if lines.is_empty() {
+                            ui.label(
+                                egui::RichText::new(format!("session: custom [{}] (ready)", cmd))
+                                    .color(pal.pink)
+                                    .monospace(),
+                            );
+                        } else {
+                            for line in lines {
+                                ui.label(egui::RichText::new(line).color(pal.text).monospace());
+                            }
+                        }
+                    }
+                }
+            }
+            ui.add_space(4.0);
+        });
+
+    // 2. Separator line above prompt input
+    ui.painter().line_segment(
+        [
+            Pos2::new(input_rect.min.x, input_rect.min.y),
+            Pos2::new(input_rect.max.x, input_rect.min.y),
+        ],
+        Stroke::new(size::HAIRLINE, pal.hair),
     );
-    cursor_y += 18.0;
 
-    // Status or instructions
-    match &state.selection {
-        CliSelection::Unselected => {
-            let msg = "select an agent cli to start";
-            let msg_galley = painter.layout_no_wrap(msg.to_owned(), font_id.clone(), pal.faint);
-            painter.galley(
-                Pos2::new(body_rect.min.x + pad_x, cursor_y),
-                msg_galley,
-                pal.faint,
-            );
-            cursor_y += 18.0;
-        }
-        CliSelection::Preset(preset) => {
-            let status = format!("session: {} (ready)", preset.display_name());
-            let status_galley = painter.layout_no_wrap(status, font_id.clone(), pal.pink);
-            painter.galley(
-                Pos2::new(body_rect.min.x + pad_x, cursor_y),
-                status_galley,
-                pal.pink,
-            );
-            cursor_y += 18.0;
-        }
-        CliSelection::Custom(cmd) => {
-            let status = format!("session: custom [{}] (ready)", cmd);
-            let status_galley = painter.layout_no_wrap(status, font_id.clone(), pal.pink);
-            painter.galley(
-                Pos2::new(body_rect.min.x + pad_x, cursor_y),
-                status_galley,
-                pal.pink,
-            );
-            cursor_y += 18.0;
-        }
-    }
+    // 3. Prompt input bar
+    let mut input_ui = ui.new_child(egui::UiBuilder::new().max_rect(input_rect));
+    input_ui.horizontal_centered(|ui| {
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new(">").color(pal.pink).monospace());
 
-    // Command prompt line
-    let prompt_str = "> _";
-    let prompt_galley = painter.layout_no_wrap(prompt_str.to_owned(), font_id, pal.text);
-    painter.galley(
-        Pos2::new(body_rect.min.x + pad_x, cursor_y),
-        prompt_galley,
-        pal.text,
-    );
+        let mut buf_guard = state.input_buffer.lock().ok();
+        if let Some(ref mut buf) = buf_guard {
+            let edit = egui::TextEdit::singleline(&mut **buf)
+                .font(font_id)
+                .text_color(pal.text)
+                .hint_text("Ask agent...")
+                .frame(egui::Frame::NONE)
+                .desired_width(f32::INFINITY);
+
+            let response = ui.add(edit);
+
+            let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if enter_pressed && response.has_focus() {
+                let text = std::mem::take(&mut **buf);
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    if let Some(session) = state.active_session() {
+                        let _ = session.send_line(trimmed);
+                    }
+                }
+                response.request_focus();
+            }
+        }
+    });
 }

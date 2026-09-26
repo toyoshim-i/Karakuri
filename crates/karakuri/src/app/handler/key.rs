@@ -28,6 +28,12 @@ impl App {
                 return;
             }
 
+            // If an egui text edit widget (e.g. Prompt bay) is focused, egui consumes keystrokes.
+            if gfx.egui.egui_ctx().egui_wants_keyboard_input() {
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                return;
+            }
+
             // Interactive Tooltip Key Learn Mode: capture next key to bind to the active control.
             if let Some(on) = self.hover.learning_key() {
                 if key.logical_key == Key::Named(NamedKey::Escape) {
