@@ -1,40 +1,14 @@
-//! The console paints its own hover layer, and the words in it are the
-//! manual's own.
+//! Extracts hover tip citations from the manual (`docs/manual/console.html`).
 //!
-//! # The words are the page's, and only the key is written down here
-//!
-//! `docs/manual/console.html` is the only copy of a tip. The page is
-//! [`PAGE`], embedded at compile time, and [`Tips::read`] parses the
-//! `data-tip` attributes out of it once, at start-up, off the frame path
-//! (P-0091). Nothing here restates a word of one, so there is no second copy
-//! to drift ([`docs/contributing.md` §4](../../../docs/contributing.md), which
-//! is *generated* rather than *tested*).
+//! Tips are parsed once at startup from compile-time embedded [`PAGE`] (P-0091)
+//! to avoid duplication and doc drift.
 
-/// The mock, embedded: the only copy of every tip on this console.
-///
-/// It is `include_str!` rather than a path read at run time for the reason
-/// every other transcription in this crate is a `const`: a panel that had to
-/// find `docs/manual/` on disk would draw no tips at all when it was installed
-/// anywhere else, and a tip that is missing is indistinguishable from a control
-/// that has none.
+/// Embedded manual HTML page containing hover tips for console controls.
 pub const PAGE: &str = include_str!("../../../../docs/manual/console.html");
 
-/// Where one control's words are in the mock: the element's class, exactly as
-/// the page spells it, and the text inside it with its tags removed and its
-/// runs of whitespace collapsed.
+/// Locates a control's hover tip in the manual by HTML class, inner text, and index.
 ///
-/// It is a citation and not a copy. Nothing here is a word of the tip — what is
-/// written down is where to find it, which is the part the page cannot answer
-/// for itself.
-///
-/// The text is in the page's own spelling, entities and all — `&#9662;` stays
-/// `&#9662;` — because what is being cited is the markup rather than what a
-/// browser makes of it, and a cite a reader can `grep` for is one they can
-/// check.
-///
-/// [`Cite::nth`] is which of the elements matching that pair is meant, and it
-/// is 0 for every cite that is unambiguous. A pair that matches nothing, or
-/// that matches fewer elements than `nth` reaches, fails in `tests/hover.rs`.
+/// Preserves exact markup spelling and entities to allow verified lookup in tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cite {
     /// The element's `class` attribute, verbatim, or `""` for an element with none.
@@ -45,13 +19,9 @@ pub struct Cite {
     pub nth: usize,
 }
 
-/// Every tip [`crate::hover::TIPS`] cites, in [`crate::hover::flat`]'s order, read out of [`PAGE`] once.
+/// Cached tip strings resolved from [`PAGE`] matching [`crate::hover::TIPS`].
 ///
-/// An entry is `None` where its [`Cite`] resolved to nothing, which is a
-/// transcription that has gone stale rather than a control with no tip — a
-/// control with no tip has no row at all. `tests/hover.rs` is where that fails;
-/// a panel that met one would draw nothing for that control rather than
-/// something wrong.
+/// An entry is `None` if its [`Cite`] could not be resolved from markup.
 pub struct Tips {
     words: Vec<Option<String>>,
 }
@@ -112,14 +82,9 @@ pub struct Element<'a> {
     pub tip: &'a str,
 }
 
-/// Every element in the page carrying a `data-tip`, in document order.
+/// Scans document-order HTML elements bearing a `data-tip` attribute.
 ///
-/// A scan and not a parser: it finds the attribute, walks back to the `<` that
-/// opened the tag, reads the class beside it, and takes the text up to the
-/// matching close tag. That is enough for this page and it is deliberately not
-/// enough for HTML in general — what it cannot read it drops, and
-/// `tests/hover.rs` carries a floor so a scan that stopped reading fails rather
-/// than passing over an empty set (`gpu_tests_are_under_mod_gpu.rs`'s shape).
+/// Extracts the class and inner text between tags for tip resolution.
 pub fn elements(page: &str) -> Vec<Element<'_>> {
     let mut out = Vec::new();
     let mut from = 0;
@@ -251,11 +216,7 @@ const NAMED: [(&str, &str); 15] = [
     ("&gt;", ">"),
 ];
 
-/// One tip's words, as a reader sees them: the attribute's value with its
-/// entities resolved.
-///
-/// `&amp;` is last on purpose — it is resolved after every other entity, so a
-/// literal ampersand in the page cannot turn the text after it into one.
+/// Decodes HTML entities in tip text, resolving `&amp;` last to avoid double-unescaping.
 pub fn decode(escaped: &str) -> String {
     let mut out = String::with_capacity(escaped.len());
     let mut rest = escaped;
