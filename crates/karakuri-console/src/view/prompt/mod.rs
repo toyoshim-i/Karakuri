@@ -1,11 +1,13 @@
 //! Prompt bay module: embedded agent terminal and CLI selection.
 
+pub mod ansi;
 mod cli;
 mod head;
 mod paint;
 mod session;
 mod state;
 
+pub use ansi::{Cell, CellStyle, Scrollback};
 pub use cli::{is_executable_on_path, resolve_executable, CliPreset, CliSelection};
 pub use head::{
     prompt_ask, prompt_item_rect, prompt_menu_rect, prompt_pill, PromptAsk, MENU_CARD_W, MENU_COLS,
@@ -13,5 +15,5 @@ pub use head::{
     MENU_ROWS_PER_COL, PROMPT_TITLE,
 };
 pub use paint::{prompt_head_into, prompt_into, prompt_menu_into, PROMPT_FONT_SIZE};
-pub use session::{Scrollback, SessionManager, SessionStatus, TerminalSession};
+pub use session::{SessionManager, SessionStatus, TerminalSession};
 pub use state::PromptState;
