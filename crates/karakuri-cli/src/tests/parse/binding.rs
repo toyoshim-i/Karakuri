@@ -2,14 +2,7 @@ use super::*;
 
 // -- --bind ---------------------------------------------------------------
 
-/// The spec's own example, field for field. This is the mapping the flag
-/// exists to preserve: when a Set file can be loaded, each `field=value`
-/// here becomes the JSON field of the same name and nothing else changes.
-///
-/// ```ndjson
-/// {"t":"bind","layer":"L1","key":"spawn_rate","signal":"noise",
-///  "noise":{"kind":"perlin","rate":0.5,"stream":3},"curve":"lin","range":[4000,16000]}
-/// ```
+/// Verifies that `--bind` accurately populates all fields of a binding record.
 #[test]
 fn bind_carries_every_field_of_the_record() {
     let args = parse(&[
@@ -82,11 +75,7 @@ fn bind_octaves_reaches_fbm_in_either_order() {
     );
 }
 
-/// `octaves` belongs to `fbm` and, per `docs/ir-spec.md`, is "ignored by the
-/// other three kinds". What it must never do is decide the kind: a
-/// `noise.kind=white` that came back as `fbm` is a different generator from the
-/// one the operator named, chosen silently, in a flag whose whole stated reason
-/// for refusing unknown fields is that silence.
+/// Verifies that octaves fields cannot change the noise generator kind.
 #[test]
 fn bind_octaves_never_silently_replaces_the_kind_that_was_named() {
     for fields in [
@@ -146,13 +135,7 @@ fn a_malformed_bind_is_refused_and_says_what_it_could_not_use() {
     }
 }
 
-/// A binding to `bpm` is pinned at the top of its range for the whole run,
-/// because a tempo is not a `[0, 1]` signal and the curve clamps it. That is
-/// `--param key=HIGH` spelled at four times the length, and nothing on the
-/// outside distinguishes it from a binding that is working — the status line
-/// shows a number, and the number never moves. `bpm` is a signal the spec
-/// lists, so a generator will reach for it; the refusal is what tells it to
-/// reach for `beat` instead.
+/// Verifies that binding directly to bpm is rejected with guidance to use beat or bar.
 #[test]
 fn binding_bpm_is_refused_and_names_the_signal_to_use_instead() {
     let err = parse(&["--bind", "layer=L1,key=radius,signal=bpm,range=1..5"]).unwrap_err();
@@ -223,16 +206,7 @@ fn a_recorded_salt_wins_and_an_unrecorded_one_is_derived() {
     assert_eq!(salts_for(seed, &[Some(11)], 2), vec![11, derived(1)]);
 }
 
-/// The flag and the file agree about compositing in either order, and leaving
-/// the flag off takes nothing away from a file that records a merge.
-///
-/// `--merge` can only turn compositing *on* — there is no spelling that turns
-/// it off, because overdraw is what saying nothing means — so `--load-set X
-/// --merge 0` on a composited file is two ways of asking for one thing rather
-/// than a contest. The case that decides the rule is the third: a composited
-/// file loaded with no flag. Reading the missing flag as "overdraw" would make
-/// every saved variant pool come back unfoldable, which is exactly the state
-/// the `merge` record was added to end.
+/// Verifies that `--merge` flags and Set file layering agree without conflict.
 #[test]
 fn the_flag_and_the_file_agree_about_compositing_in_either_order() {
     use karakuri_engine::set::Layering::{Composite, Overdraw};
@@ -282,13 +256,7 @@ fn the_flag_and_the_file_agree_about_compositing_in_either_order() {
     );
 }
 
-/// What a live save writes as the merge's `live`, read off the Set.
-///
-/// `k` and the MCP tool write what is on screen, and the fold is one of the
-/// things only the Set knows: there is no flag that selects a renderer.
-/// Every-input-live is `None` and not renderer 0 — a Set nobody has selected in
-/// has made no choice to record, and a one-renderer Set is that case rather
-/// than a selection of its only renderer.
+/// Verifies that live saving accurately records active selection state from the Set.
 #[test]
 fn a_saved_fold_is_the_selection_the_set_is_holding() {
     let live = karakuri_engine::mix::Input::unity();

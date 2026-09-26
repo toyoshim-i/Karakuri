@@ -2,12 +2,7 @@ use super::*;
 
 // -- edges -----------------------------------------------------------
 
-/// `--edge <node>.<slot>=<geometry>` writes the record it stands for, and every
-/// part of the spelling names something.
-///
-/// The `.` is the same dot the procedure reads the slot through and the `=` is
-/// `--set`'s, so `--edge morph.far=sphere` and `far.position` in the `deform`
-/// are visibly one spelling.
+/// Verifies that `--edge <node>.<slot>=<geometry>` correctly parses and constructs an Edge.
 #[test]
 fn an_edge_names_a_node_a_slot_and_the_geometry_bound_to_it() {
     let args = parse(&["--edge", "morph.far=sphere_shell"]).expect("parses");
@@ -100,14 +95,7 @@ fn a_saved_set_records_the_capacity_the_run_was_drawing() {
     );
 }
 
-/// Each source runs at the capacity its own procedure declares. The build asked
-/// `capacity_for` once, about the first L1, and handed the answer to every
-/// source — so a grid declared at 131072 ran at 32768 because it was loaded
-/// beside a cube that declared that.
-///
-/// Nothing could have caught it downstream: the number came from a real
-/// declaration, so it was inside *somebody's* range, and the picture is a grid
-/// with fewer points in it, which is a thing a grid can be.
+/// Verifies that multiple sources operate at their individually declared capacities.
 #[test]
 fn every_source_runs_at_the_capacity_it_declares() {
     let small = compile::check(
