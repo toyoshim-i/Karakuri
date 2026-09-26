@@ -1,29 +1,5 @@
-//! The Set-file projection: "a Set file is the session stream with ticks
-//! dropped and the state folded down" (`docs/ir-spec.md`, Session stream
-//! format).
-//!
-//! Folding is last-write-wins per address and key, where "key" depends on the
-//! record type — a [`Record::Param`] is keyed by `(layer, index, key)`, a
-//! [`Record::Capacity`], a [`Record::Seed`] and a [`Record::Camera`] by the
-//! node they address, and so on. What a record says about a node is folded;
-//! which node it says it about is what it is folded by, so a [`Record::Slot`]'s
-//! `name` is on the value side of that line and its `(layer, index)` is on the
-//! key side.
-//!
-//! The result keeps each key at the position of its *first* occurrence in the
-//! session but with its *last* value — the same semantics as repeatedly
-//! `.insert()`-ing into an ordered map. That keeps the projection stable:
-//! appending one more edit to a session changes at most the value at an
-//! existing position, or appends one new position, so saving the same live
-//! session twice in a row produces near-identical Set files even as the session
-//! grows.
-//!
-//! [`Record::Unknown`] cannot be folded by this scheme at all: the variant
-//! carries no data, so two unrelated unknown record types are indistinguishable
-//! once parsed, and folding them together would silently merge records that
-//! share nothing but the store's ignorance of them. Each unknown line is
-//! therefore treated as its own key and passes through unfolded, in its
-//! original relative position.
+//! Set-file projection: folds live session streams into Set state (last-write-wins per address and key).
+//! Unknown record types pass through unfolded to preserve third-party or forward-compatible data.
 
 use std::collections::HashMap;
 

@@ -1,8 +1,5 @@
-//! The content-addressed artifact store and the ndjson record formats.
-//!
-//! Artifacts are immutable and identified by the hash of their `.kir` source.
-//! Metadata is regenerated from the source plus a compile pass, so a
-//! `.meta.ndjson` is a reproducible artifact rather than a hand-authored one.
+//! Content-addressed artifact store and ndjson record formats.
+//! Artifacts are immutable and metadata is reproducible from `.kir` source.
 
 pub mod hash;
 pub mod ndjson;
