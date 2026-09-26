@@ -21,13 +21,13 @@ use karakuri_layout::Point;
 
 #[test]
 fn presets_are_in_strict_alphabetical_order() {
-    assert_eq!(CliPreset::ALL.len(), 15);
+    assert_eq!(CliPreset::ALL.len(), 18);
     let commands: Vec<&str> = CliPreset::ALL.iter().map(|p| p.command()).collect();
     assert_eq!(
         commands,
         vec![
-            "agy", "aider", "claude", "codex", "copilot", "deepseek", "grok", "kimi", "mimo",
-            "minimax", "mistral", "muse", "ollama", "pi", "qwen"
+            "agy", "aider", "claude", "cline", "codex", "copilot", "deepseek", "grok", "hermes",
+            "kimi", "mimo", "minimax", "mistral", "muse", "ollama", "opencode", "pi", "qwen"
         ]
     );
 
