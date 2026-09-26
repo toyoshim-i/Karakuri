@@ -18,20 +18,7 @@ mod gpu {
         const WARMUP: usize = 60;
         const MEASURED: usize = 120;
 
-        // **The sprite is expressed against the height it is rendered at**,
-        // which is the whole of what a reader has to hold: a rate is a size
-        // only once a height is named. `point_rate` is a fraction of the
-        // target's height, so [`L4`]'s 0.015625 is four texels at [`HEIGHT`]
-        // and 11.25 here, at 720 — 7.9 times the area, on an additive blend
-        // that is paid by area. That is what this test measured from
-        // 2026-09-02 to 2026-09-07, and a quarter to two fifths of every
-        // figure it printed was the fixture rather than the deck: on a quiet
-        // machine `four, one Live` reads 21.3 ms at 11.25 texels against 16.1
-        // at four, and with the machine loaded the same pair read 62.7 and
-        // 67.3 against 33.6 and 32.7, because contention lands on the
-        // four-slot lines. The rate is rescaled here rather than changed in
-        // [`L4`], because [`L4`]'s number is the right one for the 256-high
-        // target the assertions render into.
+        // Rescale point_rate to maintain constant pixel diameter regardless of target resolution.
         const SPRITE_PX: f32 = 4.0;
         let l4 = L4.replace(
             "point_rate = 0.015625;",
@@ -145,14 +132,7 @@ mod gpu {
             }
             out
         };
-        // **The same deck, never warmed**, which is the panel's own state
-        // rather than this test's: three slots that have been off air since
-        // the window opened, holding element state `Simulation::initialize`
-        // filled with zeros. Every element is at the origin, so the whole
-        // capacity is drawn at one clip position and the raster back end
-        // serialises order-dependent blending at that one address. The gap
-        // between this line and `four, one Live` is what an unstepped draw
-        // costs, and it is the reason ADR-0269 steps every drawn slot.
+        // Unstepped cold deck baseline measuring uninitialized origin-concentrated primitives.
         let one_live_cold = {
             let seeds = [SEED_A, SEED_B, SEED_A + 1, SEED_B + 1];
             let swaps = seeds
@@ -203,131 +183,7 @@ mod gpu {
         eprintln!();
     }
 
-    /// What filling a deck slot's **preview cell** costs, two ways. **Printed,
-    /// not asserted.**
-    ///
-    /// A cell in the program bay is **112 x 63** — `karakuri-console`'s
-    /// `view::preview_cells` derives the width from `(466 - three 6px gaps) / 4
-    /// = 112`, and 112 at 16:9 is 63 — while a slot renders at the deck's
-    /// canvas, 1280x720. Two ways to get one into the other, and this measures
-    /// both rather than arguing them:
-    ///
-    /// - **downsample**: present the 1280x720 target into the cell. No extra
-    ///   draw. The horizontal stride is `1280 / 112` = 11.4 source texels at 8
-    ///   bytes each, so consecutive output texels fall in different cache lines.
-    /// - **re-render**: draw the Set again into a 112x63 target. Better
-    ///   locality, and **not fewer primitives**: the point count is the
-    ///   capacity either way, 262144.
-    ///
-    /// **The filter decides how many taps the downsample takes, and this one
-    /// takes four.** `Present`'s sampler is `Linear`/`Linear` over a texture
-    /// with `mip_level_count: 1`, so there is no mip chain to fall back on and
-    /// a fragment reads a 2x2 neighbourhood, not an 11x11 box. The downsample
-    /// therefore *undersamples* — it is bilinear point-picking with aliasing,
-    /// not a box filter — and it does not read the 1.8 MB the source occupies:
-    /// 7056 output texels at four taps is 28k taps, scattered.
-    ///
-    /// **`point_rate` is a fraction of the target's height, so a small target
-    /// has fewer fragments per sprite — until a sprite reaches a pixel.**
-    /// `karakuri-codegen`'s L4 expansion scales the quad by the rate rather than
-    /// by a pixel count, so a sprite is the same share of the frame at every
-    /// size. This paragraph read that a 112x63 render therefore rasterises
-    /// roughly `(63/720)²` of the fragments a 1280x720 one does, and that is no
-    /// longer true at the bottom of the sweep: a quad below a pixel is floored
-    /// at one pixel and dimmed rather than dropped (ADR-0245), so a `Points`
-    /// procedure's fragment count bottoms out at one per element
-    /// instead of falling with the area. At 112x63 this material's sprites are
-    /// about a third of a pixel across, so the cell render sits entirely in that
-    /// floored regime.
-    ///
-    /// **The sweep's lit-texel column is not the check for that**, and reading
-    /// it as one would be a mistake. At capacity 262144 the coverage saturates —
-    /// 231 points land on each lit texel at 112x63 — so the column reports the
-    /// material's silhouette rather than any sprite's extent, and it comes out
-    /// near 16% at every size for that reason. What a sprite's extent does at
-    /// two target sizes is asserted to the texel in `tests/lines.rs`, on one
-    /// element, where nothing saturates.
-    ///
-    /// Same method as its neighbour
-    /// [`the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`]:
-    /// host clock around submit-and-wait, the same 60-frame warm-up and
-    /// 120-frame window, medians and worst rather than means. Two departures,
-    /// both because this compares configurations against each other rather
-    /// than reporting them one at a time:
-    ///
-    /// - **the configurations are interleaved, one frame each per round, and
-    ///   the order rotates.** Run as blocks, the first block measured a cold
-    ///   GPU and the last a hot one: 1280x720 came out 9.3 ms as the first
-    ///   block and 7.3 ms as the last, which is a quarter of the number and
-    ///   none of it the configuration. Those two figures are from the run that
-    ///   found the hazard, under the pixel-size semantics; the hazard is the
-    ///   point and it is not sensitive to either.
-    /// - **each present writes into its own cell texture**, so "did this pass
-    ///   write anything" can still be asked of each of them at the end. A
-    ///   target that persists between frames is the hazard the pixel tests
-    ///   above defeat by resizing; here every destination is blackened before
-    ///   the loop and counted after it.
-    ///
-    /// One configuration is **nothing at all** — an empty command buffer,
-    /// submitted and waited on. A host clock around submit-and-wait pays for a
-    /// round trip whether or not there is work in it, and the present passes
-    /// here are small enough that the round trip is most of what is timed:
-    /// 0.13 ms of the 0.49 ms. Every present figure worth quoting is net of
-    /// that line.
-    ///
-    /// **Run it alone.** `cargo test` runs the two benchmarks in this file on
-    /// two threads and one GPU, and every number in both comes out about 40%
-    /// high; `--test-threads=1`, or a name filter, is part of the method.
-    ///
-    /// **What it found, so that the next reader need not run it.** The
-    /// downsample is under a millisecond net of the floor and the 11.4-texel
-    /// stride costs almost nothing — 0.883 ms against 0.805 ms for the same
-    /// present with no scaling at all.
-    ///
-    /// **The cost order has reversed twice, and the second time it reversed
-    /// back.** Under the old pixel-size semantics, re-rendering into the cell
-    /// was 17.5 ms against 9.3 ms for the whole 1280x720 frame. `point_rate`
-    /// turned that around — 7.6 ms against 10.5 ms, the sweep climbing with the
-    /// target — and the one-pixel floor turned it back. Measured here as a
-    /// **pair**, one machine and one sitting, with the floor removed and
-    /// restored, because the older figures are another machine's and a
-    /// difference between them would be unreadable:
-    ///
-    /// | target | no floor | floored |
-    /// |---|---|---|
-    /// | 112x63 | 7.338 ms | 10.573 ms |
-    /// | 224x126 | 8.209 ms | 10.700 ms |
-    /// | 448x252 | 10.239 ms | 10.036 ms |
-    /// | 640x360 | 10.693 ms | 9.860 ms |
-    /// | 1280x720 | 11.687 ms | 10.014 ms |
-    ///
-    /// The draw-only halves say it without the compute in them: 4.797 ms against
-    /// 8.103 ms at 112x63, and 7.48 ms either way at 1280x720. **Rendering at
-    /// cell size went from 0.6x the whole 720p frame to 1.1x of it**, which is
-    /// what a floor of one fragment per element does to a target of 7056 texels
-    /// holding 262144 elements.
-    ///
-    /// **The 1280x720 row is the control, and it moved 1.7 ms.** The floor is
-    /// inert there — this material is 1.4 to 4 pixels across at that size — so
-    /// that gap is this machine's run-to-run agreement rather than an effect of
-    /// anything. Read the shape of the sweep and not the rows.
-    ///
-    /// **It is still not the way to fill a cell, and the reason has changed.**
-    /// The reason used to be that most of this material's sprites cover no pixel
-    /// centre at 112x63 and vanish — which was a defect in the renderer rather
-    /// than a fact about cells, and ADR-0245 is where it went. What stands in its
-    /// place is the plain cost: the full-size target is rendered anyway, so
-    /// downsampling costs line 2 alone, 0.489 ms net of the floor, against a
-    /// second 10.573 ms pass. **What fills a cell is open again** in the sense
-    /// that the correctness argument is spent; the cost argument now points the
-    /// same way, and the panel downsamples today.
-    ///
-    /// All of that is a claim about point sprites and not about every L4 — a
-    /// fullscreen node such as `examples/field_march.kir` has a fragment count
-    /// that *is* the pixel count, and nothing here measures one.
-    ///
-    /// `#[ignore]`d for the same reason its neighbour is: capacity 262144,
-    /// eleven configurations.
+    /// Measures preview cell presentation cost comparing downsampling against re-rendering.
     #[test]
     #[ignore = "a measurement, not a check; run with --ignored --nocapture"]
     fn the_cost_of_filling_a_preview_cell_is_measured_and_reported() {
@@ -567,11 +423,7 @@ mod gpu {
                     set.prepare(&gpu.queue, 1, &Signals::default());
                     set.render(&mut encoder, target.hdr_view(), 1);
                 }
-                // Nothing at all, submitted and waited on: the floor this
-                // harness can measure. A present pass costing "tens of
-                // microseconds" is unreadable here unless it is read against
-                // this line, because a host clock around submit-and-wait is
-                // paying for a round trip either way.
+                // Baseline floor representing empty command buffer submission and wait.
                 _ => {}
             }
             submit(encoder);
@@ -676,14 +528,7 @@ mod gpu {
         eprintln!();
     }
 
-    /// A mix target that is not the deck's size is refused rather than mixed.
-    ///
-    /// The composite reads its sources with `textureLoad`, and an out-of-range
-    /// `textureLoad` is *defined* to return zero — so resizing `Present` and
-    /// forgetting the deck would produce a black frame, every frame, with nothing
-    /// logged. A panic at the call is louder than a picture that is quietly wrong,
-    /// and this is a programming error rather than an input error: no `.kir` and
-    /// no record stream can reach it.
+    /// Verifies that rendering into a target mismatched with deck dimensions panics.
     #[test]
     #[should_panic(expected = "resize both")]
     fn a_mix_target_of_the_wrong_size_is_refused() {

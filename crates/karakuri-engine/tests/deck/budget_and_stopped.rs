@@ -3,16 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// A frame slowed by hand, so that **"the deck is over its period" is a fact
-    /// of the harness rather than of the machine**.
-    ///
-    /// `docs/contributing.md` §1 rules out a test that turns on whether this
-    /// adapter is fast: a workload heavy enough to blow a budget here is
-    /// comfortable somewhere else. The two tests below need a deck whose *frames*
-    /// are certainly over a budget while the *candidate* is certainly under it,
-    /// and the only way to have both on every machine is to make the frame long
-    /// by construction. It stands in for exactly what the old gate could not tell
-    /// apart from a heavy candidate: a long frame, whatever produced it.
+    /// Deliberate artificial frame delay to ensure deck period reliably exceeds budget in tests.
     const SLOW_FRAME: Duration = Duration::from_millis(30);
 
     /// The budget both of those hold against — a third of [`SLOW_FRAME`], so the
@@ -33,24 +24,8 @@ mod gpu {
         std::thread::sleep(SLOW_FRAME);
     }
 
-    /// **A light candidate is kept in a deck whose frames are over the budget —
-    /// which is the exact case that used to roll it back.**
-    ///
-    /// Measured on 2026-09-09, headless at 1280x720 on an M4 Pro, host clock and
-    /// biased high: the panel's four default slots take 4.3 ms a frame, the
-    /// reference Set in one of four takes 11.3 ms, and on the panel each cell's
-    /// present adds about 1.5 ms on top — so loading the reference Set into one
-    /// slot of four was about 18 ms of work against a 16.7 ms vsync, landed at 33
-    /// ms under Fifo, and was rolled back. What that Set's *own* frame costs is
-    /// about 9 ms. The gate was not too strict; it was reading the wrong
-    /// quantity
-    /// ([ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
-    ///
-    /// The deck here is four slots with a build landing on one of them, its frames
-    /// held over the budget by [`SLOW_FRAME`], and the candidate small. Under the
-    /// old gate the median interval decided, so this candidate was certain to go;
-    /// under this one it is kept, and the deck being over its period is said in
-    /// the place that is entitled to say it.
+    /// Verifies that candidate sets are retained when candidate cost is within budget,
+    /// even if aggregate deck period exceeds the frame period limit (ADR-0313).
     #[test]
     fn a_light_candidate_is_kept_in_a_deck_whose_frames_are_over_the_budget() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -108,13 +83,7 @@ mod gpu {
             SWAPPED,
             "the verdict said kept and the slot is not holding the candidate"
         );
-        // **A number and not the absence of one.** Which of the slot's two
-        // readings answered is `governor::budgeted`'s and not this test's: a
-        // candidate arrives with a measurement and an `estimate` at the deck's
-        // own size since ADR-0356, and on this machine the fit can refuse. What
-        // this test turns on is that the verdict was reached on the candidate's
-        // own frame rather than on the deck's interval, which the band below is
-        // what says.
+        // Verifies the verdict was reached on the candidate's own frame cost rather than the deck interval.
         assert_ne!(
             basis,
             karakuri_engine::Basis::Unbudgetable,
@@ -160,28 +129,7 @@ mod gpu {
         );
     }
 
-    /// **A slot the watchdog stopped takes no step, and its target keeps the
-    /// last image it made** — two of the three things ADR-0316 says *stops
-    /// updating* means.
-    ///
-    /// The budget is zero, so the candidate cannot pass and the branch is
-    /// certainly reached on every machine (`docs/contributing.md` §1: the
-    /// alternative is a shader chosen for being slow somewhere).
-    ///
-    /// **What each half rules out.** The step count would advance if
-    /// `Frame::render` were skipping the draw and not the step, and the target's
-    /// bits would go *black* if a stopped slot were skipped by clearing rather
-    /// than by being left alone — which is the state an operator cannot tell
-    /// from an empty slot.
-    ///
-    /// **What no assertion here can reach is the draw**, and saying so is
-    /// better than implying otherwise. A stopped slot's buffers do not change,
-    /// and `points.rs` clears its target and redraws from those buffers — so a
-    /// slot that was still being drawn would produce the **same bits**, and this
-    /// test would pass. *Keep drawing without stepping* is therefore ruled out
-    /// by ADR-0316's argument (it removes almost nothing, because the draw is
-    /// the fill-rate half) and not by this file; what an outside observer can
-    /// see of it is a cost, and this suite asserts no costs.
+    /// Verifies that a stopped slot ceases stepping its state while preserving its last rendered image target (ADR-0316).
     #[test]
     fn a_stopped_slot_takes_no_step_and_keeps_the_image_it_stopped_at() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -291,17 +239,7 @@ mod gpu {
         );
     }
 
-    /// **A fader to zero reaches a stopped slot**, which is
-    /// [ADR-0040](../../../docs/adr/0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md)'s
-    /// zero-skip and `P-0094`'s last resort: the way out of material an operator
-    /// cannot use is to pull it down, and it has to work on exactly the material
-    /// that has gone wrong. A stopped slot is still mixed — that is the point of
-    /// stopping it rather than blanking it — so *still mixed* has to be
-    /// something the fader can end.
-    ///
-    /// One slot Live and the other off air, so the picture is this slot's held
-    /// image and nothing else, and *out of the mix* is *black* rather than a
-    /// difference somebody has to interpret.
+    /// Verifies that setting gain to zero excludes a stopped slot's held image from the composite (ADR-0040).
     #[test]
     fn a_fader_to_zero_takes_a_stopped_slot_out_of_the_picture() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -388,11 +326,7 @@ mod gpu {
         );
     }
 
-    /// Verifies that candidate budget evaluation is independent of neighbor slot loads (ADR-0313).
-    ///
-    /// The same candidate receives the identical verdict regardless of whether
-    /// neighboring slots are idle or carrying heavy workloads that exceed the
-    /// deck-level frame period.
+    /// Verifies candidate budget evaluation is independent of neighbor slot loads (ADR-0313).
     #[test]
     fn a_candidates_verdict_does_not_move_with_what_the_other_slots_carry() {
         /// Sixteen times [`CAPACITY`], so the loaded run's neighbours are a real
@@ -465,15 +399,7 @@ mod gpu {
             "the same candidate was kept on one deck and thrown out on another; the \
          only difference between them is what the other slots are carrying"
         );
-        // **Both verdicts read a number of the candidate's own**, and which of
-        // its two readings that was is not asserted. A candidate arrives with a
-        // measurement and an `estimate` since ADR-0356, and the estimate's two
-        // rungs are a few hundred microseconds each on a host clock — so on the
-        // loaded deck the slope through them can come out negative, which is
-        // `Unfit::FragmentTermNegative` and sends the slot to its measurement
-        // (ADR-0296 §2). That is the fallback working and it is load-dependent
-        // by construction. What is *not* allowed to move with the neighbours is
-        // the verdict, which is the equality above.
+        // Verifies that both verdicts evaluated the candidate's own cost rather than unbudgetable fallback.
         for (which, basis) in [("idle", idle.2), ("loaded", loaded.2)] {
             assert_ne!(
                 basis,
