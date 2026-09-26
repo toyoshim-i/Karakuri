@@ -189,6 +189,7 @@ mod gpu {
             fov_y: 0.9,
             near: 0.25,
             far: 250.0,
+            ..karakuri_engine::camera::Orbit::default()
         };
         let six = |o: &karakuri_engine::camera::Orbit| {
             (o.radius, o.speed, o.height, o.fov_y, o.near, o.far)

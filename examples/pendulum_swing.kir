@@ -1,0 +1,52 @@
+// An L3 camera procedure executing an oscillating pendulum swing across the subject.
+//
+// At the apex of each swing, motion slows to zero and reverses direction.
+// Includes a vertigo / dolly-zoom coupling parameter that counter-scales the lens
+// field of view with distance, creating classic cinema optical distortion.
+
+proc pendulum_swing {
+  kind L3
+
+  // Distance from the subject in world units.
+  param radius     : float [2.0, 40.0]   = 10.0
+  // Oscillation frequency in swings per second.
+  param speed      : float [0.0, 2.0]    = 0.15
+  // Angular arc half-width in radians (max swing breadth).
+  param arc        : float [0.2, 3.14]   = 1.2
+  // Height of the swing pivot plane.
+  param height     : float [-20.0, 20.0] = 1.5
+  // Height variation between the center and the apex (swoop).
+  param dip        : float [-10.0, 10.0] = -2.0
+  // Base lens field of view in radians.
+  param lens       : float [0.3, 2.5]    = 1.047
+  // Dolly zoom vertigo coupling: compresses or expands FOV as camera swings.
+  param vertigo    : float [-1.0, 1.0]   = 0.35
+
+  camera {
+    // Sinusoidal pendulum phase: slows at extremes (-1, +1), fast in center (0)
+    let phase = sin(t * speed * 6.2831853);
+    let angle = phase * arc;
+
+    let h = height + (1.0 - cos(angle)) * dip;
+    let r = radius * (1.0 + phase * phase * (vertigo * 0.3));
+
+    let eye_x = sin(angle) * r;
+    let eye_y = h;
+    let eye_z = cos(angle) * r;
+
+    let final_eye = vec3(eye_x, eye_y, eye_z);
+    let final_target = vec3(0.0, 0.0, 0.0);
+
+    eye    = final_eye;
+    target = final_target;
+    // Vertigo FOV counter-modulation
+    fov_y  = clamp(lens * (1.0 - phase * phase * vertigo), 0.2, 2.5);
+
+    let fwd     = normalize(final_target - final_eye);
+    let rgt     = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let base_up = cross(rgt, fwd);
+    // Banking into the swing turn
+    let bank    = phase * 0.25;
+    up = base_up * cos(bank) + rgt * sin(bank);
+  }
+}

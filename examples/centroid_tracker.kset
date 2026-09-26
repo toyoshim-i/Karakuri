@@ -1,0 +1,7 @@
+{"t":"set","id":"centroid_tracker","v":1}
+{"t":"part","layer":"L1","path":"shape_swarms.kir"}
+{"t":"part","layer":"L3","path":"centroid_tracker.kir"}
+{"t":"part","layer":"L4","path":"halo_points.kir"}
+{"t":"param","layer":"L3","key":"radius","value":5.5}
+{"t":"param","layer":"L3","key":"target_anchor","value":0.8}
+{"t":"param","layer":"L4","key":"point_scale","value":0.04}

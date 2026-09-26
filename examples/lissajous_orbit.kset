@@ -1,0 +1,8 @@
+{"t":"set","id":"lissajous_orbit","v":1}
+{"t":"part","layer":"L1","path":"clifford_dust.kir"}
+{"t":"part","layer":"L3","path":"lissajous_orbit.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}
+{"t":"param","layer":"L3","key":"radius_x","value":5.0}
+{"t":"param","layer":"L3","key":"radius_y","value":3.0}
+{"t":"param","layer":"L3","key":"radius_z","value":4.0}
+{"t":"param","layer":"L4","key":"point_scale","value":0.03}

@@ -1,0 +1,46 @@
+// An L3 camera procedure that navigates along a 3D Lissajous / figure-8 curve
+// around the subject, weaving up, down, over, and through without flying off.
+//
+// Ensures the subject stays centered in view while the perspective sweeps
+// dynamically through climbing, diving, and banking angles.
+
+proc lissajous_orbit {
+  kind L3
+
+  // Base orbit radius in world units.
+  param radius     : float [1.0, 40.0]   = 9.5
+  // Base traversal rate in cycles per second.
+  param speed      : float [-2.0, 2.0]   = 0.08
+  // Central eye elevation above target.
+  param height     : float [-20.0, 20.0] = 2.0
+  // Vertical oscillation amplitude (bobbing).
+  param bob        : float [0.0, 20.0]   = 5.0
+  // Roll banking intensity along the path.
+  param bank       : float [-3.14, 3.14] = 0.5
+  // Vertical field of view in radians.
+  param lens       : float [0.3, 2.5]    = 1.047
+  // Target vertical tracking offset.
+  param target_y   : float [-10.0, 10.0] = 0.0
+
+  camera {
+    let a = t * speed * 6.2831853;
+
+    // 3D Lissajous trajectory (harmonic ratios 1 : 2 : 3)
+    let eye_x = sin(a) * radius;
+    let eye_y = height + sin(a * 2.0) * bob;
+    let eye_z = cos(a * 3.0) * (radius * 0.85);
+
+    let final_eye    = vec3(eye_x, eye_y, eye_z);
+    let final_target = vec3(0.0, target_y, 0.0);
+
+    eye    = final_eye;
+    target = final_target;
+    fov_y  = lens;
+
+    let fwd     = normalize(final_target - final_eye);
+    let rgt     = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let base_up = cross(rgt, fwd);
+    let roll_a  = sin(a * 2.0) * bank;
+    up = base_up * cos(roll_a) + rgt * sin(roll_a);
+  }
+}

@@ -1,0 +1,7 @@
+{"t":"set","id":"pendulum_swing","v":1}
+{"t":"part","layer":"L1","path":"pendulum_trace.kir"}
+{"t":"part","layer":"L3","path":"pendulum_swing.kir"}
+{"t":"part","layer":"L4","path":"plain_points.kir"}
+{"t":"param","layer":"L3","key":"arc","value":1.2}
+{"t":"param","layer":"L3","key":"vertigo","value":0.8}
+{"t":"param","layer":"L4","key":"point_scale","value":0.03}
