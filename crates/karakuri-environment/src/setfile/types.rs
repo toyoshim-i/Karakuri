@@ -31,6 +31,8 @@ pub struct Loaded {
     pub fields: Vec<Checked>,
     /// The renderers, in the order their `slot` records indexed them.
     pub l4s: Vec<Checked>,
+    /// The post-processing frame effects, by `slot` index.
+    pub l5s: Vec<Checked>,
     /// Source procedure code in node order, excluding built-in cameras.
     pub srcs: Vec<String>,
     /// Vertex/point capacities per geometry slot, or `None` if engine default.

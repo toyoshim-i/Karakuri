@@ -168,6 +168,14 @@ capacity [65536, 1048576] = 262144
 **Shared vertices on static sources only:**
 An index buffer references slot indices, but live compaction moves them every frame (`Dispatch`). A source with no `spawn` and no `kill()` never compacts and its `seed` is its slot index; therefore, `triangles`, `grid`, and `ribbon` are legal only where `Checked::is_static` holds (its third use after L2 edges and `morph.kir`). Spawning sources carrying shared-vertex topologies require group lifecycle (scheduled for M11).
 
+**Under `triangles` a face has no identity of its own.** Element `seed` is corner `seed % 3u`
+of face `seed / 3u`; an element that needs its face's centre or normal evaluates all three
+corners itself. There is no barycentric built-in, and attributes are only those in
+[the attribute table](#emit--consumes): a renderer that draws a face's edges reads a per-corner
+value the L1 writes — `uv` set to `(1,0)`, `(0,1)` and `(0,0)` interpolates to the barycentric
+coordinates, and `min(min(uv.x, uv.y), 1.0 - uv.x - uv.y)` is the distance to the nearest edge.
+`examples/shard_bloom.kir` and `examples/shard_edges.kir` are the pair.
+
 For `points` and `lines`, topology constrains no renderer: a segment gets both of its ends from
 attributes the L4 consumes, so a line renderer needs nothing from the geometry that the
 `consumes ⊆ emit` check does not already cover — which means one L1 file can be paired with
@@ -544,6 +552,11 @@ works cleanly without alteration.
 Blend mode is part of an artifact's identity: a procedure writes its `color` and alpha
 knowing how they will be combined.
 
+**Renderers draw in declaration order, and an `opaque` renderer must come before every
+non-opaque one in its Set** — a Set that declares `opaque` after `additive` or `weighted` is
+refused at build, naming both. A fullscreen `additive` renderer after an `opaque` one draws at
+the far plane and so lands behind the mesh: that is how a backdrop is put under geometry.
+
 **The equivalent gap on the topology side closed first**, and how it closed is what settled
 the shape of this declaration. Quad expansion used to be justified by
 `topology points` while `topology` was declared on the **L1** header, so an L4 had no way to
@@ -658,9 +671,12 @@ the one it gets by default:
 So **material should occupy roughly a radius of 1 to 4 around the origin.** Much smaller
 and it is a dot; much larger and it fills the frame with no silhouette.
 
-Brightness is harder, because the pipeline is additive and has no tone mapper yet. `color`
-is linear and unbounded, values above 1.0 clip at output, and every element in a sprite's
-footprint adds. The practical consequence is that **usable exposure scales inversely with
+Brightness is harder, because the pipeline is additive. `color` is linear and unbounded,
+and every element in a sprite's footprint adds. The frame is tone mapped once, after the mix
+(`--tonemap`, ACES by default; `clamp` is the only operator under which values above 1.0
+clip). **Under ACES a saturated colour washes toward white as its largest channel nears 1.0**:
+a pastel comes out grey and a bright yellow comes out cream. A colour meant to read as
+saturated keeps its largest channel below 1.0 and leaves the headroom to glows and edges. The practical consequence is that **usable exposure scales inversely with
 element count**: what reads correctly at 4096 elements is a solid white disc at 262144. A
 procedure cannot know the capacity it will run at — that is a Set-level dial — so this is
 a problem the engine has to solve rather than the author. Until it does, an artifact
@@ -759,7 +775,11 @@ kill();                       // L1 element block only
   time — see [State semantics](#state-semantics).
 - Assigning to a name that was never declared is an error, not a declaration.
 - `let`, `var`, and the loop variable may not shadow a param, an attribute, or an ambient
-  value.
+  value. **Every name in the [attribute table](#emit--consumes) is reserved in every
+  procedure, declared or not**: `let tint = …` is refused in a fullscreen L4 that consumes
+  nothing, and so are `normal`, `size` and `uv`.
+- A `let` whose initializer fails to check is not bound, so each later use of the name reports
+  ``does not resolve`` as well. Fix the first diagnostic; the rest are its echo.
 - Loop bounds are signed integer literals, not expressions. Constant bounds are what makes
   cost estimation possible, and a literal is the only form the check pass need not reason
   about. `for i in -3..3` is well formed; a range that does not ascend — `for i in 4..0` —
@@ -1704,6 +1724,26 @@ Two rules come with it:
 `point_coord` runs 0..1 across the frame, x to the right and y down, which is the same
 sentence it already means: 0..1 across the primitive.
 
+**`point_coord` is not isotropic**: both axes run 0..1 whatever the aspect ratio, so a circle
+drawn in it is an ellipse, and there is no aspect ambient to correct it with. Isotropic frame
+coordinates come from `ray` in the camera's basis. Under the built-in orbit, which looks at the
+origin with a 60° vertical field of view, this gives `y` in -1..1 bottom to top and `x` at the
+same scale:
+
+```
+let fw = normalize(-eye);
+let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+let up = cross(rt, fw);
+let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+```
+
+An L3 that aims elsewhere or changes the field of view breaks both assumptions.
+
+**Nested L5 post-processing procedures run directly within a Set** (ADR-0098).
+In addition to the master output chain, a Set can hold nested L5 passes (`kind L5`) that
+execute sequentially after its L4 renderers finish rasterization, applying scanlines,
+channel splits, blurs, or vignettes directly to that deck's output.
+
 A Set always has an L1, so a fullscreen renderer is still paired with geometry — and if it
 is the *only* renderer, that geometry is dead weight: pick something small, since only its
 `capacity` declaration is read. In a stack beside a per-element renderer it is not dead
@@ -2052,6 +2092,11 @@ One rule and no exceptions is what makes it worth the extra characters: a langua
 *some* positions broadcast is one where an author has to remember which, and where a wrong
 guess is a shader that compiles.
 
+**Every function in this group and in [Trigonometry](#trigonometry) takes `float` or a float
+vector, never `int` or `uint`** — `max(n, 1u)` is refused with ``max` does not accept `uint``.
+Do the arithmetic in `float` and convert once: `uint(max(sqrt(float(n)), 1.0))`. Integer
+`%`, `/`, `*`, `+` and `-` are operators and do take `int` and `uint`.
+
 ### Trigonometry
 
 `sin cos tan asin acos atan atan2`
@@ -2115,6 +2160,18 @@ disc_point(float, float) -> vec2
 
 `hsv_to_rgb(vec3) -> vec3` `rgb_to_hsv(vec3) -> vec3`
 `srgb_to_linear(vec3) -> vec3` `linear_to_srgb(vec3) -> vec3`
+
+### Derivatives (L4 `fragment` only)
+
+```
+dpdx(T) -> T              // T is float or a float vector
+dpdy(T) -> T
+fwidth(T) -> T
+flat_normal(vec3) -> vec3 // normalize(cross(dpdx(p), dpdy(p)))
+```
+
+Refused outside a `fragment` block. `flat_normal(position)` is the face normal of a
+shared-vertex mesh, taken from the screen-space derivatives of the interpolated position.
 
 ### Frame (L5 only)
 
@@ -2617,7 +2674,10 @@ content address.
 
 **A `part` carries what a `slot` carries, with a path where the address is**: `layer` and
 `index` are the node's address on exactly the `slot` rule — absent is 0 and 0 is not written —
-and `name` is what this Set calls the node, on the same terms and surviving resolution
+**so a second `part` on the same layer must write `"index":1`**. Two parts claiming one index
+are not refused: the later one replaces the earlier, and the only sign is the load note
+``two L4 slots both claim index 0; the later one is used``. `--take-in` accepts such a file.
+`name` is what this Set calls the node, on the same terms and surviving resolution
 unchanged, because it is the same node and the `edge` above points at it by that name.
 Everything else a Set file holds — `capacity`, `param`, `bind`, `camera`, `seed`, `edge`,
 `merge` — is unchanged and means the same thing in both forms. **Only how a node's source is

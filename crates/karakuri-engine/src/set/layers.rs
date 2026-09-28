@@ -4,3 +4,5 @@ mod common;
 mod execution;
 mod params;
 mod uniforms;
+
+pub(crate) use execution::allocate_hdr_target;

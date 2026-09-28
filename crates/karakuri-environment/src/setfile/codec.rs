@@ -214,10 +214,10 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     // Every layer's slots by index, the layers in the order [`layer_ordinal`]
     // gives them. `None` is a gap — an index nothing claimed — which is refused
     // below rather than silently closed up.
-    let mut slots: [Vec<Option<Hash>>; 5] = Default::default();
+    let mut slots: [Vec<Option<Hash>>; 6] = Default::default();
     // What each of those is called, in the same shape and by the same index, so
     // a name and the artifact it belongs to are placed by one statement.
-    let mut slot_names: [Vec<Option<String>>; 5] = Default::default();
+    let mut slot_names: [Vec<Option<String>>; 6] = Default::default();
     // The edges the file recorded, in the order it recorded them.
     let mut edges: Vec<karakuri_engine::set::Edge> = Vec::new();
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
@@ -472,6 +472,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let l3_srcs = sources(Kind::L3)?;
     let l4_srcs = sources(Kind::L4)?;
     let field_srcs = sources(Kind::Field)?;
+    let l5_srcs = sources(Kind::L5)?;
     // Verify that camera placement settings apply to the built-in orbit slot.
     if camera.is_some() && camera_index as usize != l3_srcs.len() {
         notes.push(format!(
@@ -520,14 +521,16 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let l3s = check(&l3_srcs)?;
     let l4s = check(&l4_srcs)?;
     let fields = check(&field_srcs)?;
+    let l5s = check(&l5_srcs)?;
 
     // Expands parameter and binding records per component declaration width (ADR-0268).
-    let layers: [(Kind, &[Checked]); 5] = [
+    let layers: [(Kind, &[Checked]); 6] = [
         (Kind::L1, &l1s),
         (Kind::L2, &l2s),
         (Kind::L3, &l3s),
         (Kind::L4, &l4s),
         (Kind::Field, &fields),
+        (Kind::L5, &l5s),
     ];
     // Collect all declarations of key matching address target.
     let declared_as = |at: Option<(Kind, u32)>, key: &str| -> Vec<karakuri_ir::Ty> {
@@ -640,6 +643,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         .chain(l3_srcs)
         .chain(l4_srcs)
         .chain(field_srcs)
+        .chain(l5_srcs)
         .collect();
 
     // Trim names to loaded node bounds.
@@ -649,12 +653,14 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         l3s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L3) as usize]),
         l4s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L4) as usize]),
         fields: std::mem::take(&mut slot_names[layer_ordinal(Kind::Field) as usize]),
+        l5s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L5) as usize]),
     };
     names.l1s.truncate(l1s.len());
     names.l2s.truncate(l2s.len());
     names.l3s.truncate(l3s.len());
     names.l4s.truncate(l4s.len());
     names.fields.truncate(fields.len());
+    names.l5s.truncate(l5s.len());
 
     Ok(Loaded {
         id: file_id,
@@ -663,6 +669,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         l3s,
         fields,
         l4s,
+        l5s,
         srcs,
         capacities,
         params,

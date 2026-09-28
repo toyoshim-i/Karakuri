@@ -28,6 +28,7 @@ fn validate_wired(
         &l3s.iter().collect::<Vec<_>>(),
         &[],
         &l4s.iter().collect::<Vec<_>>(),
+        &[],
         Layering::Overdraw,
         7,
         &[],

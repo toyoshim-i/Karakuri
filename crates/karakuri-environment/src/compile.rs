@@ -15,6 +15,7 @@ pub struct Names {
     pub l3s: Vec<Option<String>>,
     pub l4s: Vec<Option<String>>,
     pub fields: Vec<Option<String>>,
+    pub l5s: Vec<Option<String>>,
 }
 
 impl Names {
@@ -29,6 +30,7 @@ impl Names {
             .chain(self.l3s.iter().flatten())
             .chain(self.l4s.iter().flatten())
             .chain(self.fields.iter().flatten())
+            .chain(self.l5s.iter().flatten())
     }
 
     /// Verifies that all explicitly assigned node names within this slot are unique.
@@ -181,6 +183,7 @@ pub struct Material {
     /// evaluates none.
     pub fields: Vec<karakuri_ir::typed::Checked>,
     pub l4s: Vec<karakuri_ir::typed::Checked>,
+    pub l5s: Vec<karakuri_ir::typed::Checked>,
     /// What each of those is called, in the same per-layer shape.
     pub names: Names,
 }
@@ -241,6 +244,7 @@ pub fn sort_compiled(
     let mut l3s: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut fields: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut l4s = Vec::new();
+    let mut l5s: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut placed = Vec::new();
     for (named, checked, source) in compiled {
         let name = named.name.clone();
@@ -275,14 +279,11 @@ pub fn sort_compiled(
                 l1s.push(checked);
                 (karakuri_ir::Kind::L1, l1s.len() - 1, l1s.last())
             }
-            // L5 procedures inside a Set (nested L5 role) are not yet routable; reject until nested L5 support lands.
+            // L5 post-processing procedures nested inside a Set (ADR-0098).
             karakuri_ir::Kind::L5 => {
-                return Err(format!(
-                    "{} declares `kind L5`, and a Set has nowhere to put one yet — a frame \
-                     effect runs in the master chain. The file compiles and can be stored; \
-                     what is missing is the nested L5 role in a Set",
-                    named.path.display()
-                ));
+                names.l5s.push(name);
+                l5s.push(checked);
+                (karakuri_ir::Kind::L5, l5s.len() - 1, l5s.last())
             }
         };
         let checked = filed.expect("the procedure was pushed onto that layer's list above");
@@ -318,6 +319,7 @@ pub fn sort_compiled(
             l3s,
             fields,
             l4s,
+            l5s,
             names,
         },
         placed,

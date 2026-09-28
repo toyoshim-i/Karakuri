@@ -187,12 +187,14 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
     let l3s: Vec<&Checked> = loaded.l3s.iter().collect();
     let fields: Vec<&Checked> = loaded.fields.iter().collect();
     let l4s: Vec<&Checked> = loaded.l4s.iter().collect();
+    let l5s: Vec<&Checked> = loaded.l5s.iter().collect();
     let plan = match karakuri_engine::Set::validate(
         &sources,
         &l2s,
         &l3s,
         &fields,
         &l4s,
+        &l5s,
         // Reads merge record from file to validate compositing limits against stored configuration.
         loaded.layering,
         // A salt decides what the elements *are* and never how many bytes they
@@ -206,6 +208,7 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
             l3s: &loaded.names.l3s,
             l4s: &loaded.names.l4s,
             fields: &loaded.names.fields,
+            l5s: &loaded.names.l5s,
             edges: &loaded.edges,
             depth_tests: &[],
         },

@@ -35,6 +35,7 @@ impl Set {
             &[],
             &[],
             &[l4],
+            &[],
             Layering::Overdraw,
             seed_salt,
             &[],
@@ -42,7 +43,7 @@ impl Set {
         )
     }
 
-    /// Compiles multiple geometry sources, deformers, cameras, fields, and renderers into a runnable Set.
+    /// Compiles multiple geometry sources, deformers, cameras, fields, renderers, and post-processors into a runnable Set.
     ///
     /// Execution runs within a wgpu validation error scope to report driver-level errors gracefully.
     #[allow(clippy::too_many_arguments)]
@@ -54,6 +55,7 @@ impl Set {
         l3s: &[&Checked],
         fields: &[&Checked],
         l4s: &[&Checked],
+        l5s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
         salts: &[Option<u32>],
@@ -61,7 +63,7 @@ impl Set {
     ) -> Result<Set, SetError> {
         let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
-            device, queue, l1s, l2s, l3s, fields, l4s, layering, seed_salt, salts, wiring,
+            device, queue, l1s, l2s, l3s, fields, l4s, l5s, layering, seed_salt, salts, wiring,
         );
         let captured = pollster::block_on(scope.pop());
 
@@ -87,6 +89,7 @@ impl Set {
         l3s: &[&Checked],
         fields: &[&Checked],
         l4s: &[&Checked],
+        l5s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
         salts: &[Option<u32>],
@@ -106,8 +109,9 @@ impl Set {
             l1s: _,
             l2s: _,
             fields: _,
+            l5s: _,
         } = Set::validate(
-            l1s, l2s, l3s, fields, l4s, layering, seed_salt, salts, wiring,
+            l1s, l2s, l3s, fields, l4s, l5s, layering, seed_salt, salts, wiring,
         )?;
         let bound_at = |at: usize| -> Vec<(&str, &Checked)> {
             field_bound
@@ -268,6 +272,81 @@ impl Set {
             });
         }
 
+        let (
+            l5_layout,
+            l5_sampler,
+            l5_nodes,
+            l5_target,
+            l5_target_view,
+            l5_ping_target,
+            l5_ping_view,
+            l5_held_target,
+            l5_held_view,
+        ) = if !l5s.is_empty() {
+            let layout =
+                crate::pass::ImagePass::create_bind_group_layout(device, Some("Set L5 layout"));
+            let sampler = crate::pass::ImagePass::create_sampler(device, Some("Set L5 sampler"));
+            let (target, target_view) =
+                crate::set::layers::allocate_hdr_target(device, 1, 1, "Set L5 target");
+            let (ping_t, ping_v) = if l5s.len() > 1 {
+                let (t, v) = crate::set::layers::allocate_hdr_target(device, 1, 1, "Set L5 ping");
+                (Some(t), Some(v))
+            } else {
+                (None, None)
+            };
+            let (held_t, held_v) = if l5s.iter().any(|n| n.retains) {
+                let (t, v) = crate::set::layers::allocate_hdr_target(device, 1, 1, "Set L5 held");
+                (Some(t), Some(v))
+            } else {
+                (None, None)
+            };
+            let mut nodes = Vec::new();
+            for (at, l5) in l5s.iter().enumerate() {
+                let (pass, _shader) = crate::pass::ImagePass::from_l5(device, &layout, l5);
+                let src_view = if at == 0 {
+                    &target_view
+                } else if at % 2 == 1 {
+                    ping_v.as_ref().unwrap()
+                } else {
+                    &target_view
+                };
+                let held_view = if l5.retains {
+                    held_v.as_ref().unwrap_or(src_view)
+                } else {
+                    src_view
+                };
+                let bind_group = pass.bind(
+                    device,
+                    &layout,
+                    src_view,
+                    held_view,
+                    &sampler,
+                    Some(&format!("Set L5[{at}] bind")),
+                );
+                let param_keys = l5.params.iter().map(|p| p.name.clone()).collect();
+                nodes.push(crate::set::types::SetL5 {
+                    name: l5.name.clone(),
+                    pass,
+                    bind_group,
+                    retains: l5.retains,
+                    param_keys,
+                });
+            }
+            (
+                Some(layout),
+                Some(sampler),
+                nodes,
+                Some(target),
+                Some(target_view),
+                ping_t,
+                ping_v,
+                held_t,
+                held_v,
+            )
+        } else {
+            (None, None, Vec::new(), None, None, None, None, None, None)
+        };
+
         let params = l1s
             .iter()
             .map(|(l1, _)| declared_defaults(l1))
@@ -278,6 +357,7 @@ impl Set {
             }))
             .chain(l4s.iter().map(|n| declared_defaults(n)))
             .chain(fields.iter().map(|n| declared_defaults(n)))
+            .chain(l5s.iter().map(|n| declared_defaults(n)))
             .collect();
         let param_values = l1s
             .iter()
@@ -295,6 +375,7 @@ impl Set {
             }))
             .chain(l4s.iter().map(|n| declared_default_values(n)))
             .chain(fields.iter().map(|n| declared_default_values(n)))
+            .chain(l5s.iter().map(|n| declared_default_values(n)))
             .collect();
         let ranges = l1s
             .iter()
@@ -306,6 +387,7 @@ impl Set {
             }))
             .chain(l4s.iter().map(|n| declared_ranges(n)))
             .chain(fields.iter().map(|n| declared_ranges(n)))
+            .chain(l5s.iter().map(|n| declared_ranges(n)))
             .collect();
         let authorities = vec![Authority::default(); names.len()];
         let moved = vec![HashSet::new(); names.len()];
@@ -331,11 +413,13 @@ impl Set {
             closed_form: l1s.iter().all(|(n, _)| n.closed_form)
                 && l2s.iter().all(|n| n.closed_form)
                 && l3s.iter().all(|n| n.closed_form)
-                && l4s.iter().all(|n| n.closed_form),
+                && l4s.iter().all(|n| n.closed_form)
+                && l5s.iter().all(|n| n.closed_form),
             reads_beats: l1s.iter().any(|(n, _)| n.reads_beats)
                 || l2s.iter().any(|n| n.reads_beats)
                 || l3s.iter().any(|n| n.reads_beats)
-                || l4s.iter().any(|n| n.reads_beats),
+                || l4s.iter().any(|n| n.reads_beats)
+                || l5s.iter().any(|n| n.reads_beats),
             sources,
             params,
             param_values,
@@ -356,6 +440,15 @@ impl Set {
             interface: Vec::new(),
             l1_count: l1s.len(),
             field_count: fields.len(),
+            l5s: l5_nodes,
+            l5_target,
+            l5_target_view,
+            l5_ping_target,
+            l5_ping_view,
+            l5_held_target,
+            l5_held_view,
+            l5_sampler,
+            l5_layout,
             field_declared: fields.iter().map(|f| declared_keys(f)).collect(),
             field_params: {
                 let mut keys: Vec<String> = field_bound

@@ -54,6 +54,7 @@ pub(crate) fn set_of(
         &material.l3s,
         &material.fields,
         &material.l4s,
+        &material.l5s,
         karakuri_engine::set::Layering::Overdraw,
         &material.names,
         &[],
