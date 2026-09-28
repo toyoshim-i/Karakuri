@@ -1,0 +1,27 @@
+// Scan-line slit scan: retains with the exit cut, taking a narrow slit
+// of the incoming source and shifting the retained frame each step,
+// so time maps spatially across the frame.
+
+proc slit_scan {
+  kind L5
+  retains
+
+  // Slit sampling position along y axis.
+  param slit_y : float [0.0, 1.0] = 0.5
+  // Slit aperture half-width.
+  param slit_w : float [0.002, 0.05] = 0.01
+  // Scan roll speed along y.
+  param speed : float [0.001, 0.05] = 0.008
+
+  frame {
+    let current = texel(src);
+    // Sample held frame shifted along y by speed.
+    let shifted_uv = vec2(point_coord.x, fract(point_coord.y - speed));
+    let previous = tap(held, shifted_uv);
+
+    // Take incoming source inside the slit aperture, retained history elsewhere.
+    let inside = 1.0 - step(slit_w, abs(point_coord.y - slit_y));
+
+    color = vec4(mix(previous.xyz, current.xyz, vec3(inside)), current.w);
+  }
+}

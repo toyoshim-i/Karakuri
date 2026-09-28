@@ -275,12 +275,12 @@ pub fn sort_compiled(
                 l1s.push(checked);
                 (karakuri_ir::Kind::L1, l1s.len() - 1, l1s.last())
             }
-            // L5 procedures are not yet routable in deck slots; reject until master chain slot support lands.
+            // L5 procedures inside a Set (nested L5 role) are not yet routable; reject until nested L5 support lands.
             karakuri_ir::Kind::L5 => {
                 return Err(format!(
                     "{} declares `kind L5`, and a Set has nowhere to put one yet — a frame \
-                     effect runs in the master chain, which is still three fixed passes. The \
-                     file compiles and can be stored; what is missing is the chain's slots",
+                     effect runs in the master chain. The file compiles and can be stored; \
+                     what is missing is the nested L5 role in a Set",
                     named.path.display()
                 ));
             }

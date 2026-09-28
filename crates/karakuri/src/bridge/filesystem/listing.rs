@@ -342,7 +342,24 @@ pub(crate) fn listing(
     view.library = rows.iter().map(|(name, _)| name.clone()).collect();
     view.kinds = rows.into_iter().map(|(_, kind)| kind).collect();
     // Offers `kind L5` procedures for master chain add, addressing sources by content hash (ADR-0156, ADR-0340).
-    view.chain_add = chain_offers(store, &kept, &shipped);
+    // Master chain is global; offer procedures from both store and presets regardless of active Library scope.
+    let all_kept;
+    let chain_kept = match scope {
+        Scope::AllSets => &kept,
+        _ => {
+            all_kept = procedures(store);
+            &all_kept
+        }
+    };
+    let all_shipped;
+    let chain_shipped = match scope {
+        Scope::Presets => &shipped,
+        _ => {
+            all_shipped = presets_procedures(presets);
+            &all_shipped
+        }
+    };
+    view.chain_add = chain_offers(store, chain_kept, chain_shipped);
     // Apply filter narrowing only for store-backed scopes.
     let narrowed = matches!(scope, Scope::AllSets | Scope::MySets)
         .then(|| narrowing(holds.as_deref(), None))

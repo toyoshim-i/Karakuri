@@ -56,6 +56,13 @@ impl InspectorPane {
         }
     }
 
+    /// Returns the landing rectangle if `p` is dropped over this pane (ADR-0273, ADR-0338).
+    pub fn dropped(&self, p: karakuri_layout::Point) -> Option<Rect> {
+        let at = Pos2::new(p.x, p.y);
+        let bounds = Rect::from_min_max(self.head.min, self.body.max);
+        bounds.contains(at).then_some(bounds)
+    }
+
     /// Hit-tests renderer selection chips at `p`, returning [`Operation::SelectRenderer`] per [P-0090].
     pub fn select_renderer(
         &self,

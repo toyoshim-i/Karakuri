@@ -328,6 +328,9 @@ impl View {
                             ),
                         },
                     );
+                    if let Some(drop_box) = carried.and_then(|p| at.dropped(p)) {
+                        drop_ring(ui, &pal, drop_box, 0.0);
+                    }
                 }
             }
 

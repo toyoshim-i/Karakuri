@@ -409,6 +409,10 @@ pub(crate) fn on_kind_field(panel: &Panel, ctx: &egui::Context, view: &View, p: 
     on_kind(panel, ctx, view, p, KindChip::Layer(Layer::Field))
 }
 
+pub(crate) fn on_kind_l5(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Layer(Layer::L5))
+}
+
 pub(crate) fn on_kind_sets(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_kind(panel, ctx, view, p, KindChip::Sets)
 }

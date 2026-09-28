@@ -211,18 +211,25 @@ fn a_procedure_row_has_no_star_and_loads_one_layer() {
 // The filter field and the six kind chips
 // ---------------------------------------------------------------------------
 
-/// Asserts the six filter chips match declared procedure material kinds and sets (ADR-0340).
+/// Asserts the seven filter chips match declared procedure material kinds and sets (ADR-0340).
 #[test]
-fn the_kind_chips_are_the_five_kinds_and_the_sets() {
+fn the_kind_chips_are_the_six_kinds_and_the_sets() {
     use karakuri_operation::Layer;
-    for layer in [Layer::L1, Layer::L2, Layer::L3, Layer::L4, Layer::Field] {
+    for layer in [
+        Layer::L1,
+        Layer::L2,
+        Layer::L3,
+        Layer::L4,
+        Layer::Field,
+        Layer::L5,
+    ] {
         let spelled = match layer {
             Layer::L1 => "L1",
             Layer::L2 => "L2",
             Layer::L3 => "L3",
             Layer::L4 => "L4",
             Layer::Field => "FIELD",
-            Layer::L5 => unreachable!("L5 is not on this row"),
+            Layer::L5 => "L5",
         };
         let found = LAYERS
             .iter()
@@ -237,21 +244,21 @@ fn the_kind_chips_are_the_five_kinds_and_the_sets() {
     }
     assert_eq!(
         LAYERS.len(),
-        5,
+        6,
         "the row draws a chip per layer and no more"
     );
     assert_eq!(
         KindChip::ALL.len(),
-        6,
-        "the row is five kinds and the Sets — {} chips",
+        7,
+        "the row is six kinds and the Sets — {} chips",
         KindChip::ALL.len()
     );
     assert_eq!(KindChip::Sets.word(), "SET");
 }
 
-/// Kind chip presses emit the entire 6-chip filter state, toggling the clicked chip and updating all others (ADR-0338).
+/// Kind chip presses emit the entire 7-chip filter state, toggling the clicked chip and updating all others (ADR-0338).
 #[test]
-fn a_press_on_a_kind_chip_names_all_six_and_turns_that_one_over() {
+fn a_press_on_a_kind_chip_names_all_seven_and_turns_that_one_over() {
     use karakuri_operation::{LibraryKinds, Operation};
     let panel = console(PLAUSIBLE);
     let ctx = drawn_once();
@@ -286,7 +293,7 @@ fn a_press_on_a_kind_chip_names_all_six_and_turns_that_one_over() {
     }
     assert!(
         at.narrowing(),
-        "six presses left the row showing everything"
+        "seven presses left the row showing everything"
     );
     // And back off again, chip by chip, to the state a run opens in.
     for (chip, box_) in &boxes {

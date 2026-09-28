@@ -1,0 +1,26 @@
+// High-impact 1-frame inverted/negative-flash strobe triggered on transients.
+// Inverts or solarizes the frame during transient pulse windows.
+
+proc negative_strobe {
+  kind L5
+
+  // Strobe intensity factor.
+  param amount : float [0.0, 1.0] = 0.0
+  // Strobe pulse frequency in beats.
+  param rate : float [0.5, 8.0] = 2.0
+  // Strobe pulse duration fraction within the cycle.
+  param width : float [0.05, 0.5] = 0.1
+
+  frame {
+    let c = texel(src);
+    let phase = fract(beats * rate);
+    // Sharp pulse window triggered on beat edge.
+    let pulse = step(phase, width) * amount;
+
+    // Negative inversion blended with flash glow.
+    let inverted = vec3(1.0) - c.xyz;
+    let flashed = mix(c.xyz, inverted, vec3(pulse));
+
+    color = vec4(flashed, c.w);
+  }
+}

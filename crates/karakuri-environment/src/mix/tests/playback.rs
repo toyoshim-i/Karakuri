@@ -383,6 +383,27 @@ fn a_shipped_procedure_resolves_without_a_store() {
     }
 }
 
+/// Verifies that curated master chain presets build valid chain records and resolve all procedures (M10.3).
+#[test]
+fn curated_chain_presets_resolve_and_build() {
+    assert_eq!(shipped::CHAIN_PRESETS.len(), 4);
+    for preset in shipped::CHAIN_PRESETS {
+        let chain = preset.build_chain();
+        assert_eq!(chain.slots.len(), preset.procedures.len());
+        for (i, slot) in chain.slots.iter().enumerate() {
+            let proc_name = preset.procedures[i];
+            assert!(
+                shipped::name_of(&slot.procedure).is_some(),
+                "{proc_name} has a name"
+            );
+            assert!(
+                resolve_procedure(None, &slot.procedure).is_some(),
+                "{proc_name} resolves"
+            );
+        }
+    }
+}
+
 /// Verifies that stored procedures resolve through the run's Store.
 #[test]
 fn a_stored_procedure_resolves_through_the_runs_store() {
