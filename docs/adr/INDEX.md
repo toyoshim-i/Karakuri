@@ -343,7 +343,7 @@ number; new records continue from the end.
 | [ADR-0315](0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md) | A model has no window, so the twelve surface rows' MCP badges are gap | 2026-09-09 | accepted |
 | [ADR-0316](0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md) | An over-budget candidate stays in the slot, and the slot stops updating | 2026-09-09 | accepted |
 | [ADR-0317](0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md) | The master chain is three fixed passes, and feedback reads either cut | 2026-09-09 | accepted |
-| [ADR-0318](0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md) | The built-in camera's three placement numbers are parameter rows | 2026-09-09 | accepted |
+| [ADR-0318](0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md) | The built-in camera's three placement numbers are parameter rows | 2026-09-09 | **superseded by ADR-0374** |
 | [ADR-0319](0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md) | An attachment is a session record, taking a parameter back removes it, and an authority chip is a destination | 2026-09-09 | accepted |
 | [ADR-0320](0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md) | A pattern is one bar of sixteen slots, a lane is a target and two levels, and a cell is a bit | 2026-09-09 | accepted |
 | [ADR-0321](0321-a-lanes-target-is-an-operation-with-its-value-elided.md) | A lane's target is an operation with its value elided | 2026-09-09 | accepted |
@@ -391,6 +391,15 @@ number; new records continue from the end.
 | [ADR-0363](0363-agent-workflow-operations-are-read-slot-copy-slot-and-get-permissions-staged-through-atomic-rename.md) | Agent workflow operations are read_slot, copy_slot, and get_permissions, staged through atomic rename | 2026-09-16 | accepted |
 | [ADR-0364](0364-every-bay-head-renders-the-menu-dice-and-double-clicking-the-header-toggles-folding.md) | Every bay head renders the menu dice, and double-clicking the header toggles folding | 2026-09-27 | accepted |
 | [ADR-0365](0365-the-prompt-bay-embeds-an-interactive-multi-session-terminal-multiplexer-with-cursor-anchored-input.md) | The Prompt bay embeds an interactive multi-session terminal multiplexer with cursor-anchored input | 2026-09-27 | accepted |
+| [ADR-0366](0366-mix-participation-is-decoupled-from-residency-and-solo-and-mute-are-destination-operations.md) | Mix participation is decoupled from residency, and solo and mute are destination operations | 2026-09-19 | accepted |
+| [ADR-0367](0367-gate-refusals-carry-structured-machine-readable-codes-and-slot-policies-persist-in-the-store.md) | Gate refusals carry structured machine-readable codes, and slot policies persist in the store | 2026-09-21 | accepted |
+| [ADR-0368](0368-the-audio-signal-bus-resolves-eight-acoustic-frequency-bands-by-semantic-names-at-frame-boundaries.md) | The audio signal bus resolves eight acoustic frequency bands by semantic names at frame boundaries | 2026-09-21 | accepted |
+| [ADR-0369](0369-gpu-output-plugins-are-isolated-processes-discovered-dynamically-over-pipes-and-sharing-zero-copy-surfaces.md) | GPU output plugins are isolated processes discovered dynamically over pipes and sharing zero-copy surfaces | 2026-09-26 | accepted |
+| [ADR-0370](0370-space-unconditionally-folds-the-focused-bay-and-enter-unifies-primary-actions-across-all-controls.md) | Space unconditionally folds the focused bay, and Enter unifies primary actions across all controls | 2026-09-26 | accepted |
+| [ADR-0371](0371-divider-dragging-cascades-through-constrained-bays-into-flexible-siblings.md) | Divider dragging cascades through constrained bays into flexible siblings | 2026-09-27 | accepted |
+| [ADR-0372](0372-theme-mode-is-auto-day-or-night-and-auto-resolves-the-operating-systems-palette-per-frame.md) | Theme mode is Auto, Day, or Night, and Auto resolves the operating system's palette per frame | 2026-09-27 | accepted |
+| [ADR-0373](0373-prompt-capture-mode-bypasses-all-keymaps-and-forwards-escape-and-control-keys-directly-to-the-pty.md) | Prompt capture mode bypasses all keymaps and forwards escape and control keys directly to the pty | 2026-09-27 | accepted |
+| [ADR-0374](0374-the-built-in-camera-expands-to-six-placement-parameters-and-procedural-l3-camera-procedures.md) | The built-in camera expands to six placement parameters and procedural L3 camera procedures | 2026-09-27 | accepted |
 
 ## Retired numbers
 

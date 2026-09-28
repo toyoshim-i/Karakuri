@@ -4,7 +4,7 @@ title: The Prompt bay embeds an interactive multi-session terminal multiplexer w
 status: accepted
 date: 2026-09-27
 supersedes: []
-superseded_by: []
+superseded_by: [0373]
 principles: [0090, 0094]
 tags: [console, bay, prompt, pty, terminal, agent, m9]
 ---
