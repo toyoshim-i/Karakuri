@@ -1,0 +1,131 @@
+// A command-room emergency display: a honeycomb of hexagonal warning panels
+// blinks red and orange with block text inside, a framed monitor traces three
+// synchronisation waveforms in green, orange and violet, segmented level
+// meters flicker below it, hazard stripes crawl along the top and bottom
+// edges, and the whole room pulses red while the alert is on. Draws the whole
+// frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/tactical_alert.kir --capacity 256
+
+proc tactical_alert {
+  kind  L4
+  blend additive
+
+  // Strength of the emergency: the red room pulse and how many panels are
+  // lit red rather than orange.
+  param alert  : float [0.0, 1.0] = 0.7
+
+  // Blink rate of the warning panels, in blinks per second.
+  param blink  : float [0.0, 6.0] = 1.5
+
+  // Agitation of the waveforms and meters. Bind to a level signal.
+  param unrest : float [0.0, 1.0] = 0.3
+
+  // Hit strength: flashes the panels and jolts the waveforms. Bind to an onset.
+  param kick   : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let orange = vec3(1.0, 0.16, 0.0);
+    let red    = vec3(1.0, 0.02, 0.01);
+    let green  = vec3(0.15, 1.0, 0.25);
+    let violet = vec3(0.45, 0.12, 1.0);
+    let ink    = vec3(0.0);
+    let pulse  = 0.5 + 0.5 * sin(t * 6.2831853 * 0.8);
+
+    // Room: black with a fine orange map grid and coarser major lines.
+    let gf = abs(fract(p * 10.0) - vec2(0.5));
+    let gm = abs(fract(p * 2.0) - vec2(0.5));
+    let minor = exp(-(0.5 - max(gf.x, gf.y)) * 60.0) * 0.04;
+    let major = exp(-(0.5 - max(gm.x, gm.y)) * 200.0) * 0.12;
+    var c = orange * (minor + major);
+
+    // Hazard stripes along the top and bottom edges, crawling sideways.
+    let edge = step(0.86, abs(p.y)) * step(abs(p.y), 0.95);
+    let haz  = step(0.5, fract((p.x + p.y * sign(p.y)) * 5.0 - t * 0.6));
+    c = mix(c, mix(ink, orange * 0.9, vec3(haz)), vec3(edge));
+    c += orange * exp(-abs(abs(p.y) - 0.84) * 400.0) * 0.6;
+
+    // Monitor: a framed panel with a green graticule and three traces.
+    let mc = vec2(-1.0, 0.33);
+    let mh = vec2(0.66, 0.4);
+    let md = abs(p - mc) - mh;
+    let inmon = step(max(md.x, md.y), 0.0);
+    let frame = exp(-abs(max(md.x, md.y)) * 500.0);
+    let ml  = (p - mc) / mh;
+    let mg  = abs(fract(ml * vec2(5.0, 4.0)) - vec2(0.5));
+    let grat = exp(-(0.5 - max(mg.x, mg.y)) * 80.0) * 0.12;
+    c = mix(c, vec3(0.0, 0.015, 0.0) + green * grat, vec3(inmon));
+    c += orange * frame * 0.9;
+    var tr = vec3(0.0);
+    for k in 0..3 {
+      let fk  = float(k);
+      let ph  = ml.x * (3.0 + fk * 1.7) - t * (1.5 + fk * 0.6);
+      let amp = 0.18 + 0.25 * unrest + 0.3 * kick;
+      let jit = value_noise(vec3(ml.x * 9.0, t * 3.0, fk * 5.0)) * (0.05 + 0.3 * unrest);
+      let wy  = (fk - 1.0) * 0.45 + amp * sin(ph) * (0.6 + 0.4 * sin(ph * 0.37 + fk)) + jit;
+      let d   = (ml.y - wy) * mh.y;
+      let g   = 0.004;
+      let tone = mix(mix(green, orange, vec3(step(0.5, fk))), violet, vec3(step(1.5, fk)));
+      tr += tone * g * g / (d * d + g * g);
+    }
+    c += tr * inmon * 0.9;
+
+    // Meters: sixteen segmented bars under the monitor.
+    let bc = vec2(-1.0, -0.5);
+    let bh = vec2(0.66, 0.24);
+    let bd = abs(p - bc) - bh;
+    let inbar = step(max(bd.x, bd.y), 0.0);
+    let bl  = (p - bc) / bh * 0.5 + vec2(0.5);
+    let bi  = floor(bl.x * 16.0);
+    let lvl = clamp(0.3 + 0.4 * (0.5 + 0.5 * value_noise(vec3(bi * 0.7, t * (2.0 + 6.0 * unrest), 1.0))) + 0.3 * kick, 0.0, 1.0);
+    let seg = step(0.25, fract(bl.y * 20.0)) * step(0.2, fract(bl.x * 16.0)) * step(fract(bl.x * 16.0), 0.8);
+    let lit = step(bl.y, lvl);
+    let mcol = mix(green, mix(orange, red, vec3(step(0.85, bl.y))), vec3(step(0.6, bl.y)));
+    c += mcol * seg * lit * inbar * 0.45 + mcol * seg * inbar * 0.03;
+    c += orange * exp(-abs(max(bd.x, bd.y)) * 500.0) * 0.7;
+
+    // Warning honeycomb: flat-topped hexagons from two offset lattices, kept
+    // inside a rough disc. Each panel blinks on its own phase, red under a
+    // strong alert, and carries two lines of black block text.
+    let hc = vec2(0.72, 0.05);
+    let hs = (p - hc) / 0.19;
+    let s  = vec2(1.7320508, 1.0);
+    let ga = floor(hs / s) * s + s * 0.5;
+    let gb = floor((hs - s * 0.5) / s) * s + s;
+    let da = hs - ga;
+    let db = hs - gb;
+    let pick = step(dot(db, db), dot(da, da));
+    let cell = mix(ga, gb, vec2(pick));
+    let off  = mix(da, db, vec2(pick));
+    let ho = abs(off);
+    let he = max(dot(ho, vec2(0.8660254, 0.5)), ho.y);
+    let hh = hash3(uint(cell.x * 7.0 + 1000.0) * 7919u + uint(cell.y * 7.0 + 1000.0) * 104729u);
+    let keep = step(length(cell), 2.9 + hh.x * 0.8) * step(0.12, hh.y);
+    let on   = step(0.35, fract(t * blink + hh.z)) ;
+    let hot  = step(hh.x, alert);
+    let fillc = mix(orange, red, vec3(hot)) * (0.25 + 0.75 * max(on, kick)) * (0.8 + 0.4 * pulse * alert);
+    let body = step(he, 0.44);
+    let trim = step(abs(he - 0.4), 0.012);
+    let row  = step(abs(abs(off.y) - 0.1), 0.055);
+    let glyph = step(0.35, hash1(uint(cell.x * 7.0 + 1000.0) * 131u + uint(cell.y * 7.0 + 1000.0) * 977u
+                                  + uint(floor(off.x * 14.0) + 20.0) * 17u + uint(step(0.0, off.y)) * 3u))
+              * step(abs(off.x), 0.28) * step(0.25, fract(off.x * 14.0));
+    let panel = mix(fillc, ink, vec3(max(row * glyph, trim)));
+    c = mix(c, panel, vec3(body * keep));
+    c += fillc * exp(-max(he - 0.44, 0.0) * 30.0) * keep * 0.15 * (1.0 - body);
+
+    // Emergency: the room pulses red toward its edges.
+    let vig = dot(p * vec2(0.55, 0.9), p * vec2(0.55, 0.9));
+    c += red * alert * pulse * (0.01 + 0.12 * vig * vig);
+
+    let scan = 0.85 + 0.15 * sin(point_coord.y * 540.0 * 3.1415927);
+    color = vec4(c * scan, 1.0);
+  }
+}

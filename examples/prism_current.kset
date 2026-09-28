@@ -1,0 +1,8 @@
+{"t":"set","id":"prism_current","v":1}
+{"t":"part","layer":"L1","path":"prism_current.kir"}
+{"t":"part","layer":"L3","path":"tunnel_eye.kir"}
+{"t":"part","layer":"L4","path":"prism_current_surface.kir"}
+{"t":"param","layer":"L3","key":"back","value":0.0}
+{"t":"param","layer":"L3","key":"wander","value":0.3}
+{"t":"param","layer":"L3","key":"lens","value":1.35}
+{"t":"bind","layer":"L1","key":"surge","signal":"energy","curve":"smooth","range":[0.25,0.85]}

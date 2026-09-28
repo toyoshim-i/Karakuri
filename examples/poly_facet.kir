@@ -1,0 +1,62 @@
+// Faceted cybernetic polygon renderer with holographic laser wireframe edges,
+// screen-space flat normals, and iridescent specular reflection.
+//
+//     cargo run -p karakuri-cli -- --set examples/poly_hyperdrive.kir,examples/poly_facet.kir
+
+proc poly_facet {
+  kind  L4
+  blend opaque
+
+  consumes position, uv, tint, size
+
+  // Thickness of the glowing wireframe edge around each polygon facet.
+  param wire_width : float [0.01, 0.35] = 0.08
+
+  // Brightness multiplier for the wireframe lasers.
+  param edge_glow  : float [0.5, 8.0] = 3.5
+
+  // Metallic facet opacity / darkness (0 = fully glass/black facet, 1 = solid lit).
+  param facet_lit  : float [0.0, 1.0] = 0.45
+
+  // Exposure scaling for master output.
+  param exposure   : float [0.2, 4.0] = 1.35
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    // Screen-space flat normal for crisp crystalline polygon facets.
+    let n = flat_normal(position);
+
+    // Barycentric distance to the nearest triangle edge.
+    let d_edge = min(uv.x, min(uv.y, 1.0 - uv.x - uv.y));
+    let wire   = 1.0 - smoothstep(0.0, wire_width, d_edge);
+
+    // Directional lighting across the facets.
+    let light_dir = normalize(vec3(0.5, 0.8, 0.6));
+    let diff      = max(dot(n, light_dir), 0.0);
+
+    // View vector and specular reflection glint.
+    let view_dir = normalize(-position);
+    let half_vec = normalize(light_dir + view_dir);
+    let spec     = pow(max(dot(n, half_vec), 0.0), 32.0);
+
+    // Fresnel rim glow around glancing angles.
+    let fresnel = pow(1.0 - max(dot(n, view_dir), 0.0), 3.0);
+
+    // Base face color: dark crystalline metallic base mixed with vertex tint.
+    let dark_base = vec3(0.03, 0.04, 0.06);
+    let lit_face  = mix(dark_base, tint * (diff * 0.7 + 0.3), vec3(facet_lit));
+    let spec_glow = vec3(spec * 0.8) + tint * (fresnel * 0.5);
+
+    // Laser wireframe color: hyper-intense neon emission along the polygon borders.
+    let laser_color = tint * edge_glow * (1.0 + size * 1.5) + vec3(spec * 0.5);
+
+    // Combine facet shading with laser edge highlights.
+    let final_rgb = mix(lit_face + spec_glow, laser_color, vec3(wire)) * exposure;
+
+    color = vec4(final_rgb, 1.0);
+  }
+}

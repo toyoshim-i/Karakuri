@@ -1,0 +1,49 @@
+// A backdrop for a mesh in the foreground: faint speed lines streaming out
+// from the centre of the frame, a shock ring that leaves the centre on every
+// beat, and a deep blue haze. Draws the whole frame and reads no geometry;
+// under an opaque renderer it sits behind the mesh.
+//
+//     cargo run -p karakuri-cli -- --set examples/shard_bloom.kir,examples/shard_edges.kir,examples/shard_backdrop.kir
+
+proc shard_backdrop {
+  kind  L4
+  blend additive
+
+  // Speed of the streaming lines.
+  param rush   : float [0.0, 4.0] = 1.2
+
+  // Brightness of the lines and rings.
+  param level  : float [0.0, 2.0] = 0.5
+
+  // Hue of the haze and lines.
+  param hue    : float [0.0, 1.0] = 0.62
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let r   = length(p);
+    let ang = atan2(p.y, p.x) / 6.2831853 + 0.5;
+    let tone = hsv_to_rgb(vec3(hue, 0.8, 1.0));
+
+    // Speed lines: 180 angular lanes, each carrying dashes outward at its own
+    // pace; only some lanes are lit at a time.
+    let lane = floor(ang * 180.0);
+    let lh   = hash3(uint(lane) * 7919u + 5u);
+    let lx   = abs(fract(ang * 180.0) - 0.5);
+    let dash = fract(log(r + 0.05) * 1.5 - t * rush * (0.5 + lh.x) + lh.y * 10.0);
+    let lit  = step(0.7, lh.z) * smoothstep(0.0, 0.3, dash) * (1.0 - smoothstep(0.3, 0.6, dash));
+    let lines = exp(-lx * 12.0) * lit * smoothstep(0.2, 1.2, r);
+
+    // Shock ring on every beat.
+    let bt   = fract(beats);
+    let ring = exp(-abs(r - bt * 2.2) * 40.0) * (1.0 - bt);
+
+    let haze = tone * 0.05 * exp(-r * 1.2);
+    color = vec4(haze + tone * (lines * 0.6 + ring * 0.5) * level, 1.0);
+  }
+}

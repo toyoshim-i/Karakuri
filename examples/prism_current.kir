@@ -1,0 +1,45 @@
+// A travelling, pleated polygon tunnel. Six consecutive elements form a quad.
+// uv carries triangle barycentrics; size carries the travelling pulse.
+// All motion is analytic and can be scrubbed without simulation history.
+proc prism_current {
+  kind L1
+  topology triangles
+  capacity [18432, 18432] = 18432
+
+  param speed : float [0.0, 4.0] = 1.4
+  param fold : float [0.0, 1.0] = 0.65
+  param twist : float [-0.4, 0.4] = 0.16
+  param surge : float [0.0, 1.0] = 0.35
+  emit position, uv, tint, size
+
+  element {
+    let quad = seed / 6u;
+    let tri = (seed / 3u) % 2u;
+    let corner = seed % 3u;
+    var du = 0.0;
+    var dv = 0.0;
+    if corner == 1u { du = 1.0; dv = float(tri); }
+    if corner == 2u { du = 1.0 - float(tri); dv = 1.0; }
+    let column = float(quad % 48u) + du;
+    let row = float(quad / 48u) + dv;
+    let travel = t * speed * 3.0;
+    let depth = (row - fract(travel)) * 0.9;
+    let world = (row + floor(travel)) * 0.9;
+    let angle = column / 48.0 * 6.2831853;
+    let pulse = pow(0.5 + 0.5 * sin(world * 0.55 - t * 2.8), 12.0);
+    let pleat = cos(angle * 8.0 + world * 0.38 - t * 0.5);
+    let radius = 3.8 + fold * (pleat * 0.85 + sin(world * 0.8 + angle * 3.0) * 0.5)
+      + pulse * surge * 0.7;
+    let turn = angle + depth * twist + 0.3 * sin(world * 0.12 + t * 0.3);
+    let bend = smoothstep(0.0, 18.0, depth);
+    position = vec3(radius * cos(turn) + bend * sin(depth * 0.11 + t * 0.22) * 2.2,
+      radius * sin(turn) + bend * cos(depth * 0.09 - t * 0.17) * 1.6, 3.0 - depth);
+    uv = vec2(0.0);
+    if corner == 0u { uv = vec2(1.0, 0.0); }
+    if corner == 1u { uv = vec2(0.0, 1.0); }
+    let sector = float(quad % 48u) / 48.0 * 6.2831853;
+    let warm = smoothstep(0.15, 0.65, sin(sector * 3.0 + t * 0.18));
+    tint = mix(vec3(0.015, 0.65, 1.0), vec3(1.0, 0.10, 0.025), vec3(warm));
+    size = pulse;
+  }
+}

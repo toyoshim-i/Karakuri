@@ -1,0 +1,5 @@
+{"t":"set","id":"seigaiha_neon","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"seigaiha_neon.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"glow","signal":"energy","curve":"smooth","range":[0.4,1.6]}

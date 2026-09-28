@@ -1,0 +1,142 @@
+// A kinetic cybernetic polyhedral hyper-structure: thousands of faceted crystalline
+// triangles forming a morphing torus knot ribbon and a counter-rotating energy core.
+// The structure breathes, twists, and flares open its polygonal petals on beat transients.
+//
+//     cargo run -p karakuri-cli -- --set examples/poly_hyperdrive.kir,examples/poly_facet.kir
+
+proc poly_hyperdrive {
+  kind     L1
+  topology triangles
+  capacity [3072, 65536] = 24576
+
+  // Base radius of the outer toroidal manifold in world units.
+  param radius : float [1.0, 6.0] = 3.2
+
+  // Thickness of the ribbon band.
+  param tube   : float [0.2, 2.5] = 0.95
+
+  // Speed of the knot circulation and twist.
+  param speed  : float [-1.0, 1.0] = 0.15
+
+  // Morphing factor between 3-knot and 5-knot harmonics.
+  param morph  : float [0.0, 1.0] = 0.5
+
+  // Wing flap / petal flare angle on transients; bind to onset.
+  param flare  : float [0.0, 1.5] = 0.65
+
+  // Tumble speed of the entire assembly in turns per second.
+  param spin   : float [-0.5, 0.5] = 0.05
+
+  // Base chromatic palette hue [0, 1].
+  param hue    : float [0.0, 1.0] = 0.72
+
+  emit position, uv, tint, size
+
+  element {
+    let tri    = seed / 3u;
+    let corner = seed % 3u;
+    let total_tri = capacity / 3u;
+
+    // Split capacity: 85% outer hyper-torus manifold, 15% inner energy core.
+    let core_split = total_tri * 15u / 100u;
+    let is_core    = step(float(tri), float(core_split) - 0.5);
+
+    // Barycentric coordinates for sharp wireframe edge extraction in L4.
+    var bc = vec2(0.0);
+    if corner == 0u { bc = vec2(1.0, 0.0); }
+    if corner == 1u { bc = vec2(0.0, 1.0); }
+    uv = bc;
+
+    // Transient hit from beat fractions and onset modulation.
+    let beat_hit = pow(1.0 - fract(beats), 4.0);
+    let energy   = clamp(beat_hit * 0.75 + flare * 0.5, 0.0, 1.0);
+    size = energy;
+
+    var pos = vec3(0.0);
+    var col = vec3(0.0);
+
+    if is_core > 0.5 {
+      // --- INNER ENERGY CORE (Orbiting geometric star shards) ---
+      let c_idx = tri;
+      let c_tot = core_split;
+      let phi   = float(c_idx) * 2.3999632;
+      let y_pos = 1.0 - (float(c_idx) / float(c_tot)) * 2.0;
+      let r_sph = sqrt(max(1.0 - y_pos * y_pos, 0.0));
+
+      let core_r = 1.1 + 0.3 * sin(t * 4.0 + float(c_idx) * 0.2) + energy * 0.4;
+      let c_cen  = vec3(cos(phi) * r_sph, y_pos, sin(phi) * r_sph) * core_r;
+
+      // Triangle corners oriented outward
+      let c_ang = float(corner) * 2.0943951 + t * 2.0 + float(c_idx);
+      let c_rad = 0.12 * (1.0 + energy * 0.8);
+      let c_up  = normalize(c_cen + vec3(0.0001));
+      let c_tan = normalize(cross(c_up, vec3(0.0, 1.0, 0.0)) + vec3(0.0001));
+      let c_bin = cross(c_up, c_tan);
+
+      let c_off = (c_tan * cos(c_ang) + c_bin * sin(c_ang)) * c_rad;
+      pos = c_cen + c_off;
+
+      let c_hue = fract(hue + 0.5 + float(c_idx) * 0.002 + t * 0.1);
+      col = hsv_to_rgb(vec3(c_hue, 0.85, 1.0 + energy * 1.5));
+    } else {
+      // --- OUTER HYPER-TORUS MANIFOLD (Morphing kinetic polygon ribbon) ---
+      let m_idx = tri - core_split;
+      let m_tot = total_tri - core_split;
+
+      // Fraction along the knot manifold [0, 1]
+      let u = float(m_idx) / float(m_tot);
+      let a = u * 6.2831853;
+
+      // Knot frequency parameters morphing dynamically
+      let p_val = 2.0 + morph;
+      let q_val = 5.0 - morph * 2.0;
+
+      let knot_a = a * p_val + t * speed * 6.2831853;
+      let knot_b = a * q_val + sin(t * 0.8 + a * 2.0) * 0.5;
+
+      let r_ring = radius * (1.0 + 0.15 * sin(a * 4.0 + beats * 0.5));
+      let r_tube = tube * (1.0 + 0.25 * cos(knot_b) + energy * 0.4);
+
+      let cx = (r_ring + r_tube * cos(knot_b)) * cos(knot_a);
+      let cy = r_tube * sin(knot_b) * 1.6 + sin(a * 3.0 + t) * 0.4;
+      let cz = (r_ring + r_tube * cos(knot_b)) * sin(knot_a);
+      let cen = vec3(cx, cy, cz);
+
+      // Tangent vector along curve
+      let delta_a = 0.01;
+      let n_a = knot_a + delta_a * p_val;
+      let n_b = knot_b + delta_a * q_val;
+      let next_cen = vec3(
+        (r_ring + r_tube * cos(n_b)) * cos(n_a),
+        r_tube * sin(n_b) * 1.6 + sin((a + delta_a) * 3.0 + t) * 0.4,
+        (r_ring + r_tube * cos(n_b)) * sin(n_a)
+      );
+      let tan_vec = normalize(next_cen - cen);
+      let rad_vec = normalize(cen * vec3(1.0, 0.0, 1.0) + vec3(0.0001));
+      let nor_vec = normalize(cross(tan_vec, rad_vec) + vec3(0.0001));
+      let bin_vec = cross(tan_vec, nor_vec);
+
+      // Flaring angle: polygons tilt like active aerodynamic fins on beat
+      let flare_rot = (energy * flare + 0.1 * sin(a * 8.0 + t * 2.0)) * 1.2;
+      let fin_nor = rot_axis(nor_vec, tan_vec, flare_rot);
+
+      // Triangular shard vertices
+      let shard_size = (0.28 + 0.1 * sin(a * 6.0)) * (1.0 + energy * 0.35);
+      let shard_ang  = float(corner) * 2.0943951 + sin(a * 10.0 + t) * 0.5;
+
+      let local_disp = (tan_vec * cos(shard_ang) * 1.5 + bin_vec * sin(shard_ang)) * shard_size;
+      let lift = fin_nor * (energy * 0.35);
+
+      pos = cen + local_disp + lift;
+
+      let m_hue = fract(hue + u * 1.2 + sin(beats * 0.25) * 0.2);
+      col = hsv_to_rgb(vec3(m_hue, 0.8, 0.95 + energy * 1.0));
+    }
+
+    // Global rotational tumble
+    let tumble_ax = normalize(vec3(0.2, 1.0, 0.15));
+    let tumble_ang = t * spin * 6.2831853;
+    position = rot_axis(pos, tumble_ax, tumble_ang);
+    tint     = col;
+  }
+}

@@ -1,0 +1,113 @@
+// Pastel wallpaper of hearts and polka dots drifting on a diagonal, each heart
+// ringed in white with a glossy highlight and hopping on every beat, over a
+// pink-to-lavender sky with soft rainbow bands, and four-pointed sparkles
+// twinkling in front. Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/kawaii_hearts.kir --capacity 256
+
+proc kawaii_hearts {
+  kind  L4
+  blend additive
+
+  // Drift speed of the wallpaper.
+  param drift  : float [0.0, 1.0] = 0.12
+
+  // Tile size, in frame half-heights.
+  param tile   : float [0.2, 1.0] = 0.42
+
+  // How far a heart swells on the beat.
+  param hop    : float [0.0, 0.5] = 0.18
+
+  // Sparkle brightness.
+  param sparkle : float [0.0, 3.0] = 1.2
+
+  // Overall brightness.
+  param exposure : float [0.2, 2.0] = 1.25
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let pink  = srgb_to_linear(vec3(1.0, 0.66, 0.84));
+    let lilac = srgb_to_linear(vec3(0.80, 0.72, 1.0));
+    let mint  = srgb_to_linear(vec3(0.45, 0.95, 0.82));
+    let lemon = srgb_to_linear(vec3(1.0, 0.9, 0.45));
+    let hot   = srgb_to_linear(vec3(1.0, 0.36, 0.62));
+    let white = vec3(1.0);
+
+    // Sky: pink to lavender, crossed by faint slow rainbow bands.
+    let sky  = mix(lilac, pink, vec3(smoothstep(-1.0, 1.0, p.y + 0.3 * sin(p.x * 1.3 + t * 0.3))));
+    let bow  = hsv_to_rgb(vec3(fract(p.y * 0.25 + p.x * 0.1 - t * 0.05), 0.35, 1.0));
+    var c = mix(sky, bow, vec3(0.18));
+
+    // Wallpaper on a tilted, drifting lattice. Checkerboard cells alternate
+    // between a heart and a polka dot.
+    let ca = cos(0.35);
+    let sa = sin(0.35);
+    let w  = vec2(ca * p.x - sa * p.y, sa * p.x + ca * p.y) / tile + vec2(t * drift, -t * drift * 0.6);
+    let cell = floor(w);
+    let f    = fract(w) * 2.0 - vec2(1.0);
+    let hc   = hash3(uint(cell.x + 1000.0) * 7919u + uint(cell.y + 1000.0) * 104729u);
+    let odd  = mod(cell.x + cell.y, 2.0);
+
+    // Beat hop: a quick swell that settles before the next beat, offset per
+    // cell so the wall ripples rather than pumps as one.
+    let ph   = fract(beats + hc.x * 0.25);
+    let bump = 1.0 + hop * exp(-ph * 7.0);
+    // Undo the lattice tilt so every heart stands upright.
+    let fu   = vec2(ca * f.x + sa * f.y, ca * f.y - sa * f.x);
+    let l    = fu / bump + vec2(0.0, 0.08 * sin(t * 2.0 + hc.y * 6.2831853));
+
+    // Heart: a square turned 45 degrees with a disc on each upper edge.
+    let a  = 0.52;
+    let hq = vec2(l.x + l.y + 0.08, l.y - l.x + 0.08) * 0.70710678;
+    let db = sd_box(vec3(hq, 0.0), vec3(a * 0.5, a * 0.5, 1.0));
+    let o1 = vec2(0.18385, 0.10385);
+    let o2 = vec2(-0.18385, 0.10385);
+    let dh = min(db, min(length(l - o1) - a * 0.5, length(l - o2) - a * 0.5));
+
+    // Polka dot.
+    let dd = length(l) - 0.32;
+
+    let isheart = 1.0 - odd;
+    let d  = mix(dd, dh, isheart);
+    let pick = floor(hc.z * 4.0);
+    let fill = mix(mix(hot, mint, vec3(step(0.5, pick))), mix(lemon, white, vec3(step(2.5, pick))), vec3(step(1.5, pick)));
+    let body = mix(white * 0.95, fill, vec3(isheart));
+    let dotc = mix(fill, white, vec3(0.15));
+    let ink  = mix(dotc, body, vec3(isheart));
+
+    // Soft drop shadow, a white rim, the fill, and a gloss highlight.
+    let shadow = 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.18, length(l + vec2(-0.06, 0.08)) - 0.36)) * isheart;
+    c = c * shadow;
+    let rim  = 1.0 - smoothstep(0.075, 0.095, d);
+    c = mix(c, white, vec3(rim * isheart));
+    let inside = 1.0 - smoothstep(-0.01, 0.01, d);
+    c = mix(c, ink, vec3(inside));
+    let gl = length((l - vec2(-0.17, 0.14)) * vec2(1.0, 1.7));
+    c = mix(c, white, vec3((1.0 - smoothstep(0.07, 0.09, gl)) * inside * isheart * 0.9));
+
+    // Sparkles: sparse four-pointed stars on a finer grid, each twinkling on
+    // its own phase.
+    var sp = 0.0;
+    for k in 0..2 {
+      let fk = float(k);
+      let sz = 0.3 + fk * 0.23;
+      let sw = p / sz + vec2(fk * 3.7 + t * 0.05, fk * 1.3 - t * 0.08);
+      let sc = floor(sw);
+      let sh = hash3(uint(sc.x + 1000.0) * 7919u + uint(sc.y + 1000.0) * 104729u + uint(k) * 13u);
+      let sl = (fract(sw) - vec2(0.5) - (sh.xy - vec2(0.5)) * 0.5) * 6.0;
+      let tw = pow(0.5 + 0.5 * sin(t * (2.0 + 3.0 * sh.z) + sh.x * 6.2831853), 6.0);
+      let arm = exp(-abs(sl.x) * 30.0) * exp(-abs(sl.y) * 3.0) + exp(-abs(sl.y) * 30.0) * exp(-abs(sl.x) * 3.0);
+      let core = exp(-dot(sl, sl) * 12.0);
+      sp += (arm + core) * tw * step(0.55, sh.z);
+    }
+    c = c + vec3(1.0, 0.95, 1.0) * sp * sparkle;
+
+    color = vec4(c * exposure, 1.0);
+  }
+}

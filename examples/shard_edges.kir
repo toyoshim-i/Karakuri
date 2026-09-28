@@ -1,0 +1,55 @@
+// Dark faceted metal with neon edges for triangle meshes: each face is lit
+// flat from a key light with a coloured rim, its three edges glow in the
+// face's tint, and a face that carries heat burns from its edges inward,
+// magenta turning orange as the heat rises. Depth-tested and opaque.
+//
+// Reads `uv` as the corner's barycentric coordinates within its face, `tint`
+// as the face colour and `size` as heat in 0..1, which is what
+// `shard_bloom.kir` writes.
+//
+//     cargo run -p karakuri-cli -- --set examples/shard_bloom.kir,examples/shard_edges.kir
+
+proc shard_edges {
+  kind  L4
+  blend opaque
+
+  consumes position, uv, size, tint
+
+  // Direction the key light comes from.
+  param light_dir : vec3 [-1.0, 1.0] = vec3(0.5, 0.8, 0.3)
+
+  // Width of the edge glow, in barycentric units.
+  param edge     : float [0.005, 0.2] = 0.035
+
+  // Edge brightness; above 1 feeds bloom.
+  param neon     : float [0.0, 8.0] = 3.0
+
+  // Overall brightness.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    let n  = flat_normal(position);
+    let l  = normalize(light_dir);
+    let diff = max(dot(n, l), 0.0);
+    let fr = pow(1.0 - abs(n.z), 3.0);
+
+    // Distance to the nearest edge, in barycentric units.
+    let bz = 1.0 - uv.x - uv.y;
+    let e  = min(min(uv.x, uv.y), bz);
+    let line = exp(-e / edge);
+
+    // Heat eats in from the edges: the burning band widens as heat rises.
+    let burn = smoothstep(size * 0.34, size * 0.34 - 0.08, e) * size;
+
+    let metal = tint * (0.03 + 0.22 * diff) + vec3(0.25, 0.3, 0.45) * fr * 0.25;
+    let glow  = tint * line * neon * (0.6 + 0.8 * size);
+    let fire  = mix(vec3(1.0, 0.03, 0.35), vec3(1.0, 0.35, 0.02), vec3(size * size)) * burn * 3.0;
+
+    color = vec4((metal + glow + fire) * exposure, 1.0);
+  }
+}

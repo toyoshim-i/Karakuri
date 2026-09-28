@@ -1,0 +1,11 @@
+{"t":"set","id":"poly_hyperdrive","v":1}
+{"t":"part","layer":"L1","path":"poly_hyperdrive.kir"}
+{"t":"part","layer":"L4","path":"poly_facet.kir"}
+{"t":"param","layer":"L1","key":"radius","value":3.2}
+{"t":"param","layer":"L1","key":"tube","value":0.95}
+{"t":"param","layer":"L1","key":"speed","value":0.15}
+{"t":"param","layer":"L1","key":"flare","value":0.65}
+{"t":"param","layer":"L4","key":"wire_width","value":0.08}
+{"t":"param","layer":"L4","key":"edge_glow","value":3.5}
+{"t":"param","layer":"L4","key":"facet_lit","value":0.45}
+{"t":"camera","kind":"orbit","radius":7.2,"speed":0.04,"height":1.5}

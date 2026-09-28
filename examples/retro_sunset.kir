@@ -1,0 +1,108 @@
+// A retro-future horizon: a striped sun sinking behind wireframe mountains, a
+// violet sky full of stars, and a neon grid floor rushing toward the viewer
+// that flares on every beat and mirrors the sun in a smeared reflection.
+// Scanlines and a vignette finish it. Draws the whole frame and reads no
+// geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/retro_sunset.kir --capacity 256
+
+proc retro_sunset {
+  kind  L4
+  blend additive
+
+  // Speed of the floor toward the viewer, in grid cells per second.
+  param speed   : float [0.0, 8.0] = 1.6
+
+  // Height of the horizon, in frame half-heights.
+  param horizon : float [-0.6, 0.4] = -0.12
+
+  // Sun radius, in frame half-heights.
+  param sun     : float [0.2, 0.9] = 0.55
+
+  // How hard the grid flares on the beat.
+  param pump    : float [0.0, 3.0] = 1.2
+
+  // Extra glow on the grid, meant for a level signal.
+  param energy  : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let magenta = vec3(1.0, 0.05, 0.6);
+    let cyan    = vec3(0.05, 0.8, 1.0);
+    let beat    = exp(-fract(beats) * 5.0);
+    let hy      = p.y - horizon;
+
+    // Sky: deep indigo overhead, magenta and orange toward the horizon.
+    let sk = clamp(hy, 0.0, 2.0);
+    var c = mix(vec3(0.9, 0.25, 0.25), vec3(0.35, 0.02, 0.35), vec3(smoothstep(0.0, 0.5, sk)));
+    c = mix(c, vec3(0.01, 0.0, 0.06), vec3(smoothstep(0.35, 1.2, sk)));
+
+    // Stars, twinkling, fading out toward the glow of the horizon.
+    let sg = p * 38.0;
+    let sc = floor(sg);
+    let sh = hash3(uint(sc.x + 1000.0) * 7919u + uint(sc.y + 1000.0) * 104729u);
+    let sd = length(fract(sg) - vec2(0.5) - (sh.xy - vec2(0.5)) * 0.6);
+    let tw = 0.6 + 0.4 * sin(t * (1.0 + 3.0 * sh.z) + sh.x * 30.0);
+    c += vec3(0.9, 0.85, 1.0) * step(0.9, sh.z) * exp(-sd * sd * 900.0) * tw * smoothstep(0.2, 0.7, sk) * 2.0;
+
+    // Sun: yellow at the crown to hot pink at the base, cut by bands that
+    // thicken as they descend and scroll slowly down.
+    let sp  = vec2(p.x, hy - sun * 0.4);
+    let sr  = length(sp);
+    let sv  = sp.y / sun;
+    let sun_c = mix(vec3(1.0, 0.03, 0.35), vec3(1.0, 0.7, 0.05), vec3(smoothstep(-0.6, 0.8, sv)));
+    let gap = clamp((0.3 - sv) * 1.1, 0.0, 0.8);
+    let cut = step(gap, fract(sv * 7.0 + t * 0.35));
+    let disc = 1.0 - smoothstep(sun - 0.004, sun + 0.004, sr);
+    c = mix(c, c * 0.45, vec3(disc));
+    c = mix(c, sun_c * mix(0.75, 1.1, smoothstep(-0.4, 0.6, sv)), vec3(disc * cut));
+    c += vec3(1.0, 0.2, 0.45) * exp(-(sr - sun) * 5.0) * 0.3 * (1.0 - disc);
+
+    // Mountains: a ridge of absolute noise, dark with a neon contour and a few
+    // wireframe contours, standing in front of the sun.
+    let ridge = 0.06 + 0.22 * abs(value_noise(vec3(p.x * 1.7 + 11.0, 0.0, 0.0)))
+              + 0.08 * abs(value_noise(vec3(p.x * 5.1, 3.0, 0.0)));
+    let mh = ridge * smoothstep(0.1, 0.9, abs(p.x));
+    let inm = step(0.0, hy) * (1.0 - step(mh, hy));
+    let wire = exp(-abs(fract(hy * 28.0) - 0.5) * 12.0) * 0.12;
+    c = mix(c, vec3(0.03, 0.0, 0.07) + magenta * wire, vec3(inm));
+    c += magenta * exp(-abs(hy - mh) * 220.0) * step(0.0, hy) * 1.2 * step(0.01, mh);
+
+    // Floor: a plane below the eye. Depth goes as the inverse of the distance
+    // below the horizon; grid lines are thinned with distance and fade into
+    // the haze before they alias.
+    let below = max(-hy, 0.0001);
+    let z  = 0.35 / below;
+    let wx = p.x * z;
+    let wz = z + t * speed;
+    let lx = abs(fract(wx) - 0.5);
+    let lz = abs(fract(wz) - 0.5);
+    let wdt = 0.02 * z * 0.6 + 0.012;
+    let gridx = exp(-(0.5 - lx) / wdt);
+    let gridz = exp(-(0.5 - lz) / wdt);
+    let far = exp(-z * 0.12);
+    let flare = 1.0 + beat * pump + energy * 1.5;
+    let grid = (gridx + gridz) * far * flare;
+    let floor_c = vec3(0.02, 0.0, 0.05) + mix(cyan, magenta, vec3(smoothstep(1.0, 8.0, z))) * grid * 1.4;
+
+    // The sun's reflection: a vertical smear under it that ripples.
+    let refl = exp(-abs(p.x + 0.03 * sin(z * 6.0 - t * 3.0)) * 6.0 / (sun + 0.2)) * exp(-below * 3.0);
+    let haze = exp(-below * 12.0);
+    let flo  = floor_c + vec3(1.0, 0.25, 0.4) * (refl * 0.5 + haze * 0.6);
+    c = mix(c, flo, vec3(step(hy, 0.0)));
+
+    // Horizon line.
+    c += vec3(1.0, 0.4, 0.8) * exp(-abs(hy) * 300.0) * 1.5;
+
+    // Scanlines and a vignette.
+    let scan = 0.82 + 0.18 * sin(point_coord.y * 540.0 * 3.1415927);
+    let vig  = 1.0 - 0.3 * dot(p * vec2(0.5, 0.85), p * vec2(0.5, 0.85));
+    color = vec4(c * scan * vig, 1.0);
+  }
+}

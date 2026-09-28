@@ -1,0 +1,6 @@
+{"t":"set","id":"tactical_alert","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"tactical_alert.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"unrest","signal":"energy","curve":"smooth","range":[0.1,0.9]}
+{"t":"bind","layer":"L4","key":"kick","signal":"audio.onset","curve":"pow2","range":[0.0,1.0]}

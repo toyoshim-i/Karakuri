@@ -1,0 +1,101 @@
+// A cyber HUD over falling code: columns of blocky glyphs rain down in cyan
+// with the odd magenta column, a segmented targeting reticle turns at the
+// centre, and now and then horizontal bands tear sideways while the red, green
+// and blue channels split apart. Scanlines and a vignette finish it. Draws the
+// whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/cyber_glitch.kir --capacity 256
+
+proc cyber_glitch {
+  kind  L4
+  blend additive
+
+  // Fall speed of the code rain.
+  param rain   : float [0.0, 4.0] = 1.0
+
+  // How often and how far bands tear: 0 never, 1 constantly and wide.
+  param glitch : float [0.0, 1.0] = 0.4
+
+  // Channel separation, in frame half-heights; widened while a tear is on.
+  param split  : float [0.0, 0.05] = 0.006
+
+  // Reticle brightness.
+  param hud    : float [0.0, 2.0] = 1.0
+
+  // Hit strength: forces a tear and punches the reticle. Bind to an onset.
+  param kick   : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // Tears: the frame is cut into bands that re-cut twelve times a second;
+    // a burst decides whether this quarter second tears at all.
+    let tick  = floor(t * 12.0);
+    let band  = floor(p.y * 9.0 + hash1(uint(tick) * 31u + 7u) * 5.0);
+    let bh    = hash2(uint(band + 500.0) * 7919u + uint(tick) * 131u);
+    let burst = max(step(1.0 - glitch * 0.45, hash1(uint(floor(t * 4.0)) * 977u + 5u)), step(0.5, kick));
+    let tear  = (bh.x - 0.5) * 0.5 * glitch * step(0.55, bh.y) * burst;
+    let sep   = split * (1.0 + 5.0 * burst);
+
+    var c = vec3(0.0);
+    for ch in 0..3 {
+      let fc   = float(ch);
+      let mask = vec3(1.0 - step(0.5, fc), step(0.5, fc) - step(1.5, fc), step(1.5, fc));
+      let q    = vec2(p.x + tear + (fc - 1.0) * sep, p.y);
+
+      // Code rain: glyph cells fixed to the screen, lit by a head that falls
+      // down each column and leaves a fading trail above it.
+      let colw = 0.042;
+      let rowh = colw * 1.35;
+      let cx   = floor(q.x / colw);
+      let hc   = hash3(uint(cx + 1000.0) * 7919u + 11u);
+      let row  = floor(q.y / rowh);
+      let head = -t * rain * (5.0 + 9.0 * hc.x) + hc.y * 60.0;
+      let d    = mod(row - head, 48.0);
+      let lit  = exp(-d * 0.15) + 2.5 * (1.0 - step(1.0, d));
+
+      // A glyph is a 3x5 bit pattern inside a 5x7 cell, re-rolled at the
+      // column's own flicker rate.
+      let gx  = floor(fract(q.x / colw) * 5.0);
+      let gy  = floor(fract(q.y / rowh) * 7.0);
+      let ins = step(0.5, gx) * step(gx, 3.5) * step(0.5, gy) * step(gy, 5.5);
+      let gt  = floor(t * (0.7 + 4.0 * hc.z) + hc.x * 9.0);
+      let bit = step(0.45, hash1(uint(cx + 1000.0) * 7919u + uint(row + 1000.0) * 104729u
+                             + uint(gx * 8.0 + gy) * 31u + uint(gt) * 977u));
+      let hue  = mix(vec3(0.1, 0.85, 1.0), vec3(1.0, 0.1, 0.65), vec3(step(0.86, hc.z)));
+      let code = hue * bit * ins * lit * 0.55;
+
+      // Reticle: a segmented inner ring, three counter-rotating arcs, tick
+      // marks, and a crosshair broken open at the middle.
+      let hs  = hud * (1.0 + 0.6 * kick);
+      let sq  = q * (1.0 - 0.06 * kick);
+      let r   = length(sq);
+      let ang = atan2(sq.y, sq.x) / 6.2831853 + 0.5;
+      let g   = 0.004;
+      let seg = step(0.35, fract(ang * 36.0 + t * 0.4));
+      let r1  = g * g / ((r - 0.42) * (r - 0.42) + g * g) * seg;
+      let arc = step(0.62, fract(ang * 3.0 - t * 0.25));
+      let r2  = g * g / ((r - 0.5) * (r - 0.5) + g * g) * arc * 1.4;
+      let tk  = step(0.9, fract(ang * 72.0)) * step(0.56, r) * step(r, 0.6);
+      let r3  = g * g / ((r - 0.66) * (r - 0.66) * 4.0 + g * g) * step(0.5, fract(ang * 8.0 + t * 0.1));
+      let cross_x = g * g / (sq.y * sq.y + g * g) * step(0.12, abs(sq.x)) * step(abs(sq.x), 0.3);
+      let cross_y = g * g / (sq.x * sq.x + g * g) * step(0.12, abs(sq.y)) * step(abs(sq.y), 0.3);
+      let dot_c   = 0.0002 / (r * r + 0.0002);
+      let ret = (r1 + r2 + tk * 0.8 + r3 + cross_x + cross_y + dot_c) * hs;
+      let retc = vec3(0.3, 1.0, 0.9) * ret + vec3(1.0, 0.2, 0.5) * r2 * burst * hs;
+
+      let scene = vec3(0.0, 0.02, 0.05) + code + retc;
+      c += mask * dot(scene, mask);
+    }
+
+    // Scanlines, a flicker while tearing, and a vignette.
+    let scan = 0.78 + 0.22 * sin(point_coord.y * 540.0 * 3.1415927);
+    let vig  = 1.0 - 0.35 * dot(p * vec2(0.55, 0.9), p * vec2(0.55, 0.9));
+    color = vec4(c * scan * vig * (1.0 + 0.3 * burst), 1.0);
+  }
+}

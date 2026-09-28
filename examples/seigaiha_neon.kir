@@ -1,0 +1,125 @@
+// A shrine gate standing in a neon sea: overlapping wave-scale (seigaiha)
+// rings in indigo and gold roll across the lower frame with light running
+// outward through them, a vermilion sun rises behind the gate's silhouette
+// against a night sky, and cherry petals tumble across everything. Draws the
+// whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/seigaiha_neon.kir --capacity 256
+
+proc seigaiha_neon {
+  kind  L4
+  blend additive
+
+  // Height of the sea's edge, in frame half-heights.
+  param shore  : float [-0.8, 0.2] = -0.3
+
+  // Size of one wave scale, in frame half-heights.
+  param scale  : float [0.05, 0.4] = 0.13
+
+  // Rate at which light runs outward through the rings.
+  param ripple : float [0.0, 4.0] = 1.2
+
+  // How many petals fall: 0 none, 1 a storm.
+  param petals : float [0.0, 1.0] = 0.3
+
+  // Sun glow, meant for a level signal.
+  param glow   : float [0.0, 2.0] = 0.6
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let vermilion = vec3(1.0, 0.045, 0.012);
+    let gold      = vec3(1.0, 0.7, 0.2);
+    let aqua      = vec3(0.15, 0.75, 1.0);
+    let sakura    = vec3(1.0, 0.3, 0.5);
+
+    // Night sky: indigo overhead, violet haze toward the sea.
+    var c = mix(vec3(0.12, 0.03, 0.18), vec3(0.005, 0.01, 0.05), vec3(smoothstep(shore, 1.0, p.y)));
+
+    // Sun: a vermilion disc with a wide glow, behind everything else.
+    let sc = vec2(0.0, shore + 0.72);
+    let sr = length(p - sc);
+    c = mix(c, vermilion * 0.95, vec3(1.0 - smoothstep(0.495, 0.505, sr)));
+    c += vermilion * exp(-max(sr - 0.5, 0.0) * 4.0) * glow * 0.5;
+
+    // Gate silhouette: two pillars, a lower tie beam, and a top beam whose
+    // ends sweep upward.
+    let gx  = abs(p.x);
+    let gy  = p.y - shore;
+    let pil = step(abs(gx - 0.3), 0.035) * step(-0.05, gy) * step(gy, 0.95);
+    let tie = step(gx, 0.43) * step(abs(gy - 0.72), 0.03);
+    let lip = 0.9 + 0.05 * pow(gx / 0.58, 4.0);
+    let top = step(gx, 0.58) * step(abs(gy - lip), 0.045);
+    let cap = step(gx, 0.52) * step(abs(gy - lip + 0.08), 0.022);
+    let mid = step(gx, 0.02) * step(0.72, gy) * step(gy, lip - 0.08);
+    let gate = clamp(pil + tie + top + cap + mid, 0.0, 1.0);
+    c = mix(c, vec3(0.02, 0.0, 0.01), vec3(gate));
+
+    // Sea: rows of scales, alternate rows offset by half a scale, each lower
+    // row laid over the one above. Walk the five rows that can reach this
+    // point from the top down and keep the last one it falls inside.
+    let w  = vec2(p.x / scale + t * 0.25, (p.y - shore) / scale);
+    let r0 = floor(w.y * 2.0);
+    var dist = 2.0;
+    var rowk = 0.0;
+    for k in 0..5 {
+      let row = r0 + 2.0 - float(k);
+      let off = mod(row, 2.0);
+      let cx  = 2.0 * floor((w.x - off) * 0.5 + 0.5) + off;
+      let dk  = length(w - vec2(cx, row * 0.5));
+      if dk < 1.0 {
+        dist = dk;
+        rowk = row + cx * 0.37;
+      }
+    }
+
+    // Four rings per scale; light pulses outward and drifts from row to row.
+    let fr  = fract(dist * 4.0);
+    let e   = min(fr, 1.0 - fr);
+    let lum = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(dist * 6.0 - t * ripple * 3.0 + rowk * 0.8), 3.0);
+    let edge = exp(-(1.0 - dist) * 40.0);
+    let line = exp(-e * 30.0) * lum;
+    let waves = vec3(0.01, 0.02, 0.09) + mix(aqua, gold, vec3(0.5 + 0.5 * sin(rowk * 0.9))) * line * 0.9
+              + gold * edge * 1.2;
+    let insea = 1.0 - smoothstep(-0.01, 0.01, gy);
+    // The sun's glitter on the water, under the gate.
+    let glit = exp(-gx * 4.0) * exp(gy * 2.5) * (0.5 + 0.5 * sin(w.y * 40.0 + t * 4.0)) * 0.5;
+    c = mix(c, waves + vermilion * glit, vec3(insea * step(dist, 1.5)));
+    c = mix(c, vec3(0.01, 0.01, 0.05), vec3(insea * step(1.5, dist)));
+    c += gold * exp(-abs(gy) * 120.0) * 0.8;
+
+    // Petals: three depths of cells falling and swaying; a cell holds a petal
+    // when its hash clears the density, spinning as it goes.
+    for k in 0..3 {
+      let fk = float(k);
+      let cs = 0.22 + fk * 0.12;
+      let pw = vec2(p.x + 0.12 * sin(t * 0.7 + fk * 2.0 + p.y * 1.5), p.y) / cs
+             + vec2(t * (0.15 + 0.05 * fk), t * (0.35 + 0.1 * fk));
+      let pc = floor(pw);
+      let ph = hash3(uint(pc.x + 1000.0) * 7919u + uint(pc.y + 1000.0) * 104729u + uint(k) * 17u);
+      let lp = fract(pw) - vec2(0.5) - (ph.xy - vec2(0.5)) * 0.4;
+      let an = t * (1.0 + 2.0 * ph.z) + ph.x * 6.2831853;
+      let ca = cos(an);
+      let sa = sin(an);
+      let rl = vec2(ca * lp.x - sa * lp.y, sa * lp.x + ca * lp.y);
+      // A teardrop with a notch at its broad end; a flip squashes it across.
+      let flip = 0.35 + 0.65 * abs(sin(t * 2.0 + ph.y * 9.0));
+      let el = vec2(rl.x / flip, rl.y) * vec2(4.4, 3.0);
+      let body = length(el) - 0.3 + el.y * 0.25;
+      let notch = length(el + vec2(0.0, 0.42)) - 0.1;
+      let dpet = max(body, -notch);
+      let on = step(1.0 - petals * 0.55, ph.z);
+      let a  = (1.0 - smoothstep(-0.02, 0.03, dpet)) * on;
+      let depth = 0.35 + 0.25 * fk;
+      c = mix(c, sakura * depth, vec3(a * 0.9));
+      c += sakura * exp(-max(dpet, 0.0) * 12.0) * on * 0.08;
+    }
+
+    color = vec4(c, 1.0);
+  }
+}

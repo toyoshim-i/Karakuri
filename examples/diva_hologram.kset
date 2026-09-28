@@ -1,0 +1,5 @@
+{"t":"set","id":"diva_hologram","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"diva_hologram.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"level","signal":"energy","curve":"smooth","range":[0.15,1.0]}
