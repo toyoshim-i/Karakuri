@@ -5,6 +5,33 @@ use crate::node::{Deform, Simulation};
 use crate::set::types::{ElementStorage, Set, Source};
 use crate::video_source::VideoSource;
 
+pub(crate) fn allocate_hdr_target(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    label: &str,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: width.max(1),
+            height: height.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: crate::present::Present::HDR_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
 impl Set {
     /// Resizes renderer viewports and accumulation targets to match new dimensions.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
@@ -29,6 +56,46 @@ impl Set {
             });
             self.depth_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
             self.depth_texture = Some(texture);
+        }
+        if self.l5_target.is_some() {
+            let (t, v) = allocate_hdr_target(device, width, height, "Set L5 target");
+            self.l5_target = Some(t);
+            self.l5_target_view = Some(v);
+        }
+        if self.l5_ping_target.is_some() {
+            let (t, v) = allocate_hdr_target(device, width, height, "Set L5 ping");
+            self.l5_ping_target = Some(t);
+            self.l5_ping_view = Some(v);
+        }
+        if self.l5_held_target.is_some() {
+            let (t, v) = allocate_hdr_target(device, width, height, "Set L5 held");
+            self.l5_held_target = Some(t);
+            self.l5_held_view = Some(v);
+        }
+        if let (Some(layout), Some(sampler)) = (&self.l5_layout, &self.l5_sampler) {
+            let total = self.l5s.len();
+            for at in 0..total {
+                let src_view = if at == 0 {
+                    self.l5_target_view.as_ref().unwrap()
+                } else if at % 2 == 1 {
+                    self.l5_ping_view.as_ref().unwrap()
+                } else {
+                    self.l5_target_view.as_ref().unwrap()
+                };
+                let held_view = if self.l5s[at].retains {
+                    self.l5_held_view.as_ref().unwrap_or(src_view)
+                } else {
+                    src_view
+                };
+                self.l5s[at].bind_group = self.l5s[at].pass.bind(
+                    device,
+                    layout,
+                    src_view,
+                    held_view,
+                    sampler,
+                    Some(&format!("Set L5[{at}] bind")),
+                );
+            }
         }
         for renderer in self.sources.iter_mut().flat_map(|s| &mut s.renderers) {
             renderer.resize(device, width, height);
@@ -258,13 +325,20 @@ impl Set {
         }
         let merge = self.merge.as_ref();
         let depth_view = self.depth_view.as_ref();
+
+        let render_dest = if self.l5s.is_empty() {
+            target
+        } else {
+            self.l5_target_view.as_ref().unwrap()
+        };
+
         for (source_at, source) in self.sources.iter().enumerate() {
             let (parity, counts) = (source.sim.parity(), self.output_counts(source));
             for (i, renderer) in source.renderers.iter().enumerate() {
                 match merge {
                     None => renderer.draw(
                         encoder,
-                        target,
+                        render_dest,
                         depth_view,
                         parity,
                         counts,
@@ -282,7 +356,36 @@ impl Set {
             }
         }
         if let Some(merge) = merge {
-            merge.record(encoder, target);
+            merge.record(encoder, render_dest);
+        }
+
+        if !self.l5s.is_empty() {
+            let total = self.l5s.len();
+            for at in 0..total {
+                let is_last = at == total - 1;
+                let dst_view = if is_last {
+                    target
+                } else if at % 2 == 0 {
+                    self.l5_ping_view.as_ref().unwrap()
+                } else {
+                    self.l5_target_view.as_ref().unwrap()
+                };
+                self.l5s[at]
+                    .pass
+                    .record(encoder, dst_view, &self.l5s[at].bind_group);
+            }
+            if let (Some(target), Some(held)) = (&self.l5_target, &self.l5_held_target) {
+                let (w, h) = self.viewport();
+                encoder.copy_texture_to_texture(
+                    target.as_image_copy(),
+                    held.as_image_copy(),
+                    wgpu::Extent3d {
+                        width: w.max(1),
+                        height: h.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
         }
     }
 }

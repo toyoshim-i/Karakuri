@@ -177,6 +177,7 @@ fn main() {
             l3s: loaded.l3s,
             fields: loaded.fields,
             l4s: loaded.l4s,
+            l5s: loaded.l5s,
             names,
         });
         placed.push(Vec::new());

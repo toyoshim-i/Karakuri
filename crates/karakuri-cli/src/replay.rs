@@ -143,6 +143,7 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
         &loaded.l3s,
         &loaded.fields,
         &loaded.l4s,
+        &loaded.l5s,
         // Layering recorded in head (defaults to Overdraw).
         layering,
         // Names and edges recorded in head.
@@ -413,6 +414,7 @@ fn rebuild(
         &[],
         &[],
         &l4s,
+        &[],
         layering,
         &Names::default(),
         &[],

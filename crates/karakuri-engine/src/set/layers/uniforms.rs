@@ -168,6 +168,7 @@ impl Set {
         let t = self.t_at(next_steps_taken);
         self.last_beats = view.oscillator().at_time(f64::from(t)).beats() as f32;
         self.write_l4_uniforms(queue, t);
+        self.write_l5_uniforms(queue, t);
     }
 
     /// Writes uniform buffers for L4 renderers and camera nodes.
@@ -305,6 +306,28 @@ impl Set {
         }
     }
 
+    /// Writes uniform buffers for nested L5 post-processing nodes.
+    fn write_l5_uniforms(&mut self, queue: &wgpu::Queue, t: f32) {
+        if self.l5s.is_empty() {
+            return;
+        }
+        let first = self.slot_of(Kind::L5);
+        let clock = crate::pass::Clock {
+            t,
+            beats: self.last_beats,
+            dt: self.dt,
+            seed_salt: self.seed_salt,
+        };
+        let viewport = self.viewport;
+        for (i, l5) in self.l5s.iter_mut().enumerate() {
+            let slot = first + i;
+            if let Some(params) = self.params.get(slot) {
+                let p_iter = params.iter().map(|(k, v)| (k.as_str(), *v));
+                l5.pass.write_uniform(queue, clock, viewport, p_iter);
+            }
+        }
+    }
+
     /// Evaluates each parameter binding against input signals and manual fallback values.
     fn resolve_bindings(&mut self, signals: &Signals) {
         let ranges: Vec<(usize, std::ops::Range<usize>)> = Kind::ALL
@@ -320,7 +343,7 @@ impl Set {
                 Kind::L3 => ranges[2].clone(),
                 Kind::L4 => ranges[3].clone(),
                 Kind::Field => (0, 0..0),
-                Kind::L5 => (0, 0..0),
+                Kind::L5 => ranges[5].clone(),
             };
             let manual = range
                 .clone()

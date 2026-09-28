@@ -242,7 +242,8 @@ mod gpu {
                 .map(|l1| (l1, l1.capacity.expect("an L1 declares a capacity").default))
                 .collect();
             assert!(!l1s.is_empty(), "{}.kset starts with no L1", set.stem);
-            let (l2s, l3s, l4s, fields) = (on("L2"), on("L3"), on("L4"), on("Field"));
+            let (l2s, l3s, l4s, l5s, fields) =
+                (on("L2"), on("L3"), on("L4"), on("L5"), on("Field"));
             let edges: Vec<karakuri_engine::set::Edge> = set
                 .edges
                 .iter()
@@ -257,6 +258,7 @@ mod gpu {
                 && l4s.len() == 1
                 && l2s.is_empty()
                 && l3s.is_empty()
+                && l5s.is_empty()
                 && fields.is_empty()
                 && edges.is_empty()
             {
@@ -271,6 +273,7 @@ mod gpu {
                     &l3s,
                     &fields,
                     &l4s,
+                    &l5s,
                     karakuri_engine::set::Layering::Overdraw,
                     0,
                     &[],

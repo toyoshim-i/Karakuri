@@ -279,6 +279,7 @@ pub fn candidate(id: u64) -> Request {
         live: None,
         published: Vec::new(),
         l4s: vec![compile(L4)],
+        l5s: Vec::new(),
         seed_salt: SEED_B,
         camera: karakuri_engine::camera::Orbit::default(),
         salts: Vec::new(),

@@ -42,6 +42,7 @@ pub fn resolve_node_names(
     cameras: &[Option<&Checked>],
     l4s: &[&Checked],
     fields: &[&Checked],
+    l5s: &[&Checked],
     wiring: &Wiring<'_>,
 ) -> Result<Vec<String>, SetError> {
     let given = |at: usize, from: &[Option<String>]| from.get(at).cloned().flatten();
@@ -70,6 +71,11 @@ pub fn resolve_node_names(
                 .iter()
                 .enumerate()
                 .map(|(at, n)| (given(at, wiring.fields), Some(*n))),
+        )
+        .chain(
+            l5s.iter()
+                .enumerate()
+                .map(|(at, n)| (given(at, wiring.l5s), Some(*n))),
         )
         .collect();
 
@@ -679,6 +685,7 @@ impl Set {
         l3s: &[&'a Checked],
         fields: &[&'a Checked],
         l4s: &[&'a Checked],
+        l5s: &[&'a Checked],
         layering: Layering,
         seed_salt: u32,
         salts: &[Option<u32>],
@@ -708,7 +715,7 @@ impl Set {
             .chain(std::iter::once(None))
             .collect();
 
-        let names = resolve_node_names(l1s, l2s, &cameras, l4s, fields, &wiring)?;
+        let names = resolve_node_names(l1s, l2s, &cameras, l4s, fields, l5s, &wiring)?;
 
         let nodes: Vec<Option<&Checked>> = l1s
             .iter()
@@ -717,9 +724,11 @@ impl Set {
             .chain(cameras.iter().copied())
             .chain(l4s.iter().copied().map(Some))
             .chain(fields.iter().copied().map(Some))
+            .chain(l5s.iter().copied().map(Some))
             .collect();
 
-        let field_range = names.len() - fields.len()..names.len();
+        let field_start = l1s.len() + l2s.len() + cameras.len() + l4s.len();
+        let field_range = field_start..field_start + fields.len();
         let camera_range = l1s.len() + l2s.len()..l1s.len() + l2s.len() + cameras.len();
 
         let (field_bound, camera_bound, source_bound, far_at) =
@@ -761,6 +770,15 @@ impl Set {
                 });
             }
         }
+        for l5 in l5s {
+            if l5.kind != Kind::L5 {
+                return Err(SetError::WrongKind {
+                    slot: "L5",
+                    expected: Kind::L5,
+                    actual: l5.kind,
+                });
+            }
+        }
 
         let heads: Vec<usize> = (0..l1s.len()).filter(|at| Some(*at) != far_at).collect();
         let pairing = l2s.iter().position(|n| n.geometry_slot().is_some());
@@ -790,6 +808,7 @@ impl Set {
             l1s: l1s.to_vec(),
             l2s: l2s.to_vec(),
             fields: fields.to_vec(),
+            l5s: l5s.to_vec(),
         })
     }
 }

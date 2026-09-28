@@ -90,6 +90,7 @@ proc plain_dots {
             &[],
             &[],
             &[l4],
+            &[],
             Layering::Overdraw,
             SEED,
             &[],

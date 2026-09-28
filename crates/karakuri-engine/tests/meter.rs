@@ -438,6 +438,7 @@ mod gpu {
                 live: None,
                 published: Vec::new(),
                 l4s: vec![compile(&L4.replace("{{EXPOSURE}}", "0.000"))],
+                l5s: Vec::new(),
                 seed_salt: SEED,
                 camera: karakuri_engine::camera::Orbit::default(),
                 salts: Vec::new(),

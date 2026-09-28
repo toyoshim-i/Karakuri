@@ -36,8 +36,7 @@ impl Set {
             Kind::L3 => self.cameras.len(),
             Kind::L4 => first.renderers.len(),
             Kind::Field => self.field_count,
-            // Nested L5 nodes are not yet supported.
-            Kind::L5 => 0,
+            Kind::L5 => self.l5s.len(),
         }
     }
 
@@ -54,7 +53,13 @@ impl Set {
                     + self.procedures(Kind::L3)
                     + self.procedures(Kind::L4)
             }
-            Kind::L5 => self.params.len(),
+            Kind::L5 => {
+                self.l1_count
+                    + self.procedures(Kind::L2)
+                    + self.procedures(Kind::L3)
+                    + self.procedures(Kind::L4)
+                    + self.field_count
+            }
         }
     }
 
@@ -65,9 +70,9 @@ impl Set {
             Kind::L1 => start..start + self.l1_count,
             Kind::L2 => start..start + self.procedures(Kind::L2),
             Kind::L3 => start..start + self.procedures(Kind::L3),
-            Kind::L4 => start..self.params.len() - self.field_count,
+            Kind::L4 => start..start + self.procedures(Kind::L4),
             Kind::Field => start..start + self.field_count,
-            Kind::L5 => start..start,
+            Kind::L5 => start..start + self.l5s.len(),
         }
     }
 
@@ -101,7 +106,7 @@ impl Set {
                 .iter()
                 .map(|r| r.param_keys())
                 .collect(),
-            Kind::L5 => Vec::new(),
+            Kind::L5 => self.l5s.iter().map(|l5| l5.param_keys.as_slice()).collect(),
         }
     }
 

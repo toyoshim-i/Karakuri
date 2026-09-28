@@ -403,6 +403,7 @@ mod gpu {
             &[],
             &[],
             &[&a, &b],
+            &[],
             karakuri_engine::set::Layering::Composite,
             SEED_A,
             &[],

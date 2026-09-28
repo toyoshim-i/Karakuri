@@ -142,6 +142,7 @@ pub fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
         live: None,
         published: Vec::new(),
         l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
+        l5s: Vec::new(),
         seed_salt: 19274,
         camera: karakuri_engine::camera::Orbit::default(),
         salts: Vec::new(),

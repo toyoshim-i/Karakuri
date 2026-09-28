@@ -359,6 +359,7 @@ impl Watch {
             l3s,
             fields,
             l4s,
+            l5s,
             names,
         } = material;
         let params = if std::mem::replace(&mut self.stated, true) {
@@ -382,12 +383,14 @@ impl Watch {
             l3s,
             fields,
             l4s,
+            l5s,
             names: karakuri_engine::swap::RequestNames {
                 l1s: names.l1s,
                 l2s: names.l2s,
                 l3s: names.l3s,
                 l4s: names.l4s,
                 fields: names.fields,
+                l5s: names.l5s,
                 depth_tests: Vec::new(),
             },
             edges: self.edges.clone(),

@@ -242,12 +242,13 @@ pub(crate) fn build_deck(
         .iter()
         .enumerate()
         .map(|(slot, material)| {
-            let (l1, l2s, l3s, fields, l4s) = (
+            let (l1, l2s, l3s, fields, l4s, l5s) = (
                 material.l1s.as_slice(),
                 &material.l2s,
                 material.l3s.as_slice(),
                 material.fields.as_slice(),
                 &material.l4s,
+                &material.l5s,
             );
             let camera = recorded_camera(args, slot);
             let layering = layering_for(args, slot, recorded_layering(args, slot));
@@ -259,6 +260,7 @@ pub(crate) fn build_deck(
                 l3s,
                 fields,
                 l4s,
+                l5s,
                 layering,
                 &material.names,
                 &args.edges,
@@ -389,6 +391,7 @@ pub(crate) fn build(
     // evaluates none.
     fields: &[karakuri_ir::typed::Checked],
     l4s: &[karakuri_ir::typed::Checked],
+    l5s: &[karakuri_ir::typed::Checked],
     layering: karakuri_engine::set::Layering,
     // What each node is called — see `Names`.
     names: &Names,
@@ -418,6 +421,7 @@ pub(crate) fn build(
     let look: Vec<&karakuri_ir::typed::Checked> = l3s.iter().collect();
     let shapes: Vec<&karakuri_ir::typed::Checked> = fields.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
+    let post: Vec<&karakuri_ir::typed::Checked> = l5s.iter().collect();
     assert_eq!(
         l1s.len(),
         capacities.len(),
@@ -435,6 +439,7 @@ pub(crate) fn build(
         &look,
         &shapes,
         &draw,
+        &post,
         layering,
         seed,
         &assigned,
@@ -444,6 +449,7 @@ pub(crate) fn build(
             l3s: &names.l3s,
             l4s: &names.l4s,
             fields: &names.fields,
+            l5s: &names.l5s,
             edges,
             depth_tests: &[],
         },

@@ -330,6 +330,7 @@ mod gpu {
             l3s: Vec::new(),
             fields: Vec::new(),
             l4s: vec![compile(L4)],
+            l5s: Vec::new(),
             names: RequestNames::default(),
             edges: Vec::new(),
             layering: karakuri_engine::set::Layering::Overdraw,

@@ -43,6 +43,8 @@ pub struct RequestNames {
     pub l4s: Vec<Option<String>>,
     /// Field node names declared in the set definition.
     pub fields: Vec<Option<String>>,
+    /// Post-processing node names declared in the set definition.
+    pub l5s: Vec<Option<String>>,
     /// Optional per-renderer depth test flags.
     pub depth_tests: Vec<Option<bool>>,
 }
@@ -61,6 +63,8 @@ pub struct Request {
     pub fields: Vec<Checked>,
     /// Renderer procedures in draw order.
     pub l4s: Vec<Checked>,
+    /// Post-processing procedures in execution order.
+    pub l5s: Vec<Checked>,
     /// Layering strategy determining whether renderers overdraw or composite.
     pub layering: crate::set::Layering,
     /// Optional renderer index to isolate. When `None`, all renderers remain active.

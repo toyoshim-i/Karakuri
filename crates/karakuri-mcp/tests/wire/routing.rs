@@ -239,6 +239,7 @@ fn assembles(
         &[],
         &[&blob],
         &[&l4],
+        &[],
         karakuri_engine::set::Layering::Overdraw,
         7,
         &[],

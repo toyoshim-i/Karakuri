@@ -398,6 +398,7 @@ mod refused {
             &[],
             &[],
             &[l4],
+            &[],
             Layering::Overdraw,
             1,
             &[],

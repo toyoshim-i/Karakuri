@@ -427,6 +427,25 @@ pub struct Set {
     pub(crate) source_bound: Vec<(usize, String, usize)>,
     /// Number of distinct Field procedures in the Set.
     pub(crate) field_count: usize,
+    /// Nested L5 post-processing procedures.
+    pub(crate) l5s: Vec<SetL5>,
+    pub(crate) l5_target: Option<wgpu::Texture>,
+    pub(crate) l5_target_view: Option<wgpu::TextureView>,
+    pub(crate) l5_ping_target: Option<wgpu::Texture>,
+    pub(crate) l5_ping_view: Option<wgpu::TextureView>,
+    pub(crate) l5_held_target: Option<wgpu::Texture>,
+    pub(crate) l5_held_view: Option<wgpu::TextureView>,
+    pub(crate) l5_sampler: Option<wgpu::Sampler>,
+    pub(crate) l5_layout: Option<wgpu::BindGroupLayout>,
+}
+
+pub(crate) struct SetL5 {
+    #[allow(dead_code)]
+    pub(crate) name: String,
+    pub(crate) pass: crate::pass::ImagePass,
+    pub(crate) bind_group: wgpu::BindGroup,
+    pub(crate) retains: bool,
+    pub(crate) param_keys: Vec<String>,
 }
 
 /// Control published to the external console interface.
@@ -519,6 +538,8 @@ pub struct Wiring<'a> {
     pub l4s: &'a [Option<String>],
     /// Optional names for Field procedures.
     pub fields: &'a [Option<String>],
+    /// Optional names for L5 post-processing procedures.
+    pub l5s: &'a [Option<String>],
     /// Optional per-renderer depth test flags (`None` or `Some(true)` tests depth, `Some(false)` skips test).
     pub depth_tests: &'a [Option<bool>],
     /// Slot bindings applicable to this Set.
@@ -571,6 +592,9 @@ pub struct Plan<'a> {
     pub(crate) l2s: Vec<&'a Checked>,
     /// Field procedures available for splicing.
     pub(crate) fields: Vec<&'a Checked>,
+    /// L5 post-processing procedures.
+    #[allow(dead_code)]
+    pub(crate) l5s: Vec<&'a Checked>,
 }
 
 /// Projected element storage allocation for a specific node instance.

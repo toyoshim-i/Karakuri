@@ -105,6 +105,7 @@ impl Rig {
             &[],
             fields,
             &[l4],
+            &[],
             Layering::Overdraw,
             SEED,
             &[],
