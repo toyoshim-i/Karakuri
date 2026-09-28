@@ -1,0 +1,97 @@
+// A kinetic exploding procedural nova core: thousands of faceted crystalline
+// triangles emerging from a chaotic energy center, pulsing and morphing to the beat.
+//
+//     cargo run -p karakuri-cli -- --set examples/poly_nova.kir,examples/poly_facet.kir
+
+proc poly_nova {
+  kind     L1
+  topology triangles
+  capacity [3072, 131072] = 65536
+
+  // Base radius of the inner sphere.
+  param radius     : float [1.0, 10.0] = 2.5
+
+  // How far the spikes protrude outward.
+  param spike_len  : float [0.0, 15.0] = 6.0
+
+  // Animation speed.
+  param speed      : float [-2.0, 2.0] = 0.8
+
+  // Noise complexity for the procedural surface.
+  param complexity : float [1.0, 10.0] = 4.0
+
+  // Rotation speed of the entire assembly.
+  param spin       : float [-1.0, 1.0] = 0.2
+
+  // Base chromatic palette hue [0, 1].
+  param hue        : float [0.0, 1.0] = 0.05
+
+  emit position, uv, tint, size
+
+  element {
+    let tri    = seed / 3u;
+    let corner = seed % 3u;
+    let total_tri = capacity / 3u;
+
+    // Barycentric coordinates for sharp wireframe edge extraction in L4.
+    var bc = vec2(0.0);
+    if corner == 0u { bc = vec2(1.0, 0.0); }
+    if corner == 1u { bc = vec2(0.0, 1.0); }
+    uv = bc;
+
+    // Transient hit from beat fractions.
+    let beat_hit = pow(1.0 - fract(beats), 3.0);
+    size = beat_hit;
+
+    let f_tri = float(tri);
+    let f_tot = float(total_tri);
+
+    // Distribute base points on a sphere using Fibonacci lattice (Golden spiral).
+    let phi_angle = f_tri * 2.3999632; // Golden angle roughly
+    let y_pos     = 1.0 - (f_tri / f_tot) * 2.0; // y goes from 1 to -1
+    let r_sph     = sqrt(max(1.0 - y_pos * y_pos, 0.0));
+    let base_dir  = vec3(cos(phi_angle) * r_sph, y_pos, sin(phi_angle) * r_sph);
+
+    // Procedural noise/displacement field using trig functions for that demoscene look.
+    let ns1 = sin(base_dir.x * complexity + t * speed);
+    let ns2 = cos(base_dir.y * complexity * 0.8 - t * speed * 1.3);
+    let ns3 = sin(base_dir.z * complexity * 1.2 + t * speed * 0.7);
+
+    // Combine noise and create sharp peaks.
+    let noise_val = pow(abs(ns1 * ns2 * ns3), 0.5);
+
+    // Animate spikes expanding and retracting with beat.
+    let active_spike = spike_len * (0.2 + 0.8 * beat_hit);
+    let rad = radius + noise_val * active_spike;
+
+    let cen = base_dir * rad;
+
+    // Calculate dynamic triangle size based on radius so they scale as they expand.
+    let tri_scale = (20.0 / sqrt(f_tot)) * (rad / radius) * (0.8 + 0.4 * beat_hit);
+
+    // Build local coordinate frame on the surface.
+    let up = normalize(cen + vec3(0.0001));
+    let tan = normalize(cross(up, vec3(0.0, 1.0, 0.0)) + vec3(0.0001));
+    let bin = cross(up, tan);
+
+    // Rotate corners to form the triangle. Add some spin based on time and index.
+    let ang = float(corner) * 2.0943951 + t * 4.0 + f_tri * 0.01;
+    let local_disp = (tan * cos(ang) + bin * sin(ang)) * tri_scale;
+
+    // Facets tilting outward/inward based on noise gradient (pseudo-gradient).
+    let lift = up * (tri_scale * 0.5 * sin(t * 8.0 + noise_val * 10.0));
+
+    var pos = cen + local_disp + lift;
+
+    // Global tumble.
+    let tumble_ax  = normalize(vec3(0.5, 1.0, 0.2));
+    let tumble_ang = t * spin * 6.2831853;
+    position = rot_axis(pos, tumble_ax, tumble_ang);
+
+    // Color gradient based on distance from center (radius) and beat.
+    let depth_hue = fract(hue + (rad - radius) * 0.05 + beat_hit * 0.1);
+
+    // Deep core is dark/hot, tips are bright/cold
+    tint = hsv_to_rgb(vec3(depth_hue, 0.8 - (rad - radius)*0.02, 0.6 + noise_val * 1.5 + beat_hit));
+  }
+}

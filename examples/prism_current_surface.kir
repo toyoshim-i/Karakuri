@@ -1,0 +1,30 @@
+// Opaque faceted panels, derivative-antialiased emissive seams and depth haze.
+proc prism_current_surface {
+  kind L4
+  blend opaque
+  consumes position, uv, tint, size
+
+  param glow : float [0.0, 4.0] = 1.25
+  param metal : float [0.0, 2.0] = 0.65
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    let bary = vec3(uv, 1.0 - uv.x - uv.y);
+    let pixels = bary / max(fwidth(bary), vec3(0.0001));
+    let edge = min(min(pixels.x, pixels.y), pixels.z);
+    let seam = 1.0 - smoothstep(0.65, 1.65, edge);
+    let halo = exp(-edge * 0.3) * 0.16;
+    let n = flat_normal(position);
+    let light = 0.15 + 0.85 * abs(dot(n, normalize(vec3(0.3, 0.8, 0.5))));
+    let sheen = pow(abs(dot(n, normalize(-position))), 9.0);
+    let panel = tint * metal * (0.055 + 0.32 * light) + vec3(0.16, 0.22, 0.3) * sheen;
+    let emission = tint * (seam + halo) * glow * (0.4 + size * 2.0);
+    let fog = exp(-length(position) * 0.045);
+    let haze = vec3(0.008, 0.022, 0.045);
+    color = vec4(mix(haze, panel + emission + tint * size * 0.12, vec3(fog)), 1.0);
+  }
+}

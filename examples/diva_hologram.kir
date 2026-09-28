@@ -1,0 +1,130 @@
+// A virtual singer's hologram stage in teal and pink: a circular spectrum of
+// mirrored bars pumps around a turning speaker disc, two musical staves wave
+// across the frame carrying notes that scroll past, and a hexagonal hologram
+// grid shimmers behind with scan bands rolling upward. Draws the whole frame
+// and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/diva_hologram.kir --capacity 256
+
+proc diva_hologram {
+  kind  L4
+  blend additive
+
+  // Loudness driving the spectrum bars. Bind to a level signal.
+  param level  : float [0.0, 1.0] = 0.35
+
+  // Scroll speed of the notes, in frame half-heights per second.
+  param tempo  : float [0.0, 1.5] = 0.35
+
+  // Radius of the spectrum ring, in frame half-heights.
+  param ring   : float [0.15, 0.6] = 0.3
+
+  // Brightness of the hexagonal grid behind.
+  param grid   : float [0.0, 1.0] = 0.25
+
+  // Overall brightness.
+  param exposure : float [0.2, 3.0] = 1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let teal = srgb_to_linear(vec3(0.22, 0.85, 0.8));
+    let pink = srgb_to_linear(vec3(1.0, 0.3, 0.62));
+    let beat = exp(-fract(beats) * 5.0);
+
+    var c = mix(vec3(0.0, 0.015, 0.02), vec3(0.01, 0.04, 0.05), vec3(smoothstep(-1.0, 1.0, p.y)));
+
+    // Hexagonal hologram grid: distance to the nearer of two offset lattices'
+    // centres gives the cell, and its edge distance the line.
+    let hs = p / 0.09;
+    let s  = vec2(1.0, 1.7320508);
+    let ga = floor(hs / s) * s + s * 0.5;
+    let gb = floor((hs - s * 0.5) / s) * s + s;
+    let da = hs - ga;
+    let db = hs - gb;
+    let off = mix(da, db, vec2(step(dot(db, db), dot(da, da))));
+    let hx = abs(off);
+    let he = max(dot(hx, vec2(0.5, 0.8660254)), hx.x);
+    let hexl = exp(-(0.5 - he) * 25.0);
+    let roll = 0.4 + 0.6 * pow(0.5 + 0.5 * sin(p.y * 3.0 - t * 1.5), 4.0);
+    c += teal * hexl * roll * grid * 0.35 * (1.0 - 0.6 * exp(-dot(p, p) * 2.0));
+
+    // Staves: two sets of five lines riding a slow wave, teal above and pink
+    // below, each carrying notes that scroll left.
+    for st in 0..2 {
+      let fs   = float(st);
+      let base = mix(0.62, -0.62, fs);
+      let tone = mix(teal, pink, vec3(fs));
+      let wav  = 0.07 * sin(p.x * 1.8 + t * 1.2 + fs * 2.5);
+      let dy   = p.y - base - wav;
+      var lines = 0.0;
+      for k in 0..5 {
+        let ly = (float(k) - 2.0) * 0.035;
+        lines += 0.00001 / ((dy - ly) * (dy - ly) + 0.00001);
+      }
+      c += tone * lines * 0.35 * step(abs(dy), 0.12);
+
+      // Notes: one slot per cell, pitched in half line-steps, a tilted oval
+      // head with a stem.
+      let nx   = p.x + t * tempo * (1.0 + fs * 0.3) + fs * 0.11;
+      let cw   = 0.2;
+      let cell = floor(nx / cw);
+      let nh   = hash3(uint(cell + 1000.0) * 7919u + uint(st) * 31u);
+      let lx   = (fract(nx / cw) - 0.5) * cw;
+      let cxw  = p.x - lx;
+      let nwav = 0.07 * sin(cxw * 1.8 + t * 1.2 + fs * 2.5);
+      let pitch = (floor(nh.x * 9.0) - 4.0) * 0.0175;
+      let ly   = p.y - (base + nwav + pitch);
+      let ca   = 0.9396926;
+      let sa   = -0.3420201;
+      let rq   = vec2(ca * lx - sa * ly, sa * lx + ca * ly);
+      let head = length(rq * vec2(1.0, 1.45)) - 0.027;
+      let stem = max(abs(lx - 0.025) - 0.003, abs(ly - 0.07) - 0.07);
+      let flag = max(abs(lx - 0.042 + (ly - 0.12) * 0.4) - 0.005, abs(ly - 0.12) - 0.022) + step(nh.y, 0.7);
+      let dn   = min(head, min(stem, flag));
+      let has  = step(0.35, nh.z);
+      let pop  = 1.0 + 0.8 * beat * step(0.8, nh.y);
+      let note = (1.0 - smoothstep(0.0, 0.004, dn)) + exp(-max(dn, 0.0) * 60.0) * 0.4;
+      c += mix(tone, vec3(1.0), vec3(0.35)) * note * has * pop * 1.2;
+    }
+
+    // Spectrum ring: 40 bars per side, mirrored left to right, each bar's
+    // height a moving noise lifted by the level and kicked by the beat.
+    let r   = length(p);
+    let ang = abs(atan2(p.x, p.y)) / 3.1415927;
+    let bi  = floor(ang * 40.0);
+    let bf  = fract(ang * 40.0);
+    let nz  = 0.5 + 0.5 * value_noise(vec3(bi * 0.31, t * 2.2, 0.0));
+    let bass = (1.0 - bi / 40.0) * beat * 0.5;
+    let h   = 0.03 + 0.28 * clamp(nz * (0.4 + level) + bass, 0.0, 1.0);
+    let rr  = ring * (1.0 + 0.05 * beat);
+    let inb = step(rr, r) * step(r, rr + h) * step(0.18, bf) * step(bf, 0.82);
+    let along = clamp((r - rr) / 0.3, 0.0, 1.0);
+    c += mix(teal, pink, vec3(along)) * inb * 0.7;
+    let capd = abs(r - (rr + h + 0.018));
+    c += vec3(1.0) * step(capd, 0.005) * step(0.18, bf) * step(bf, 0.82) * 0.8;
+
+    // Speaker disc: concentric rings turning, a waveform circling inside, and
+    // a soft pink core that swells on the beat.
+    let rot = atan2(p.y, p.x) + t * 0.6;
+    let dr  = rr - 0.02 - r;
+    let rings = exp(-abs(fract(r * 28.0) - 0.5) * 14.0) * step(0.0, dr) * 0.25
+              * (0.6 + 0.4 * sin(rot * 3.0));
+    let wv  = rr * 0.62 + 0.025 * sin(rot * 8.0 + t * 5.0) * (0.4 + level + beat);
+    let wave = 0.00002 / ((r - wv) * (r - wv) + 0.00002);
+    let core = exp(-r * r * 60.0 / (1.0 + beat)) * 0.8;
+    c += teal * (rings + wave * 0.8) + pink * core;
+    c += teal * 0.0001 / ((r - rr + 0.01) * (r - rr + 0.01) + 0.0001) * 0.4;
+
+    // Hologram flicker and scan bands rolling upward.
+    let band = 0.85 + 0.15 * sin(point_coord.y * 540.0 * 3.1415927)
+             + 0.25 * pow(0.5 + 0.5 * sin(p.y * 2.0 - t * 2.4), 30.0);
+    let flick = 0.95 + 0.05 * hash1(uint(floor(t * 30.0)) * 131u);
+    color = vec4(c * band * flick * exposure, 1.0);
+  }
+}

@@ -1,0 +1,7 @@
+{"t":"set","id":"shard_bloom","v":1}
+{"t":"part","layer":"L1","path":"shard_bloom.kir"}
+{"t":"part","layer":"L4","path":"shard_edges.kir"}
+{"t":"part","layer":"L4","index":1,"path":"shard_backdrop.kir"}
+{"t":"camera","kind":"orbit","radius":5.2,"speed":0.07,"height":1.4}
+{"t":"bind","layer":"L1","key":"burst","signal":"audio.onset","curve":"pow2","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"peel","signal":"energy","curve":"smooth","range":[0.5,1.0]}
