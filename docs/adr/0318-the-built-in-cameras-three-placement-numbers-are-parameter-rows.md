@@ -4,7 +4,7 @@ title: The built-in camera's three placement numbers are parameter rows
 status: accepted
 date: 2026-09-09
 supersedes: []
-superseded_by: []
+superseded_by: [0374]
 principles: [0084, 0086, 0087, 0090, 0092]
 tags: [console, engine, camera, operations, setfile, m5.5]
 ---
