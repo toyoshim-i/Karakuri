@@ -1,0 +1,28 @@
+// High-frequency organic film stock grain/noise to eliminate digital
+// plastic look without heavy blur.
+
+proc film_grain {
+  kind L5
+
+  // Grain intensity factor.
+  param amount : float [0.0, 0.5] = 0.12
+  // Grain granularity scale.
+  param scale : float [1.0, 5.0] = 2.5
+  // Midtone luminance bias (real film grain concentrates in midtones).
+  param midtones : float [0.0, 1.0] = 0.6
+
+  frame {
+    let c = texel(src);
+    // Film grain jitter advancing at 24 fps.
+    let jitter = floor(t * 24.0);
+    let sample_pos = point_coord * scale * 1000.0;
+    let n = fract(sin(dot(sample_pos + jitter, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+
+    // Luminance-weighted response curve.
+    let luma = dot(c.xyz, vec3(0.299, 0.587, 0.114));
+    let weight = 1.0 - midtones * abs(luma - 0.5) * 2.0;
+    let grain = n * amount * max(weight, 0.1);
+
+    color = vec4(clamp(c.xyz + grain, vec3(0.0), vec3(1.0)), c.w);
+  }
+}

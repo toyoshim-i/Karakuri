@@ -640,6 +640,15 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
                 at: on_kind_field,
             },
             Tipped {
+                control: "the L5 chip",
+                cites: Cite {
+                    class: "kind",
+                    text: "L5",
+                    nth: 0,
+                },
+                at: on_kind_l5,
+            },
+            Tipped {
                 control: "the SET chip",
                 cites: Cite {
                     class: "kind",

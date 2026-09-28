@@ -626,12 +626,19 @@ fn add_card(
         .iter()
         .map(|item| width(&item.words))
         .fold(size::ROW_MENU_MIN_W, f32::max);
+    let card_w = widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0;
     let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * choices.items.len() as f32;
+    // If opening downward would spill past the bottom of the viewport, open upward above `+ add`.
+    let y = if add.max.y + size::PILL_GAP + height > viewport.max.y {
+        add.min.y - size::PILL_GAP - height
+    } else {
+        add.max.y + size::PILL_GAP
+    };
     let card = held_inside(
         &viewport,
-        add.max.x - (widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0),
-        add.max.y + size::PILL_GAP,
-        widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
+        add.max.x - card_w,
+        y.max(viewport.min.y),
+        card_w,
         height,
     );
     Some(AddCard {

@@ -1,0 +1,28 @@
+// Audio-transient-reactive radial dispersion that explodes outwards
+// on kicks and snaps back. Produces high-energy chromatic bursts.
+
+proc chroma_burst {
+  kind L5
+
+  // Radial dispersion intensity.
+  param amount : float [0.0, 1.0] = 0.5
+  // Pulse rate in beats.
+  param rate : float [0.25, 4.0] = 1.0
+  // Maximum radial spread distance.
+  param spread : float [0.01, 0.2] = 0.06
+
+  frame {
+    let delta = point_coord - vec2(0.5);
+    let dist = length(delta);
+    // Transient envelope: fast impact with exponential decay.
+    let env = pow(1.0 - fract(beats * rate), 4.0) * amount;
+    let disp = delta * (env * spread);
+
+    let r = tap(src, point_coord - disp).x;
+    let g = tap(src, point_coord).y;
+    let b = tap(src, point_coord + disp).z;
+    let alpha = texel(src).w;
+
+    color = vec4(r, g, b, alpha);
+  }
+}

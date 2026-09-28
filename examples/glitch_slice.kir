@@ -1,0 +1,37 @@
+// Cuts the incoming frame into horizontal slices and applies pseudo-random
+// block displacements synchronized with the beat, punctuated by drop accents.
+// Designed for drop punctuation and rhythmic glitch transitions.
+
+proc glitch_slice {
+  kind L5
+
+  // Glitch intensity factor.
+  param amount : float [0.0, 1.0] = 0.5
+  // Number of horizontal slice bands across the screen.
+  param slices : float [4.0, 64.0] = 16.0
+  // Displacement spread across x.
+  param spread : float [0.0, 0.5] = 0.15
+
+  frame {
+    let n = max(floor(slices), 4.0);
+    let band = floor(point_coord.y * n);
+    // Quantize beat time into sixteenth-note intervals for sharp rhythmic stepping.
+    let beat_step = floor(beats * 4.0);
+    // Pseudo-random hash for this band and beat step.
+    let h1 = fract(sin(band * 127.1 + beat_step * 311.7) * 43758.5453);
+    let h2 = fract(sin(band * 269.5 + beat_step * 183.3) * 43758.5453);
+
+    // Only displace bands whose hash falls within active amount threshold.
+    let active = step(1.0 - amount, h1);
+    let shift = (h2 * 2.0 - 1.0) * spread * active;
+
+    let sample_coord = vec2(fract(point_coord.x + shift), point_coord.y);
+    let c = tap(src, sample_coord);
+
+    // Slight chromatic aberration on active glitch bands.
+    let r = tap(src, vec2(fract(sample_coord.x + shift * 0.2), sample_coord.y)).x;
+    let b = tap(src, vec2(fract(sample_coord.x - shift * 0.2), sample_coord.y)).z;
+
+    color = vec4(mix(c.x, r, active), c.y, mix(c.z, b, active), c.w);
+  }
+}

@@ -8,22 +8,23 @@ use super::*;
 pub const HOLDS_UNSET: &str = "holds…";
 
 /// Layer names and display labels for kind filter chips (ADR-0338, ADR-0340).
-pub const LAYERS: [(Layer, &str); 5] = [
+pub const LAYERS: [(Layer, &str); 6] = [
     (Layer::L1, "L1"),
     (Layer::L2, "L2"),
     (Layer::L3, "L3"),
     (Layer::L4, "L4"),
     (Layer::Field, "FIELD"),
+    (Layer::L5, "L5"),
 ];
 
-/// The word the `SET` chip carries, and the one place it is spelled — the sixth
-/// of the six, and the only one that is not a [`Layer`].
+/// The word the `SET` chip carries, and the one place it is spelled — the seventh
+/// of the seven, and the only one that is not a [`Layer`].
 pub const SETS_CHIP: &str = "SET";
 
 /// Kind filter chip representing a layer or full Set row (ADR-0338, P-0090).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KindChip {
-    /// One of the five kinds a procedure declares.
+    /// One of the six kinds a procedure declares.
     Layer(Layer),
     /// The Sets, which is the row kind that declares no `kind` at all.
     Sets,
@@ -31,12 +32,13 @@ pub enum KindChip {
 
 impl KindChip {
     /// All kind chips in display order (ADR-0338, ADR-0340).
-    pub const ALL: [KindChip; 6] = [
+    pub const ALL: [KindChip; 7] = [
         KindChip::Layer(Layer::L1),
         KindChip::Layer(Layer::L2),
         KindChip::Layer(Layer::L3),
         KindChip::Layer(Layer::L4),
         KindChip::Layer(Layer::Field),
+        KindChip::Layer(Layer::L5),
         KindChip::Sets,
     ];
 

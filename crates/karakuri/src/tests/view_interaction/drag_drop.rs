@@ -361,3 +361,121 @@ fn a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at() {
 
     std::fs::remove_dir_all(&root).expect("clean up");
 }
+
+fn test_pane(deck: usize) -> view::Pane {
+    view::Pane {
+        deck,
+        material: format!("deck_{deck}"),
+        sync: karakuri_operation::Sync::Free,
+        allows: [true; view::SYNCS.len()],
+        anchor_bpm: 128.0,
+        scrub_beats: 0.0,
+        composite: false,
+        aimed: None,
+        nodes: vec![],
+    }
+}
+
+/// Dragging a Set from the library and dropping it onto an Inspector pane emits a `LoadSet` operation for that pane's deck.
+#[test]
+fn a_drop_on_an_inspector_pane_loads_that_panes_deck() {
+    let ctx = drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+    readout.view.scopes = Scope::ALL.to_vec();
+    readout.view.library = vec![
+        "drift_night".to_owned(),
+        "lattice_veil".to_owned(),
+        "glass_shell".to_owned(),
+    ];
+    readout.view.inspector = vec![test_pane(1), test_pane(0)];
+
+    let row = |readout: &mut Readout, index: usize| {
+        readout.panel.solve();
+        let at = library_bay(
+            readout.panel.layout(),
+            &readout.view.scopes,
+            &readout.view.library,
+            readout.view.opened(),
+            readout.view.pointed(),
+            readout.view.library_scroll(),
+        )
+        .expect("the bay lists its rows")
+        .row(index);
+        Point::new(at.center().x, at.center().y)
+    };
+
+    let at = row(&mut readout, 0);
+    readout.pointer(&ctx, Pointer::Moved(at));
+    readout.pointer(&ctx, Pointer::Down);
+
+    let pane_at = inspector_pane(readout.panel.layout(), 0, &readout.view.inspector[0], 0.0)
+        .expect("inspector pane 0 is laid out");
+    let over = Point::new(pane_at.body.center().x, pane_at.body.center().y);
+
+    let (claim, did) = readout.pointer(&ctx, Pointer::Moved(over));
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(did, Acted::Nothing);
+
+    let (claim, did) = readout.pointer(&ctx, Pointer::Up);
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(
+        did,
+        Acted::Emitted(Some(Operation::LoadSet {
+            deck: 1,
+            set: "drift_night".to_owned(),
+        }))
+    );
+}
+
+/// Dragging a procedure from the library and dropping it onto an Inspector pane emits a `LoadProcedure` operation for that pane's deck.
+#[test]
+fn a_drop_of_a_procedure_on_an_inspector_pane_loads_that_panes_deck() {
+    let ctx = drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+    readout.view.scopes = Scope::ALL.to_vec();
+    readout.view.library = vec!["orbit_wide".to_owned()];
+    readout.view.kinds = vec![view::RowKind {
+        badges: vec![karakuri_operation::Layer::L3],
+        procedure: true,
+    }];
+    readout.view.inspector = vec![test_pane(0), test_pane(2)];
+
+    let at = {
+        readout.panel.solve();
+        let rect = library_bay(
+            readout.panel.layout(),
+            &readout.view.scopes,
+            &readout.view.library,
+            readout.view.opened(),
+            readout.view.pointed(),
+            readout.view.library_scroll(),
+        )
+        .expect("the bay lists its rows")
+        .row(0);
+        Point::new(rect.center().x, rect.center().y)
+    };
+
+    readout.pointer(&ctx, Pointer::Moved(at));
+    readout.pointer(&ctx, Pointer::Down);
+
+    // Inspector pane 1 is Deck C (deck: 2)
+    let pane_at = inspector_pane(readout.panel.layout(), 1, &readout.view.inspector[1], 0.0)
+        .expect("inspector pane 1 is laid out");
+    let over = Point::new(pane_at.body.center().x, pane_at.body.center().y);
+
+    let (claim, did) = readout.pointer(&ctx, Pointer::Moved(over));
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(did, Acted::Nothing);
+
+    let (claim, did) = readout.pointer(&ctx, Pointer::Up);
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(
+        did,
+        Acted::Emitted(Some(Operation::LoadProcedure {
+            deck: 2,
+            procedure: "orbit_wide".to_owned(),
+        }))
+    );
+}

@@ -98,6 +98,28 @@ impl Readout {
                                 .and_then(|cells| cells.dropped(at, self.view.mixer.len()))
                         })
                         .map(Landing::Deck)
+                        // Drops onto an inspector pane representing a deck (ADR-0273, ADR-0338).
+                        .or_else(|| {
+                            for (index, pane) in self
+                                .view
+                                .inspector
+                                .iter()
+                                .enumerate()
+                                .take(karakuri_console::view::PANES)
+                            {
+                                if let Some(laid) = inspector_pane(
+                                    self.panel.layout(),
+                                    index,
+                                    pane,
+                                    self.view.scroll_in(index),
+                                ) {
+                                    if laid.dropped(at).is_some() {
+                                        return Some(Landing::Deck(pane.deck as u8));
+                                    }
+                                }
+                            }
+                            None
+                        })
                         // Drops onto master chain if carrying a valid L5 procedure (ADR-0273).
                         .or_else(|| {
                             let adding = self.view.chain_choices();
