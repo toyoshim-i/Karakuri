@@ -445,6 +445,7 @@ pub(crate) fn build(
             l4s: &names.l4s,
             fields: &names.fields,
             edges,
+            depth_tests: &[],
         },
     ) {
         Ok(mut set) => {

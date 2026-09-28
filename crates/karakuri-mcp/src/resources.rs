@@ -100,10 +100,20 @@ pub(crate) fn vocabulary() -> String {
                   is not declared: an L4 draws segments when its `vertex` block assigns \
                   `clip_b` and sprites when it does not.\n\n",
     );
-    for topology in [Topology::Points, Topology::Lines, Topology::Fullscreen] {
+    for topology in [
+        Topology::Points,
+        Topology::Lines,
+        Topology::Triangles,
+        Topology::Grid,
+        Topology::Ribbon,
+        Topology::Fullscreen,
+    ] {
         let note = match topology {
             Topology::Points => "one sprite per element",
             Topology::Lines => "one segment per element, `clip` to `clip_b`",
+            Topology::Triangles => "vertex-shader-art triangle mesh, 3 elements per triangle (`Checked::is_static` sources only)",
+            Topology::Grid => "2D tessellated quad grid mesh with automated index buffer (`Checked::is_static` sources only)",
+            Topology::Ribbon => "connected quad strip ribbon for trails (`Checked::is_static` sources only)",
             Topology::Fullscreen => {
                 "the whole frame, from an L4 with **no `vertex` block**. It must \
                  `consumes` nothing — there is no element to read from — and it gets `eye` \
@@ -123,7 +133,7 @@ pub(crate) fn vocabulary() -> String {
          combined.\n\nThey read `color`'s alpha differently, which is the part that \
          changes how a procedure is written.\n\n",
     );
-    for blend in [Blend::Additive, Blend::Weighted] {
+    for blend in [Blend::Additive, Blend::Weighted, Blend::Opaque] {
         let note = match blend {
             Blend::Additive => {
                 "colour sums and nothing occludes. Alpha is **emission strength** and may \
@@ -137,6 +147,11 @@ pub(crate) fn vocabulary() -> String {
                  it. Alpha is **opacity** and is clamped to `[0, 1]`. Not available on a \
                  fullscreen L4: one fragment per texel makes it identical to `additive`, \
                  and building such a pair is refused"
+            }
+            Blend::Opaque => {
+                "opaque rasterization with depth testing and depth writing against a per-Set \
+                 Depth32 target. Alpha writes full coverage (1.0). Non-opaque renderers test depth \
+                 and do not write, occluding behind opaque surfaces via early-Z"
             }
         };
         out.push_str(&format!("- `{}` — {note}\n", blend.name()));

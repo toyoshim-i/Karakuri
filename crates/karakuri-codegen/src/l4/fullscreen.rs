@@ -22,7 +22,7 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
     // (0,0), (2,0), (0,2) in `point_coord`, so the frame is the 0..1 corner.
     let uv = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
     var out: VsOut;
-    out.clip = vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+    out.clip = vec4<f32>(uv * 2.0 - 1.0, 1.0, 1.0);
     // Flipped in y: NDC runs up and a framebuffer runs down, and the whole
     // point of this value is that a fragment can say where on screen it is.
     out.point_coord = vec2<f32>(uv.x, 1.0 - uv.y);

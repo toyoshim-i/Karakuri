@@ -388,6 +388,7 @@ impl Watch {
                 l3s: names.l3s,
                 l4s: names.l4s,
                 fields: names.fields,
+                depth_tests: Vec::new(),
             },
             edges: self.edges.clone(),
             layering: self.layering,

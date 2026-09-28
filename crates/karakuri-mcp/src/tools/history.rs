@@ -207,6 +207,7 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
             l4s: &loaded.names.l4s,
             fields: &loaded.names.fields,
             edges: &loaded.edges,
+            depth_tests: &[],
         },
     ) {
         Ok(plan) => plan,

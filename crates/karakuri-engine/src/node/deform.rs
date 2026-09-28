@@ -32,6 +32,8 @@ pub(crate) struct Deform {
     synthetic: Synthetic,
     /// Amplification resources (counts, alive buffers, derive pipeline) if factor > 1.
     amplified: Option<Amplified>,
+    /// Preserved topology from upstream geometry.
+    topology: karakuri_ir::Topology,
     /// Uniform field names declared by this procedure.
     param_names: Vec<String>,
     /// Component-addressed parameter keys (e.g. `glow.x`, `glow.y`).
@@ -328,6 +330,7 @@ impl Deform {
             emits: shader.emits,
             synthetic: shader.synthetic,
             amplified,
+            topology: input.topology,
             param_names: l2.params.iter().map(|p| p.name.clone()).collect(),
             param_keys: crate::set::declared_keys(l2),
         })
@@ -378,6 +381,7 @@ impl Deform {
             elements: [&self.elements, &self.elements],
             alive,
             counts,
+            topology: self.topology,
         }
     }
 

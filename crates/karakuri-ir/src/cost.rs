@@ -140,6 +140,9 @@ fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
 
         Builtin::HsvToRgb | Builtin::RgbToHsv => W_HSV_RGB,
         Builtin::SrgbToLinear | Builtin::LinearToSrgb => W_SRGB_LINEAR,
+
+        Builtin::Dpdx | Builtin::Dpdy | Builtin::Fwidth => W_CHEAP,
+        Builtin::FlatNormal => W_CROSS + W_NORMALIZE + 2 * W_CHEAP,
     }
 }
 

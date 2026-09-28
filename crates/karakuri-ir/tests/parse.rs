@@ -374,7 +374,7 @@ fn an_unknown_topology_is_refused_and_names_the_ones_that_exist() {
     let src = r#"
 proc guessed {
   kind     L1
-  topology triangles
+  topology voxels
   capacity [1, 64] = 8
 
   emit position
@@ -384,12 +384,40 @@ proc guessed {
   }
 }
 "#;
-    let errs = parse(src).expect_err("`triangles` is not a topology");
+    let errs = parse(src).expect_err("`voxels` is not a topology");
     let hints: String = errs.iter().filter_map(|e| e.hint.clone()).collect();
     assert!(
-        hints.contains("points") && hints.contains("lines"),
+        hints.contains("points") && hints.contains("lines") && hints.contains("triangles"),
         "hint was: {hints}"
     );
+}
+
+/// Verifies `topology triangles` parses as triangles.
+#[test]
+fn topology_triangles_parses_as_triangles() {
+    let src = r#"
+proc mesh {
+  kind     L1
+  topology triangles
+  capacity [3, 96] = 30
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let proc = parse(src).unwrap_or_else(|errs| {
+        panic!(
+            "{}",
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    });
+    assert_eq!(proc.topology, Some(karakuri_ir::ast::Topology::Triangles));
 }
 
 /// Verifies `blend weighted` parses as weighted blend mode.
@@ -424,6 +452,38 @@ proc glassy {
     assert_eq!(proc.blend, Some(karakuri_ir::ast::Blend::Weighted));
 }
 
+/// Verifies `blend opaque` parses as opaque blend mode.
+#[test]
+fn blend_opaque_parses_as_opaque() {
+    let src = r#"
+proc solid {
+  kind  L4
+  blend opaque
+
+  consumes position
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+    point_rate = 0.03;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let proc = parse(src).unwrap_or_else(|errs| {
+        panic!(
+            "{}",
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    });
+    assert_eq!(proc.blend, Some(karakuri_ir::ast::Blend::Opaque));
+}
+
 /// Verifies unknown blend modes are rejected with candidate suggestions.
 #[test]
 fn an_unknown_blend_is_refused_and_names_the_ones_that_exist() {
@@ -447,7 +507,7 @@ proc guessed {
     let errs = parse(src).expect_err("`screen` is not an L4 blend mode");
     let hints: String = errs.iter().filter_map(|e| e.hint.clone()).collect();
     assert!(
-        hints.contains("additive") && hints.contains("weighted") && hints.contains("opacity"),
+        hints.contains("additive") && hints.contains("weighted") && hints.contains("opaque"),
         "hint was: {hints}"
     );
 }

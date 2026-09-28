@@ -381,7 +381,13 @@ struct Identity {
     has_copy_slot: bool,
 }
 
-fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth: bool) {
+fn write_vsout_struct(
+    out: &mut String,
+    id: Identity,
+    attrs_used: &[Attr],
+    depth: bool,
+    topology: Topology,
+) {
     out.push_str("struct VsOut {\n");
     out.push_str("    @builtin(position) clip: vec4<f32>,\n");
     out.push_str("    @location(0) point_coord: vec2<f32>,\n");
@@ -398,9 +404,14 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
         ));
         loc += 1;
     }
+    let interp = if topology.is_shared() {
+        ""
+    } else {
+        "@interpolate(flat) "
+    };
     for &a in attrs_used {
         out.push_str(&format!(
-            "    @location({loc}) @interpolate(flat) {}: {},\n",
+            "    @location({loc}) {interp}{}: {},\n",
             a.name(),
             wgsl_ty(a.ty())
         ));
@@ -639,7 +650,7 @@ pub fn fuse_l2_into_l4(
     src.push('\n');
     src.push_str(CORNER_OF);
     src.push('\n');
-    write_vsout_struct(&mut src, id, &attrs_used, weighted);
+    write_vsout_struct(&mut src, id, &attrs_used, weighted, topology);
     src.push('\n');
     if weighted {
         src.push_str(WEIGHTED_FS_OUT);
@@ -694,6 +705,14 @@ pub fn fuse_l2_into_l4(
             src.push_str(SEGMENT_EXPANSION);
             if weighted {
                 src.push_str("    out.view_depth = w;\n");
+            }
+        }
+        Topology::Triangles | Topology::Grid | Topology::Ribbon => {
+            src.push_str("    out.clip = _clip;\n");
+            src.push_str("    out.point_coord = vec2<f32>(0.0, 0.0);\n");
+            src.push_str("    out.coverage = 1.0;\n");
+            if weighted {
+                src.push_str("    out.view_depth = _clip.w;\n");
             }
         }
         Topology::Fullscreen => unreachable!(),

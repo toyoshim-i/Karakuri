@@ -1,0 +1,79 @@
+// A rotating 3D octahedron procedural mesh (double pyramid) rendered as triangles.
+// Eight triangular faces connect the top and bottom apexes to the square equatorial girdle.
+
+proc mesh_pyramid {
+  kind     L1
+  topology triangles
+  capacity [24, 24] = 24
+
+  // Radius of the equatorial girdle in world units.
+  param radius : float [0.2, 5.0] = 1.8
+
+  // Height of top and bottom pyramid peaks in world units.
+  param height : float [0.2, 5.0] = 2.2
+
+  // Rotation speed about the tumble axis in turns per second.
+  param spin   : float [-1.0, 1.0] = 0.08
+
+  emit position, tint
+
+  element {
+    let face   = seed / 3u;
+    let corner = seed % 3u;
+
+    let top = vec3(0.0, height, 0.0);
+    let bot = vec3(0.0, -height, 0.0);
+
+    let v0 = vec3(radius, 0.0, 0.0);
+    let v1 = vec3(0.0, 0.0, radius);
+    let v2 = vec3(-radius, 0.0, 0.0);
+    let v3 = vec3(0.0, 0.0, -radius);
+
+    var p = top;
+
+    // Top four faces
+    if face == 0u {
+      if corner == 1u { p = v0; }
+      if corner == 2u { p = v1; }
+    }
+    if face == 1u {
+      if corner == 1u { p = v1; }
+      if corner == 2u { p = v2; }
+    }
+    if face == 2u {
+      if corner == 1u { p = v2; }
+      if corner == 2u { p = v3; }
+    }
+    if face == 3u {
+      if corner == 1u { p = v3; }
+      if corner == 2u { p = v0; }
+    }
+
+    // Bottom four faces
+    if face == 4u {
+      p = bot;
+      if corner == 1u { p = v1; }
+      if corner == 2u { p = v0; }
+    }
+    if face == 5u {
+      p = bot;
+      if corner == 1u { p = v2; }
+      if corner == 2u { p = v1; }
+    }
+    if face == 6u {
+      p = bot;
+      if corner == 1u { p = v3; }
+      if corner == 2u { p = v2; }
+    }
+    if face == 7u {
+      p = bot;
+      if corner == 1u { p = v0; }
+      if corner == 2u { p = v3; }
+    }
+
+    let ang = t * spin * 6.2831853;
+    let ax  = normalize(vec3(0.3, 1.0, 0.2));
+    position = rot_axis(p, ax, ang);
+    tint     = vec3(1.0);
+  }
+}

@@ -160,12 +160,26 @@ builtins! {
     RgbToHsv     => "rgb_to_hsv",     [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
     SrgbToLinear => "srgb_to_linear", [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
     LinearToSrgb => "linear_to_srgb", [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
+
+    // Derivatives and surface shading (Fragment stage only)
+    Dpdx       => "dpdx",        [Same] -> Same, FloatOrVector, [];
+    Dpdy       => "dpdy",        [Same] -> Same, FloatOrVector, [];
+    Fwidth     => "fwidth",      [Same] -> Same, FloatOrVector, [];
+    FlatNormal => "flat_normal", [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
 }
 
 impl Builtin {
     /// Returns true if this builtin is an L5 frame effect.
     pub fn is_frame_effect(self) -> bool {
         matches!(self, Builtin::Texel | Builtin::Tap | Builtin::FrameStep)
+    }
+
+    /// Returns true if this builtin is restricted to fragment stage execution.
+    pub fn is_fragment_only(self) -> bool {
+        matches!(
+            self,
+            Builtin::Dpdx | Builtin::Dpdy | Builtin::Fwidth | Builtin::FlatNormal
+        )
     }
 
     /// Returns the argument index taking a texture operand, or `None`.

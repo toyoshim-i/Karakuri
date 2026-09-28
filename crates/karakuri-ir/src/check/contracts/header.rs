@@ -42,10 +42,27 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 Some(Topology::Fullscreen) => errors.push(
                     IrError::contract(proc.span, "`fullscreen` describes a renderer, not geometry")
                         .with_hint(
-                            "use `points` or `lines` here. An L4 draws the whole frame by \
+                            "use `points`, `lines`, `triangles`, `grid`, or `ribbon` here. An L4 draws the whole frame by \
                          having no `vertex` block, which is the only way to say it",
                         ),
                 ),
+                Some(top) if top.is_shared() => {
+                    let has_spawn = proc.block(BlockKind::Spawn).is_some();
+                    let has_kill = proc.blocks.iter().any(|b| crate::ast::stmt_contains_kill(&b.stmts));
+                    if has_spawn || has_kill {
+                        errors.push(
+                            IrError::contract(
+                                proc.span,
+                                format!("`topology {}` is legal only on static sources", top.name()),
+                            )
+                            .with_hint(
+                                "remove `spawn` and `kill()`: shared-vertex topologies require static sources \
+                                 (`Checked::is_static`) because compaction moves slot indices every frame, \
+                                 invalidating index buffers. Spawning meshes require group lifecycle (scheduled for M11).",
+                            ),
+                        );
+                    }
+                }
                 Some(_) => {}
             }
             if proc.blend.is_some() {

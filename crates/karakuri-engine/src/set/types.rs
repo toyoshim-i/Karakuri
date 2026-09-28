@@ -141,6 +141,14 @@ pub enum SetError {
         field: String,
         detail: String,
     },
+    /// An opaque L4 renderer is declared after a non-opaque renderer in the Set.
+    #[error(
+        "`{opaque}` declares `blend opaque` and sits after non-opaque renderer `{non_opaque}`\n\
+         hint: move renderer `{opaque}` before non-opaque renderers. A Set rasterizes in \
+         declaration order and does not sort silently; opaque geometry must draw first to \
+         write depth and occlude transparent/additive passes (P-0083, P-0084, ADR-0375)"
+    )]
+    OpaqueAfterNonOpaque { opaque: String, non_opaque: String },
     /// A pairing L2 deformer is positioned non-first in the deformation chain.
     #[error(
         "`{l2}` pairs two geometries and sits at position {at} in the chain\n\
@@ -399,6 +407,10 @@ pub struct Set {
     pub(crate) cameras: Vec<crate::node::Camera>,
     /// Optional L5 merge compositor.
     pub(crate) merge: Option<crate::node::Merge>,
+    /// On-demand depth target texture when opaque renderers are present in the Set.
+    pub(crate) depth_texture: Option<wgpu::Texture>,
+    /// Texture view into `depth_texture`.
+    pub(crate) depth_view: Option<wgpu::TextureView>,
     /// Composite input configurations for each renderer in draw order.
     pub(crate) edges: Vec<Input>,
     /// Active parameter signal bindings.
@@ -507,6 +519,8 @@ pub struct Wiring<'a> {
     pub l4s: &'a [Option<String>],
     /// Optional names for Field procedures.
     pub fields: &'a [Option<String>],
+    /// Optional per-renderer depth test flags (`None` or `Some(true)` tests depth, `Some(false)` skips test).
+    pub depth_tests: &'a [Option<bool>],
     /// Slot bindings applicable to this Set.
     pub edges: &'a [Edge],
 }

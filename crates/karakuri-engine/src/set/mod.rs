@@ -125,6 +125,31 @@ impl Set {
             })
             .collect();
 
+        let has_depth = l4s
+            .iter()
+            .any(|l4| l4.blend == Some(karakuri_ir::Blend::Opaque));
+        let (depth_texture, depth_view) = if has_depth {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Set depth target"),
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            (Some(texture), Some(view))
+        } else {
+            (None, None)
+        };
+
         let renderer_count = l4s.len();
         let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
         for (head, &at) in heads.iter().enumerate() {
@@ -219,7 +244,17 @@ impl Set {
                             .iter()
                             .find(|(node, _)| *node == at)
                             .map_or(0, |(_, ordinal)| *ordinal);
-                        Renderer::build(device, l4, &geometry, &camera_nodes[camera], &bound_at(at))
+                        let depth_test =
+                            wiring.depth_tests.get(k).copied().flatten().unwrap_or(true);
+                        Renderer::build(
+                            device,
+                            l4,
+                            &geometry,
+                            &camera_nodes[camera],
+                            &bound_at(at),
+                            has_depth,
+                            depth_test,
+                        )
                     })
                     .collect()
             };
@@ -314,6 +349,8 @@ impl Set {
             cameras: camera_nodes,
             merge: (layering == Layering::Composite)
                 .then(|| crate::node::Merge::build(device, renderer_count, 1, 1)),
+            depth_texture,
+            depth_view,
             edges: vec![Input::default(); renderer_count],
             bindings: Vec::new(),
             interface: Vec::new(),

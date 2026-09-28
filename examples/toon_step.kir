@@ -1,0 +1,36 @@
+// Quantized stepped cel-shading material preset using flat normals and opaque depth writes.
+// Produces distinct geometric lighting bands for comic, anime, and low-poly art styles.
+
+proc toon_step {
+  kind  L4
+  blend opaque
+
+  consumes position
+
+  param light_dir : vec3 [-1.0, 1.0] = vec3(0.4, 0.8, 0.5)
+  param base_hue  : float [0.0, 1.0]  = 0.58
+  param exposure  : float [0.0, 4.0]  = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    let n = flat_normal(position);
+    let l = normalize(light_dir);
+    let diff = dot(n, l);
+
+    // Quantize into 3 discrete shading bands
+    var shade = 0.25;
+    if diff > 0.05 {
+      shade = 0.65;
+    }
+    if diff > 0.60 {
+      shade = 1.00;
+    }
+
+    let c = hsv_to_rgb(vec3(base_hue, 0.70, shade));
+    color = vec4(c * exposure, 1.0);
+  }
+}
