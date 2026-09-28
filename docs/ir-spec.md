@@ -154,22 +154,25 @@ two answers to one question and picking either is picking silently.
 ### capacity / topology (L1 only)
 
 ```
-topology points          // or: topology lines
+topology points          // or: lines, triangles, grid, ribbon
 capacity [65536, 1048576] = 262144
 ```
 
-`topology` says **what the geometry is meant to read as**. `points` means one sprite per
-element; `lines` means one *segment* per element, drawn from the paired L4's `clip` to its
-`clip_b`. See [L4 blocks and outputs](#l4-blocks-and-outputs) for how a renderer says which
-it draws.
+`topology` says **what the geometry is meant to read as**:
+- `points`: one sprite per element.
+- `lines`: one segment per element, drawn from the paired L4's `clip` to its `clip_b`.
+- `triangles`: direct vertex-shader-art triangle mesh where each vertex is an element addressed by `seed` (never slot index; P-0007, ADR-0001). Every 3 elements form one triangle face.
+- `grid`: 2D tessellated quad grid mesh with automated index buffering, enabling reactive terrain, cloth, and wire lattices via displacement functions.
+- `ribbon`: continuous connected quad-strip ribbon topology for trails and field flowlines.
 
-**It constrains no renderer, and that is deliberate.** A segment gets both of its ends from
+**Shared vertices on static sources only:**
+An index buffer references slot indices, but live compaction moves them every frame (`Dispatch`). A source with no `spawn` and no `kill()` never compacts and its `seed` is its slot index; therefore, `triangles`, `grid`, and `ribbon` are legal only where `Checked::is_static` holds (its third use after L2 edges and `morph.kir`). Spawning sources carrying shared-vertex topologies require group lifecycle (scheduled for M11).
+
+For `points` and `lines`, topology constrains no renderer: a segment gets both of its ends from
 attributes the L4 consumes, so a line renderer needs nothing from the geometry that the
 `consumes ⊆ emit` check does not already cover — which means one L1 file can be paired with
-a sprite renderer and a stroke renderer alike. `examples/drift_shell.kir` is paired with
-both `soft_points.kir` and `drift_streaks.kir` for exactly that reason. Requiring the two
-declarations to agree would have invented a dependency the lowering does not have, and would
-have made "the same cloud, drawn two ways" cost two L1 *files*.
+a sprite renderer and a stroke renderer alike. For shared-vertex topologies (`triangles`, `grid`, `ribbon`),
+the index layout is established by the L1 declaration.
 
 Several renderers over one simulation **is** built: a Set holds a list of L4 nodes and
 `Set::step` walks its sources while `Set::draw` walks its renderers, so "the same cloud,
@@ -506,26 +509,37 @@ blend additive
 blend weighted
 ```
 
-Two legal values. `additive` was the only one in v0.2, and the declaration existed before
+```
+blend opaque
+```
+
+Three legal values. `additive` was the only one in v0.2, and the declaration existed before
 there was a second so that adding one would be a format addition rather than a format
 change — the same move as defining `VideoSource` before there is a second implementation of
 it. That is what it turned out to be.
 
 Additive needs no sorting, which is why it is where v0.2 started: `capacity` elements cannot
-be depth-sorted per frame at this scale, even sorting indices alone. The successor is not
-depth sorting but **weighted blended OIT** — order independent, two targets (accumulation
-and revealage) that the existing `Rgba16Float` pipeline accommodates naturally, and an
-approximation whose coarseness does not show on soft sprites. Being order independent, it
-does not interact with compaction at all.
+be depth-sorted per frame at this scale, even sorting indices alone. The successor was
+**weighted blended OIT** — order independent, two targets (accumulation and revealage) that
+the existing `Rgba16Float` pipeline accommodates naturally, and an approximation whose
+coarseness does not show on soft sprites. Being order independent, it does not interact with
+compaction at all.
 
-**The two modes read `color`'s alpha differently, and that is the part an author has to
+**`blend opaque` is the third value (ADR-0375).** It writes and tests depth using an internal
+per-Set `Depth32Float` target allocated on demand (costing nothing when unused, P-0091).
+It is essential for procedural meshes, shared vertices, MatCap, and Toon shading, where
+`weighted` averages color by depth weight (roughly 52/48 front/back) and washes out opaque volume.
+Under `blend opaque`, coverage is 1.0 and fragments replace destination color and write depth.
+
+**The modes read `color`'s alpha differently, and that is the part an author has to
 know.** Under `additive`, alpha is emission strength: it scales what a fragment adds, and
 the spec's "values above 1.0 are expected" applies to it as much as to the colour. Under
 `weighted`, alpha is **opacity**, and opacity above 1.0 is not a thing — the revealage a
 weighted pass accumulates is `prod(1 - a)`, which stops meaning "what is still visible
 behind this" the moment a term goes negative. The generated shader clamps it to `[0, 1]`,
 so a fragment block that writes 1.5 gets 1.0 rather than a picture with negative light in
-it.
+it. Under `opaque`, alpha writes 1.0 into destination coverage, so `over` blending in the mixer
+works cleanly without alteration.
 
 Blend mode is part of an artifact's identity: a procedure writes its `color` and alpha
 knowing how they will be combined.
@@ -1471,6 +1485,21 @@ that is the number a procedure with no `spawn` block and no `kill()` does not ha
 its live set cannot change, so the engine skips the scan for it and `element` writes in
 place.
 
+#### Group lifecycle for dynamic meshes (M11 specification)
+
+In Milestone 10, shared-vertex topologies (`triangles`, `grid`, `ribbon`) are strictly confined to static
+sources (`Checked::is_static`) because per-element compaction invalidates slot indices referenced by
+index buffers.
+
+To support dynamic spawning meshes (such as ribbon particle trails or shattering polygon debris),
+the engine specifies **group lifecycle**: elements spawn and die in coherent units of $k$ elements.
+- The alive flag and prefix scan operate per group of $k$ slots rather than per single element.
+- `spawn` counts and buffer `capacity` are enforced as integer multiples of $k$.
+- Group-aligned truncation `min(spawn_count, capacity - survivors)` ensures partial groups never spawn.
+- Order-preserving compaction moves whole groups contiguously, preserving the relative index relationships
+  within each group and keeping its shared-vertex index buffer completely valid.
+Implementation of group lifecycle is scheduled for Milestone 11.
+
 ---
 
 ## L1 example
@@ -1698,11 +1727,15 @@ available they lowered to a varying against the engine's own vertex stage, which
 field — valid `.kir`, invalid WGSL, and the process down before a frame was drawn.
 
 Consumed attributes, `seed` and `copy` are readable in both blocks of a *per-element* L4.
-Per-element values reach
-`fragment` with **flat** interpolation. That is exact under both topologies for the same
-reason: a sprite and a segment are each one element's worth of values, so there is nothing
-to interpolate between. It is a topology with real *shared* vertices that would need the
-rule revisited.
+Under `points` and `lines`, per-element values reach `fragment` with **flat** interpolation (`@interpolate(flat)`).
+That is exact under both topologies because a sprite and a segment are each one element's worth of values, so there
+is nothing to interpolate between.
+
+Under **shared-vertex topologies** (`triangles`, `grid`, `ribbon`), attributes vary across the triangle faces
+and are passed to the fragment shader with **perspective-correct smooth interpolation** (no `flat` attribute).
+`seed` and `copy` remain `@interpolate(flat)`. Because world/view position `p` interpolates across the primitive,
+screen-space partial derivatives `dpdx(p)` and `dpdy(p)` are non-zero, granting automatic flat surface normal
+derivation: `normalize(cross(dpdx(p), dpdy(p)))` for faceted lighting with zero authoring overhead.
 
 ---
 
@@ -2200,11 +2233,17 @@ why `frame_step` is a builtin rather than a spelling.
   width measured on the screen expressible at all. The honest failure is a missing stroke rather than one
   drawn through the camera. A zero-length segment needs no special case — both ends land on
   the same pixel and the quad is zero-area, which is what a guard would have arranged
-- L1 buffers are read as storage, indexed by `@builtin(instance_index)`, not as vertex
+- L1 buffers are read as storage, indexed by `@builtin(instance_index)` (or indexed via index buffer for shared topologies), not as vertex
   buffers
-- Per-element values used in `fragment` become `@interpolate(flat)` varyings
-- `blend additive` lowers to additive blending with no depth write, which is what avoids
-  any sort requirement. **Colour is what it applies to.** The alpha channel of the target
+- Per-element values used in `fragment` become `@interpolate(flat)` varyings under `points` and `lines`.
+  Under shared topologies (`triangles`, `grid`, `ribbon`), attributes vary smoothly without `@interpolate(flat)`.
+- `blend opaque` lowers to direct standard colour attachment writes with depth testing and depth writing
+  enabled against the Set's internal `Depth32Float` target (`depth_write_enabled: true`, `depth_compare: LessEqual`).
+  Alpha writes 1.0 (full opaque coverage).
+- `blend additive` lowers to additive blending. When an opaque renderer exists in the Set, it tests depth
+  (`depth_write_enabled: false`, `depth_compare: LessEqual`) so opaque geometry occludes additive particles
+  via early-Z rejection. When no opaque renderer exists, no depth attachment is bound.
+  **Colour is what it applies to.** The alpha channel of the target
   composes as `over` instead, accumulating `1 - prod(1 - a_i)` — the coverage L5's `over`
   blend mode needs, which nothing else writes. So the colour that leaves L4 is
   premultiplied by coverage, and a fragment block that assigns an alpha above 1.0 is

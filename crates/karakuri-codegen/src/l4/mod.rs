@@ -312,7 +312,13 @@ fn derived_binding(attr: Attr) -> String {
     }
 }
 
-fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth: bool) {
+fn write_vsout_struct(
+    out: &mut String,
+    id: Identity,
+    attrs_used: &[Attr],
+    depth: bool,
+    topology: Topology,
+) {
     out.push_str("struct VsOut {\n");
     out.push_str("    @builtin(position) clip: vec4<f32>,\n");
     out.push_str("    @location(0) point_coord: vec2<f32>,\n");
@@ -329,9 +335,14 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
         ));
         loc += 1;
     }
+    let interp = if topology.is_shared() {
+        ""
+    } else {
+        "@interpolate(flat) "
+    };
     for &a in attrs_used {
         out.push_str(&format!(
-            "    @location({loc}) @interpolate(flat) {}: {},\n",
+            "    @location({loc}) {interp}{}: {},\n",
             a.name(),
             wgsl_ty(a.ty())
         ));
@@ -360,7 +371,11 @@ fn vertex_entry(
 ) -> String {
     let mut out = String::new();
     out.push_str("@vertex\n");
-    out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
+    if topology.is_shared() {
+        out.push_str("fn vs(@builtin(vertex_index) elem: u32) -> VsOut {\n");
+    } else {
+        out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
+    }
     out.push_str("    let seed = elements[elem].seed;\n");
     // Default copy index to 0u when geometry has no copy slot.
     out.push_str(if id.has_copy_slot {
@@ -416,6 +431,14 @@ fn vertex_entry(
                 out.push_str("    out.view_depth = w;\n");
             }
         }
+        Topology::Triangles | Topology::Grid | Topology::Ribbon => {
+            out.push_str("    out.clip = _clip;\n");
+            out.push_str("    out.point_coord = vec2<f32>(0.0, 0.0);\n");
+            out.push_str("    out.coverage = 1.0;\n");
+            if weighted {
+                out.push_str("    out.view_depth = _clip.w;\n");
+            }
+        }
         // Never reached: a fullscreen procedure has no vertex block to lower,
         // so `generate_l4` takes the other path entirely.
         Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
@@ -433,6 +456,7 @@ fn vertex_entry(
     let dropped = match topology {
         Topology::Points => "alive[elem] == 0u",
         Topology::Lines => "alive[elem] == 0u || _clip.w <= 0.0 || _clip_b.w <= 0.0",
+        Topology::Triangles | Topology::Grid | Topology::Ribbon => "alive[elem] == 0u",
         Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
     };
     out.push_str(&format!("    if {dropped} {{\n"));
@@ -527,15 +551,24 @@ pub fn generate_l4(
     elements: &ElementLayout,
     fields: crate::Bound<'_>,
 ) -> L4Shader {
+    let topology = checked
+        .topology
+        .expect("a checked L4 procedure always carries an inferred topology");
+    generate_l4_for_topology(checked, elements, fields, topology)
+}
+
+/// Lowers a `Checked` L4 procedure to WGSL against upstream `ElementLayout` with an explicit topology.
+pub fn generate_l4_for_topology(
+    checked: &Checked,
+    elements: &ElementLayout,
+    fields: crate::Bound<'_>,
+    topology: Topology,
+) -> L4Shader {
     assert_eq!(
         checked.kind,
         Kind::L4,
         "generate_l4 called on a non-L4 procedure"
     );
-    // Topology is inferred by the check pass from whether vertex assigns clip_b.
-    let topology = checked
-        .topology
-        .expect("a checked L4 procedure always carries an inferred topology");
     // Declared blend mode (e.g. weighted order-independent transparency).
     let weighted = checked.blend == Some(Blend::Weighted);
 
@@ -625,7 +658,7 @@ pub fn generate_l4(
     src.push('\n');
     src.push_str(CORNER_OF);
     src.push('\n');
-    write_vsout_struct(&mut src, id, &attrs_used, weighted);
+    write_vsout_struct(&mut src, id, &attrs_used, weighted, topology);
     src.push('\n');
     if weighted {
         src.push_str(WEIGHTED_FS_OUT);

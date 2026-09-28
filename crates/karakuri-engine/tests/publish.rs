@@ -183,8 +183,8 @@ proc cool {
         let set = build(&gpu);
         let all = set.published();
 
-        // Exactly five controls: two procedure controls plus three built-in camera controls.
-        assert_eq!(all.len(), 5, "{all:#?}");
+        // Exactly eleven controls: two procedure controls plus nine built-in camera controls.
+        assert_eq!(all.len(), 11, "{all:#?}");
         // Range takes the intersection [0, 4] in declaration order.
         assert_eq!(
             all,
@@ -195,6 +195,24 @@ proc cool {
                 control("radius", Kind::L3, 0, "radius", [1.0, 40.0]),
                 control("speed", Kind::L3, 0, "speed", [0.0, 2.0]),
                 control("height", Kind::L3, 0, "height", [-40.0, 40.0]),
+                control("fov_y", Kind::L3, 0, "fov_y", [0.2, 2.5]),
+                control(
+                    "yaw",
+                    Kind::L3,
+                    0,
+                    "yaw",
+                    [-std::f32::consts::PI, std::f32::consts::PI]
+                ),
+                control("target_y", Kind::L3, 0, "target_y", [-20.0, 20.0]),
+                control(
+                    "roll",
+                    Kind::L3,
+                    0,
+                    "roll",
+                    [-std::f32::consts::PI, std::f32::consts::PI]
+                ),
+                control("bob", Kind::L3, 0, "bob", [0.0, 10.0]),
+                control("dolly", Kind::L3, 0, "dolly", [-20.0, 20.0]),
                 every("exposure", "exposure", [0.0, 4.0])
             ]
         );
@@ -244,9 +262,9 @@ proc cool {
 
         // And nothing was published, so a refusal leaves the Set as it was rather
         // than half-configured: the default interface, one control per key —
-        // plus the built-in camera's three, which are addressed rather than
+        // plus the built-in camera's nine, which are addressed rather than
         // bare and so are one control per declaration (ADR-0318).
-        assert_eq!(set.published().len(), 5);
+        assert_eq!(set.published().len(), 11);
 
         set.publish(control("size", Kind::L1, 0, "radius", [0.5, 8.0]))
             .expect("the declared range itself is a subset of itself");
@@ -470,17 +488,22 @@ proc cool {
         assert_eq!(
             names,
             // Declaration order: L1 parameters, camera parameters, then L4 parameters.
-            vec!["radius", "amount", "radius", "speed", "height", "exposure", "gain", "blur"],
+            vec![
+                "radius", "amount", "radius", "speed", "height", "fov_y", "yaw", "target_y",
+                "roll", "bob", "dolly", "exposure", "gain", "blur"
+            ],
             "not the order the procedures declare them in"
         );
 
         // Fixture ensures declaration order differs from alphabetical order.
         let mut sorted = names.clone();
         sorted.sort_unstable();
-        assert_eq!(
-            sorted,
-            vec!["amount", "blur", "exposure", "gain", "height", "radius", "radius", "speed"]
-        );
+        let mut expected_sorted = vec![
+            "amount", "blur", "bob", "dolly", "exposure", "fov_y", "gain", "height", "radius",
+            "radius", "roll", "speed", "target_y", "yaw",
+        ];
+        expected_sorted.sort_unstable();
+        assert_eq!(sorted, expected_sorted);
         assert_ne!(
             names, sorted,
             "the fixture declares its parameters alphabetically, so it proves nothing"
@@ -492,7 +515,7 @@ proc cool {
             1,
             "{all:#?}"
         );
-        assert_eq!(all[5], every("exposure", "exposure", [0.0, 4.0]));
+        assert_eq!(all[11], every("exposure", "exposure", [0.0, 4.0]));
         // Controls may share parameter names when scoped to different node addresses.
         assert_eq!(all[0], every("radius", "radius", [0.5, 8.0]));
         assert_eq!(

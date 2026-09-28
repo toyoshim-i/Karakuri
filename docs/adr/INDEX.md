@@ -400,6 +400,7 @@ number; new records continue from the end.
 | [ADR-0372](0372-theme-mode-is-auto-day-or-night-and-auto-resolves-the-operating-systems-palette-per-frame.md) | Theme mode is Auto, Day, or Night, and Auto resolves the operating system's palette per frame | 2026-09-27 | accepted |
 | [ADR-0373](0373-prompt-capture-mode-bypasses-all-keymaps-and-forwards-escape-and-control-keys-directly-to-the-pty.md) | Prompt capture mode bypasses all keymaps and forwards escape and control keys directly to the pty | 2026-09-27 | accepted |
 | [ADR-0374](0374-the-built-in-camera-expands-to-six-placement-parameters-and-procedural-l3-camera-procedures.md) | The built-in camera expands to six placement parameters and procedural L3 camera procedures | 2026-09-27 | accepted |
+| [ADR-0375](0375-depth-buffer-and-opaque-blend-mode.md) | Depth buffer, blend opaque, and draw-order verification within a Set | 2026-09-28 | accepted |
 
 ## Retired numbers
 

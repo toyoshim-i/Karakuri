@@ -608,6 +608,7 @@ pub fn plan_sources<'a>(
                 }
             }
         }
+        let mut first_non_opaque: Option<&Checked> = None;
         for l4 in l4s {
             if l4.kind != Kind::L4 {
                 return Err(SetError::WrongKind {
@@ -615,6 +616,16 @@ pub fn plan_sources<'a>(
                     expected: Kind::L4,
                     actual: l4.kind,
                 });
+            }
+            if l4.blend == Some(karakuri_ir::Blend::Opaque) {
+                if let Some(non_opaque) = first_non_opaque {
+                    return Err(SetError::OpaqueAfterNonOpaque {
+                        opaque: l4.name.clone(),
+                        non_opaque: non_opaque.name.clone(),
+                    });
+                }
+            } else if first_non_opaque.is_none() {
+                first_non_opaque = Some(l4);
             }
             if let Some(e) = check_against(l4, &available) {
                 return Err(e);

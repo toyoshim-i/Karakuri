@@ -198,6 +198,10 @@ fn lower_builtin(
         return format!("{}({})", mod_helper_name(ret_ty), inner.join(", "));
     }
 
+    if func == Builtin::FlatNormal {
+        return format!("normalize(cross(dpdx({}), dpdy({})))", inner[0], inner[0]);
+    }
+
     req.note_builtin(func);
     format!("{}({})", func.name(), inner.join(", "))
 }

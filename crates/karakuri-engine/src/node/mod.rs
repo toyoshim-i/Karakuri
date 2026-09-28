@@ -26,6 +26,8 @@ pub(crate) struct Geometry<'a> {
     pub alive: [&'a wgpu::Buffer; 2],
     /// Indirect dispatch and draw counts buffer.
     pub counts: &'a wgpu::Buffer,
+    /// Topology declared by upstream geometry.
+    pub topology: karakuri_ir::Topology,
 }
 
 pub(crate) type ParamValueLookup<'a> = &'a dyn Fn(&str) -> Option<karakuri_store::record::Value>;

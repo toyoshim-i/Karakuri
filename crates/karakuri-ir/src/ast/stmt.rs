@@ -55,3 +55,13 @@ impl Stmt {
         }
     }
 }
+
+/// Returns true if any statement in `stmts` contains a `kill()` call.
+pub fn stmt_contains_kill(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(|s| match s {
+        Stmt::Kill { .. } => true,
+        Stmt::If { then, els, .. } => stmt_contains_kill(then) || stmt_contains_kill(els),
+        Stmt::For { body, .. } => stmt_contains_kill(body),
+        _ => false,
+    })
+}

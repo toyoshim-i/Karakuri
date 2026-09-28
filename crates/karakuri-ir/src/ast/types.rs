@@ -15,19 +15,6 @@ pub enum Kind {
     L5,
 }
 
-/// What a procedure's geometry *is*, on an L1 header, and what an L4 procedure
-/// *draws*, inferred rather than declared — see
-/// [`crate::typed::Checked::topology`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Topology {
-    /// One sprite per element.
-    Points,
-    /// One segment per element, from [`Output::Clip`] to [`Output::ClipB`].
-    Lines,
-    /// Fullscreen pass without per-element geometry.
-    Fullscreen,
-}
-
 impl Kind {
     /// All pipeline layer kinds supported by the runtime.
     pub const ALL: [Kind; 6] = [
@@ -96,12 +83,63 @@ pub const TEXTURE_SRC: &str = "src";
 /// Retained frame texture identifier passed to L5 procedures (`held`).
 pub const TEXTURE_HELD: &str = "held";
 
+/// What a procedure's geometry *is*, on an L1 header, and what an L4 procedure
+/// *draws*, inferred rather than declared — see
+/// [`crate::typed::Checked::topology`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Topology {
+    /// One sprite per element.
+    Points,
+    /// One segment per element, from [`Output::Clip`] to [`Output::ClipB`].
+    Lines,
+    /// Direct vertex-shader-art triangle mesh: 3 elements per triangle.
+    Triangles,
+    /// 2D tessellated quad grid mesh with automated index buffer.
+    Grid,
+    /// Connected quad strip ribbon.
+    Ribbon,
+    /// Fullscreen pass without per-element geometry.
+    Fullscreen,
+}
+
 impl Topology {
+    pub const ALL: [Topology; 6] = [
+        Topology::Points,
+        Topology::Lines,
+        Topology::Triangles,
+        Topology::Grid,
+        Topology::Ribbon,
+        Topology::Fullscreen,
+    ];
+
     pub fn name(self) -> &'static str {
         match self {
             Topology::Points => "points",
             Topology::Lines => "lines",
+            Topology::Triangles => "triangles",
+            Topology::Grid => "grid",
+            Topology::Ribbon => "ribbon",
             Topology::Fullscreen => "fullscreen",
+        }
+    }
+
+    /// Returns true if this topology uses shared indexed vertices across primitives.
+    pub fn is_shared(self) -> bool {
+        matches!(
+            self,
+            Topology::Triangles | Topology::Grid | Topology::Ribbon
+        )
+    }
+
+    pub fn from_name(name: &str) -> Option<Topology> {
+        match name {
+            "points" => Some(Topology::Points),
+            "lines" => Some(Topology::Lines),
+            "triangles" => Some(Topology::Triangles),
+            "grid" => Some(Topology::Grid),
+            "ribbon" => Some(Topology::Ribbon),
+            "fullscreen" => Some(Topology::Fullscreen),
+            _ => None,
         }
     }
 }
@@ -113,13 +151,27 @@ pub enum Blend {
     Additive,
     /// Weighted blended order-independent transparency (WBOIT).
     Weighted,
+    /// Opaque rasterization with depth testing and depth writing.
+    Opaque,
 }
 
 impl Blend {
+    pub const ALL: [Blend; 3] = [Blend::Additive, Blend::Weighted, Blend::Opaque];
+
     pub fn name(self) -> &'static str {
         match self {
             Blend::Additive => "additive",
             Blend::Weighted => "weighted",
+            Blend::Opaque => "opaque",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Blend> {
+        match name {
+            "additive" => Some(Blend::Additive),
+            "weighted" => Some(Blend::Weighted),
+            "opaque" => Some(Blend::Opaque),
+            _ => None,
         }
     }
 }

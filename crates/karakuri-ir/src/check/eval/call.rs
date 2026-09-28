@@ -211,6 +211,19 @@ impl<'a> Checker<'a> {
             }
             return None;
         }
+        if b.is_fragment_only() && self.block != Some(crate::ast::BlockKind::Fragment) {
+            self.err_hint(
+                Stage::Type,
+                span,
+                format!("`{}` is only available in a `fragment` block", b.name()),
+                "screen-space derivatives and flat normals measure adjacent pixels during \
+                 rasterization, which only happens in the fragment stage",
+            );
+            for a in args_ast {
+                self.check_expr(a);
+            }
+            return None;
+        }
         // Resolve texture argument identifiers before expression evaluation.
         if let Some(at) = b.texture_arg() {
             return self.check_texture_call(b, at, args_ast, span);

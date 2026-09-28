@@ -1,0 +1,6 @@
+{"t":"set","id":"mesh_toon","v":1}
+{"t":"part","layer":"L1","path":"mesh_pyramid.kir"}
+{"t":"part","layer":"L4","path":"toon_step.kir"}
+{"t":"param","layer":"L1","key":"radius","value":1.8}
+{"t":"param","layer":"L1","key":"height","value":2.2}
+{"t":"camera","kind":"orbit","radius":5.5,"speed":0.05,"height":1.2}

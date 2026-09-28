@@ -1,6 +1,6 @@
 //! The L4 node: `(Geometry, Camera) -> Texture`.
 
-use karakuri_codegen::generate_l4;
+use karakuri_codegen::generate_l4_for_topology;
 use karakuri_codegen::layout::{binding, counts, group, UniformLayout};
 use karakuri_ir::typed::Checked;
 
@@ -23,6 +23,8 @@ pub(crate) struct Renderer {
     oit: Option<Oit>,
     /// Drawing topology declared by this procedure.
     topology: karakuri_ir::Topology,
+    /// Whether this renderer configures depth testing / writing.
+    has_depth_stencil: bool,
     /// Parameter names declared in procedure definition.
     param_names: Vec<String>,
     /// Addressable parameter keys (e.g. `color.r`, `size.x`).
@@ -37,12 +39,21 @@ impl Renderer {
         geometry: &Geometry<'_>,
         camera: &Camera,
         fields: karakuri_codegen::Bound<'_>,
+        has_depth: bool,
+        depth_test: bool,
     ) -> Renderer {
-        let topology = l4.topology.unwrap_or(karakuri_ir::Topology::Points);
+        let inferred = l4.topology.unwrap_or(karakuri_ir::Topology::Points);
+        let topology = if inferred == karakuri_ir::Topology::Points && geometry.topology.is_shared()
+        {
+            geometry.topology
+        } else {
+            inferred
+        };
         let fullscreen = topology == karakuri_ir::Topology::Fullscreen;
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
+        let is_opaque = l4.blend == Some(karakuri_ir::Blend::Opaque);
 
-        let shader = generate_l4(l4, geometry.layout, fields);
+        let shader = generate_l4_for_topology(l4, geometry.layout, fields, topology);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L4)", l4.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -137,6 +148,37 @@ impl Renderer {
             bind_group_layouts: &groups,
             immediate_size: 0,
         });
+        let (has_depth_stencil, depth_stencil) = if is_opaque {
+            (
+                true,
+                Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+            )
+        } else if has_depth && depth_test {
+            (
+                true,
+                Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+            )
+        } else {
+            (false, None)
+        };
+
+        let opaque_target = [Some(wgpu::ColorTargetState {
+            format: crate::present::Present::HDR_FORMAT,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
         let weighted_targets = crate::oit::colour_targets();
         let additive_target = [Some(wgpu::ColorTargetState {
             format: crate::present::Present::HDR_FORMAT,
@@ -169,7 +211,9 @@ impl Renderer {
                 module: &module,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
-                targets: if weighted {
+                targets: if is_opaque {
+                    &opaque_target
+                } else if weighted {
                     &weighted_targets
                 } else {
                     &additive_target
@@ -180,7 +224,7 @@ impl Renderer {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil,
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
             cache: None,
@@ -198,6 +242,7 @@ impl Renderer {
                 .map(|g| (g, camera.bind_group().clone())),
             oit: weighted.then(|| Oit::new(device)),
             topology,
+            has_depth_stencil,
             param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
             param_keys: crate::set::declared_keys(l4),
         }
@@ -260,16 +305,48 @@ impl Renderer {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        depth_view: Option<&wgpu::TextureView>,
         parity: usize,
         counts_buf: &wgpu::Buffer,
         first: bool,
     ) {
+        let depth_stencil_attachment = if self.has_depth_stencil {
+            let view = depth_view.expect("depth view required when renderer has depth stencil");
+            Some(wgpu::RenderPassDepthStencilAttachment {
+                view,
+                depth_ops: Some(wgpu::Operations {
+                    load: if first {
+                        wgpu::LoadOp::Clear(1.0)
+                    } else {
+                        wgpu::LoadOp::Load
+                    },
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            })
+        } else {
+            None
+        };
+
         if let Some(oit) = &self.oit {
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("L4 (weighted)"),
                     color_attachments: &oit.attachments(),
-                    depth_stencil_attachment: None,
+                    depth_stencil_attachment: depth_stencil_attachment.as_ref().map(|d| {
+                        wgpu::RenderPassDepthStencilAttachment {
+                            view: d.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: if first {
+                                    wgpu::LoadOp::Clear(1.0)
+                                } else {
+                                    wgpu::LoadOp::Load
+                                },
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }
+                    }),
                     timestamp_writes: None,
                     occlusion_query_set: None,
                     multiview_mask: None,
@@ -294,7 +371,7 @@ impl Renderer {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment,
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,

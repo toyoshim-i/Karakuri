@@ -8,7 +8,28 @@ use crate::video_source::VideoSource;
 impl Set {
     /// Resizes renderer viewports and accumulation targets to match new dimensions.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.viewport = [width.max(1) as f32, height.max(1) as f32];
+        let width = width.max(1);
+        let height = height.max(1);
+        self.viewport = [width as f32, height as f32];
+        if self.depth_texture.is_some() {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Set depth target"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            self.depth_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            self.depth_texture = Some(texture);
+        }
         for renderer in self.sources.iter_mut().flat_map(|s| &mut s.renderers) {
             renderer.resize(device, width, height);
         }
@@ -236,16 +257,27 @@ impl Set {
             camera.record(encoder);
         }
         let merge = self.merge.as_ref();
+        let depth_view = self.depth_view.as_ref();
         for (source_at, source) in self.sources.iter().enumerate() {
             let (parity, counts) = (source.sim.parity(), self.output_counts(source));
             for (i, renderer) in source.renderers.iter().enumerate() {
                 match merge {
-                    None => {
-                        renderer.draw(encoder, target, parity, counts, source_at == 0 && i == 0)
-                    }
-                    Some(merge) => {
-                        renderer.draw(encoder, merge.target(i), parity, counts, source_at == 0)
-                    }
+                    None => renderer.draw(
+                        encoder,
+                        target,
+                        depth_view,
+                        parity,
+                        counts,
+                        source_at == 0 && i == 0,
+                    ),
+                    Some(merge) => renderer.draw(
+                        encoder,
+                        merge.target(i),
+                        depth_view,
+                        parity,
+                        counts,
+                        source_at == 0,
+                    ),
                 }
             }
         }

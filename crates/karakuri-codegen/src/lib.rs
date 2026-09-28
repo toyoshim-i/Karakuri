@@ -54,7 +54,7 @@ pub use fusion::{fuse_l2_into_l4, FusedShader};
 pub use l1::{generate_l1, L1Shader};
 pub use l2::{generate_l2, L2Shader};
 pub use l3::{generate_l3, L3Shader};
-pub use l4::{generate_l4, L4Shader};
+pub use l4::{generate_l4, generate_l4_for_topology, L4Shader};
 pub use l5::{generate_l5, L5Shader};
 
 use karakuri_ir::typed::Checked;

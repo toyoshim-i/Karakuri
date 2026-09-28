@@ -463,10 +463,14 @@ impl Parser {
 
     fn parse_topology(&mut self) -> Option<Topology> {
         self.advance(); // "topology"
-        let (name, span) = self.expect_ident("`points` or `lines`")?;
+        let (name, span) =
+            self.expect_ident("`points`, `lines`, `triangles`, `grid`, or `ribbon`")?;
         match name.as_str() {
             "points" => Some(Topology::Points),
             "lines" => Some(Topology::Lines),
+            "triangles" => Some(Topology::Triangles),
+            "grid" => Some(Topology::Grid),
+            "ribbon" => Some(Topology::Ribbon),
             // Parsed so that the *contract* check can say why it is wrong here
             // rather than the parser saying the word does not exist. It does
             // exist; it is not something geometry can be.
@@ -475,8 +479,7 @@ impl Parser {
                 self.error_with_hint(
                     span,
                     format!("unknown topology `{name}`"),
-                    "the topologies are `points` and `lines` — `lines` makes each element \
-                     one segment, whose far end the paired L4 writes to `clip_b`",
+                    "the topologies are `points`, `lines`, `triangles`, `grid`, and `ribbon`",
                 );
                 None
             }
@@ -485,17 +488,18 @@ impl Parser {
 
     fn parse_blend(&mut self) -> Option<Blend> {
         self.advance(); // "blend"
-        let (name, span) = self.expect_ident("`additive` or `weighted`")?;
+        let (name, span) = self.expect_ident("`additive`, `weighted`, or `opaque`")?;
         match name.as_str() {
             "additive" => Some(Blend::Additive),
             "weighted" => Some(Blend::Weighted),
+            "opaque" => Some(Blend::Opaque),
             _ => {
                 self.error_with_hint(
                     span,
                     format!("unknown blend mode `{name}`"),
                     "the blend modes are `additive`, which sums colour and occludes nothing, \
-                     and `weighted`, which is order-independent transparency and reads \
-                     `color`'s alpha as opacity",
+                     `weighted`, which is order-independent transparency, and \
+                     `opaque`, which tests and writes depth",
                 );
                 None
             }

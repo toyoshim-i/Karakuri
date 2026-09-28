@@ -43,6 +43,8 @@ pub struct RequestNames {
     pub l4s: Vec<Option<String>>,
     /// Field node names declared in the set definition.
     pub fields: Vec<Option<String>>,
+    /// Optional per-renderer depth test flags.
+    pub depth_tests: Vec<Option<bool>>,
 }
 
 /// Specification for building a Set on the background worker thread.

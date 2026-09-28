@@ -95,6 +95,8 @@ pub(crate) struct Simulation {
     prev_bg: [wgpu::BindGroup; 2],
     next_bg: [wgpu::BindGroup; 2],
 
+    /// Drawing topology declared by the L1 procedure.
+    topology: karakuri_ir::Topology,
     /// Declared parameter field names matching uniform buffer layout entries.
     param_names: Vec<String>,
     /// Addressable parameter keys, expanding vector parameters into component keys.
@@ -115,6 +117,7 @@ impl Simulation {
         derived: &[karakuri_ir::Attr],
         fields: karakuri_codegen::Bound<'_>,
     ) -> Simulation {
+        let topology = l1.topology.unwrap_or(karakuri_ir::Topology::Points);
         let shader = generate_l1(l1, derived, fields);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L1)", l1.name)),
@@ -374,6 +377,7 @@ impl Simulation {
             step_bg,
             prev_bg,
             next_bg,
+            topology,
             param_names: l1.params.iter().map(|p| p.name.clone()).collect(),
             param_keys: crate::set::declared_keys(l1),
         }
@@ -386,6 +390,7 @@ impl Simulation {
             elements: [self.element_buf.prev(false), self.element_buf.prev(true)],
             alive: [self.alive_buf.prev(false), self.alive_buf.prev(true)],
             counts: &self.counts,
+            topology: self.topology,
         }
     }
 
@@ -420,7 +425,7 @@ impl Simulation {
         queue.write_buffer(
             &self.counts,
             0,
-            &initial_counts(self.capacity, self.has_spawn),
+            &initial_counts(self.capacity, self.has_spawn, self.topology),
         );
     }
 
@@ -645,7 +650,7 @@ fn initial_state(capacity: u32, has_spawn: bool, layout: &ElementLayout) -> (Vec
 }
 
 /// Generates initial contents for the counts buffer at frame zero.
-fn initial_counts(capacity: u32, has_spawn: bool) -> Vec<u8> {
+fn initial_counts(capacity: u32, has_spawn: bool, topology: karakuri_ir::Topology) -> Vec<u8> {
     let range = if has_spawn { 0 } else { capacity };
     let mut bytes = vec![0u8; counts::SIZE as usize];
     let mut put = |at: u64, v: u32| {
@@ -656,8 +661,13 @@ fn initial_counts(capacity: u32, has_spawn: bool) -> Vec<u8> {
     put(counts::ELEM_XYZ + 4, 1);
     put(counts::ELEM_XYZ + 8, 1);
     put(counts::RANGE, range);
-    put(counts::DRAW, VERTICES_PER_ELEMENT);
-    put(counts::DRAW + 4, range);
+    if topology.is_shared() {
+        put(counts::DRAW, range);
+        put(counts::DRAW + 4, 1);
+    } else {
+        put(counts::DRAW, VERTICES_PER_ELEMENT);
+        put(counts::DRAW + 4, range);
+    }
     put(counts::SURVIVORS, range);
     bytes
 }

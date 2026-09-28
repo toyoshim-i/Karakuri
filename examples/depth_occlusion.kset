@@ -1,0 +1,10 @@
+{"t":"set","id":"depth_occlusion","v":1}
+{"t":"part","layer":"L1","path":"mesh_pyramid.kir"}
+{"t":"part","layer":"L1","path":"orbit_motes.kir"}
+{"t":"part","layer":"L4","path":"matcap_clay.kir"}
+{"t":"part","layer":"L4","path":"halo_points.kir"}
+{"t":"param","layer":"L1","index":0,"key":"radius","value":1.6}
+{"t":"param","layer":"L1","index":0,"key":"height","value":2.0}
+{"t":"param","layer":"L1","index":1,"key":"reach","value":3.2}
+{"t":"param","layer":"L4","index":1,"key":"point_scale","value":0.15}
+{"t":"camera","kind":"orbit","radius":6.0,"speed":0.06,"height":1.0}

@@ -81,6 +81,7 @@ pub(crate) fn run_worker(
                     l3s: &request.names.l3s,
                     l4s: &request.names.l4s,
                     fields: &request.names.fields,
+                    depth_tests: &request.names.depth_tests,
                     edges: &request.edges,
                 },
             )
