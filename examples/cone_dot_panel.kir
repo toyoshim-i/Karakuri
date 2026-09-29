@@ -1,0 +1,92 @@
+// A panel of round dots filling the xy plane, lit from the middle of its bottom
+// edge like a speaker cone. The direction from that point picks the band: the
+// low bands straight up the middle, rising toward the high ones as it tilts out
+// to either side, mirrored, with the high side boosted so it is not empty. On
+// every beat an arc of lit dots leaves the bottom centre and fans outward and
+// upward. The response is steep, so the panel is mostly dark with sharp clusters
+// of large dots, running from deep blue when quiet to hot magenta when loud.
+// Emits `size` as a world diameter, `tint`, and the edge softness in `uv.x`, for
+// `soft_discs`; meant for `flat_eye` at its default frame, whose view spans
+// about [-1.96, 1.96] x [-1.1, 1.1] at 16:9.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/cone_dot_panel.kset
+//     cargo run -p karakuri-cli -- --load-set cone_dot_panel
+
+proc cone_dot_panel {
+  kind     L1
+  topology points
+
+  // Rows are floor(sqrt(capacity * 9 / 16)) and columns fill the rest, so the
+  // panel keeps square cells at 16:9.
+  capacity [576, 16384] = 2304
+
+  // Arc travel per beat, in panel heights.
+  param reach : float [0.1, 3.0] = 1.1
+
+  // Exponent on the loudness; higher is steeper.
+  param steep : float [1.0, 6.0] = 3.0
+
+  // Extra gain on the high bands toward the sides; 0 is none.
+  param boost : float [0.0, 3.0] = 0.6
+
+  // Diameter of a fully loud dot, in cells; 1 touches its neighbours.
+  param grow  : float [0.0, 1.5] = 1.0
+
+  // How much each dot flickers on its own, as a fraction of its loudness.
+  param spark : float [0.0, 1.0] = 0.35
+
+  // Levels of the eight bands; band 0 runs straight up the middle.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.75
+  param level2 : float [0.0, 1.0] = 0.6
+  param level3 : float [0.0, 1.0] = 0.5
+  param level4 : float [0.0, 1.0] = 0.45
+  param level5 : float [0.0, 1.0] = 0.4
+  param level6 : float [0.0, 1.0] = 0.35
+  param level7 : float [0.0, 1.0] = 0.3
+
+  emit position, tint, size, uv
+
+  element {
+    let rows = uint(floor(sqrt(float(capacity) * 0.5625)));
+    let cols = capacity / rows;
+    let cell = 2.2 / float(rows);
+    let ix   = seed % cols;
+    let iy   = seed / cols;
+    let p    = vec2((float(ix) + 0.5 - float(cols) * 0.5) * cell,
+                    (float(iy) + 0.5 - float(rows) * 0.5) * cell);
+
+    // Polar coordinates about the bottom centre: distance in panel heights,
+    // and the angle from straight up, 0 up the middle and 1 along the edge.
+    let d  = p - vec2(0.0, -1.1);
+    let r  = length(d) / 2.2;
+    let a  = abs(atan2(d.x, d.y)) / 1.5707963;
+    let bf = a * 7.0;
+    let lv = level0 * max(0.0, 1.0 - abs(bf))
+           + level1 * max(0.0, 1.0 - abs(bf - 1.0))
+           + level2 * max(0.0, 1.0 - abs(bf - 2.0))
+           + level3 * max(0.0, 1.0 - abs(bf - 3.0))
+           + level4 * max(0.0, 1.0 - abs(bf - 4.0))
+           + level5 * max(0.0, 1.0 - abs(bf - 5.0))
+           + level6 * max(0.0, 1.0 - abs(bf - 6.0))
+           + level7 * max(0.0, 1.0 - abs(bf - 7.0));
+
+    // This beat's arc leaving the bottom centre and fading as it goes, over a
+    // steady share of the band's level along its whole direction.
+    let ph  = fract(max(beats, 0.0));
+    let e   = (r - ph * reach) * 7.0;
+    let arc = (1.0 - 0.6 * ph) / (1.0 + e * e);
+
+    // A per-dot flicker, re-rolled eight times a beat.
+    let fl = hash1(seed * 2654435761u + uint(max(beats, 0.0) * 8.0) * 40503u);
+
+    let v = lv * (1.0 + boost * a) * (0.65 + 0.5 * arc) * (1.0 - spark + 2.0 * spark * fl);
+    let s = min(pow(v, steep), 1.0);
+
+    position = vec3(p, 0.0);
+    size     = s * grow * cell;
+    tint     = mix(srgb_to_linear(vec3(0.1, 0.15, 0.95)), srgb_to_linear(vec3(1.0, 0.1, 0.6)), vec3(s * s))
+             * (0.4 + 0.8 * s);
+    uv       = vec2(0.15, 0.0);
+  }
+}

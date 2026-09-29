@@ -1,0 +1,32 @@
+// A flat field of one colour, brighter toward the bottom edge as if lit from
+// below. Draws the whole frame and reads no geometry; stacked beside a
+// per-element renderer it is the background the material sits on.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/polygon_confetti.kset
+//     cargo run -p karakuri-cli -- --load-set polygon_confetti
+
+proc lit_backdrop {
+  kind  L4
+  blend additive
+
+  // Hue and saturation of the field.
+  param hue   : float [0.0, 1.0] = 0.93
+  param sat   : float [0.0, 1.0] = 0.72
+
+  // Brightness of the field away from the lights.
+  param level : float [0.0, 2.0] = 0.45
+
+  // Brightness of three lights just below the bottom edge; 0 is a flat field.
+  param lift  : float [0.0, 2.0] = 0.5
+
+  fragment {
+    // Frame position in [-1, 1] with y up, y compressed by 3 for the falloff.
+    let p  = vec2(point_coord.x * 2.0 - 1.0, (1.0 - point_coord.y * 2.0) / 3.0);
+    let d1 = distance(p, vec2(-1.0, -0.5));
+    let d2 = distance(p, vec2(0.0, -0.5));
+    let d3 = distance(p, vec2(1.0, -0.5));
+    let glow = 0.1 * lift * (1.0 / d1 + 1.0 / d2 + 1.0 / d3);
+
+    color = vec4(hsv_to_rgb(vec3(hue, sat, 1.0)) * (level + glow), 1.0);
+  }
+}

@@ -1,0 +1,6 @@
+{"t":"set","id":"peak_postcard","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"peak_postcard.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"glow","signal":"energy","curve":"lin","range":[0.8,1.8]}
+{"t":"bind","layer":"L4","key":"snow","signal":"band3","curve":"smooth","range":[0.025,0.06]}

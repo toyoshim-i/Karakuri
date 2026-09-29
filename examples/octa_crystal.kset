@@ -1,0 +1,14 @@
+{"t":"set","id":"octa_crystal","v":1}
+{"t":"part","layer":"L1","path":"sphere_shell.kir"}
+{"t":"part","layer":"L4","path":"glow_march.kir"}
+{"t":"part","layer":"Field","path":"octa_crystal.kir"}
+{"t":"edge","node":"glow_march","slot":"shape","to":"octa_crystal"}
+{"t":"capacity","layer":"L1","value":4096}
+{"t":"param","layer":"L4","key":"spin","value":0.12}
+{"t":"param","layer":"L4","key":"tight","value":12.0}
+{"t":"param","layer":"L4","key":"gain","value":1.6}
+{"t":"param","layer":"L4","key":"hue","value":0.4}
+{"t":"param","layer":"L4","key":"shift","value":0.45}
+{"t":"param","layer":"L4","key":"sat","value":0.75}
+{"t":"bind","layer":"L4","key":"gain","signal":"energy","curve":"sqrt","range":[1.3,2.6]}
+{"t":"bind","layer":"Field","key":"spread","signal":"band1","curve":"smooth","range":[0.85,1.0]}

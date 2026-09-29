@@ -1,0 +1,106 @@
+// A flat wall of small wireframe globes packed like a honeycomb: rows of
+// coarse latitude-longitude spheres, every other row nudged sideways by half a
+// cell. Each globe is drawn as the edges of its triangle facets, so every
+// facet shows a diagonal. All globes tumble about two axes on one shared
+// clock, lit by a light from the upper side.
+//
+// Sound arrives as two sets of three levels. The `across` levels are read by
+// column, mirrored about the centre column, centre to edge: they swell a globe
+// and jump its tumble phase forward, so neighbours twitch out of step. The
+// `down` levels are read by row, mirrored about the middle row, and shaped
+// steeply into brightness, so in silence the wall is almost black and a hit
+// flashes whole rows.
+//
+// Each globe is 72 strokes, 3 per facet: element `seed` is stroke `seed % 72`
+// of globe `seed / 72`. A stroke runs from `position` to
+// `position - velocity`, which is what `room_strokes.kir` draws.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/honeycomb_globes.kset
+//     cargo run -p karakuri-cli -- --load-set honeycomb_globes
+
+proc honeycomb_globes {
+  kind     L1
+  topology lines
+  capacity [1440, 57600] = 11520   // 160 globes * 72 strokes
+
+  // Rows of globes; the column count is what the capacity leaves.
+  param rows   : float [2.0, 40.0] = 10.0
+
+  // Distance between neighbouring globe centres.
+  param pitch  : float [0.1, 4.0] = 1.0
+
+  // Globe radius in silence and at full level, as a share of the pitch.
+  param rest   : float [0.0, 1.0] = 0.22
+  param full   : float [0.0, 1.0] = 0.55
+
+  // Tumble rate in turns per second, and how far a full level jumps the phase.
+  param spin   : float [0.0, 2.0] = 0.15
+  param jump   : float [0.0, 6.0] = 2.5
+
+  // Exponent that shapes the row level into brightness, and the brightness at full.
+  param shape  : float [1.0, 8.0] = 3.0
+  param bright : float [0.0, 8.0] = 2.5
+
+  // Levels in 0..1, centre to edge: by column for size and spin, by row for brightness.
+  param across : vec3 [0.0, 1.0] = vec3(0.6, 0.5, 0.4)
+  param down   : vec3 [0.0, 1.0] = vec3(0.8, 0.7, 0.6)
+
+  emit position, velocity, tint
+
+  element {
+    let globe  = seed / 72u;
+    let stroke = seed % 72u;
+    let facet  = stroke / 3u;
+    let edge   = stroke % 3u;
+
+    // Facet (i, j): 6 around, 4 from pole to pole. Edge 0 runs along the
+    // latitude ring, edge 1 down the meridian, edge 2 across the diagonal.
+    let i = float(facet % 6u);
+    let j = float(facet / 6u);
+    var di = 1.0;
+    var dj = 0.0;
+    if edge == 1u {
+      di = 0.0;
+      dj = 1.0;
+    }
+    if edge == 2u {
+      dj = 1.0;
+    }
+    let pa = 6.2831853 * i / 6.0;
+    let ta = 3.1415927 * j / 4.0;
+    let pb = 6.2831853 * (i + di) / 6.0;
+    let tb = 3.1415927 * (j + dj) / 4.0;
+    let a  = vec3(sin(ta) * cos(pa), cos(ta), sin(ta) * sin(pa));
+    let b  = vec3(sin(tb) * cos(pb), cos(tb), sin(tb) * sin(pb));
+
+    // Where the globe sits in the honeycomb.
+    let nr   = uint(max(rows, 1.0));
+    let nc   = uint(max(float((capacity / 72u) / nr), 1.0));
+    let col  = float(globe % nc);
+    let row  = float(globe / nc);
+    let odd  = float((globe / nc) % 2u);
+    let cx   = col + 0.5 * odd - 0.25 - (float(nc) - 1.0) * 0.5;
+    let cy   = row - (float(nr) - 1.0) * 0.5;
+    let home = vec3(cx * pitch, cy * pitch * 0.8660254, 0.0);
+
+    // Mirrored levels, centre (0) to edge (2), read across the three bands.
+    let fc  = min(abs(cx) / max((float(nc) - 1.0) * 0.5, 1.0), 1.0) * 2.0;
+    let lc  = mix(mix(across.x, across.y, min(fc, 1.0)), across.z, max(fc - 1.0, 0.0));
+    let fr  = min(abs(cy) / max((float(nr) - 1.0) * 0.5, 1.0), 1.0) * 2.0;
+    let lr  = mix(mix(down.x, down.y, min(fr, 1.0)), down.z, max(fr - 1.0, 0.0));
+
+    let r    = pitch * mix(rest, full, lc);
+    let turn = t * spin * 6.2831853 + lc * jump;
+    let ra   = rot_y(rot_x(a, turn), turn * 0.61);
+    let rb   = rot_y(rot_x(b, turn), turn * 0.61);
+
+    // Lambert shading at the stroke's midpoint, light from the upper side.
+    let n    = normalize(ra + rb + vec3(0.0001, 0.0, 0.0));
+    let lamb = max(dot(n, normalize(vec3(-0.3, 0.8, 0.55))), 0.0);
+    let lum  = (0.12 + 0.88 * lamb) * pow(lr, shape) * bright;
+
+    position = home + ra * r;
+    velocity = (ra - rb) * r;
+    tint     = vec3(lum);
+  }
+}

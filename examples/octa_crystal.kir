@@ -1,0 +1,53 @@
+// A crystal cluster: space is folded three times through a mirror plane that
+// keeps swinging, and what is left is measured against one octahedron. The
+// result is a double-pyramid envelope packed with smaller diamonds and
+// pyramids, and because the plane never stops moving, the facets split, merge
+// and slide through one another.
+//
+//     karakuri-cli --set sphere_shell.kir,octa_crystal.kir,glow_march.kir \
+//                  --edge glow_march.shape=octa_crystal
+//
+// Written for `glow_march`, whose 26 steps leave 117 ops per evaluation for
+// the field; this one estimates at 116. A fourth fold does not fit.
+
+proc octa_crystal {
+  kind Field
+
+  // Radius of the octahedral envelope in world units.
+  param reach  : float [0.5, 4.5] = 3.6
+
+  // Swing rate of the mirror plane, in radians per second. 0 freezes the
+  // crystal in one arrangement.
+  param turn   : float [0.0, 2.0] = 0.3
+
+  // How far each fold pushes its copies apart, in folded units. Low packs the
+  // diamonds into one solid; high scatters them into a loose lace.
+  param spread : float [0.2, 1.6] = 0.9
+
+  // Radius of the octahedron left at the end of the folds, in folded units.
+  // This is the size of the smallest facets.
+  param facet  : float [0.05, 1.5] = 0.3
+
+  field {
+    // The mirror plane's normal, swinging about the vertical. Its y component
+    // stays negative so that the fold still cuts space after `abs` has made
+    // every component positive, and its x and z stay positive so that the fold
+    // keeps the copies packed rather than throwing them out of the cluster.
+    // Its squared length is 2, so the reflection `p - m * 2 * dot(p, m) / |m|^2`
+    // needs no factor.
+    let a = t * turn;
+    let m = vec3(abs(cos(a)), -1.0, abs(sin(a)));
+
+    var p = point / reach;
+    for i in 0..3 {
+      p = abs(p);
+      p = (p - m * min(dot(p, m), 0.0)) * 2.0 - vec3(spread);
+    }
+
+    // Octahedron distance, scaled back out of the three doublings and the
+    // initial scale (0.57735 * reach / 8), cut to an octahedral envelope of
+    // radius `reach`.
+    distance = max((dot(abs(p), vec3(1.0)) - facet) * reach * 0.0721688,
+                   (dot(abs(point), vec3(1.0)) - reach) * 0.57735);
+  }
+}

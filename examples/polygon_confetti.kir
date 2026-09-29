@@ -1,0 +1,94 @@
+// A few hundred small regular polygons, from triangles to heptagons, each
+// outlined in a ring of dots, falling slowly down the xy plane and spinning
+// about their own centres. Every shape listens to one of eight bands: at rest it
+// is a speck, and when its band is loud it swells into a readable outline, so
+// the music pops shapes open here and there like confetti catching the light.
+// Seed / 48 is the shape and seed % 48 is the dot along its perimeter. Meant for
+// `flat_eye`, whose frame spans about [-1.96, 1.96] x [-1.1, 1.1] at 16:9.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/polygon_confetti.kset
+//     cargo run -p karakuri-cli -- --load-set polygon_confetti
+
+proc polygon_confetti {
+  kind     L1
+  topology points
+  capacity [1536, 49152] = 15360
+
+  // Fall speed in world units per second, before each shape's own factor.
+  param fall  : float [0.0, 1.0]  = 0.1
+
+  // Spin in radians per second, before each shape's own rate and direction.
+  param spin  : float [0.0, 4.0]  = 0.9
+
+  // Circumradius of a shape whose band is silent, in world units.
+  param speck : float [0.0, 0.1]  = 0.012
+
+  // Circumradius added when the band is at full level.
+  param swell : float [0.0, 0.5]  = 0.16
+
+  // Dot diameter of a fully swollen shape, in world units; a speck's dots shrink
+  // with it.
+  param bead  : float [0.002, 0.05] = 0.012
+
+  // Levels of the eight bands; a shape follows the band its hash picks.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.6
+  param level2 : float [0.0, 1.0] = 0.4
+  param level3 : float [0.0, 1.0] = 0.35
+  param level4 : float [0.0, 1.0] = 0.3
+  param level5 : float [0.0, 1.0] = 0.7
+  param level6 : float [0.0, 1.0] = 0.25
+  param level7 : float [0.0, 1.0] = 0.2
+
+  emit position, tint, size, uv
+
+  element {
+    let si = seed / 48u;
+    let k  = seed % 48u;
+    let h  = hash3(si * 977u + 13u);
+    let g  = hash3(si * 977u + 29u);
+
+    // Side count 3..7 and the band, both from the shape's hash.
+    let n  = 3.0 + floor(h.x * 4.999);
+    let bf = floor(h.z * 7.999);
+
+    // Level of the shape's band, picked without branching: the weight of band
+    // j is 1 at j == bf and 0 everywhere else.
+    let lv = level0 * max(0.0, 1.0 - abs(bf))
+           + level1 * max(0.0, 1.0 - abs(bf - 1.0))
+           + level2 * max(0.0, 1.0 - abs(bf - 2.0))
+           + level3 * max(0.0, 1.0 - abs(bf - 3.0))
+           + level4 * max(0.0, 1.0 - abs(bf - 4.0))
+           + level5 * max(0.0, 1.0 - abs(bf - 5.0))
+           + level6 * max(0.0, 1.0 - abs(bf - 6.0))
+           + level7 * max(0.0, 1.0 - abs(bf - 7.0));
+
+    // Cubed so a moderate band stays a speck and only a loud one opens.
+    let open = lv * lv * lv;
+    let r    = speck + swell * open;
+
+    // The dot's place on the perimeter: an edge, and a fraction along it
+    // between the edge's two corners.
+    let u   = (float(k) + 0.5) / 48.0 * n;
+    let e   = floor(u);
+    let f   = u - e;
+    let rot = t * spin * (0.3 + 0.9 * g.x) * (step(0.5, g.y) * 2.0 - 1.0) + g.z * 6.2831853;
+    let a0  = e / n * 6.2831853 + rot;
+    let a1  = (e + 1.0) / n * 6.2831853 + rot;
+    let loc = mix(vec2(cos(a0), sin(a0)), vec2(cos(a1), sin(a1)), vec2(f)) * r;
+
+    // A fixed column and a fall that wraps over [-1.4, 1.4]; the frame spans
+    // about [-1.1, 1.1], and the margin hides the jump.
+    let x = (h.y * 2.0 - 1.0) * 2.1;
+    let y = 1.4 - fract(g.x * 7.3 + t * fall * (0.4 + 1.2 * h.y * g.z)) * 2.8;
+    position = vec3(x + loc.x, y + loc.y, 0.0);
+
+    size = bead * (0.35 + 0.65 * open);
+    // Warm gold washed toward a pastel of the shape's own hue, bright enough
+    // at full swell for the frame's glow to catch it.
+    let pastel = hsv_to_rgb(vec3(g.y, 0.35, 1.0));
+    let gold   = srgb_to_linear(vec3(1.0, 0.72, 0.3));
+    tint = mix(gold, pastel, vec3(0.45)) * (0.4 + 1.6 * open);
+    uv   = vec2(0.5, 0.0);
+  }
+}

@@ -1,0 +1,124 @@
+// A fine square wireframe lying flat in the xz plane, lifted by sound toward a
+// camera hovering just above its centre. The angle around the centre picks the
+// band, mirrored left and right; each beat starts a ring of lift at the centre
+// that travels outward, and the lift fades to nothing at the edges. One hue
+// drifts round the wheel, loud lines flip to the opposite hue and are driven far
+// past full brightness so the middle blows out to white. Seed / 2 is the grid
+// point and seed % 2 says whether its segment runs along x or along z; the far
+// edge's segments are zero length and draw nothing. Emits `velocity` as the
+// segment from its far end to `position`, which is what `tint_strokes` draws.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/burst_mesh.kset
+//     cargo run -p karakuri-cli -- --load-set burst_mesh
+
+proc burst_mesh {
+  kind     L1
+  topology lines
+
+  // Two segments per grid point: capacity 2 * n * n for an n-by-n mesh.
+  capacity [2048, 131072] = 32768
+
+  // Half the width of the mesh, in world units.
+  param extent : float [0.5, 12.0] = 6.0
+
+  // Height of a fully loud point at the centre, in world units. Kept under the
+  // camera's height (0.5 by default in `hover_lens`) so no line passes behind it.
+  param lift   : float [0.0, 0.48] = 0.36
+
+  // Distance a beat's ring travels outward, as a fraction of `extent`.
+  param reach  : float [0.1, 1.5]  = 0.9
+
+  // Turns of the hue per second.
+  param drift  : float [0.0, 0.2]  = 0.015
+
+  // Loudness past which a line flips to the opposite hue.
+  param flip   : float [0.0, 1.0]  = 0.55
+
+  // Brightness at full loudness; above 1 the colour washes out to white.
+  param over   : float [0.5, 8.0]  = 4.0
+
+  // Levels of the eight bands; band 0 runs along +z and band 7 along -z.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.75
+  param level2 : float [0.0, 1.0] = 0.6
+  param level3 : float [0.0, 1.0] = 0.5
+  param level4 : float [0.0, 1.0] = 0.45
+  param level5 : float [0.0, 1.0] = 0.4
+  param level6 : float [0.0, 1.0] = 0.35
+  param level7 : float [0.0, 1.0] = 0.3
+
+  emit position, velocity, tint
+
+  element {
+    let n    = uint(floor(sqrt(float(capacity / 2u))));
+    let c    = seed / 2u;
+    let axis = seed % 2u;
+    let ix   = c % n;
+    let iz   = c / n;
+    let last = float(n - 1u);
+    let ph   = fract(max(beats, 0.0));
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    var la = 0.0;
+    var ra = 0.0;
+    for k in 0..2 {
+      // k 0 is this point, k 1 its neighbour along the segment's axis, or the
+      // point itself at the far edge.
+      var jx = float(ix);
+      var jz = float(iz);
+      if k == 1 {
+        if axis == 0u {
+          jx = min(jx + 1.0, last);
+        } else {
+          jz = min(jz + 1.0, last);
+        }
+      }
+      let x = (jx / last * 2.0 - 1.0) * extent;
+      let z = (jz / last * 2.0 - 1.0) * extent;
+      let r = length(vec2(x, z)) / extent;
+
+      // Band by angle from +z, the same on both sides.
+      let bf = abs(atan2(x, z)) / 3.1415927 * 7.0;
+      let lv = level0 * max(0.0, 1.0 - abs(bf))
+             + level1 * max(0.0, 1.0 - abs(bf - 1.0))
+             + level2 * max(0.0, 1.0 - abs(bf - 2.0))
+             + level3 * max(0.0, 1.0 - abs(bf - 3.0))
+             + level4 * max(0.0, 1.0 - abs(bf - 4.0))
+             + level5 * max(0.0, 1.0 - abs(bf - 5.0))
+             + level6 * max(0.0, 1.0 - abs(bf - 6.0))
+             + level7 * max(0.0, 1.0 - abs(bf - 7.0));
+
+      // At the centre, where the angle means nothing, every band counts alike.
+      let avg = (level0 + level1 + level2 + level3 + level4 + level5 + level6 + level7) * 0.125;
+      let lc  = mix(avg, lv, smoothstep(0.0, 0.25, r));
+
+      // This beat's ring leaving the centre, over a swell held at the centre;
+      // the lift fades out before the edge, and so does the colour, below.
+      let e    = (r - ph * reach) * 9.0;
+      let ring = (1.0 - 0.6 * ph) / (1.0 + e * e);
+      let hold = 1.0 / (1.0 + r * r * 30.0);
+      let edge = 1.0 - smoothstep(0.45, 0.95, r);
+      let loud = lc * lc * (0.55 * hold + ring) * edge;
+
+      let p = vec3(x, min(loud, 1.0) * lift, z);
+      if k == 0 {
+        pa = p;
+        la = loud;
+        ra = r;
+      } else {
+        pb = p;
+      }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+
+    let hot = step(flip, la);
+    let hue = fract(t * drift + la * 0.08 + hot * 0.5);
+    let val = 0.12 + la * over;
+    let sat = clamp(1.3 - val * 0.3, 0.0, 1.0);
+    let rim = 1.0 - smoothstep(0.7, 1.0, ra);
+    tint = hsv_to_rgb(vec3(hue, sat, 1.0)) * val * rim;
+  }
+}

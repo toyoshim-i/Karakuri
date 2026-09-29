@@ -1,0 +1,140 @@
+// A round equaliser: a solid sphere caged by three crowns of small boxes that
+// stand out from it, the crowns turned about the vertical axis at even
+// intervals so together they bristle like a spiky ball. Each box grows outward
+// by the level of one band plus a small wobble of its own, and the whole
+// sculpture spins and rocks. Every box has its own pastel of blue with a
+// random touch of red and green; several times a second a random few jump to
+// full brightness and glow while the rest sit at half. Behind it, where rays
+// miss, a tumbling lattice of nested square outlines flashes in cycling
+// brightness, tinted by the view direction. Draws the whole frame and reads no
+// geometry; the Set adds scanlines with `analog_tv`.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/bristle_orb.kir --capacity 256
+
+proc bristle_orb {
+  kind  L4
+  blend additive
+
+  // Levels of bands 0-2, 3-5 and 6-7. Each box reads one band, cycling
+  // around the crown.
+  param lows   : vec3 [0.0, 1.0] = vec3(0.8, 0.7, 0.55)
+  param mids   : vec3 [0.0, 1.0] = vec3(0.6, 0.5, 0.45)
+  param highs  : vec2 [0.0, 1.0] = vec2(0.35, 0.25)
+
+  // Length of a box at full level, in world units.
+  param reach  : float [0.2, 1.6] = 1.0
+
+  // Spin about the vertical, in radians per second.
+  param spin   : float [0.0, 2.0] = 0.45
+
+  // Amplitude of the rocking on the second axis, in radians.
+  param rock   : float [0.0, 1.0] = 0.35
+
+  // Size of each box's own wobble, in world units.
+  param wobble : float [0.0, 0.3] = 0.07
+
+  // How many times a second the flashing boxes are re-picked.
+  param flash  : float [0.0, 16.0] = 6.0
+
+  fragment {
+    // The sculpture turns, so the ray is turned the other way once.
+    let yaw = t * spin;
+    let tip = sin(t * 0.7) * rock;
+    let ro  = rot_x(rot_y(eye, yaw), tip);
+    let rd  = rot_x(rot_y(ray, yaw), tip);
+
+    let core  = 1.1;
+    let outer = core + reach + 0.2;
+    let tick  = floor(t * flash);
+
+    // Where the ray enters the shell the boxes live in, and where it meets
+    // the sphere or leaves the shell.
+    let b    = dot(ro, rd);
+    let c2   = dot(ro, ro);
+    let dout = b * b - c2 + outer * outer;
+    let din  = b * b - c2 + core * core;
+    let t0   = max(-b - sqrt(max(dout, 0.0)), 0.0);
+    let tsph = -b - sqrt(max(din, 0.0));
+    let t1   = mix(-b + sqrt(max(dout, 0.0)), tsph, step(0.0, din));
+
+    var tt   = t0;
+    var hit  = 0.0;
+    var bid  = 0.0;
+    var face = vec3(0.0);
+    var glow = 0.0;
+    for i in 0..11 {
+      let p = ro + rd * tt;
+
+      // Nearest crown: three great circles through the poles, so the
+      // longitude snaps to one of six half-planes.
+      let rho = length(vec2(p.x, p.z));
+      let lon = atan2(p.z, p.x);
+      let kk  = floor(lon / 1.0471976 + 0.5);
+      let dl  = lon - kk * 1.0471976;
+      let cl  = sin(vec2(dl + 1.5707963, dl));
+      let x   = rho * cl.x;
+      let z   = rho * cl.y;
+
+      // Nearest box around that crown: 24 to a circle, 15 degrees apart.
+      let lat = atan2(p.y, x);
+      let jj  = floor(lat / 0.2617994 + 0.5);
+      let dt2 = lat - jj * 0.2617994;
+      let cb  = sin(vec2(dt2 + 1.5707963, dt2));
+      let rr  = length(vec2(x, p.y));
+
+      // The box's band, cycling through the eight around the crown.
+      let bix = kk * 16.0 + jj + 56.0;
+      let bn  = mod(jj + kk * 3.0, 8.0);
+      let lv  = dot(lows, step(abs(vec3(bn) - vec3(0.0, 1.0, 2.0)), vec3(0.5)))
+              + dot(mids, step(abs(vec3(bn) - vec3(3.0, 4.0, 5.0)), vec3(0.5)))
+              + dot(highs, step(abs(vec2(bn) - vec2(6.0, 7.0)), vec2(0.5)));
+      // The boxes at the poles, where the crowns cross, are left out.
+      let hh  = (0.06 + reach * lv + wobble * sin(t * 9.0 + bix * 1.37)) * 0.5 * step(abs(jj), 5.5);
+      let lq  = vec3(rr * cb.x - core - hh, rr * cb.y, z);
+      let d   = sd_box(lq, vec3(hh, 0.06, 0.06));
+
+      let on  = step(0.8, hash1(uint(bix) * 7919u + uint(tick) * 131u));
+      glow += on * exp(-d * 30.0);
+
+      if hit < 0.5 && tt < t1 {
+        if d < 0.004 {
+          hit  = 1.0;
+          bid  = bix;
+          face = abs(lq) / vec3(hh, 0.06, 0.06);
+        } else {
+          tt = tt + d * 0.9;
+        }
+      }
+    }
+
+    // Box: a face lit by how squarely it faces the ray, in its own pastel.
+    let pn    = normalize(ro + rd * tt);
+    let cap   = step(max(face.y, face.z), face.x);
+    let facing = mix(0.45 + 0.25 * step(face.z, face.y), abs(dot(pn, rd)), cap);
+    let hb    = hash2(uint(bid) * 2654435761u + 7u);
+    let pastel = vec3(0.25 + 0.7 * hb.x, 0.3 + 0.65 * hb.y, 0.95);
+    let lit   = mix(0.5, 1.0, step(0.8, hash1(uint(bid) * 7919u + uint(tick) * 131u)));
+    let barc  = pastel * facing * lit;
+
+    // Sphere: shaded by its facing ratio.
+    let sn    = normalize(ro + rd * tsph);
+    let sphc  = vec3(0.12, 0.14, 0.3) * (0.15 + 0.85 * abs(dot(sn, rd)));
+    let onsph = step(0.0, din) * (1.0 - hit);
+
+    // Background: nested square outlines folded out of a turning sky.
+    let rs = rot_x(rot_y(ray, t * 0.11), t * 0.07);
+    var fq = rs.xy / (abs(rs.z) + 0.6) * 1.4;
+    var bg = 0.0;
+    for n in 0..4 {
+      fq = abs(fq) - vec2(0.55);
+      fq = vec2(fq.x * 0.9553 - fq.y * 0.2955, fq.x * 0.2955 + fq.y * 0.9553) * 1.7;
+      let sq = abs(max(abs(fq.x), abs(fq.y)) - 0.5);
+      bg += exp(-sq * 14.0) * (0.5 + 0.5 * sin(t * 2.5 + float(n) * 1.9));
+    }
+    let sky  = (vec3(0.25, 0.3, 0.6) + abs(rs) * vec3(0.5, 0.4, 0.5)) * bg * 0.08;
+    let miss = (1.0 - hit) * (1.0 - onsph);
+
+    let c = barc * hit + sphc * onsph + sky * miss + vec3(0.6, 0.7, 1.0) * glow * 0.05;
+    color = vec4(c, 1.0);
+  }
+}

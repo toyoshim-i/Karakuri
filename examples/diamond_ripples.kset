@@ -1,0 +1,16 @@
+{"t":"set","id":"diamond_ripples","v":1}
+{"t":"part","layer":"L1","path":"diamond_ripples.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"hollow_diamonds.kir"}
+{"t":"part","layer":"L5","path":"cathode_bend.kir"}
+{"t":"param","layer":"L4","key":"exposure","value":1.8}
+{"t":"param","layer":"L5","key":"bend","value":0.35}
+{"t":"param","layer":"L5","key":"vignette","value":0.6}
+{"t":"bind","layer":"L1","key":"level0","signal":"band0","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level1","signal":"band1","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level2","signal":"band2","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level3","signal":"band3","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level4","signal":"band4","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level5","signal":"band5","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level6","signal":"band6","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"level7","signal":"band7","curve":"lin","range":[0.0,1.0]}

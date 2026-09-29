@@ -1,0 +1,15 @@
+{"t":"set","id":"dial_rings","v":1}
+{"t":"part","layer":"L1","path":"dial_rings.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"ink_strokes.kir"}
+{"t":"part","layer":"L4","index":1,"path":"lit_backdrop.kir"}
+{"t":"part","layer":"L5","path":"acrylic_glow.kir"}
+{"t":"param","layer":"L3","key":"frame","value":1.7}
+{"t":"param","layer":"L4","index":1,"key":"hue","value":0.58}
+{"t":"param","layer":"L4","index":1,"key":"sat","value":0.1}
+{"t":"param","layer":"L4","index":1,"key":"level","value":0.8}
+{"t":"param","layer":"L4","index":1,"key":"lift","value":0.25}
+{"t":"param","layer":"L5","key":"amount","value":0.5}
+{"t":"bind","layer":"L1","key":"lows.x","signal":"band0","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"lows.y","signal":"band1","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"lows.z","signal":"band2","curve":"lin","range":[0.0,1.0]}

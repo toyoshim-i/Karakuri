@@ -1,0 +1,141 @@
+// A spectrum analyser turned on its side and mirrored, in a widescreen
+// letterbox: a stack of thin rainbow bars, one per row, each reaching left and
+// right from the centre line by the level of its band, so the stack reads as a
+// spiky symmetric silhouette. Behind it a faint graph-paper grid fades out in a
+// diamond, two dim violet glows sit either side of centre, and a pulsing
+// diamond darkens the middle so the bars read brightest at their tips. The
+// strip bows outward toward the sides, red and blue split diagonally toward
+// the edges, and every twelve seconds the colour channels rotate and come
+// back. Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/letterbox_spectrum.kir --capacity 256
+
+proc letterbox_spectrum {
+  kind  L4
+  blend additive
+
+  // Level of each band, lowest band on the bottom row. Bind to band0..band7.
+  param level0 : float [0.0, 1.0] = 0.85
+  param level1 : float [0.0, 1.0] = 0.7
+  param level2 : float [0.0, 1.0] = 0.55
+  param level3 : float [0.0, 1.0] = 0.65
+  param level4 : float [0.0, 1.0] = 0.45
+  param level5 : float [0.0, 1.0] = 0.5
+  param level6 : float [0.0, 1.0] = 0.3
+  param level7 : float [0.0, 1.0] = 0.2
+
+  // Low-band push: tilts and nudges the stage, turns the grid and widens the
+  // colour split. Bind to a low band.
+  param bass   : float [0.0, 1.0] = 0.0
+
+  // Half-width of a bar at full level, in frame half-heights.
+  param reach  : float [0.2, 1.8] = 1.25
+
+  // Number of bar rows in the strip.
+  param rows   : float [8.0, 64.0] = 40.0
+
+  // Red-blue split at the frame edge, in frame half-heights.
+  param split  : float [0.0, 0.05] = 0.012
+
+  // How far the strip bows outward toward the sides.
+  param pinch  : float [0.0, 1.0] = 0.35
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // The kick tilts and nudges the whole stage.
+    let tilt = bass * 0.035;
+    let ct   = cos(tilt);
+    let st   = sin(tilt);
+    let p0   = vec2(ct * p.x - st * p.y, st * p.x + ct * p.y + bass * 0.02);
+
+    // Rows stretch vertically toward the sides, so the strip bows outward.
+    let pp = vec2(p0.x, p0.y / (1.0 + pinch * p0.x * p0.x * 0.25));
+
+    // The grid turns and slides a little with the low band.
+    let gt = bass * 0.06;
+    let gc = cos(gt);
+    let gs = sin(gt);
+
+    let half = 0.62;
+    let rowh = 2.0 * half / rows;
+
+    var c = vec3(0.0);
+    for ch in 0..3 {
+      let fc   = float(ch);
+      let mask = vec3(1.0 - step(0.5, fc), step(0.5, fc) - step(1.5, fc), step(1.5, fc));
+
+      // Red and blue split along the diagonal, more toward the edges and on
+      // the kick.
+      let q = pp + vec2(0.7071, -0.7071) * ((fc - 1.0) * split * (0.25 + length(pp)) * (1.0 + 3.0 * bass));
+
+      // Letterbox: only the middle strip is lit.
+      let inside = 1.0 - smoothstep(half - 0.004, half + 0.004, abs(q.y));
+
+      // Graph paper: a coarse grid with a finer one inside each cell, faded
+      // out in a diamond.
+      let g  = vec2(gc * q.x - gs * q.y, gs * q.x + gc * q.y) + vec2(bass * 0.03, 0.0);
+      let lc = abs(fract(g * 5.0 + vec2(0.5)) - vec2(0.5)) * 0.2;
+      let lf = abs(fract(g * 25.0 + vec2(0.5)) - vec2(0.5)) * 0.04;
+      let coarse = exp(-min(lc.x, lc.y) * 500.0);
+      let fine   = exp(-min(lf.x, lf.y) * 900.0);
+      let dv = clamp(1.0 - (abs(q.x) / 1.7 + abs(q.y) / 0.7), 0.0, 1.0);
+      var scene = vec3(0.012, 0.01, 0.018) + vec3(0.55, 0.5, 0.7) * (coarse * 0.035 + fine * 0.012) * dv;
+
+      // Two dim violet glows, one leaning magenta and one leaning teal.
+      let ga = q - vec2(-0.5, 0.0);
+      let gb = q - vec2(0.5, 0.0);
+      scene += vec3(0.22, 0.04, 0.26) * exp(-dot(ga, ga) * 5.0) * 0.3;
+      scene += vec3(0.08, 0.1, 0.28) * exp(-dot(gb, gb) * 5.0) * 0.3;
+
+      // The bars. Each row reads its band by position in the stack, blending
+      // between neighbouring bands, with a slow per-row waver on top.
+      let ry = floor((q.y + half) / rowh);
+      let yc = (ry + 0.5) * rowh - half;
+      let x  = clamp(ry / max(rows - 1.0, 1.0), 0.0, 1.0) * 7.0;
+      let lv = level0 * max(0.0, 1.0 - abs(x))
+             + level1 * max(0.0, 1.0 - abs(x - 1.0))
+             + level2 * max(0.0, 1.0 - abs(x - 2.0))
+             + level3 * max(0.0, 1.0 - abs(x - 3.0))
+             + level4 * max(0.0, 1.0 - abs(x - 4.0))
+             + level5 * max(0.0, 1.0 - abs(x - 5.0))
+             + level6 * max(0.0, 1.0 - abs(x - 6.0))
+             + level7 * max(0.0, 1.0 - abs(x - 7.0));
+      let jit = 0.72 + 0.28 * sin(t * 2.3 + ry * 1.7 + hash1(uint(ry + 1.0) * 7919u) * 6.0);
+      let hw  = reach * lv * jit + 0.01;
+      let dx  = max(abs(q.x) - hw, 0.0);
+      let dy  = max(abs(q.y - yc) - rowh * 0.1, 0.0);
+      let d   = length(vec2(dx, dy));
+      let core = 1.0 - smoothstep(0.0, 0.004, d);
+      let glow = exp(-d * 55.0) * 0.4;
+      let hue  = q.x * 0.3 + ry * 0.012 + t * 0.08;
+      let rainbow = vec3(0.5) + vec3(0.5) * cos(vec3(6.2831853) * (vec3(hue) + vec3(0.0, 0.33, 0.67)));
+
+      // The cover: a pulsing diamond that dims the middle of the bars.
+      let cr  = 0.62 + 0.15 * sin(t * 0.6);
+      let cov = 1.0 - 0.85 * smoothstep(cr, 0.0, abs(q.x) + abs(q.y) * 1.2);
+      scene += rainbow * (core * 1.1 + glow) * cov;
+
+      // A large rainbow diamond washing over the whole picture.
+      let wh   = (abs(q.x) + abs(q.y)) * 0.35 - t * 0.04;
+      let wash = vec3(0.5) + vec3(0.5) * cos(vec3(6.2831853) * (vec3(wh) + vec3(0.0, 0.33, 0.67)));
+      scene = scene * (vec3(0.75) + wash * 0.45) * inside;
+
+      c += mask * dot(scene, mask);
+    }
+
+    // Every twelve seconds the channels rotate red to green to blue and back,
+    // with a darker falloff away from the centre while rotated.
+    let cyc = fract(t / 12.0);
+    let rw  = smoothstep(0.45, 0.55, cyc) * (1.0 - smoothstep(0.9, 1.0, cyc));
+    let fall = 1.0 - rw * 0.55 * clamp(length(p) * 0.6, 0.0, 1.0);
+    c = mix(c, vec3(c.z, c.x, c.y), vec3(rw)) * fall;
+
+    color = vec4(c, 1.0);
+  }
+}

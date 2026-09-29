@@ -1,0 +1,135 @@
+// A slow flight through layers of a glowing network. Points sit roughly one to
+// a cell of a loose grid, each wandering in its own small loop, and each is
+// joined to its neighbours by thin lines that are brightest at a middle length
+// and fade out as they stretch, so the web keeps rewiring itself as the points
+// drift. Points are tiny stars that flare in slow waves, and now and then the
+// whole field bursts into sparkle. Three copies of the web at different scales
+// grow toward the viewer and fade out in turn while the view turns slowly. One
+// tint at a time drifts through reds, pinks, oranges, greens and blues, and a
+// glow rises from the bottom edge. Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/plexus_flight.kir --capacity 256
+
+proc plexus_flight {
+  kind  L4
+  blend additive
+
+  // Rate of the flight, in layer cycles per second.
+  param zoom  : float [0.0, 0.3] = 0.05
+
+  // Grid cells per frame half-height on the finest layer.
+  param dens  : float [1.0, 8.0] = 2.2
+
+  // Turning rate of the view, in radians per second.
+  param spin  : float [-0.3, 0.3] = 0.03
+
+  // Drift of the tint around the colour wheel, in turns per second.
+  param drift : float [0.0, 0.05] = 0.004
+
+  // Height of the glow rising from the bottom edge. Bind to a middle band.
+  param rise  : float [0.0, 1.0] = 0.15
+
+  // Strength of the sparkle; the periodic bursts ride on top of it.
+  param spark : float [0.0, 3.0] = 1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let va = t * spin;
+    let vr = sin(vec2(va + 1.5707963, va));
+    let pr = vec2(vr.x * p.x - vr.y * p.y, vr.y * p.x + vr.x * p.y);
+
+    // Every so often the whole field bursts into sparkle.
+    let bs    = 0.5 + 0.5 * sin(t * 0.21);
+    let burst = bs * bs * bs * bs * bs * bs * bs * bs;
+
+    var acc = 0.0;
+    for k in 0..3 {
+      // Each layer grows fourfold over one cycle and fades in and out.
+      let fk  = float(k) / 3.0;
+      let ph  = fract(t * zoom + fk);
+      let cyc = floor(t * zoom + fk);
+      let sc  = dens * exp2(2.0 * (1.0 - ph));
+      let al  = sin(ph * 3.1415927);
+      let q   = pr * sc + hash2(uint(cyc + 1000.0) * 3u + uint(k)) * 64.0;
+      var lay = 0.0;
+
+      // The four points nearest this fragment: one per cell of the 2x2 block
+      // around it, each the cell's middle plus a small wandering loop.
+      let b  = floor(q - vec2(0.5));
+      let tt = vec2(t);
+      let ha = hash2(uint(b.x + 8192.0) * 7919u + uint(b.y + 8192.0) * 104729u);
+      let pa = b + vec2(0.5, 0.5) + sin(tt * (vec2(0.3) + ha * 0.5) + ha * 6.2831853) * 0.36;
+      let hb = hash2(uint(b.x + 8193.0) * 7919u + uint(b.y + 8192.0) * 104729u);
+      let pb = b + vec2(1.5, 0.5) + sin(tt * (vec2(0.3) + hb * 0.5) + hb * 6.2831853) * 0.36;
+      let hc = hash2(uint(b.x + 8192.0) * 7919u + uint(b.y + 8193.0) * 104729u);
+      let pc = b + vec2(0.5, 1.5) + sin(tt * (vec2(0.3) + hc * 0.5) + hc * 6.2831853) * 0.36;
+      let hd = hash2(uint(b.x + 8193.0) * 7919u + uint(b.y + 8193.0) * 104729u);
+      let pd = b + vec2(1.5, 1.5) + sin(tt * (vec2(0.3) + hd * 0.5) + hd * 6.2831853) * 0.36;
+
+      // Each point is a tiny star that flares in slow waves.
+      let da = (q - pa) / sc;
+      let fa = 0.5 + 0.5 * sin(t * 0.9 + ha.x * 40.0 + pa.x * 0.35);
+      let wa = fa * fa * fa * fa;
+      lay += (0.000008 + (wa * wa * 0.0002 + burst * ha.y * 0.0003) * spark) / (dot(da, da) + 0.00004);
+      let db = (q - pb) / sc;
+      let fb = 0.5 + 0.5 * sin(t * 0.9 + hb.x * 40.0 + pb.x * 0.35);
+      let wb = fb * fb * fb * fb;
+      lay += (0.000008 + (wb * wb * 0.0002 + burst * hb.y * 0.0003) * spark) / (dot(db, db) + 0.00004);
+      let dc = (q - pc) / sc;
+      let fc = 0.5 + 0.5 * sin(t * 0.9 + hc.x * 40.0 + pc.x * 0.35);
+      let wc = fc * fc * fc * fc;
+      lay += (0.000008 + (wc * wc * 0.0002 + burst * hc.y * 0.0003) * spark) / (dot(dc, dc) + 0.00004);
+      let dd = (q - pd) / sc;
+      let fd = 0.5 + 0.5 * sin(t * 0.9 + hd.x * 40.0 + pd.x * 0.35);
+      let wd = fd * fd * fd * fd;
+      lay += (0.000008 + (wd * wd * 0.0002 + burst * hd.y * 0.0003) * spark) / (dot(dd, dd) + 0.00004);
+
+      // Every pair of the four is joined, brightest at a middle length and
+      // fading out as the pair stretches apart.
+      let e1 = pb - pa;
+      let r1 = q - pa;
+      let l1 = dot(e1, e1);
+      let g1 = 0.0018 / (length(r1 - e1 * clamp(dot(r1, e1) / l1, 0.0, 1.0)) / sc + 0.0018);
+      lay += smoothstep(2.25, 0.64, l1) * g1 * g1 * 0.6;
+      let e2 = pc - pa;
+      let r2 = q - pa;
+      let l2 = dot(e2, e2);
+      let g2 = 0.0018 / (length(r2 - e2 * clamp(dot(r2, e2) / l2, 0.0, 1.0)) / sc + 0.0018);
+      lay += smoothstep(2.25, 0.64, l2) * g2 * g2 * 0.6;
+      let e3 = pd - pb;
+      let r3 = q - pb;
+      let l3 = dot(e3, e3);
+      let g3 = 0.0018 / (length(r3 - e3 * clamp(dot(r3, e3) / l3, 0.0, 1.0)) / sc + 0.0018);
+      lay += smoothstep(2.25, 0.64, l3) * g3 * g3 * 0.6;
+      let e4 = pd - pc;
+      let r4 = q - pc;
+      let l4 = dot(e4, e4);
+      let g4 = 0.0018 / (length(r4 - e4 * clamp(dot(r4, e4) / l4, 0.0, 1.0)) / sc + 0.0018);
+      lay += smoothstep(2.25, 0.64, l4) * g4 * g4 * 0.6;
+      let e5 = pd - pa;
+      let r5 = q - pa;
+      let l5 = dot(e5, e5);
+      let g5 = 0.0018 / (length(r5 - e5 * clamp(dot(r5, e5) / l5, 0.0, 1.0)) / sc + 0.0018);
+      lay += smoothstep(2.25, 0.64, l5) * g5 * g5 * 0.6;
+      let e6 = pc - pb;
+      let r6 = q - pb;
+      let l6 = dot(e6, e6);
+      let g6 = 0.0018 / (length(r6 - e6 * clamp(dot(r6, e6) / l6, 0.0, 1.0)) / sc + 0.0018);
+      lay += smoothstep(2.25, 0.64, l6) * g6 * g6 * 0.6;
+
+      acc += lay * al;
+    }
+
+    let hue  = hsv_to_rgb(vec3(fract(0.95 + t * drift), 0.6, 1.0));
+    let lift = rise * exp(-(p.y + 1.0) * 3.0);
+    let vig  = 1.0 - 0.5 * dot(p * vec2(0.5, 0.85), p * vec2(0.5, 0.85));
+    let fade = smoothstep(0.0, 6.0, t);
+    color = vec4(hue * (acc * 0.5 + lift) * vig * fade, 1.0);
+  }
+}

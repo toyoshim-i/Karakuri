@@ -1,0 +1,110 @@
+// A few thousand small spinning squares strung on one continuous line that
+// winds out from the centre of the xy plane. The line's horizontal and vertical
+// turns run at slightly different rates, so it is a slowly deforming whorl that
+// keeps twisting into new rosettes rather than a circle. Each square follows
+// one of eight bands, cycling along the line, with a steep response: quiet
+// squares collapse to a point and only loud ones open. The line is coloured by
+// a rainbow laid along its length.
+//
+// Every square is five segments: its four edges, then a connecting stroke from
+// its first corner to the next square's first corner. Seed / 5 is the square
+// and seed % 5 the segment; the last square's connector is zero length and
+// draws nothing. Emits `velocity` as the segment from its far end to `position`,
+// which is what `tint_strokes` draws. Meant for `flat_eye`.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/square_whorl.kset
+//     cargo run -p karakuri-cli -- --load-set square_whorl
+
+proc square_whorl {
+  kind     L1
+  topology lines
+  capacity [1280, 40960] = 15000
+
+  // Radius of the outermost square, in world units.
+  param spread : float [0.2, 3.0]  = 1.05
+
+  // Turns the line makes from the centre to the rim.
+  param turns  : float [1.0, 80.0] = 21.0
+
+  // How much faster the vertical turn runs than the horizontal, as a fraction.
+  param skew   : float [0.0, 0.05] = 0.004
+
+  // Half the side of a square at full level, in world units.
+  param box    : float [0.0, 0.2]  = 0.045
+
+  // Exponent on the band level; higher is steeper.
+  param steep  : float [1.0, 8.0]  = 4.0
+
+  // Spin of a square about its centre, in radians per second, before its own
+  // rate and direction.
+  param spin   : float [0.0, 8.0]  = 1.5
+
+  // Turns of the rainbow along the line per second.
+  param cycle  : float [0.0, 0.1]  = 0.01
+
+  // Levels of the eight bands; square q follows level q % 8.
+  param level0 : float [0.0, 1.0] = 0.9
+  param level1 : float [0.0, 1.0] = 0.7
+  param level2 : float [0.0, 1.0] = 0.5
+  param level3 : float [0.0, 1.0] = 0.4
+  param level4 : float [0.0, 1.0] = 0.35
+  param level5 : float [0.0, 1.0] = 0.3
+  param level6 : float [0.0, 1.0] = 0.3
+  param level7 : float [0.0, 1.0] = 0.25
+
+  emit position, velocity, tint
+
+  element {
+    let m  = float(capacity / 5u);
+    let qi = float(seed / 5u);
+    let si = float(seed % 5u);
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+    for k in 0..2 {
+      // Vertex si + k of square qi; vertex 5 is the next square's first
+      // corner, and past the last square it is the last square's own.
+      var q = qi;
+      var c = si + float(k);
+      if c > 4.5 {
+        q = min(qi + 1.0, m - 1.0);
+        c = 0.0;
+      }
+      let cc = c - 4.0 * floor(c / 4.0);
+
+      // Centre on the whorl: the radius grows along the line, and the two axes
+      // turn at rates `skew` apart, drifting slowly so the rosette re-forms.
+      let u   = q / m;
+      let rad = spread * (0.03 + 0.97 * u);
+      let th  = u * turns * 6.2831853;
+      let sk  = skew * (1.0 + 0.5 * sin(t * 0.05));
+      let ctr = vec2(cos(th + t * 0.11), sin(th * (1.0 + sk) + t * 0.13)) * rad;
+
+      // Level of this square's band: weight 1 at band q % 8 and 0 elsewhere.
+      let bf = q - 8.0 * floor(q / 8.0);
+      let lv = level0 * max(0.0, 1.0 - abs(bf))
+             + level1 * max(0.0, 1.0 - abs(bf - 1.0))
+             + level2 * max(0.0, 1.0 - abs(bf - 2.0))
+             + level3 * max(0.0, 1.0 - abs(bf - 3.0))
+             + level4 * max(0.0, 1.0 - abs(bf - 4.0))
+             + level5 * max(0.0, 1.0 - abs(bf - 5.0))
+             + level6 * max(0.0, 1.0 - abs(bf - 6.0))
+             + level7 * max(0.0, 1.0 - abs(bf - 7.0));
+      let half = box * pow(lv, steep);
+
+      // Corner cc of a square spinning at its own rate and direction.
+      let hq  = hash2(uint(q) * 7919u + 3u);
+      let ang = t * spin * (hq.x * 2.0 - 1.0) + hq.y * 6.2831853 + (cc + 0.5) * 1.5707963;
+      let p   = vec3(ctr + vec2(cos(ang), sin(ang)) * (half * 1.4142136), 0.0);
+      if k == 0 {
+        pa = p;
+      } else {
+        pb = p;
+      }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    tint     = hsv_to_rgb(vec3(fract(qi / m + t * cycle), 0.9, 1.0));
+  }
+}

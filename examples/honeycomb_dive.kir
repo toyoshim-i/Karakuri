@@ -1,0 +1,126 @@
+// A dive into a glowing honeycomb laid on an endless floor. Every cell of the
+// honeycomb holds a thin hexagon outline whose size and twist vary: the sizes
+// ripple outward from the middle of the view in slow rings, small outlines
+// twist as they shrink and large ones overlap their neighbours, so the outlines
+// interlace into rosettes and stars. Three copies of the pattern at different
+// zooms grow toward the viewer and fade out in turn, each in one saturated hue
+// picked at random, and outlines near one size flash together. The floor turns
+// slowly, fades toward the horizon, and the eye above it bobs up and down;
+// while it is below the floor the whole image turns to its negative. Draws the
+// whole frame from its own eye and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/honeycomb_dive.kir --capacity 256
+
+proc honeycomb_dive {
+  kind  L4
+  blend additive
+
+  // Rate of the endless zoom, in layer cycles per second.
+  param zoom  : float [0.0, 0.5] = 0.07
+
+  // Height of the eye's bob. Above 0.6 the eye dips below the floor at the
+  // bottom of each bob and the image inverts.
+  param bob   : float [0.0, 1.5] = 0.85
+
+  // Honeycomb cells per floor unit on the finest layer.
+  param dens  : float [0.5, 6.0] = 1.4
+
+  // Turning rate of the floor, in radians per second.
+  param turn  : float [-0.5, 0.5] = 0.05
+
+  // Strength of the flashing ring of outlines near one size. Bind to an onset.
+  param flash : float [0.0, 3.0] = 0.8
+
+  // Brightness of the outlines, meant for a level signal.
+  param glow  : float [0.0, 3.0] = 1.1
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // The eye's own height over the floor. Its magnitude sets the view; its
+    // sign sets whether the picture is inverted.
+    let h  = 0.6 + bob * sin(t * 0.23);
+    let ha = max(abs(h), 0.12);
+
+    // A ray pitched down toward the floor; the horizon sits near the top.
+    let rd  = normalize(vec3(p.x, p.y - 0.62, -1.3));
+    let hit = step(rd.y, -0.002);
+    let s   = ha / max(-rd.y, 0.002);
+
+    // Floor position relative to the point under the centre of the view,
+    // turned slowly about that point.
+    let f0 = vec2(rd.x, rd.z) * s - vec2(0.0, -1.3 * ha / 0.62);
+    let fa = t * turn;
+    let fc = cos(fa);
+    let fs = sin(fa);
+    let f  = vec2(fc * f0.x - fs * f0.y, fs * f0.x + fc * f0.y);
+
+    let pulse = pow(0.5 + 0.5 * sin(t * 6.2831853 * 0.75), 6.0);
+
+    var c = vec3(0.0);
+    for k in 0..3 {
+      // Each layer grows eightfold over one cycle and fades in and out, so
+      // the three together zoom without end.
+      let fk  = float(k) / 3.0;
+      let ph  = fract(t * zoom + fk);
+      let cyc = floor(t * zoom + fk);
+      let sc  = dens * exp2(3.0 * (1.0 - ph));
+      let al  = sin(ph * 3.1415927);
+      let lh  = hash2(uint(cyc + 1000.0) * 3u + uint(k) + 17u);
+      let q   = f * sc + lh * 40.0;
+
+      // Nearest centre of two offset rectangular lattices is the hexagon's
+      // centre.
+      let hs = vec2(1.0, 1.7320508);
+      let ga = floor(q / hs) * hs + hs * 0.5;
+      let gb = floor((q - hs * 0.5) / hs) * hs + hs;
+      let da = q - ga;
+      let db = q - gb;
+      let cell = mix(ga, gb, vec2(step(dot(db, db), dot(da, da))));
+
+      // Outlines from this cell and the three neighbours nearest this point,
+      // because a large outline reaches into the next cell.
+      let o  = q - cell;
+      let jb = floor(atan2(o.y, o.x) / 1.0471976 + 0.5);
+      var acc = 0.0;
+      for n in 0..4 {
+        let na = (jb + float(n) - 2.0) * 1.0471976;
+        let cn = cell + sin(vec2(na + 1.5707963, na)) * step(0.5, float(n));
+        let hc = hash1(uint(round(cn.x * 2.0) + 4096.0) * 7919u
+                     + uint(round(cn.y * 1.1547005) + 4096.0) * 104729u + uint(cyc) * 131u);
+
+        // Size ripples outward from the middle in rings measured on the floor;
+        // small outlines are twisted furthest.
+        let rq  = length(cn - lh * 40.0) / sc;
+        let rad = 0.2 + 0.95 * (0.5 + 0.5 * sin(rq * 5.0 - t * 1.3 + hc * 0.8));
+        let ang = (1.2 - rad) * 2.6 + hc * 0.6;
+        let l   = q - cn;
+        let rs  = sin(vec2(ang + 1.5707963, ang));
+        let lr  = vec2(rs.x * l.x - rs.y * l.y, rs.y * l.x + rs.x * l.y);
+        let e   = max(dot(abs(lr), vec2(0.8660254, 0.5)), abs(lr.y));
+        let d   = abs(e - rad * 0.5);
+        let hot = exp(-abs(rad - 0.7) * 30.0) * pulse * flash;
+        acc += (1.0 - smoothstep(0.0, 0.03, d) + exp(-d * 18.0) * 0.25) * (1.0 + hot * 2.0);
+      }
+
+      let hue = hsv_to_rgb(vec3(lh.x, 0.9, 1.0));
+      c += hue * acc * al;
+    }
+
+    // Fade toward the horizon and a round vignette.
+    let fog = exp(-s * 0.13) * hit;
+    let vig = 1.0 - 0.45 * dot(p * vec2(0.55, 0.9), p * vec2(0.55, 0.9));
+    c = c * fog * vig * glow * 0.45;
+
+    // Below the floor the picture is its own negative.
+    let inv = smoothstep(0.04, -0.04, h);
+    c = mix(c, vec3(0.9) - min(c, vec3(0.9)), vec3(inv));
+
+    color = vec4(c, 1.0);
+  }
+}
