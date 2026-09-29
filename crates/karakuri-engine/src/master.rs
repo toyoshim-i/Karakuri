@@ -15,6 +15,8 @@ pub use crate::pass::{
 pub struct SlotSpec {
     pub procedure: String,
     pub cut: Option<Cut>,
+    /// Parameter values by addressable key: a scalar param's name, or one
+    /// component key per vector component (`glaze.x`, `glaze.y`, `glaze.z`).
     pub params: BTreeMap<String, f32>,
 }
 
@@ -63,6 +65,9 @@ impl fmt::Display for SlotError {
 
 /// One declared parameter of a chain slot, as a surface reads it: the key the
 /// procedure declares, the range it declares it over, and what the slot holds.
+///
+/// A vector param reads as one `SlotParam` per component, keyed by its component
+/// key (`glaze.x`, `glaze.y`, `glaze.z`), each over the declared per-component range.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SlotParam {
     pub key: String,
@@ -87,7 +92,8 @@ pub struct SlotReading {
     /// Whether the procedure declares `retains`, which is whether the slot has a
     /// cut to be set at all.
     pub retains: bool,
-    /// The declared parameters, in declaration order.
+    /// The declared parameters, in declaration order, vector params expanded
+    /// per component.
     pub params: Vec<SlotParam>,
 }
 
@@ -101,11 +107,14 @@ pub struct Slot {
     retains: bool,
     cut: Option<Cut>,
     params: BTreeMap<String, f32>,
-    /// Declared uniform parameter names, ranges, and defaults.
+    /// Declared addressable parameter keys, ranges, and defaults.
     declared: Vec<Declared>,
     ops_per_fragment: u32,
 }
 
+/// One addressable key of a slot's declared parameters: a scalar param's name, or
+/// one component key of a vector param (`glaze.x`), with the declared range and
+/// that component's declared default.
 pub struct Declared {
     pub name: String,
     pub min: f32,
@@ -179,11 +188,17 @@ impl Slot {
             declared: checked
                 .params
                 .iter()
-                .map(|p| Declared {
-                    name: p.name.clone(),
-                    min: p.min,
-                    max: p.max,
-                    default: p.default_scalar().unwrap_or(0.0),
+                .flat_map(|p| {
+                    let defaults = p.default_components().unwrap_or_default();
+                    p.keys()
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(i, name)| Declared {
+                            name,
+                            min: p.min,
+                            max: p.max,
+                            default: defaults.get(i).copied().unwrap_or(0.0),
+                        })
                 })
                 .collect(),
             ops_per_fragment,
@@ -225,7 +240,7 @@ impl Slot {
         self.ops_per_fragment
     }
 
-    /// Returns parameter values clamped to their declared ranges.
+    /// Returns parameter values by addressable key, clamped to their declared ranges.
     pub fn resolved(&self) -> BTreeMap<String, f32> {
         self.declared
             .iter()
@@ -249,17 +264,9 @@ impl Slot {
     /// Writes clock, viewport, and parameters into the slot's uniform buffer.
     fn write_uniform(&mut self, queue: &wgpu::Queue, clock: Clock, viewport: [f32; 2]) {
         let resolved = self.resolved();
-        let declared = &self.declared;
-        let params: Vec<(&str, f32)> = declared
-            .iter()
-            .map(|d| {
-                (
-                    d.name.as_str(),
-                    resolved.get(&d.name).copied().unwrap_or(d.default),
-                )
-            })
-            .collect();
-        self.pass.write_uniform(queue, clock, viewport, params);
+        let param = |key: &str| resolved.get(key).copied();
+        self.pass
+            .write_uniform(queue, clock, viewport, &param, None);
     }
 
     /// Updates only the clock portion of the slot's uniform buffer.

@@ -351,6 +351,8 @@ pub struct ImagePass {
     uniforms: wgpu::Buffer,
     uniform_layout: UniformLayout,
     scratch: UniformScratch,
+    /// Declared parameter names in declaration order, one per uniform field.
+    param_names: Vec<String>,
 }
 
 impl fmt::Debug for ImagePass {
@@ -369,6 +371,7 @@ impl ImagePass {
         pipeline: wgpu::RenderPipeline,
         uniforms: wgpu::Buffer,
         uniform_layout: UniformLayout,
+        param_names: Vec<String>,
     ) -> Self {
         let scratch = UniformScratch::new(&uniform_layout);
         Self {
@@ -377,6 +380,7 @@ impl ImagePass {
             uniforms,
             uniform_layout,
             scratch,
+            param_names,
         }
     }
 
@@ -510,6 +514,7 @@ impl ImagePass {
             pipeline,
             uniforms,
             shader.uniform_layout.clone(),
+            checked.params.iter().map(|p| p.name.clone()).collect(),
         );
         (pass, shader)
     }
@@ -548,13 +553,18 @@ impl ImagePass {
         })
     }
 
-    /// Pack and upload the uniform block: clock, viewport, and custom parameters.
-    pub fn write_uniform<'a>(
+    /// Pack and upload the uniform block: clock, viewport, and declared parameters.
+    ///
+    /// Parameters are packed by [`write_params`](crate::node::write_params): `param`
+    /// answers addressable keys (`amount`, `glaze.x`), `param_value` answers a whole
+    /// declared value by its bare name and takes precedence where it answers.
+    pub(crate) fn write_uniform(
         &mut self,
         queue: &wgpu::Queue,
         clock: Clock,
         viewport: [f32; 2],
-        params: impl IntoIterator<Item = (&'a str, f32)>,
+        param: &dyn Fn(&str) -> Option<f32>,
+        param_value: Option<crate::node::ParamValueLookup<'_>>,
     ) {
         let mut p = self.scratch.pack(&self.uniform_layout);
         p.f32("t", clock.t)
@@ -562,9 +572,13 @@ impl ImagePass {
             .f32("dt", clock.dt)
             .u32("seed_salt", clock.seed_salt)
             .vec2("viewport", viewport);
-        for (name, val) in params {
-            p.f32(name, val);
-        }
+        crate::node::write_params(
+            &mut p,
+            &self.uniform_layout,
+            &self.param_names,
+            param,
+            param_value,
+        );
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

@@ -323,7 +323,7 @@ impl Set {
                     &sampler,
                     Some(&format!("Set L5[{at}] bind")),
                 );
-                let param_keys = l5.params.iter().map(|p| p.name.clone()).collect();
+                let param_keys = declared_keys(l5);
                 nodes.push(crate::set::types::SetL5 {
                     name: l5.name.clone(),
                     pass,

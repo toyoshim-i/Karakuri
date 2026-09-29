@@ -17,3 +17,6 @@ mod cuts;
 
 #[path = "master/execution.rs"]
 mod execution;
+
+#[path = "master/vector_param.rs"]
+mod vector_param;
