@@ -1,0 +1,34 @@
+// Emissive light for `ribbon_chase`: bright ribbon rims, travelling stripes, a
+// hot head and a fading tail; stars as streaks that thin toward the tail.
+proc ribbon_chase_light {
+  kind L4
+  blend additive
+  consumes position, uv, tint, size
+
+  // Brightness of the ribbons and of the stars.
+  param glow  : float [0.0, 4.0] = 0.8
+  param stars : float [0.0, 4.0] = 1.5
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    let is_star = step(1.5, uv.x);
+    let a = clamp(uv.x, 0.0, 1.0);
+    let edge = abs(uv.y);
+
+    let fade = pow(1.0 - a, 1.6);
+    let rim = pow(edge, 5.0) * 1.8;
+    let stripe = pow(0.5 + 0.5 * cos(size * 6.2831853), 8.0) * 0.9;
+    let head = exp(-a * 40.0) * 3.0;
+    let white = vec3(head * 0.4);
+    let ribbon = (tint * (0.1 + rim + stripe + head) + white) * fade * glow;
+    let fog = exp(-length(position) * 0.012);
+
+    let star = tint * (1.0 - edge) * size * stars;
+
+    color = vec4(mix(ribbon * fog, star, vec3(is_star)), 1.0);
+  }
+}

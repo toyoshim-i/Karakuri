@@ -1,0 +1,11 @@
+{"t":"set","id":"ribbon_chase","v":1}
+{"t":"part","layer":"L1","path":"ribbon_chase.kir"}
+{"t":"part","layer":"L3","path":"tunnel_eye.kir"}
+{"t":"part","layer":"L4","path":"ribbon_chase_light.kir"}
+{"t":"part","layer":"L5","path":"bloom.kir"}
+{"t":"param","layer":"L3","key":"back","value":0.0}
+{"t":"param","layer":"L3","key":"reach","value":10.0}
+{"t":"param","layer":"L3","key":"wander","value":0.4}
+{"t":"param","layer":"L3","key":"sway","value":0.3}
+{"t":"param","layer":"L3","key":"lens","value":1.15}
+{"t":"param","layer":"L5","key":"amount","value":1.2}
