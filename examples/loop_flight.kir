@@ -1,0 +1,50 @@
+// A first-person camera flying a smooth closed loop through a large volume,
+// looking along its own path and banking into the curves, so the material
+// around it slides past and wheels about the viewer.
+//
+// The loop is a three-axis Lissajous figure with frequency ratio 1:2:3 about
+// the origin; the view points along the tangent and the bank follows the
+// sideways pull of the curve.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/cube_cosmos.kset
+//     cargo run -p karakuri-cli -- --load-set cube_cosmos
+
+proc loop_flight {
+  kind L3
+
+  // Half the width of the loop, in world units.
+  param span  : float [1.0, 60.0] = 16.0
+
+  // Loops per minute.
+  param pace  : float [0.0, 6.0] = 0.6
+
+  // How far the camera banks into a curve; 0 keeps the horizon level.
+  param bank  : float [0.0, 4.0] = 1.2
+
+  // Vertical field of view in radians.
+  param lens  : float [0.4, 2.2] = 1.1
+
+  camera {
+    let s  = t * pace / 60.0 * 6.2831853;
+    let ds = 0.01;
+    let p0 = vec3(sin(s), 0.45 * sin(2.0 * s + 0.7), cos(3.0 * s) * 0.8) * span;
+    let s1 = s + ds;
+    let p1 = vec3(sin(s1), 0.45 * sin(2.0 * s1 + 0.7), cos(3.0 * s1) * 0.8) * span;
+    let s2 = s + ds * 2.0;
+    let p2 = vec3(sin(s2), 0.45 * sin(2.0 * s2 + 0.7), cos(3.0 * s2) * 0.8) * span;
+
+    let fwd   = normalize(p1 - p0);
+    let right = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let top   = cross(right, fwd);
+
+    // Sideways pull of the path, per unit of span, as the bank angle.
+    let pull  = dot(p2 - 2.0 * p1 + p0, right) / (ds * ds * span);
+    let roll  = clamp(pull * bank * 0.3, -1.2, 1.2);
+
+    eye    = p0;
+    target = p0 + fwd;
+    up     = top * cos(roll) + right * sin(roll);
+    fov_y  = lens;
+    far    = span * 6.0;
+  }
+}

@@ -1,0 +1,13 @@
+{"t":"set","id":"hex_washer_tube","v":1}
+{"t":"part","layer":"L1","path":"hex_washer_tube.kir"}
+{"t":"part","layer":"L3","path":"wobble_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_faces.kir"}
+{"t":"part","layer":"L5","path":"bloom.kir"}
+{"t":"param","layer":"L5","key":"amount","value":1.5}
+{"t":"bind","layer":"L1","key":"glow","signal":"energy","curve":"pow2","range":[0.0,4.0]}
+{"t":"bind","layer":"L1","key":"along.x","signal":"band0","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"along.y","signal":"band2","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"along.z","signal":"band4","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"across.x","signal":"band1","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"across.y","signal":"band3","curve":"lin","range":[0.0,1.0]}
+{"t":"bind","layer":"L1","key":"across.z","signal":"band5","curve":"lin","range":[0.0,1.0]}

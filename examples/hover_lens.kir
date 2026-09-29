@@ -1,0 +1,35 @@
+// A camera hovering just above the origin, looking straight down the -y axis
+// through an extremely wide lens, so anything lifted toward it balloons and the
+// flat material around it streaks toward the frame edges. The up direction
+// rolls slowly from side to side and the aim trembles very slightly.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/burst_mesh.kset
+//     cargo run -p karakuri-cli -- --load-set burst_mesh
+
+proc hover_lens {
+  kind L3
+
+  // Height above the xz plane, in world units.
+  param height : float [0.1, 4.0] = 0.5
+
+  // Vertical field of view in radians.
+  param lens   : float [0.5, 3.0] = 2.9
+
+  // Largest roll either side, in radians.
+  param roll   : float [0.0, 1.5] = 0.35
+
+  // Tremble of the aim point, in world units.
+  param shake  : float [0.0, 0.05] = 0.004
+
+  camera {
+    let a = roll * sin(t * 0.37);
+    let j = vec3(sin(t * 23.0) + sin(t * 31.7), 0.0, cos(t * 19.3) + sin(t * 27.1)) * shake;
+
+    eye    = vec3(0.0, height, 0.0);
+    target = j;
+    up     = vec3(sin(a), 0.0, cos(a));
+    fov_y  = lens;
+    near   = 0.01;
+    far    = height + 20.0;
+  }
+}

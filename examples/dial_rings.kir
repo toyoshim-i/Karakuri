@@ -1,0 +1,111 @@
+// A square grid of round cells in fine line work, turning slowly as a whole
+// about a point a little off the centre. Each cell is a pair of concentric
+// members drawn as the edges of a triangle strip: an outer annulus, whose
+// strip shows short radial ticks between its rims, and an inner disc, whose
+// strip shows as a starburst of spokes.
+//
+// Each cell hears a level of its own, a random blend of two neighbouring
+// levels from `lows`, shaped by a steep curve. In silence the outer member is
+// a full-size thin ring and the inner one a speck; as the level rises the ring
+// thickens and pulls in while the disc swells. Lines are `ink` below `peak`
+// and the cell's own random hue above it, washing to white at the very top.
+//
+// Each cell is 160 strokes, 80 per member and 4 per strip step: element
+// `seed` is stroke `seed % 160` of cell `seed / 160`. A stroke runs from
+// `position` to `position - velocity`.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/dial_rings.kset
+//     cargo run -p karakuri-cli -- --load-set dial_rings
+
+proc dial_rings {
+  kind     L1
+  topology lines
+  capacity [16000, 409600] = 92160   // 24 * 24 cells * 160 strokes
+
+  // Distance between cell centres, and a cell's radius as a share of it.
+  param pitch  : float [0.05, 2.0] = 0.34
+  param fill   : float [0.1, 0.6] = 0.46
+
+  // Turns per minute of the whole grid, about `pivot` in the plane.
+  param turn   : float [-6.0, 6.0] = 0.6
+  param pivot  : vec2 [-2.0, 2.0] = vec2(0.35, -0.2)
+
+  // Exponent of the level curve; higher keeps more cells at rest.
+  param curve  : float [1.0, 8.0] = 3.0
+
+  // Level above which a cell's lines take its colour, and the line colour below it.
+  param peak   : float [0.0, 1.0] = 0.6
+  param ink    : float [0.0, 1.0] = 0.0
+
+  // Three levels in 0..1 from the low half of the spectrum.
+  param lows   : vec3 [0.0, 1.0] = vec3(0.55, 0.5, 0.45)
+
+  emit position, velocity, tint
+
+  element {
+    let cell   = seed / 160u;
+    let stroke = seed % 160u;
+    let member = stroke / 80u;
+    let piece  = (stroke % 80u) / 4u;
+    let edge   = stroke % 4u;
+
+    // The cell's place in the square grid.
+    let side = uint(max(floor(sqrt(float(capacity / 160u))), 1.0));
+    let gx   = float(cell % side) - (float(side) - 1.0) * 0.5;
+    let gy   = float(cell / side) - (float(side) - 1.0) * 0.5;
+
+    // The cell's level: a random blend of two neighbouring lows, then the curve.
+    let hr    = hash3(cell * 7u + 1u);
+    let pick  = hr.x * 2.0;
+    let raw   = mix(mix(lows.x, lows.y, min(pick, 1.0)), lows.z, max(pick - 1.0, 0.0));
+    let lv    = clamp(mix(raw, mix(lows.x, lows.z, hr.y), 0.25), 0.0, 1.0);
+    let e     = pow(lv, curve);
+
+    // Radii of this member: 0 is the annulus, 1 is the disc.
+    let cr  = pitch * fill;
+    var ro  = cr * (1.0 - 0.4 * e);
+    var ri  = ro * (0.93 - 0.55 * e);
+    if member == 1u {
+      ro = cr * (0.07 + 0.62 * e);
+      ri = 0.0;
+    }
+
+    // Strip step `piece` of 20: edge 0 runs the outer rim, 1 the inner rim,
+    // 2 the radial tick at the step's start, 3 the strip's diagonal.
+    let a0 = float(piece) / 20.0 * 6.2831853;
+    let a1 = float(piece + 1u) / 20.0 * 6.2831853;
+    let d0 = vec2(cos(a0), sin(a0));
+    let d1 = vec2(cos(a1), sin(a1));
+    var pa = d0 * ro;
+    var pb = d1 * ro;
+    if edge == 1u {
+      pa = d0 * ri;
+      pb = d1 * ri;
+    }
+    if edge == 2u {
+      pb = d0 * ri;
+    }
+    if edge == 3u {
+      pb = d1 * ri;
+    }
+
+    // The whole grid turns about the pivot.
+    let ang  = t * turn / 60.0 * 6.2831853;
+    let cs   = cos(ang);
+    let sn   = sin(ang);
+    let cen  = vec2(gx, gy) * pitch - pivot;
+    let wa   = cen + pa;
+    let wb   = cen + pb;
+    let ra   = vec2(wa.x * cs - wa.y * sn, wa.x * sn + wa.y * cs) + pivot;
+    let rb   = vec2(wb.x * cs - wb.y * sn, wb.x * sn + wb.y * cs) + pivot;
+
+    // Ink below the peak; the cell's hue above it, washing to white at the top.
+    let hot  = step(peak, lv);
+    let wash = smoothstep(0.9, 1.0, lv);
+    let hue  = hsv_to_rgb(vec3(hr.z, 1.0 - wash, 1.0));
+
+    position = vec3(ra, 0.0);
+    velocity = vec3(ra - rb, 0.0);
+    tint     = mix(vec3(ink), hue, vec3(hot));
+  }
+}

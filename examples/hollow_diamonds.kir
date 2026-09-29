@@ -1,0 +1,40 @@
+// Additive hollow diamonds: a square ring stood on its corner, of world width
+// `size` corner to corner, coloured by `tint`. The hole is a fraction of the
+// outline, so a small marker is a small ring rather than a dot.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/diamond_ripples.kset
+//     cargo run -p karakuri-cli -- --load-set diamond_ripples
+
+proc hollow_diamonds {
+  kind  L4
+  blend additive
+
+  consumes position, tint, size
+
+  // Multiplier on every marker's width.
+  param scale    : float [0.0, 4.0] = 1.0
+
+  // Size of the hole as a fraction of the outline; 0 is a filled diamond.
+  param hole     : float [0.0, 0.95] = 0.5
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    let c  = camera * vec4(position, 1.0);
+    let cu = camera * vec4(position + vec3(0.0, size * scale, 0.0), 1.0);
+
+    clip       = c;
+    point_rate = abs(cu.y / cu.w - c.y / c.w);
+  }
+
+  fragment {
+    // Distance in the diamond metric: 1 on the outline, 0 at the centre.
+    let q = abs(point_coord * 2.0 - 1.0);
+    let d = q.x + q.y;
+    let w = max(fwidth(d), 0.001);
+    let a = smoothstep(hole - w, hole + w, d) * (1.0 - smoothstep(1.0 - w, 1.0 + w, d));
+
+    color = vec4(tint * exposure, a);
+  }
+}

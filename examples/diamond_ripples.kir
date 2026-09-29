@@ -1,0 +1,109 @@
+// A square grid of markers filling the xy plane edge to edge, sized by ripples
+// from twenty-four hidden sources, three per band. Each sits at a fixed hashed
+// place with its own hue and, on every beat, sends a ring outward carrying its
+// band's level, like raindrops on a pond. A marker blends its nearby sources by
+// inverse distance, so neighbouring ripples interfere. Size responds steeply, so
+// only loud sound makes big markers, and a marker past `loud` jumps a third of
+// the way round the colour wheel to full brightness. Emits `size` as a world
+// side length and `tint`; meant for `flat_eye` at its default frame, whose view
+// spans about [-1.96, 1.96] x [-1.1, 1.1] at 16:9.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/diamond_ripples.kset
+//     cargo run -p karakuri-cli -- --load-set diamond_ripples
+
+proc diamond_ripples {
+  kind     L1
+  topology points
+
+  // Rows are floor(sqrt(capacity * 9 / 16)) and columns fill the rest, so the
+  // grid keeps square cells at 16:9.
+  capacity [576, 16384] = 3600
+
+  // Ring travel per beat, in world units.
+  param reach  : float [0.1, 4.0] = 1.2
+
+  // Exponent on the blended level; higher is steeper.
+  param steep  : float [1.0, 6.0] = 3.0
+
+  // Size at full level, in cells; above 1 neighbours overlap.
+  param grow   : float [0.0, 2.0] = 1.3
+
+  // Blended size, in cells, past which a marker flashes in the contrasting hue.
+  param loud   : float [0.0, 2.0] = 0.75
+
+  // Turns of the palette per second.
+  param drift  : float [0.0, 0.2] = 0.02
+
+  // Levels of the eight bands.
+  param level0 : float [0.0, 1.0] = 0.85
+  param level1 : float [0.0, 1.0] = 0.7
+  param level2 : float [0.0, 1.0] = 0.6
+  param level3 : float [0.0, 1.0] = 0.55
+  param level4 : float [0.0, 1.0] = 0.5
+  param level5 : float [0.0, 1.0] = 0.45
+  param level6 : float [0.0, 1.0] = 0.4
+  param level7 : float [0.0, 1.0] = 0.35
+
+  emit position, tint, size
+
+  element {
+    let rows = uint(floor(sqrt(float(capacity) * 0.5625)));
+    let cols = capacity / rows;
+    let cell = 2.2 / float(rows);
+    let ix   = seed % cols;
+    let iy   = seed / cols;
+    let p    = vec2((float(ix) + 0.5 - float(cols) * 0.5) * cell,
+                    (float(iy) + 0.5 - float(rows) * 0.5) * cell);
+
+    // Beat phase: 0 as a ring leaves its source, 1 as the next one does.
+    let ph = fract(max(beats, 0.0));
+
+    var wsum = 0.0;
+    var asum = 0.0;
+    var hsum = 0.0;
+    for b in 0..8 {
+      let bf = float(b);
+
+      // Level of band b: weight 1 at level b and 0 at every other.
+      let lv = level0 * max(0.0, 1.0 - abs(bf))
+             + level1 * max(0.0, 1.0 - abs(bf - 1.0))
+             + level2 * max(0.0, 1.0 - abs(bf - 2.0))
+             + level3 * max(0.0, 1.0 - abs(bf - 3.0))
+             + level4 * max(0.0, 1.0 - abs(bf - 4.0))
+             + level5 * max(0.0, 1.0 - abs(bf - 5.0))
+             + level6 * max(0.0, 1.0 - abs(bf - 6.0))
+             + level7 * max(0.0, 1.0 - abs(bf - 7.0));
+
+      // Three sources per band.
+      for k in 0..3 {
+        let hs  = hash3(uint(b * 3 + k) * 7919u + 101u);
+        let src = vec2((hs.x * 2.0 - 1.0) * 1.9, (hs.y * 2.0 - 1.0) * 1.05);
+        let d   = distance(p, src);
+
+        // This beat's ring, fading as it spreads, over a quieter swell that
+        // stays on the source.
+        let e    = (d - ph * reach) * 8.0;
+        let ring = (1.0 - 0.5 * ph) / (1.0 + e * e);
+        let amp  = lv * (0.35 / (1.0 + d * d * 25.0) + ring);
+
+        let w = 1.0 / (d * d + 0.25);
+        wsum += w;
+        asum += w * amp;
+        hsum += w * hs.z;
+      }
+    }
+
+    let blend = asum / wsum;
+    let s     = min(pow(blend * 3.2, steep) * grow, grow);
+    let hot   = step(loud, s);
+
+    // The region's hue: its sources' hues squeezed into a fifth of the wheel,
+    // turning slowly, and a third of a turn away on a peak.
+    let hue = fract(t * drift + (hsum / wsum) * 0.2 + hot * 0.3333);
+    let val = 0.5 + 0.5 * hot;
+
+    position = vec3(p, 0.0);
+    size     = s * cell;
+    tint     = hsv_to_rgb(vec3(hue, 0.85, 1.0)) * val;
+  }
+}

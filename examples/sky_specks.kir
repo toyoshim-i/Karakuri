@@ -1,0 +1,58 @@
+// A thin field of tiny grey stars at infinity: each star is fixed to a
+// direction, so it turns with the camera and never comes closer. Draws the
+// whole frame and reads no geometry; under an opaque renderer it sits behind
+// the material.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/cube_cosmos.kset
+//     cargo run -p karakuri-cli -- --load-set cube_cosmos
+
+proc sky_specks {
+  kind  L4
+  blend additive
+
+  // Cells per face of the direction cube; each cell holds at most one star.
+  param density : float [8.0, 200.0] = 70.0
+
+  // Share of cells that hold a star.
+  param fill    : float [0.0, 1.0] = 0.35
+
+  // Radius of a star as a share of its cell.
+  param speck   : float [0.02, 0.5] = 0.09
+
+  // Brightness of the brightest star.
+  param level   : float [0.0, 4.0] = 0.8
+
+  fragment {
+    // The direction on the face of a cube, picked by its largest axis.
+    let a = abs(ray);
+    var f    = 0u;
+    var fc   = ray.yz / a.x;
+    var lead = ray.x;
+    if a.y >= a.x && a.y >= a.z {
+      f    = 1u;
+      fc   = ray.zx / a.y;
+      lead = ray.y;
+    }
+    if a.z >= a.x && a.z >= a.y {
+      f    = 2u;
+      fc   = ray.xy / a.z;
+      lead = ray.z;
+    }
+    var side = 0u;
+    if lead < 0.0 {
+      side = 1u;
+    }
+
+    let g    = (fc * 0.5 + vec2(0.5)) * density;
+    let cell = floor(g);
+    let key  = (uint(cell.x) * 977u + uint(cell.y)) * 7u + f * 2u + side;
+    let r    = hash3(key);
+    let at   = vec2(0.2) + r.xy * 0.6;
+    let d    = length(g - cell - at);
+    let spot = 1.0 - smoothstep(speck * 0.4, speck, d);
+    let on   = step(1.0 - fill, hash1(key + 5u));
+    let grey = level * r.z * r.z;
+
+    color = vec4(vec3(grey * spot * on), 1.0);
+  }
+}

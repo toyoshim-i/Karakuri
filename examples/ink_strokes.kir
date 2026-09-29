@@ -1,0 +1,30 @@
+// Hard-edged opaque strokes, each from `position` to `position - velocity`
+// in the element's own `tint`. Depth-tested and opaque, so a stroke can be
+// darker than what lies behind it: line work in ink on a light backdrop drawn
+// after it.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/dial_rings.kset
+//     cargo run -p karakuri-cli -- --load-set dial_rings
+
+proc ink_strokes {
+  kind  L4
+  blend opaque
+
+  consumes position, velocity, tint
+
+  // Stroke width as a fraction of the frame's height.
+  param width    : float [0.0005, 0.02] = 0.0016
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position - velocity, 1.0);
+    point_rate = width;
+  }
+
+  fragment {
+    color = vec4(tint * exposure, 1.0);
+  }
+}

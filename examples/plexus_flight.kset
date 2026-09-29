@@ -1,0 +1,6 @@
+{"t":"set","id":"plexus_flight","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"plexus_flight.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"rise","signal":"band4","curve":"sqrt","range":[0.05,0.6]}
+{"t":"bind","layer":"L4","key":"spark","signal":"audio.onset","curve":"pow2","range":[0.8,2.5]}

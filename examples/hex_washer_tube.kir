@@ -1,0 +1,113 @@
+// A short tapering tube lined with a staggered honeycomb of flat hexagonal
+// washers, each facing the tube's axis. The tube runs from its open near rim
+// at z = 0 down negative z, narrowing as it goes.
+//
+// Sound opens the washers: a quiet cell is a nearly solid hexagon and a loud
+// one thins to a hex outline and swells. Each cell reads two levels, one by
+// its row down the tube and one by its column around it, mirrored left to
+// right, and flickers between the two on alternate steps; the flicker fades in
+// over the first seconds. Columns take one of four hues in a mirrored
+// sequence and the palette turns slowly; colour is saturated at the far end
+// and washes to white toward the near rim. `glow` is the overall brightness
+// and is meant to be driven steeply by loudness.
+//
+// Each washer is 12 triangles, 36 elements: element `seed` is corner
+// `seed % 3` of triangle `(seed % 36) / 3` of cell `seed / 36`.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/hex_washer_tube.kset
+//     cargo run -p karakuri-cli -- --load-set hex_washer_tube
+
+proc hex_washer_tube {
+  kind     L1
+  topology triangles
+  capacity [2592, 145152] = 36288   // 36 around * 28 rows * 36 corners
+
+  // Cells around the tube; the row count is what the capacity leaves.
+  param around : float [6.0, 96.0] = 36.0
+
+  // Radius of the near rim, and how much narrower the far end is, 0..1.
+  param radius : float [0.2, 10.0] = 2.0
+  param taper  : float [0.0, 0.95] = 0.45
+
+  // Hole size of a quiet cell and of a loud one, as a share of the hexagon.
+  param shut   : float [0.0, 1.0] = 0.12
+  param open   : float [0.0, 1.0] = 0.85
+
+  // Hue of the first column, how far apart the four hues sit, and turns per
+  // minute the palette rotates.
+  param hue    : float [0.0, 1.0] = 0.72
+  param spacing : float [0.0, 0.25] = 0.06
+  param cycle  : float [-4.0, 4.0] = 0.15
+
+  // Overall brightness, and levels in 0..1 near to far and centre to side.
+  param glow   : float [0.0, 8.0] = 1.5
+  param along  : vec3 [0.0, 1.0] = vec3(0.6, 0.5, 0.4)
+  param across : vec3 [0.0, 1.0] = vec3(0.6, 0.5, 0.4)
+
+  emit position, tint
+
+  element {
+    let cell   = seed / 36u;
+    let rem    = seed % 36u;
+    let side   = rem / 6u;
+    let tri    = (rem % 6u) / 3u;
+    let corner = rem % 3u;
+
+    let na   = uint(max(around, 1.0));
+    let nr   = uint(max(float((capacity / 36u) / na), 1.0));
+    let col  = cell % na;
+    let row  = cell / na;
+    let fa   = float(col);
+    let fr   = float(row);
+    let deep = fr / max(float(nr) - 1.0, 1.0);
+
+    // The two levels: by row, near (0) to far (2); by column, mirrored so the
+    // tube's top is 0 and its bottom is 2.
+    let ur    = deep * 2.0;
+    let by_row = mix(mix(along.x, along.y, min(ur, 1.0)), along.z, max(ur - 1.0, 0.0));
+    let half  = float(na) * 0.5;
+    let uc    = abs(fa - half + 0.5) / half * 2.0;
+    let by_col = mix(mix(across.x, across.y, min(uc, 1.0)), across.z, max(uc - 1.0, 0.0));
+
+    let tick  = uint(t / dt + 0.5);
+    var flick = by_row;
+    if tick % 2u == 1u {
+      flick = by_col;
+    }
+    let level = mix((by_row + by_col) * 0.5, flick, smoothstep(0.0, 4.0, t));
+
+    // Where the cell sits: staggered by half a cell on odd rows.
+    let ring  = radius * (1.0 - taper * deep);
+    let width = 6.2831853 * radius / float(na);
+    let theta = (fa + 0.5 * float(row % 2u)) / float(na) * 6.2831853;
+    let z0    = -width * 0.8660254 * fr * (1.0 - taper * deep * 0.5);
+    let axisr = vec3(cos(theta), sin(theta), 0.0);
+    let tang  = vec3(-sin(theta), cos(theta), 0.0);
+    let centre = axisr * ring + vec3(0.0, 0.0, z0);
+
+    // The washer's corner: outer corners k and k+1, inner corners k and k+1.
+    let outer = width * 0.5773503 * (1.0 - taper * deep) * mix(0.6, 1.0, level);
+    let inner = outer * mix(shut, open, level);
+    let k0    = float(side) * 1.0471976 + 0.5235988;
+    let k1    = k0 + 1.0471976;
+    var ang = k0;
+    var rad = outer;
+    if tri == 0u {
+      if corner == 1u { ang = k1; }
+      if corner == 2u { ang = k1; rad = inner; }
+    } else {
+      if corner == 1u { ang = k1; rad = inner; }
+      if corner == 2u { rad = inner; }
+    }
+    let local = (tang * cos(ang) + vec3(0.0, 0.0, sin(ang))) * rad;
+
+    // Colour: four hues in a mirrored run around the tube, white near the rim.
+    let slot  = uint(abs(fa - half + 0.5)) % 4u;
+    let h     = fract(hue + spacing * float(slot) + cycle * t / 60.0);
+    let sat   = mix(0.08, 0.9, pow(deep, 0.6));
+    let c     = hsv_to_rgb(vec3(h, sat, 1.0)) * (0.04 + glow * level * level);
+
+    position = centre + local;
+    tint     = c;
+  }
+}

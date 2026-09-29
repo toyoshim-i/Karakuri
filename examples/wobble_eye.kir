@@ -1,0 +1,35 @@
+// A wide-angle camera at the mouth of a tube looking down negative z. The eye
+// and the aim point each sway on their own slow wobbles and the up direction
+// rocks, so the far end wanders about the frame and tilts; the camera never
+// travels along the tube.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/hex_washer_tube.kset
+//     cargo run -p karakuri-cli -- --load-set hex_washer_tube
+
+proc wobble_eye {
+  kind L3
+
+  // Where on the z axis the eye rests, and how far ahead it aims.
+  param back  : float [-10.0, 10.0] = 0.6
+  param reach : float [1.0, 40.0] = 8.0
+
+  // Largest sideways sway of the eye and of the aim point, in world units.
+  param sway  : float [0.0, 4.0] = 0.5
+  param drift : float [0.0, 8.0] = 2.0
+
+  // Largest roll of the up direction in radians, and the wobble rate.
+  param rock  : float [0.0, 1.5] = 0.25
+  param rate  : float [0.0, 2.0] = 0.2
+
+  // Vertical field of view in radians; wide is the point.
+  param lens  : float [0.6, 2.6] = 1.9
+
+  camera {
+    let s = t * rate;
+    eye    = vec3(sin(s * 1.13) * sway, sin(s * 0.79 + 1.3) * sway, back);
+    target = vec3(sin(s * 0.61 + 2.1) * drift, sin(s * 0.93 + 0.4) * drift, back - reach);
+    let roll = sin(s * 0.53 + 0.9) * rock;
+    up     = vec3(-sin(roll), cos(roll), 0.0);
+    fov_y  = lens;
+  }
+}

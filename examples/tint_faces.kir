@@ -1,0 +1,25 @@
+// Unlit faces in their own colour: each triangle is filled with the `tint`
+// its corners carry, depth-tested and opaque. For emissive tiles and panels
+// whose brightness is decided by the geometry; a `tint` above 1 feeds a bloom.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/hex_washer_tube.kset
+//     cargo run -p karakuri-cli -- --load-set hex_washer_tube
+
+proc tint_faces {
+  kind  L4
+  blend opaque
+
+  consumes position, tint
+
+  // Brightness multiplier on `tint`.
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    color = vec4(tint * exposure, 1.0);
+  }
+}

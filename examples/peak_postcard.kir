@@ -1,0 +1,115 @@
+// A synthwave postcard of a snow-capped volcano. A magenta grid floor rushes
+// toward the viewer under a pale fog band on the horizon; a striped sun graded
+// from magenta to orange hangs to the upper left in a pink bloom, its stripes
+// scrolling up through its lower half; to the right stands the mountain, a
+// concave-flanked trapezoid fading from navy to hot pink, capped with pale
+// snow whose lower edge ripples sideways and traced with a thin pale outline.
+// Two flat scroll-style clouds, each two rounded bars joined by a rounded
+// block, drift sideways across the middle and slowly breathe. Draws the whole
+// frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/peak_postcard.kir --capacity 256
+
+proc peak_postcard {
+  kind  L4
+  blend additive
+
+  // Speed of the floor toward the viewer, in grid cells per second.
+  param speed : float [0.0, 6.0] = 1.2
+
+  // Sideways drift of the clouds, in frame half-heights per second.
+  param drift : float [0.0, 0.5] = 0.07
+
+  // Height of the ripple along the snow line, as a fraction of the mountain's
+  // height.
+  param snow  : float [0.0, 0.1] = 0.035
+
+  // Scroll rate of the sun's stripes, in stripes per second.
+  param bands : float [0.0, 2.0] = 0.3
+
+  // Brightness of the grid and the horizon fog, meant for a level signal.
+  param glow  : float [0.0, 3.0] = 1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let navy = vec3(0.012, 0.014, 0.09);
+    let pink = vec3(1.0, 0.1, 0.45);
+    let pale = vec3(1.0, 0.72, 0.86);
+    let hy   = p.y + 0.3;
+
+    // Sky: black, deepening to navy overhead, with a pink glow off the horizon.
+    var c = navy * smoothstep(0.4, 1.3, hy) + pink * exp(-max(hy, 0.0) * 5.0) * 0.35;
+
+    // Sun: magenta at the base to orange at the crown, cut by black stripes
+    // over its lower half that widen as they descend and scroll upward.
+    let sp  = p - vec2(-0.82, 0.38);
+    let sr  = length(sp);
+    let sv  = sp.y / 0.36;
+    let sun = mix(vec3(0.95, 0.03, 0.42), vec3(0.95, 0.24, 0.02), vec3(smoothstep(-0.9, 0.8, sv)));
+    let gap = clamp((0.15 - sv) * 0.3, 0.0, 0.5);
+    let cut = step(gap, fract(sv * 5.0 - t * bands));
+    let disc = 1.0 - smoothstep(0.356, 0.364, sr);
+    c = mix(c, sun * cut, vec3(disc));
+    c += vec3(1.0, 0.15, 0.5) * exp(-max(sr - 0.36, 0.0) * 6.0) * 0.3 * (1.0 - disc);
+
+    // The mountain: half-width narrows from the base to the summit along a
+    // concave curve.
+    let mx  = abs(p.x - 0.72);
+    let yn  = hy / 0.64;
+    let fl  = 1.0 - clamp(yn, 0.0, 1.0);
+    let hw  = 0.19 + 0.8 * fl * fl;
+    let inm = step(0.0, yn) * (1.0 - smoothstep(-0.003, 0.003, mx - hw)) * (1.0 - smoothstep(0.997, 1.003, yn));
+    let body = mix(navy * 1.6, pink * 0.75, vec3(pow(clamp(yn, 0.0, 1.0), 1.4)));
+
+    // Snow cap, its lower edge a wave that ripples sideways.
+    let sl   = 0.74 + snow * (sin(p.x * 30.0 - t * 1.4) + 0.5 * sin(p.x * 57.0 + t * 2.1));
+    let capw = smoothstep(sl - 0.004, sl + 0.004, yn);
+    let face = mix(body, pale * 0.85, vec3(capw));
+    c = mix(c, face, vec3(inm));
+
+    // Outline: the two flanks and the flat summit.
+    let side  = abs(mx - hw) * step(0.0, yn) * 1.0 + (1.0 - step(0.0, yn)) + step(1.0, yn);
+    let top   = abs(yn - 1.0) * 0.64 + step(0.19, mx);
+    let edge  = min(side, top);
+    c += pale * (1.0 - smoothstep(0.0015, 0.0045, edge)) * 0.9;
+
+    // Clouds: two flat scroll shapes drifting sideways and wrapping around.
+    for i in 0..2 {
+      let fi  = float(i);
+      let cx  = mod(-0.4 + fi * 2.1 + t * drift * (1.0 + fi * 0.4) + 2.4, 4.8) - 2.4;
+      let cy  = 0.06 + fi * 0.4;
+      let la  = 0.3 + 0.07 * sin(t * 0.37 + fi * 2.0);
+      let lb  = 0.2 + 0.06 * sin(t * 0.51 + fi * 3.0 + 1.0);
+      let da  = length(vec2(max(abs(p.x - cx + 0.1) - la, 0.0), p.y - cy - 0.05)) - 0.034;
+      let db  = length(vec2(max(abs(p.x - cx - 0.12) - lb, 0.0), p.y - cy + 0.04)) - 0.034;
+      let bq  = abs(p - vec2(cx + 0.02, cy + 0.005)) - vec2(0.13, 0.055) + vec2(0.035);
+      let dk  = length(max(bq, vec2(0.0))) + min(max(bq.x, bq.y), 0.0) - 0.035;
+      let d   = min(min(da, db), dk);
+      let fill = 1.0 - smoothstep(-0.002, 0.002, d);
+      c = mix(c, navy, vec3(fill));
+      c += vec3(1.0) * (1.0 - smoothstep(0.0015, 0.0045, abs(d))) * 0.8;
+    }
+
+    // Floor: depth goes as the inverse of the distance below the horizon, and
+    // the lines have a fixed width on the ground, so they are thin and crisp
+    // toward the horizon and thick up close.
+    let below = max(-hy, 0.0001);
+    let z   = 0.32 / below;
+    let lx  = 0.5 - abs(fract(p.x * z) - 0.5);
+    let lz  = 0.5 - abs(fract(z + t * speed) - 0.5);
+    let grid = (exp(-lx * 38.0) + exp(-lz * 38.0)) * exp(-z * 0.15) * glow;
+    let flo  = vec3(0.004, 0.0, 0.01) + vec3(1.0, 0.08, 0.55) * grid * 1.2;
+    c = mix(c, flo, vec3(1.0 - step(0.0, hy)));
+
+    // Pale fog band sitting on the horizon.
+    c += pale * exp(-abs(hy) * 28.0) * 0.55 * glow;
+
+    color = vec4(c, 1.0);
+  }
+}

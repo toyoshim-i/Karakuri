@@ -1,0 +1,76 @@
+// Solid faceted material lit by one point lamp: each face is shaded flat by
+// the lamp's direction, carries a sharp white specular glint seen from the
+// camera, and fades into a haze colour with distance from the camera.
+// Depth-tested and opaque, for `topology triangles` geometry.
+//
+// Reads `tint` as the face colour, linear and unbounded: a value above 1 is a
+// face that burns and feeds a bloom downstream.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/cube_cosmos.kset
+//     cargo run -p karakuri-cli -- --load-set cube_cosmos
+
+proc lamp_facets {
+  kind  L4
+  blend opaque
+
+  consumes position, tint
+
+  // World position of the lamp.
+  param lamp     : vec3 [-20.0, 20.0] = vec3(0.0, 0.0, 0.0)
+
+  // Share of the colour that stays on faces turned away from the lamp.
+  param ambient  : float [0.0, 1.0] = 0.06
+
+  // Strength of the specular glint, and its sharpness as a Blinn-Phong exponent.
+  param glint    : float [0.0, 8.0] = 1.5
+  param shine    : float [2.0, 256.0] = 60.0
+
+  // Distance from the camera at which a face has faded half-way into the haze;
+  // the top of the range leaves faces all but unfogged.
+  param fog      : float [1.0, 400.0] = 18.0
+
+  // Colour the far faces fade into, linear RGB.
+  param haze     : vec3 [0.0, 1.0] = vec3(0.0, 0.0, 0.0)
+
+  // Overall brightness.
+  param exposure : float [0.0, 4.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    // The camera's world position, recovered from the view-projection matrix:
+    // the eye is the one point that projects to clip x = y = w = 0, so it
+    // solves the 3x3 system formed by rows 0, 1 and 3.
+    let c0 = camera * vec4(1.0, 0.0, 0.0, 0.0);
+    let c1 = camera * vec4(0.0, 1.0, 0.0, 0.0);
+    let c2 = camera * vec4(0.0, 0.0, 1.0, 0.0);
+    let c3 = camera * vec4(0.0, 0.0, 0.0, 1.0);
+    let r0 = vec3(c0.x, c1.x, c2.x);
+    let r1 = vec3(c0.y, c1.y, c2.y);
+    let r3 = vec3(c0.w, c1.w, c2.w);
+    let k13 = cross(r1, r3);
+    let eye_at = -(c3.x * k13 + c3.y * cross(r3, r0) + c3.w * cross(r0, r1)) / dot(r0, k13);
+
+    // The flat normal, turned to face the camera.
+    let to_eye = eye_at - position;
+    var n = flat_normal(position);
+    if dot(n, to_eye) < 0.0 {
+      n = -n;
+    }
+
+    let v    = normalize(to_eye);
+    let l    = normalize(lamp - position);
+    let diff = max(dot(n, l), 0.0);
+    let h    = normalize(l + v);
+    let spec = pow(max(dot(n, h), 0.0), shine) * glint * step(0.0, dot(n, l));
+
+    let lit  = tint * (ambient + (1.0 - ambient) * diff) + vec3(spec);
+    let dist = length(to_eye);
+    let keep = 1.0 / (1.0 + (dist / fog) * (dist / fog));
+
+    color = vec4(mix(haze, lit, vec3(keep)) * exposure, 1.0);
+  }
+}

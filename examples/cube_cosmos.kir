@@ -1,0 +1,96 @@
+// A few thousand solid cubes scattered through a large open volume, each at a
+// fixed random spot, each tumbling about two axes on its own phase. Every cube
+// listens to one of six sound levels picked at random: a quiet cube sits small,
+// a louder one grows, and past a threshold it jumps to a much larger size, its
+// hue steps round and its colour burns far above 1 for a bloom to catch. All
+// cubes share one saturated hue that drifts slowly round the wheel.
+//
+// Each cube is 12 triangles, 36 elements: element `seed` is corner `seed % 3`
+// of triangle `(seed % 36) / 3` of cube `seed / 36`.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/cube_cosmos.kset
+//     cargo run -p karakuri-cli -- --load-set cube_cosmos
+
+proc cube_cosmos {
+  kind     L1
+  topology triangles
+  capacity [9216, 294912] = 73728   // 2048 cubes * 36 corners
+
+  // Half the side of the cubic volume the cubes are scattered through.
+  param spread  : float [2.0, 80.0] = 26.0
+
+  // Edge length of a cube at rest.
+  param cube    : float [0.02, 2.0] = 0.28
+
+  // Tumble rate in turns per second, about the two axes.
+  param tumble  : float [0.0, 2.0] = 0.12
+
+  // Hue at the start, and how many turns round the wheel it drifts per minute.
+  param hue     : float [0.0, 1.0] = 0.5
+  param drift   : float [-1.0, 1.0] = 0.05
+
+  // Level above which a cube jumps: grows by `burst`, steps its hue and burns.
+  param peak    : float [0.0, 1.0] = 0.7
+  param burst   : float [1.0, 6.0] = 2.6
+
+  // Six sound levels in 0..1; each cube listens to one of them.
+  param low     : vec3 [0.0, 1.0] = vec3(0.3, 0.3, 0.3)
+  param high    : vec3 [0.0, 1.0] = vec3(0.3, 0.3, 0.3)
+
+  emit position, tint
+
+  element {
+    let body   = seed / 36u;
+    let rem    = seed % 36u;
+    let face   = rem / 6u;
+    let tri    = (rem % 6u) / 3u;
+    let corner = rem % 3u;
+
+    // The corner on the face square, u and v in {-1, 1}: triangle 0 is
+    // corners 0,1,2 of the square and triangle 1 is corners 0,2,3.
+    var q = corner;
+    if tri == 1u && corner > 0u {
+      q = corner + 1u;
+    }
+    var u = -1.0;
+    var v = -1.0;
+    if q == 1u || q == 2u {
+      u = 1.0;
+    }
+    if q >= 2u {
+      v = 1.0;
+    }
+    let side = float(face % 2u) * 2.0 - 1.0;
+    var local = vec3(side, u, v);
+    if face / 2u == 1u {
+      local = vec3(v, side, u);
+    }
+    if face / 2u == 2u {
+      local = vec3(u, v, side);
+    }
+
+    // Which of the six levels this cube hears.
+    let pick = uint(hash1(body * 3u + 1u) * 6.0);
+    var level = low.x;
+    if pick == 1u { level = low.y; }
+    if pick == 2u { level = low.z; }
+    if pick == 3u { level = high.x; }
+    if pick == 4u { level = high.y; }
+    if pick == 5u { level = high.z; }
+
+    let hot   = step(peak, level);
+    let scale = cube * (0.35 + 1.3 * level) * (1.0 + (burst - 1.0) * hot);
+
+    let home  = (hash3(body * 3u + 2u) * 2.0 - vec3(1.0)) * spread;
+    let phase = hash2(body * 3u + 3u) * 6.2831853;
+    let turn  = t * tumble * 6.2831853;
+    let p     = rot_y(rot_x(local * 0.5 * scale, turn + phase.x), turn * 0.73 + phase.y);
+
+    let h    = fract(hue + drift * t / 60.0 + hot * 0.12);
+    let glow = 0.8 + 7.0 * hot * level;
+    let c    = hsv_to_rgb(vec3(h, 0.9 - 0.5 * hot, 0.85));
+
+    position = home + p;
+    tint     = c * glow;
+  }
+}
