@@ -144,16 +144,61 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     );
     assert!(view.kinds[1].procedure, "the shipped `.kir` is not a row");
 
-    // `my sets` lists no procedure, because a star is refused on anything
-    // `sets/` does not hold; `folder` lists none, because a folder row is a
+    // `my sets` lists no unstarred procedure; `folder` lists none, because a folder row is a
     // take and nothing takes a bare `.kir` in.
     assert!(view.select_scope(Scope::MySets));
     listing(&mut view, &root, Some(&presets), None, None);
     assert!(
         !view.library.contains(&"orbit_wide".to_owned()),
-        "`my sets` lists a procedure: {:?}",
+        "`my sets` lists an unstarred procedure: {:?}",
         view.library
     );
+    // Star the procedure; it now appears under `my sets` beside starred sets.
+    favourite(
+        &root,
+        karakuri_environment::Asked::Operator,
+        &Operation::SetFavourite {
+            id: "orbit_wide".to_owned(),
+            favourite: true,
+        },
+    )
+    .expect("procedure can be starred");
+    listing(&mut view, &root, Some(&presets), None, None);
+    assert!(
+        view.library.contains(&"orbit_wide".to_owned()),
+        "`my sets` did not list starred procedure: {:?}",
+        view.library
+    );
+    let at = view
+        .library
+        .iter()
+        .position(|row| row == "orbit_wide")
+        .unwrap();
+    assert_eq!(
+        view.kinds[at],
+        RowKind {
+            badges: vec![karakuri_operation::Layer::L3],
+            procedure: true,
+        },
+        "the procedure row's badge in `my sets` is not its kind"
+    );
+    // Unstar it and verify it is removed from `my sets`.
+    favourite(
+        &root,
+        karakuri_environment::Asked::Operator,
+        &Operation::SetFavourite {
+            id: "orbit_wide".to_owned(),
+            favourite: false,
+        },
+    )
+    .expect("procedure can be unstarred");
+    listing(&mut view, &root, Some(&presets), None, None);
+    assert!(
+        !view.library.contains(&"orbit_wide".to_owned()),
+        "`my sets` still lists unstarred procedure: {:?}",
+        view.library
+    );
+
     assert!(view.select_scope(Scope::Folder));
     listing(&mut view, &root, Some(&presets), Some(&shipped), None);
     assert!(

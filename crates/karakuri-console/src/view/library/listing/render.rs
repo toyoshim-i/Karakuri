@@ -126,20 +126,18 @@ pub(crate) fn row_into(
         }
         false => pal.dim,
     };
-    // Star indicator: sun/faint for sets, hidden for procedure rows (ADR-0299, ADR-0338).
-    if !rows.procedure(index) {
-        let on = starred.contains(name);
-        star_mark(
-            &painter,
-            bay.star(index).center(),
-            STAR_SIZE,
-            match on {
-                true => pal.sun,
-                false => pal.faint,
-            },
-            on,
-        );
-    }
+    // Star indicator: sun when starred, faint outline when unstarred (ADR-0299, ADR-0338).
+    let on = starred.contains(name);
+    star_mark(
+        &painter,
+        bay.star(index).center(),
+        STAR_SIZE,
+        match on {
+            true => pal.sun,
+            false => pal.faint,
+        },
+        on,
+    );
     let galley = painter.layout_job(span_at(name, size::BASE, ink));
     painter.galley(
         Pos2::new(bay.named(index), row.center().y - galley.size().y * 0.5),

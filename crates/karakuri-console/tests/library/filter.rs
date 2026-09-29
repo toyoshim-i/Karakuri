@@ -122,9 +122,9 @@ fn the_badges_end_where_the_rows_padding_starts() {
 
 /// A procedure row has no star, and every load off it names `LoadProcedure` —
 /// the button, the row menu's items and the carry, which are the three routes
-/// ADR-0338 names.
+/// A procedure row exposes a star indicator to toggle its inclusion in MySets (ADR-0299, ADR-0338).
 #[test]
-fn a_procedure_row_has_no_star_and_loads_one_layer() {
+fn a_procedure_row_has_a_star_and_loads_one_layer() {
     let panel = console(PLAUSIBLE);
     let ctx = drawn_once();
     let bay = bay(&panel);
@@ -135,20 +135,22 @@ fn a_procedure_row_has_no_star_and_loads_one_layer() {
     };
     let none = std::collections::BTreeSet::new();
 
-    // The star on the procedure row answers nothing, and the star on the Set
-    // row above it still does.
+    // The star on the procedure row requests starring, exactly as the Set row does.
     let star = bay.star(2);
     assert_eq!(
         bay.starred(rows, &none, Point::new(star.center().x, star.center().y)),
-        None,
-        "a press on a procedure row's star asked for a favourite"
+        Some(Operation::SetFavourite {
+            id: "orbit_wide".to_owned(),
+            favourite: true,
+        }),
+        "a press on a procedure row's star did not ask for a favourite"
     );
     let star = bay.star(0);
     assert_eq!(
         bay.starred(rows, &none, Point::new(star.center().x, star.center().y)),
         Some(Operation::SetFavourite {
             id: "drift_night".to_owned(),
-            favourite: true
+            favourite: true,
         })
     );
 

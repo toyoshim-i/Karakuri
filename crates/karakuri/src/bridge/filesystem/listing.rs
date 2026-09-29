@@ -278,9 +278,9 @@ pub(crate) fn listing(
         let at = view.filters();
         (at.holds.map(str::to_owned), None)
     };
-    // Procedures loaded per scope: AllSets includes user-kept, Presets includes shipped presets (ADR-0227, ADR-0338).
+    // Procedures loaded per scope: AllSets and MySets include user-kept, Presets includes shipped presets (ADR-0227, ADR-0338).
     let kept = match scope {
-        Scope::AllSets => procedures(store),
+        Scope::AllSets | Scope::MySets => procedures(store),
         _ => Vec::new(),
     };
     let shipped = match scope {
@@ -306,14 +306,25 @@ pub(crate) fn listing(
             rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
             rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()
         }
-        // Starred sets intersection; procedures are excluded as they cannot be starred (ADR-0299, ADR-0338).
-        Scope::MySets => held
-            .iter()
-            .filter(|set| view.starred.contains(&set.id))
-            .filter(|set| narrows(set, holds.as_deref(), layer))
-            .filter(|_| kinds.shows_sets())
-            .map(|set| (set.id.clone(), set_row(set)))
-            .collect(),
+        // Starred sets and procedures intersection (ADR-0299, ADR-0338).
+        Scope::MySets => {
+            let mut rows: Vec<(String, RowKind, std::time::SystemTime)> = held
+                .iter()
+                .filter(|set| view.starred.contains(&set.id))
+                .filter(|set| narrows(set, holds.as_deref(), layer))
+                .filter(|_| kinds.shows_sets())
+                .map(|set| (set.id.clone(), set_row(set), set.written))
+                .chain(
+                    kept.iter()
+                        .filter(|kept| view.starred.contains(&kept.name))
+                        .filter(|kept| shows_kept(kinds, kept.kind))
+                        .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
+                )
+                .collect();
+            // Sort by modification time descending, breaking ties alphabetically by name.
+            rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+            rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()
+        }
         // Shipped presets and procedures sorted by name; preset sets omit badges to avoid disk reads (P-0091).
         Scope::Presets => {
             let mut rows: Vec<(String, RowKind)> = presets_listing(presets)
@@ -351,7 +362,7 @@ pub(crate) fn listing(
     // Master chain is global; offer procedures from both store and presets regardless of active Library scope.
     let all_kept;
     let chain_kept = match scope {
-        Scope::AllSets => &kept,
+        Scope::AllSets | Scope::MySets => &kept,
         _ => {
             all_kept = procedures(store);
             &all_kept
