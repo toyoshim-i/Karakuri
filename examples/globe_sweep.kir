@@ -1,0 +1,50 @@
+// A camera that sweeps over a sphere around the origin, always looking at the
+// centre, along a path that winds through every latitude and longitude and
+// never repeats in a way the eye can follow. The camera travels sideways across
+// the frame. The sphere's radius jumps to a new random distance whenever the
+// bass level crosses into another step, so a change in the bass throws the
+// camera in close or far out.
+// Ported from the sphere scene of majvj-vrdj-2021 scenes/sphere.js.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/fft_sphere.kset
+//     cargo run -p karakuri-cli -- --load-set fft_sphere
+
+proc globe_sweep {
+  kind L3
+
+  // Distance range the camera jumps within, in world units.
+  param inner : float [0.2, 20.0] = 1.0
+  param outer : float [0.5, 60.0] = 6.0
+
+  // Progress along the path per second.
+  param speed : float [0.0, 1.0]  = 0.1
+
+  // Bass level; bind to band0. Each step of `jump` it moves picks a new distance.
+  param bass  : float [0.0, 1.0]  = 0.0
+  // Size of the bass step that picks a new distance.
+  param jump  : float [0.02, 1.0] = 0.125
+
+  // Vertical field of view in radians.
+  param lens  : float [0.4, 2.2]  = 0.785
+
+  camera {
+    let r = t * speed;
+    let a = r * 3.1;
+    let b = r * 5.1;
+    let dir = vec3(sin(a) * cos(b), sin(a) * sin(b), cos(a));
+
+    let pick = hash1(uint(max(floor(bass / jump), 0.0)) + 17u);
+    let dist = mix(inner, outer, pick);
+
+    // The path's tangent is never zero and always at right angles to `dir`.
+    let tang = vec3(3.1 * cos(a) * cos(b) - 5.1 * sin(a) * sin(b),
+                    3.1 * cos(a) * sin(b) + 5.1 * sin(a) * cos(b),
+                    -3.1 * sin(a));
+
+    eye    = dir * dist;
+    target = vec3(0.0);
+    up     = normalize(cross(dir, tang));
+    fov_y  = lens;
+    near   = 0.02;
+  }
+}

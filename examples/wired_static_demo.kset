@@ -1,0 +1,16 @@
+{"t":"set","id":"wired_static_demo","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L3","path":"room_eye.kir"}
+{"t":"part","layer":"L4","path":"circuit_tube.kir"}
+{"t":"part","layer":"L5","path":"wired_static.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L3","key":"turn","value":0.0}
+{"t":"param","layer":"L4","key":"tumble","value":0.8}
+{"t":"param","layer":"L4","key":"speed","value":1.0}
+{"t":"param","layer":"L4","key":"warm","value":1.0}
+{"t":"param","layer":"L4","key":"haze","value":20.0}
+{"t":"param","layer":"L5","key":"jitter","value":0.004}
+{"t":"param","layer":"L5","key":"saturation","value":0.2}
+{"t":"param","layer":"L5","key":"sepia","value":0.35}
+{"t":"param","layer":"L5","key":"drift","value":0.6}
+{"t":"bind","layer":"L5","key":"kick","signal":"audio.onset","curve":"pow2","range":[0.0,1.0]}
