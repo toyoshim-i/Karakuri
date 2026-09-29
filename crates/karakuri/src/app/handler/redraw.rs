@@ -358,6 +358,7 @@ impl App {
         let engine_started = Instant::now();
         // Borrow held store reference before borrowing gfx to resolve chain slot procedures.
         let held = &*self.held;
+        let presets_dir = self.presets.as_ref().map(|p| p.dir.clone());
         let composed = {
             let Gfx {
                 gpu,
@@ -386,12 +387,45 @@ impl App {
             }
             // Apply chain changes only when structure moves, querying presets then store (ADR-0340, ADR-0354, P-0091).
             if present.chain_spec() != *chain {
+                let resolve = |address: &str| {
+                    karakuri_environment::mix::resolve_procedure(Some(held), address)
+                        .or_else(|| {
+                            let dir = presets_dir.as_ref()?;
+                            let entries = std::fs::read_dir(dir).ok()?;
+                            for entry in entries.flatten() {
+                                let path = entry.path();
+                                if path.extension().and_then(|s| s.to_str()) == Some("kir") {
+                                    if let Ok(src) = std::fs::read_to_string(&path) {
+                                        if karakuri_environment::mix::shipped::address(&src)
+                                            == address
+                                        {
+                                            let _ = held.put_artifact(src.as_bytes());
+                                            return Some(src);
+                                        }
+                                    }
+                                }
+                            }
+                            None
+                        })
+                        .or_else(|| {
+                            let procedures = held.list_procedures().ok()?;
+                            for entry in procedures {
+                                if let Ok(bytes) = held.read_procedure(&entry.name) {
+                                    if let Ok(src) = String::from_utf8(bytes) {
+                                        if karakuri_environment::mix::shipped::address(&src)
+                                            == address
+                                        {
+                                            let _ = held.put_artifact(src.as_bytes());
+                                            return Some(src);
+                                        }
+                                    }
+                                }
+                            }
+                            None
+                        })
+                };
                 if let Err(refusal) = karakuri_environment::mix::apply_chain(
-                    chain_swap,
-                    present,
-                    &gpu.queue,
-                    chain,
-                    &|address| karakuri_environment::mix::resolve_procedure(Some(held), address),
+                    chain_swap, present, &gpu.queue, chain, &resolve,
                 ) {
                     eprintln!("{refusal} — the chain keeps what it had");
                 }
