@@ -123,4 +123,120 @@ fn adding_l5_to_master_chain_populates_view_params_and_allows_interaction_and_re
     .expect("master bay renders with empty chain");
     assert!(empty_row.slots.is_empty());
     assert!(empty_row.add.is_some());
+
+    // 9. Verify drop landing covers the master bay chain body even when empty
+    let list = empty_row.list.expect("empty master bay has a drop list");
+    let mid_empty_body = Point::new(list.center().x, list.center().y);
+    assert_eq!(empty_row.dropped(mid_empty_body), Some(list));
+}
+
+#[test]
+fn resolve_procedure_and_shipped_source_resolves_by_name_and_hash() {
+    let zoom_blur_src = shipped::ZOOM_BLUR;
+    let proc_address = shipped::address(zoom_blur_src);
+
+    // Resolve by address
+    assert_eq!(
+        resolve_procedure(None, &proc_address).as_deref(),
+        Some(zoom_blur_src)
+    );
+    assert_eq!(shipped::source(&proc_address), Some(zoom_blur_src));
+    assert_eq!(shipped::name_of(&proc_address), Some("zoom blur"));
+
+    // Resolve by name
+    assert_eq!(
+        resolve_procedure(None, "zoom_blur").as_deref(),
+        Some(zoom_blur_src)
+    );
+    assert_eq!(shipped::source("zoom_blur"), Some(zoom_blur_src));
+    assert_eq!(shipped::name_of("zoom_blur"), Some("zoom blur"));
+}
+
+#[test]
+fn starring_preset_procedure_adds_to_favourites_and_shows_in_my_sets() {
+    let test_dir = std::env::temp_dir().join(format!("karakuri_star_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&test_dir);
+    let store_root = test_dir.join("store");
+    let presets_root = test_dir.join("presets");
+    std::fs::create_dir_all(&presets_root).expect("create presets");
+
+    // Put a preset procedure into presets_root
+    let sample_l5 = r#"kind L5
+params
+  amount 0.5 [0, 1]
+frag
+  return texture(src, uv);
+"#;
+    std::fs::write(presets_root.join("sample_fx.kir"), sample_l5).expect("write sample_fx");
+
+    let presets = karakuri_environment::places::Presets {
+        dir: presets_root.clone(),
+        found: karakuri_environment::places::Found::Given,
+    };
+
+    // Initialize Store
+    let store = karakuri_store::Store::open(&store_root).expect("open store");
+    drop(store);
+
+    // Star the preset procedure via bridge favourite()
+    let star_op = Operation::SetFavourite {
+        id: "sample_fx".to_owned(),
+        favourite: true,
+    };
+    let response = favourite(&store_root, Some(&presets), Asked::Operator, &star_op)
+        .expect("favourite answered");
+    assert!(response.contains("is starred"), "{response}");
+
+    // Also star a built-in shipped procedure ("zoom_blur")
+    let zoom_op = Operation::SetFavourite {
+        id: "zoom_blur".to_owned(),
+        favourite: true,
+    };
+    let response_zoom = favourite(&store_root, Some(&presets), Asked::Operator, &zoom_op)
+        .expect("zoom_blur favourite answered");
+    assert!(response_zoom.contains("is starred"), "{response_zoom}");
+
+    // Read back in listing under Scope::MySets
+    let mut view = View::new(karakuri_console::room::Room::Day);
+    view.scopes = karakuri_console::view::Scope::ALL.to_vec();
+    assert!(view.select_scope(karakuri_console::view::Scope::MySets));
+
+    listing(&mut view, &store_root, Some(&presets), None, None);
+
+    assert!(
+        view.starred.contains("sample_fx"),
+        "starred set should contain sample_fx: {:?}",
+        view.starred
+    );
+    assert!(
+        view.starred.contains("zoom_blur"),
+        "starred set should contain zoom_blur: {:?}",
+        view.starred
+    );
+    assert!(
+        view.library.contains(&"sample_fx".to_owned()),
+        "MySets should list starred preset procedure sample_fx: {:?}",
+        view.library
+    );
+    assert!(
+        view.library.contains(&"zoom_blur".to_owned()),
+        "MySets should list starred shipped procedure zoom_blur: {:?}",
+        view.library
+    );
+
+    // Verify unstarring removes them from MySets
+    let unstar_op = Operation::SetFavourite {
+        id: "sample_fx".to_owned(),
+        favourite: false,
+    };
+    favourite(&store_root, Some(&presets), Asked::Operator, &unstar_op).expect("unstar answered");
+
+    listing(&mut view, &store_root, Some(&presets), None, None);
+
+    assert!(
+        !view.library.contains(&"sample_fx".to_owned()),
+        "MySets should not list unstarred procedure sample_fx"
+    );
+
+    let _ = std::fs::remove_dir_all(&test_dir);
 }

@@ -88,11 +88,27 @@ fn chain_offers(
             if let Some(store) = opened.as_ref() {
                 let _ = store.put_artifact(source.as_bytes());
             }
-            out.push(view::AddChoice {
-                procedure,
-                words: entry.name.clone(),
-                retains,
-            });
+            if !out.iter().any(|c| c.words == entry.name) {
+                out.push(view::AddChoice {
+                    procedure,
+                    words: entry.name.clone(),
+                    retains,
+                });
+            }
+        }
+    }
+    for (name, source) in karakuri_environment::mix::shipped::ALL {
+        if let Some((procedure, retains)) = karakuri_environment::mix::l5_offer(source) {
+            if let Some(store) = opened.as_ref() {
+                let _ = store.put_artifact(source.as_bytes());
+            }
+            if !out.iter().any(|c| c.words == name) {
+                out.push(view::AddChoice {
+                    procedure,
+                    words: name.to_string(),
+                    retains,
+                });
+            }
         }
     }
     out
@@ -320,7 +336,50 @@ pub(crate) fn listing(
                         .filter(|kept| shows_kept(kinds, kept.kind))
                         .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
                 )
+                .chain(
+                    presets_listing(presets)
+                        .into_iter()
+                        .filter(|preset| view.starred.contains(&preset.id))
+                        .filter(|_| kinds.shows_sets())
+                        .map(|preset| {
+                            let written = std::fs::metadata(&preset.path)
+                                .and_then(|m| m.modified())
+                                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                            (preset.id, RowKind::default(), written)
+                        }),
+                )
+                .chain(
+                    presets_procedures(presets)
+                        .into_iter()
+                        .filter(|shipped| view.starred.contains(&shipped.name))
+                        .filter(|shipped| shows_kept(kinds, shipped.kind.and_then(kind_of)))
+                        .map(|shipped| {
+                            let kind = shipped_row(&shipped);
+                            let written = std::fs::metadata(&shipped.file)
+                                .and_then(|m| m.modified())
+                                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                            (shipped.name.clone(), kind, written)
+                        }),
+                )
+                .chain(
+                    karakuri_environment::mix::shipped::ALL
+                        .iter()
+                        .filter(|(name, _)| view.starred.contains(*name))
+                        .filter(|_| kinds.shows_layer(karakuri_operation::Layer::L5))
+                        .map(|(name, _)| {
+                            (
+                                (*name).to_string(),
+                                RowKind {
+                                    badges: vec![karakuri_operation::Layer::L5],
+                                    procedure: true,
+                                },
+                                std::time::SystemTime::UNIX_EPOCH,
+                            )
+                        }),
+                )
                 .collect();
+            let mut seen = std::collections::BTreeSet::new();
+            rows.retain(|(name, _, _)| seen.insert(name.clone()));
             // Sort by modification time descending, breaking ties alphabetically by name.
             rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
             rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()

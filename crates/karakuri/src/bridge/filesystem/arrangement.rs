@@ -21,6 +21,7 @@ pub(crate) fn arrangements(root: &std::path::Path) -> Vec<String> {
 /// Star operations requested by an automated model are rejected to preserve operator library intent (P-0096).
 pub(crate) fn favourite(
     root: &std::path::Path,
+    presets: Option<&karakuri_environment::places::Presets>,
     asked: Asked,
     operation: &Operation,
 ) -> Option<String> {
@@ -38,7 +39,16 @@ pub(crate) fn favourite(
             }
         ));
     }
-    let wrote = Store::open(root).and_then(|store| store.set_favourite(id, *favourite));
+    let in_presets = presets.is_some_and(|p| {
+        p.dir.join(format!("{id}.kset")).is_file()
+            || p.dir
+                .join(format!("{id}{}", Store::PROCEDURE_FILE_SUFFIX))
+                .is_file()
+    }) || karakuri_environment::mix::shipped::ALL
+        .iter()
+        .any(|(name, _)| *name == id);
+    let wrote =
+        Store::open(root).and_then(|store| store.set_favourite_known(id, *favourite, in_presets));
     Some(match wrote {
         Ok(true) => format!(
             "star: `{id}` {} — `my sets` is the starred subset of `all`, and this row is {} \

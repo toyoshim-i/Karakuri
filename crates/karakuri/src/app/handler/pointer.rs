@@ -208,7 +208,12 @@ impl App {
             }
         }
         if let Acted::Emitted(Some(ref operation @ Operation::SetFavourite { .. })) = acted {
-            if let Some(line) = favourite(&self.store, Asked::Operator, operation) {
+            if let Some(line) = favourite(
+                &self.store,
+                self.presets.as_ref(),
+                Asked::Operator,
+                operation,
+            ) {
                 println!("{line}");
             }
         }

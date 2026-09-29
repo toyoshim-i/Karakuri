@@ -156,6 +156,7 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     // Star the procedure; it now appears under `my sets` beside starred sets.
     favourite(
         &root,
+        Some(&presets),
         karakuri_environment::Asked::Operator,
         &Operation::SetFavourite {
             id: "orbit_wide".to_owned(),
@@ -185,6 +186,7 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     // Unstar it and verify it is removed from `my sets`.
     favourite(
         &root,
+        Some(&presets),
         karakuri_environment::Asked::Operator,
         &Operation::SetFavourite {
             id: "orbit_wide".to_owned(),
@@ -331,6 +333,7 @@ fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
     assert!(view.narrow(None, karakuri_operation::LibraryKinds::EVERYTHING));
     favourite(
         &root,
+        None,
         Asked::Operator,
         &Operation::SetFavourite {
             id: "night01".to_owned(),
