@@ -1,0 +1,140 @@
+// Two light ribbons racing each other through space, seen by a camera that
+// chases them from behind. The flight never ends: everything is placed relative
+// to the camera, so the numbers stay small however long it runs.
+//
+// The ribbons fly along one winding path. Each ribbon coils round the path,
+// twists about its own length, and runs ahead or behind the other on two slow
+// swings, so they keep overtaking. The camera rides the same path a few units
+// behind them, turned to face along it. Streaking stars fill the rest.
+//
+// Elements [0, 6144) are the ribbons: 2 ribbons * 512 segments * 6 corners.
+// Elements [6144, 18432) are 4096 star streaks, 3 corners each.
+// uv.x is the distance from the head (0) to the tail (1) on a ribbon and 2.0 on
+// a star; uv.y is the side, -1 or +1. size is the stripe phase on a ribbon and
+// the head-to-tail fade on a star.
+//
+//     cargo run -p karakuri-cli -- --store /tmp/ribbon-chase --take-in examples/ribbon_chase.kset
+//     cargo run -p karakuri-cli -- --store /tmp/ribbon-chase --load-set ribbon_chase
+
+proc ribbon_chase {
+  kind     L1
+  topology triangles
+  capacity [18432, 18432] = 18432
+
+  // Flight speed in world units per second.
+  param speed : float [0.0, 30.0] = 11.0
+
+  // How far the two ribbons swing ahead of and behind each other.
+  param chase : float [0.0, 1.0] = 0.6
+
+  // Radius of the coil each ribbon winds round the path.
+  param coil  : float [0.0, 3.0] = 1.2
+
+  // Ribbon width, and length from head to tail.
+  param width : float [0.05, 1.0] = 0.2
+  param trail : float [8.0, 60.0] = 22.0
+
+  // How hard the path bends.
+  param swing : float [0.0, 2.0] = 1.0
+
+  // How far behind the flight the camera rides.
+  param follow : float [4.0, 24.0] = 13.0
+
+  emit position, uv, tint, size
+
+  element {
+    // Every point is at path distance `base + o`, with `o` small.
+    let base = t * speed;
+
+    // Camera position, `follow` units behind the flight, and its frame, which
+    // faces along the path half that distance further ahead.
+    let sc = base - follow;
+    let pcx = swing * (7.0 * sin(sc * 0.043) + 2.6 * sin(sc * 0.117 + 1.3));
+    let pcy = swing * (4.0 * sin(sc * 0.061 + 0.7) + 1.8 * cos(sc * 0.137));
+    let sl = base - follow * 0.5;
+    let tcx = swing * (0.301 * cos(sl * 0.043) + 0.3042 * cos(sl * 0.117 + 1.3));
+    let tcy = swing * (0.244 * cos(sl * 0.061 + 0.7) - 0.2466 * sin(sl * 0.137));
+    let ct = normalize(vec3(tcx, tcy, 1.0));
+    let cr = normalize(vec3(ct.z, 0.0, -ct.x));
+    let cu = cross(ct, cr);
+
+    var d = vec3(0.0);
+
+    if seed < 6144u {
+      let quad = seed / 6u;
+      let tri = (seed / 3u) % 2u;
+      let corner = seed % 3u;
+      var du = 0.0;
+      var dv = 0.0;
+      if corner == 1u { du = 1.0; dv = float(tri); }
+      if corner == 2u { du = 1.0 - float(tri); dv = 1.0; }
+
+      let ribbon = quad / 512u;
+      let fi = float(ribbon);
+      let a = (float(quad % 512u) + du) / 512.0;
+
+      // Heads swing past each other; both stay ahead of the camera.
+      let lead = chase * (3.0 * sin(t * 0.41) + 1.5 * sin(t * 1.13 + 0.5));
+      var head = lead;
+      if ribbon == 1u { head = -0.8 * lead + chase * 1.2 * sin(t * 0.67 + 2.0); }
+      let o = head - a * trail;
+      let s = base + o;
+
+      let px = swing * (7.0 * sin(s * 0.043) + 2.6 * sin(s * 0.117 + 1.3));
+      let py = swing * (4.0 * sin(s * 0.061 + 0.7) + 1.8 * cos(s * 0.137));
+      let tx = swing * (0.301 * cos(s * 0.043) + 0.3042 * cos(s * 0.117 + 1.3));
+      let ty = swing * (0.244 * cos(s * 0.061 + 0.7) - 0.2466 * sin(s * 0.137));
+      let pt = normalize(vec3(tx, ty, 1.0));
+      let pr = normalize(vec3(pt.z, 0.0, -pt.x));
+      let pu = cross(pt, pr);
+
+      // Coil round the path, half a turn apart, and twist about the length.
+      let theta = s * 0.32 + t * 1.1 + fi * 3.1415927;
+      let r = coil * (1.0 + 0.35 * sin(s * 0.09 + t * 0.7 + fi * 2.1));
+      let out = pr * cos(theta) + pu * sin(theta);
+      let perp = pu * cos(theta) - pr * sin(theta);
+      let phi = s * 0.21 + t * 0.9 + fi * 1.7;
+      let side = out * cos(phi) + perp * sin(phi);
+
+      // Pointed head, long tapering tail.
+      let w = width * smoothstep(0.0, 0.035, a) * pow(1.0 - a, 0.6);
+
+      d = vec3(px - pcx, py - pcy, o + follow) + out * r + side * (dv * 2.0 - 1.0) * w;
+
+      uv = vec2(a, dv * 2.0 - 1.0);
+      tint = mix(vec3(0.1, 0.55, 1.0), vec3(1.0, 0.18, 0.6), vec3(fi));
+      // Stripes fixed in space, so the ribbon slides through them.
+      size = fract(base * 0.35) + o * 0.35;
+    } else {
+      let star = (seed - 6144u) / 3u;
+      let corner = seed % 3u;
+      let h = hash3(star);
+      let g = hash3(star + 7919u);
+
+      // Fixed in space across, wrapped along the flight over 110 units.
+      let ahead = fract(h.z - base / 110.0) * 110.0 - 12.0;
+      d = vec3((h.x * 2.0 - 1.0) * 60.0 - pcx, (h.y * 2.0 - 1.0) * 40.0 - pcy, ahead);
+
+      let c = vec3(dot(d, cr), dot(d, cu), -dot(d, ct));
+      let across = normalize(cross(normalize(c), vec3(0.0, 0.0, 1.0)) + vec3(0.0001));
+      let thick = 0.012 + 0.0012 * length(c);
+      let streak = speed * 0.09 * (0.5 + g.x);
+
+      var off = across * thick;
+      var side = 1.0;
+      size = 1.0;
+      if corner == 1u { off = -across * thick; side = -1.0; }
+      if corner == 2u { off = vec3(0.0, 0.0, -streak); side = 0.0; size = 0.0; }
+      // Back to the flight frame so the shared transform below applies.
+      d = d + cr * off.x + cu * off.y - ct * off.z;
+
+      let fade = smoothstep(98.0, 70.0, ahead) * smoothstep(-12.0, -6.0, ahead);
+      let hue = mix(vec3(0.6, 0.75, 1.0), vec3(1.0, 0.8, 0.55), vec3(step(0.7, g.y)));
+      tint = hue * (0.5 + 3.0 * pow(g.z, 6.0)) * fade;
+      uv = vec2(2.0, side);
+    }
+
+    // Into the camera's frame: right, up, and forward along -z.
+    position = vec3(dot(d, cr), dot(d, cu), -dot(d, ct));
+  }
+}
