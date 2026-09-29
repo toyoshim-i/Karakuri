@@ -339,7 +339,7 @@ impl App {
             }
             let title = operation.title();
             // Favorites are handled directly without emitting engine operations.
-            if let Some(refusal) = favourite(store, Asked::Model, &operation) {
+            if let Some(refusal) = favourite(store, None, Asked::Model, &operation) {
                 println!("{refusal}");
                 reply.settled(Err(refusal));
                 continue;

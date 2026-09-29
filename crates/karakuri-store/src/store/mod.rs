@@ -351,14 +351,24 @@ impl Store {
         Ok(ids.into_iter().collect())
     }
 
-    /// Sets or clears the favourite status of a Set.
+    /// Sets or clears the favourite status of a Set or procedure.
     ///
     /// Returns `Ok(true)` if the state changed, or `Ok(false)` if the state was already set.
-    /// Returns [`StoreError::NoSet`] if attempting to star a Set that does not exist.
+    /// Returns [`StoreError::NoSet`] if attempting to star an item that does not exist in the store.
     pub fn set_favourite(&self, id: &str, favourite: bool) -> Result<bool, StoreError> {
+        self.set_favourite_known(id, favourite, false)
+    }
+
+    /// Sets or clears the favourite status, allowing items known to exist in external presets.
+    pub fn set_favourite_known(
+        &self,
+        id: &str,
+        favourite: bool,
+        in_presets: bool,
+    ) -> Result<bool, StoreError> {
         let is_set = self.set_path(id).is_file();
         let is_procedure = self.procedure_path(id).is_file();
-        if favourite && !is_set && !is_procedure {
+        if favourite && !is_set && !is_procedure && !in_presets {
             return Err(StoreError::NoSet(id.to_string()));
         }
         let mut ids = self.favourites()?;

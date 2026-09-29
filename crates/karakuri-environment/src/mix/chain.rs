@@ -68,7 +68,7 @@ pub fn resolve_chain(
         .collect()
 }
 
-/// Resolves an address to source code, checking shipped presets before querying the store.
+/// Resolves an address or procedure name to source code, checking shipped presets before querying the store.
 pub fn resolve_procedure(
     store: Option<&karakuri_store::store::Store>,
     address: &str,
@@ -76,9 +76,21 @@ pub fn resolve_procedure(
     if let Some(source) = shipped::source(address) {
         return Some(source.to_string());
     }
-    let hash: karakuri_store::hash::Hash = address.parse().ok()?;
-    let bytes = store?.get_artifact(&hash).ok()?;
-    String::from_utf8(bytes).ok()
+    if let Some(store) = store {
+        if let Ok(bytes) = store.read_procedure(address) {
+            if let Ok(src) = String::from_utf8(bytes) {
+                return Some(src);
+            }
+        }
+        if let Ok(hash) = address.parse::<karakuri_store::hash::Hash>() {
+            if let Ok(bytes) = store.get_artifact(&hash) {
+                if let Ok(src) = String::from_utf8(bytes) {
+                    return Some(src);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Puts a described chain on a `Present`, updating parameters immediately or requesting an async build.

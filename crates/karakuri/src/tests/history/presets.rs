@@ -434,6 +434,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
     assert!(
         favourite(
             &root,
+            Some(&presets),
             Asked::Operator,
             &Operation::SetFavourite {
                 id: "night01".to_owned(),
@@ -453,6 +454,7 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
     // Removing favourite removes it from MySets.
     favourite(
         &root,
+        Some(&presets),
         Asked::Operator,
         &Operation::SetFavourite {
             id: "night01".to_owned(),

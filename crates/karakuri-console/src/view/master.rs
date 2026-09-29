@@ -441,6 +441,16 @@ pub fn master(
                 None => pill,
             });
         }
+        let body_min = Pos2::new(row.min.x, row.max.y + size::MASTER_STACK_GAP);
+        let body_max = Pos2::new(
+            row.max.x,
+            (region.max.y - size::MASTER_PAD_X).max(body_min.y),
+        );
+        let body_rect = Rect::from_min_max(body_min, body_max);
+        list = Some(match list {
+            Some(held) => held.union(body_rect),
+            None => body_rect,
+        });
     }
 
     let card = add.and_then(|add| add_card(ctx, to_egui(layout.viewport()), add, choices));

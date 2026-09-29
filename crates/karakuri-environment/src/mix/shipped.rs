@@ -191,7 +191,7 @@ pub fn addresses() -> &'static Shipped {
 /// of them.
 pub fn name_of(address_of: &str) -> Option<&'static str> {
     for (name, source) in ALL {
-        if address(source) == address_of {
+        if name == address_of || address(source) == address_of {
             return Some(match name {
                 "acrylic_glow" => "acrylic glow",
                 "analog_tv" => "analog tv",
@@ -227,9 +227,9 @@ pub fn name_of(address_of: &str) -> Option<&'static str> {
     None
 }
 
-/// Returns the source code for a shipped preset address, or `None` if unknown.
+/// Returns the source code for a shipped preset address or procedure name, or `None` if unknown.
 pub fn source(address_of: &str) -> Option<&'static str> {
     ALL.into_iter()
+        .find(|&(name, src)| name == address_of || address(src) == address_of)
         .map(|(_, src)| src)
-        .find(|src| address(src) == address_of)
 }

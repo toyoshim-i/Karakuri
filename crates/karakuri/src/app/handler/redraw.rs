@@ -220,11 +220,25 @@ impl App {
         self.readout.view.look = Some(look(&gfx.engine.look));
         // Update Master bay output level and look parameters in a single pass (ADR-0224).
         self.readout.view.master_out = Some(gfx.engine.deck.out());
+        {
+            let Engine {
+                chain_swap,
+                present,
+                ..
+            } = &mut gfx.engine;
+            chain_swap.begin_frame(present, &gfx.gpu.device, &gfx.gpu.queue);
+            for event in chain_swap.events() {
+                eprintln!("{event}");
+            }
+        }
         self.readout.view.master_chain = Some(chain_view(
             &gfx.engine.present,
             &self.readout.view.chain_add.clone(),
         ));
         self.readout.view.master_chain_building = gfx.engine.chain_swap.building().is_some();
+        if self.readout.view.master_chain_building {
+            gfx.window.request_redraw();
+        }
         // Read open model classes directly from the handle shared with the MCP server.
         self.readout.view.opening = self.readout.opening.read();
         // Populate mixer strip state from deck slots for this frame (see `mixer`).
@@ -396,8 +410,11 @@ impl App {
                                 let path = entry.path();
                                 if path.extension().and_then(|s| s.to_str()) == Some("kir") {
                                     if let Ok(src) = std::fs::read_to_string(&path) {
-                                        if karakuri_environment::mix::shipped::address(&src)
-                                            == address
+                                        let name =
+                                            path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                                        if name == address
+                                            || karakuri_environment::mix::shipped::address(&src)
+                                                == address
                                         {
                                             let _ = held.put_artifact(src.as_bytes());
                                             return Some(src);
@@ -410,6 +427,14 @@ impl App {
                         .or_else(|| {
                             let procedures = held.list_procedures().ok()?;
                             for entry in procedures {
+                                if entry.name == address {
+                                    if let Ok(bytes) = held.read_procedure(&entry.name) {
+                                        if let Ok(src) = String::from_utf8(bytes) {
+                                            let _ = held.put_artifact(src.as_bytes());
+                                            return Some(src);
+                                        }
+                                    }
+                                }
                                 if let Ok(bytes) = held.read_procedure(&entry.name) {
                                     if let Ok(src) = String::from_utf8(bytes) {
                                         if karakuri_environment::mix::shipped::address(&src)
