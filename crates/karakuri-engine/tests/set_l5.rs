@@ -59,6 +59,22 @@ proc tint_green {
 }
 "#;
 
+/// Writes its vector and scalar params straight to the frame: `rgb = glaze * gain`,
+/// `a = tilt.y`. Every param type an L5 may declare (`float`, `vec2`, `vec3`).
+const L5_GLAZE: &str = r#"
+proc glaze_probe {
+  kind L5
+
+  param glaze : vec3 [0.0, 1.0] = vec3(0.0, 0.25, 1.0)
+  param tilt  : vec2 [0.0, 1.0] = vec2(0.5, 0.75)
+  param gain  : float [0.0, 2.0] = 1.0
+
+  frame {
+    color = vec4(glaze * gain, tilt.y);
+  }
+}
+"#;
+
 #[test]
 fn a_set_with_nested_l5_validates_and_exposes_parameters() {
     let l1 = compile(L1_GRID);
@@ -82,7 +98,7 @@ fn a_set_with_nested_l5_validates_and_exposes_parameters() {
 
 mod gpu {
     pub(super) use super::common::{compile, f16};
-    pub(super) use super::{L1_GRID, L4_RED, L5_INVERT, L5_TINT_GREEN};
+    pub(super) use super::{L1_GRID, L4_RED, L5_GLAZE, L5_INVERT, L5_TINT_GREEN};
     use karakuri_engine::set::{Layering, Wiring};
     use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
     use karakuri_ir::Kind;
@@ -247,5 +263,79 @@ mod gpu {
             center[1]
         );
         assert!(center[2] > 0.9, "blue should be ~1.0, got {}", center[2]);
+    }
+
+    fn center(pixels: &[[f32; 4]]) -> [f32; 4] {
+        pixels[(H / 2 * W + W / 2) as usize]
+    }
+
+    fn assert_near(got: [f32; 4], want: [f32; 4], what: &str) {
+        for (c, (g, w)) in got.iter().zip(want).enumerate() {
+            assert!(
+                (g - w).abs() < 0.01,
+                "{what}: channel {c} is {g}, wanted {w} (texel {got:?})"
+            );
+        }
+    }
+
+    /// A nested L5's vector params pack into their `vecN` uniform fields: the
+    /// declared defaults, a manual write on one component, and a binding on one
+    /// component each reach the frame.
+    #[test]
+    fn a_nested_l5_packs_its_vector_params_per_component() {
+        let gpu = Gpu::headless().expect("GPU available");
+        let l1 = compile(L1_GRID);
+        let l4 = compile(L4_RED);
+        let l5 = compile(L5_GLAZE);
+
+        let mut set = Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            &[(&l1, 16)],
+            &[],
+            &[],
+            &[],
+            &[&l4],
+            &[&l5],
+            Layering::Overdraw,
+            1,
+            &[],
+            Wiring::default(),
+        )
+        .expect("builds with a vector-param L5");
+        set.resize(&gpu.device, W, H);
+
+        assert_near(
+            center(&draw(&gpu, &mut set)),
+            [0.0, 0.25, 1.0, 0.75],
+            "declared defaults",
+        );
+
+        assert!(
+            set.set_param_at(Kind::L5, 0, "glaze.x", 1.0),
+            "an L5's vector component has to be addressable by its component key"
+        );
+        assert_near(
+            center(&draw(&gpu, &mut set)),
+            [1.0, 0.25, 1.0, 0.75],
+            "glaze.x written to 1.0",
+        );
+
+        assert!(
+            set.bind(karakuri_engine::Binding::new(
+                Kind::L5,
+                "glaze.y",
+                karakuri_engine::binding::NOISE_SIGNAL,
+                karakuri_engine::Curve::Lin,
+                [0.6, 0.6],
+            ))
+            .attached(),
+            "an L5's vector component has to be bindable by its component key"
+        );
+        assert_near(
+            center(&draw(&gpu, &mut set)),
+            [1.0, 0.6, 1.0, 0.75],
+            "glaze.y bound to a constant 0.6",
+        );
     }
 }

@@ -319,12 +319,19 @@ impl Set {
             seed_salt: self.seed_salt,
         };
         let viewport = self.viewport;
-        for (i, l5) in self.l5s.iter_mut().enumerate() {
-            let slot = first + i;
-            if let Some(params) = self.params.get(slot) {
-                let p_iter = params.iter().map(|(k, v)| (k.as_str(), *v));
-                l5.pass.write_uniform(queue, clock, viewport, p_iter);
-            }
+        let bindings = &self.bindings;
+        let params = &self.params[first..];
+        let param_values = &self.param_values[first..];
+        for (at, (l5, (own, own_values))) in self
+            .l5s
+            .iter_mut()
+            .zip(params.iter().zip(param_values))
+            .enumerate()
+        {
+            let param = |name: &str| effective(bindings, own, Kind::L5, at, name);
+            let param_val = |name: &str| effective_vector(bindings, own_values, Kind::L5, at, name);
+            l5.pass
+                .write_uniform(queue, clock, viewport, &param, Some(&param_val));
         }
     }
 
