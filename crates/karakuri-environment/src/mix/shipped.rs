@@ -24,9 +24,45 @@ pub const GLITCH_SLICE: &str = include_str!("../../../../examples/glitch_slice.k
 pub const NEGATIVE_STROBE: &str = include_str!("../../../../examples/negative_strobe.kir");
 /// `examples/slit_scan.kir`.
 pub const SLIT_SCAN: &str = include_str!("../../../../examples/slit_scan.kir");
+/// `examples/acrylic_glow.kir`.
+pub const ACRYLIC_GLOW: &str = include_str!("../../../../examples/acrylic_glow.kir");
+/// `examples/beat_dissolve.kir`.
+pub const BEAT_DISSOLVE: &str = include_str!("../../../../examples/beat_dissolve.kir");
+/// `examples/cathode_bend.kir`.
+pub const CATHODE_BEND: &str = include_str!("../../../../examples/cathode_bend.kir");
+/// `examples/flash_panels.kir`.
+pub const FLASH_PANELS: &str = include_str!("../../../../examples/flash_panels.kir");
+/// `examples/hue_rotate.kir`.
+pub const HUE_ROTATE: &str = include_str!("../../../../examples/hue_rotate.kir");
+/// `examples/led_matrix.kir`.
+pub const LED_MATRIX: &str = include_str!("../../../../examples/led_matrix.kir");
+/// `examples/lens_warp.kir`.
+pub const LENS_WARP: &str = include_str!("../../../../examples/lens_warp.kir");
+/// `examples/mirror_fold.kir`.
+pub const MIRROR_FOLD: &str = include_str!("../../../../examples/mirror_fold.kir");
+/// `examples/mosaic_glow.kir`.
+pub const MOSAIC_GLOW: &str = include_str!("../../../../examples/mosaic_glow.kir");
+/// `examples/neon_edges.kir`.
+pub const NEON_EDGES: &str = include_str!("../../../../examples/neon_edges.kir");
+/// `examples/poster_dither.kir`.
+pub const POSTER_DITHER: &str = include_str!("../../../../examples/poster_dither.kir");
+/// `examples/roll_panels.kir`.
+pub const ROLL_PANELS: &str = include_str!("../../../../examples/roll_panels.kir");
+/// `examples/sepia_film.kir`.
+pub const SEPIA_FILM: &str = include_str!("../../../../examples/sepia_film.kir");
+/// `examples/shadow_mask.kir`.
+pub const SHADOW_MASK: &str = include_str!("../../../../examples/shadow_mask.kir");
+/// `examples/tile_zoom.kir`.
+pub const TILE_ZOOM: &str = include_str!("../../../../examples/tile_zoom.kir");
+/// `examples/tuning_moire.kir`.
+pub const TUNING_MOIRE: &str = include_str!("../../../../examples/tuning_moire.kir");
+/// `examples/wired_static.kir`.
+pub const WIRED_STATIC: &str = include_str!("../../../../examples/wired_static.kir");
+/// `examples/zoom_blur.kir`.
+pub const ZOOM_BLUR: &str = include_str!("../../../../examples/zoom_blur.kir");
 
 /// All shipped master chain procedures in canonical order.
-pub const ALL: [(&str, &str); 11] = [
+pub const ALL: [(&str, &str); 29] = [
     ("feedback", FEEDBACK),
     ("bloom", BLOOM),
     ("rgb_shift", RGB_SHIFT),
@@ -38,6 +74,24 @@ pub const ALL: [(&str, &str); 11] = [
     ("glitch_slice", GLITCH_SLICE),
     ("negative_strobe", NEGATIVE_STROBE),
     ("slit_scan", SLIT_SCAN),
+    ("acrylic_glow", ACRYLIC_GLOW),
+    ("beat_dissolve", BEAT_DISSOLVE),
+    ("cathode_bend", CATHODE_BEND),
+    ("flash_panels", FLASH_PANELS),
+    ("hue_rotate", HUE_ROTATE),
+    ("led_matrix", LED_MATRIX),
+    ("lens_warp", LENS_WARP),
+    ("mirror_fold", MIRROR_FOLD),
+    ("mosaic_glow", MOSAIC_GLOW),
+    ("neon_edges", NEON_EDGES),
+    ("poster_dither", POSTER_DITHER),
+    ("roll_panels", ROLL_PANELS),
+    ("sepia_film", SEPIA_FILM),
+    ("shadow_mask", SHADOW_MASK),
+    ("tile_zoom", TILE_ZOOM),
+    ("tuning_moire", TUNING_MOIRE),
+    ("wired_static", WIRED_STATIC),
+    ("zoom_blur", ZOOM_BLUR),
 ];
 
 /// A curated master chain preset configuration (M10.3).
@@ -139,15 +193,33 @@ pub fn name_of(address_of: &str) -> Option<&'static str> {
     for (name, source) in ALL {
         if address(source) == address_of {
             return Some(match name {
-                "rgb_shift" => "rgb shift",
+                "acrylic_glow" => "acrylic glow",
                 "analog_tv" => "analog tv",
-                "crt_screen" => "crt screen",
-                "chroma_echo" => "chroma echo",
+                "beat_dissolve" => "beat dissolve",
+                "cathode_bend" => "cathode bend",
                 "chroma_burst" => "chroma burst",
+                "chroma_echo" => "chroma echo",
+                "crt_screen" => "crt screen",
                 "film_grain" => "film grain",
+                "flash_panels" => "flash panels",
                 "glitch_slice" => "glitch slice",
+                "hue_rotate" => "hue rotate",
+                "led_matrix" => "led matrix",
+                "lens_warp" => "lens warp",
+                "mirror_fold" => "mirror fold",
+                "mosaic_glow" => "mosaic glow",
                 "negative_strobe" => "negative strobe",
+                "neon_edges" => "neon edges",
+                "poster_dither" => "poster dither",
+                "rgb_shift" => "rgb shift",
+                "roll_panels" => "roll panels",
+                "sepia_film" => "sepia film",
+                "shadow_mask" => "shadow mask",
                 "slit_scan" => "slit scan",
+                "tile_zoom" => "tile zoom",
+                "tuning_moire" => "tuning moire",
+                "wired_static" => "wired static",
+                "zoom_blur" => "zoom blur",
                 other => other,
             });
         }

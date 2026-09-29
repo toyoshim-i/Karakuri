@@ -67,6 +67,9 @@ fn chain_offers(
             continue;
         };
         if let Some((procedure, retains)) = karakuri_environment::mix::l5_offer(&source) {
+            if let Some(store) = opened.as_ref() {
+                let _ = store.put_artifact(source.as_bytes());
+            }
             out.push(view::AddChoice {
                 procedure,
                 words: entry.name.clone(),
@@ -82,6 +85,9 @@ fn chain_offers(
             continue;
         };
         if let Some((procedure, retains)) = karakuri_environment::mix::l5_offer(&source) {
+            if let Some(store) = opened.as_ref() {
+                let _ = store.put_artifact(source.as_bytes());
+            }
             out.push(view::AddChoice {
                 procedure,
                 words: entry.name.clone(),
