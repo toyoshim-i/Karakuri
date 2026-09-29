@@ -1,0 +1,40 @@
+// A field of stars scattered evenly through a cube around the origin, each a
+// dot of light: most are faint and near white, a few are strongly coloured
+// between blue, magenta, red and orange, never green. Every star is one very
+// short segment pointing at the origin, so a stroke renderer draws it as a dot
+// and the field can share a Set with line geometry.
+// Ported from tmalib src/TmaModelPrimitives.js `createStars`.
+//
+//     cargo run -p karakuri-cli -- --set examples/star_box.kir,examples/tint_strokes.kir --param width=0.0014
+
+proc star_box {
+  kind     L1
+  topology lines
+  capacity [1024, 65536] = 10000
+
+  // Half the side of the cube the stars fill, in world units.
+  param space  : float [1.0, 60.0] = 6.0
+
+  // Length of each star's segment in world units; about a pixel at a distance
+  // of 6 with the default field of view.
+  param dot    : float [0.001, 0.1] = 0.012
+
+  // Brightness multiplier on every star.
+  param bright : float [0.0, 4.0]  = 1.0
+
+  emit position, velocity, tint
+
+  element {
+    let p = (hash3(seed * 4u) * 2.0 - vec3(1.0)) * space;
+    let r = hash3(seed * 4u + 1u);
+
+    // Hue from 240 degrees round through 0 to 60, skipping the greens;
+    // saturation is the cube of a random number, so most stars are pale.
+    let hue = fract((240.0 + r.x * 180.0) / 360.0);
+    let sat = r.y * r.y * hash1(seed * 4u + 2u);
+
+    position = p;
+    velocity = normalize(p + vec3(0.0001)) * dot;
+    tint     = hsv_to_rgb(vec3(hue, sat, r.z)) * bright;
+  }
+}

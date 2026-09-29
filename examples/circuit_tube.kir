@@ -2,7 +2,8 @@
 // rectangles split again and again with bright traces, scrolling past along the
 // axis; dash-shaped packets of light race along the wall in lanes with a blue
 // halo, and the far end dissolves into haze. `palette` runs from deep blue and
-// white to dim teal and amber. Reads `ray` against a camera facing negative z.
+// white to dim teal and amber, and `warm` turns the wall alone to copper.
+// Reads `ray` against a camera facing negative z.
 //
 //     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/room_eye.kir,examples/circuit_tube.kir --param turn=0
 
@@ -27,6 +28,9 @@ proc circuit_tube {
 
   // Distance, in radii, at which the haze reaches half strength.
   param haze    : float [2.0, 40.0] = 14.0
+
+  // Turns the wall toward copper and amber; the packets and haze keep `palette`.
+  param warm    : float [0.0, 1.0] = 0.0
 
   fragment {
     let sw = t * 0.23;
@@ -81,7 +85,7 @@ proc circuit_tube {
     let a1 = vec3(0.1, 0.5, 0.45);
     let b0 = vec3(0.8, 0.9, 1.0);
     let b1 = vec3(1.0, 0.6, 0.2);
-    let wallc = mix(a0, a1, vec3(palette));
+    let wallc = mix(mix(a0, a1, vec3(palette)), vec3(1.0, 0.45, 0.12), vec3(warm));
     let hotc  = mix(b0, b1, vec3(palette));
     let bright = mix(1.0, 0.45, palette);
 

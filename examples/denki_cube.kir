@@ -1,0 +1,244 @@
+// A glowing cube at the origin inside a field of stars. Each face carries the
+// same emblem, turned a quarter further on every face: a lightning bolt inside
+// a square frame ringed by short sparks. Faces toward the viewer are bright,
+// faces turned away dim. The cube swells with the bass, and loud bass charges
+// it: once enough has built up, the cube and the whole star field tip over by a
+// quarter turn in half a second to show the next face, walking a fixed tour of
+// six orientations. Seeds 0..11 are the cube's edges, 12..107 the emblems (16
+// segments per face), and from 128 on the stars.
+// Ported from the denki scene of majvj-vrdj-2021 scenes/denki.js; the event
+// logo on the original cube is replaced by the emblem.
+//
+// The flip is accumulated state. `normal` carries it from frame to frame and
+// nothing downstream reads it: x is the charge, y the orientation 0..5 and z
+// the progress of a flip under way (0 when none is).
+//
+//     cargo run -p karakuri-cli -- --set examples/denki_cube.kir,examples/flat_eye.kir,examples/tint_strokes.kir --param frame=3.8
+
+proc denki_cube {
+  kind     L1
+  topology lines
+  capacity [1024, 65536] = 10240
+
+  // Bass level; bind to `bass`.
+  param bass   : float [0.0, 1.0]  = 0.0
+  // Bass level above which the cube charges and swells hard.
+  param hit    : float [0.0, 1.0]  = 0.78
+  // Charge a flip needs, in frames of full-level bass at 60 frames a second.
+  param charge : float [1.0, 100.0] = 16.0
+  // Seconds a flip takes.
+  param flip   : float [0.1, 4.0]  = 0.5
+
+  // Side of the cube at rest, in world units, and how much the bass adds to it.
+  param side   : float [0.2, 8.0]  = 2.25
+  param pulse  : float [0.0, 4.0]  = 2.0
+
+  // Colour and brightness of the cube.
+  param ink    : vec3 [0.0, 4.0]   = vec3(0.55, 1.0, 0.6)
+
+  // Half the side of the cube the stars fill, and their brightness.
+  param space  : float [1.0, 200.0] = 40.0
+  param stars  : float [0.0, 4.0]  = 1.5
+
+  emit position, velocity, tint, normal
+
+  element {
+    // Flip state.
+    var charge_n = normal.x;
+    var face_n   = normal.y;
+    var phase_n  = normal.z;
+    if phase_n > 0.0 {
+      phase_n = phase_n + dt / flip;
+      if phase_n >= 1.0 {
+        phase_n = 0.0;
+        face_n  = mod(face_n + 1.0, 6.0);
+      }
+    } else {
+      if bass > hit {
+        charge_n = charge_n + bass * dt * 60.0;
+      }
+      if charge_n > charge {
+        charge_n = 0.0;
+        phase_n  = 0.000001;
+      }
+    }
+
+    // The tour: each orientation is up to five turns about x, y, x, y, x, and a
+    // flip moves the last one toward the next orientation's.
+    let b  = face_n;
+    let d  = phase_n;
+    let q  = 1.5707963;
+    var s0 = 0.0;
+    var s1 = 0.0;
+    var s2 = 0.0;
+    var s3 = 0.0;
+    var s4 = 0.0;
+    if b < 0.5 {
+      s0 = q * (1.0 - d);
+    }
+    if b > 0.5 && b < 1.5 {
+      s1 = -q * d;
+    }
+    if b > 1.5 {
+      s1 = -q;
+    }
+    if b > 1.5 && b < 2.5 {
+      s2 = -q * d;
+    }
+    if b > 2.5 && b < 3.5 {
+      s2 = -q - q * d;
+    }
+    if b > 3.5 {
+      s2 = -2.0 * q;
+    }
+    if b > 3.5 && b < 4.5 {
+      s3 = -q * d;
+    }
+    if b > 4.5 {
+      s3 = -q;
+      s4 = -q * d;
+    }
+
+    // Swell: gentle below `hit`, hard above it.
+    var l = bass * 0.255;
+    if bass > hit {
+      l = bass * 1.28;
+    }
+    let sz = side * (1.0 + pulse * l);
+
+    var p0 = vec3(0.0);
+    var p1 = vec3(0.0);
+    var c  = vec3(0.0);
+
+    if seed < 12u {
+      // Edges: four along each axis.
+      let axis = seed / 4u;
+      let k    = seed % 4u;
+      let u    = float(k % 2u) - 0.5;
+      let v    = float(k / 2u) - 0.5;
+      var a = vec3(-0.5, u, v);
+      var e = vec3(0.5, u, v);
+      if axis == 1u {
+        a = vec3(u, -0.5, v);
+        e = vec3(u, 0.5, v);
+      }
+      if axis == 2u {
+        a = vec3(u, v, -0.5);
+        e = vec3(u, v, 0.5);
+      }
+      p0 = a;
+      p1 = e;
+      c  = ink;
+    }
+
+    if seed >= 12u && seed < 108u {
+      let f = (seed - 12u) / 16u;
+      let j = (seed - 12u) % 16u;
+
+      // Emblem in face coordinates, -0.5..0.5 on each side.
+      var a0 = vec2(0.0);
+      var a1 = vec2(0.0);
+      // Frame.
+      if j == 0u {
+        a0 = vec2(-0.4, -0.4);
+        a1 = vec2(0.4, -0.4);
+      }
+      if j == 1u {
+        a0 = vec2(0.4, -0.4);
+        a1 = vec2(0.4, 0.4);
+      }
+      if j == 2u {
+        a0 = vec2(0.4, 0.4);
+        a1 = vec2(-0.4, 0.4);
+      }
+      if j == 3u {
+        a0 = vec2(-0.4, 0.4);
+        a1 = vec2(-0.4, -0.4);
+      }
+      // Bolt: a zigzag from top right to bottom left.
+      if j == 4u {
+        a0 = vec2(0.12, 0.3);
+        a1 = vec2(-0.1, 0.02);
+      }
+      if j == 5u {
+        a0 = vec2(-0.1, 0.02);
+        a1 = vec2(0.1, 0.02);
+      }
+      if j == 6u {
+        a0 = vec2(0.1, 0.02);
+        a1 = vec2(-0.12, -0.3);
+      }
+      // Sparks: eight short rays around the bolt.
+      if j >= 7u && j < 15u {
+        let ang = float(j - 7u) * 0.7853982 + 0.3926991;
+        let dir = vec2(cos(ang), sin(ang));
+        a0 = dir * 0.3;
+        a1 = dir * 0.36;
+      }
+      // Each face turns the emblem a further quarter.
+      let turn = float(f % 4u) * q;
+      let cr = cos(turn);
+      let sr = sin(turn);
+      let r0 = vec2(a0.x * cr - a0.y * sr, a0.x * sr + a0.y * cr);
+      let r1 = vec2(a1.x * cr - a1.y * sr, a1.x * sr + a1.y * cr);
+
+      // Face basis: +z, -z, +x, -x, +y, -y.
+      var fu = vec3(1.0, 0.0, 0.0);
+      var fv = vec3(0.0, 1.0, 0.0);
+      var fz = vec3(0.0, 0.0, 1.0);
+      if f == 1u {
+        fu = vec3(-1.0, 0.0, 0.0);
+        fz = vec3(0.0, 0.0, -1.0);
+      }
+      if f == 2u {
+        fu = vec3(0.0, 0.0, -1.0);
+        fz = vec3(1.0, 0.0, 0.0);
+      }
+      if f == 3u {
+        fu = vec3(0.0, 0.0, 1.0);
+        fz = vec3(-1.0, 0.0, 0.0);
+      }
+      if f == 4u {
+        fv = vec3(0.0, 0.0, -1.0);
+        fz = vec3(0.0, 1.0, 0.0);
+      }
+      if f == 5u {
+        fv = vec3(0.0, 0.0, 1.0);
+        fz = vec3(0.0, -1.0, 0.0);
+      }
+      let used = j < 15u;
+      if used {
+        p0 = fz * 0.5 + fu * r0.x + fv * r0.y;
+        p1 = fz * 0.5 + fu * r1.x + fv * r1.y;
+        c  = ink;
+      }
+    }
+
+    var star = 0.0;
+    if seed >= 128u {
+      // Stars, the same scatter as `star_box`.
+      let sp = (hash3(seed * 4u) * 2.0 - vec3(1.0)) * space;
+      let r  = hash3(seed * 4u + 1u);
+      let hue = fract((240.0 + r.x * 180.0) / 360.0);
+      let sat = r.y * r.y * hash1(seed * 4u + 2u);
+      p0 = sp;
+      p1 = sp - normalize(sp + vec3(0.0001)) * 0.004 * length(sp);
+      c  = hsv_to_rgb(vec3(hue, sat, r.z)) * stars;
+      star = 1.0;
+    }
+
+    // Turn the whole thing: innermost turn first.
+    let w0 = rot_x(rot_y(rot_x(rot_y(rot_x(p0, s4), s3), s2), s1), s0);
+    let w1 = rot_x(rot_y(rot_x(rot_y(rot_x(p1, s4), s3), s2), s1), s0);
+
+    // Faces toward the viewer (+z) bright, faces away dim; stars unshaded.
+    let zc    = (w0.z + w1.z) * 0.5;
+    let shade = mix((zc + 0.8) / 1.6, 1.0, star);
+    let scale = mix(sz, 1.0, star);
+
+    position = w0 * scale;
+    velocity = (w0 - w1) * scale;
+    tint     = c * shade;
+    normal   = vec3(charge_n, face_n, phase_n);
+  }
+}
