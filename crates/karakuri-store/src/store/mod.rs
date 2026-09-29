@@ -356,7 +356,9 @@ impl Store {
     /// Returns `Ok(true)` if the state changed, or `Ok(false)` if the state was already set.
     /// Returns [`StoreError::NoSet`] if attempting to star a Set that does not exist.
     pub fn set_favourite(&self, id: &str, favourite: bool) -> Result<bool, StoreError> {
-        if favourite && !self.set_path(id).is_file() {
+        let is_set = self.set_path(id).is_file();
+        let is_procedure = self.procedure_path(id).is_file();
+        if favourite && !is_set && !is_procedure {
             return Err(StoreError::NoSet(id.to_string()));
         }
         let mut ids = self.favourites()?;

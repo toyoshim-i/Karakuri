@@ -77,7 +77,7 @@ impl LibraryBay {
         let row = self
             .drawn()
             .find(|index| self.list.contains(p) && self.star(*index).contains(p))?;
-        let id = rows.set(row)?;
+        let id = rows.name(row)?;
         Some(Operation::SetFavourite {
             id: id.to_owned(),
             favourite: !marks.contains(id),

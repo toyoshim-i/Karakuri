@@ -407,3 +407,22 @@ fn a_favourites_file_that_is_not_a_list_of_ids_is_an_error() {
         other => panic!("expected Favourites, got {other:?}"),
     }
 }
+
+/// Verifies that starring a procedure stored in procedures/ is accepted.
+#[test]
+fn starring_a_procedure_is_accepted() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    store
+        .write_procedure("orbit_wide", b"proc orbit_wide { kind L3 }\n")
+        .unwrap();
+
+    assert!(store.set_favourite("orbit_wide", true).unwrap());
+    assert_eq!(
+        store.favourites().unwrap().into_iter().collect::<Vec<_>>(),
+        vec!["orbit_wide".to_string()]
+    );
+    assert!(!store.set_favourite("orbit_wide", true).unwrap());
+    assert!(store.set_favourite("orbit_wide", false).unwrap());
+    assert!(store.favourites().unwrap().is_empty());
+}
