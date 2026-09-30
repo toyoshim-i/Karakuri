@@ -25,10 +25,8 @@ proc ribbon_chase_light {
     let head = exp(-a * 40.0) * 3.0;
     let white = vec3(head * 0.4);
     let ribbon = (tint * (0.1 + rim + stripe + head) + white) * fade * glow;
-    let fog = exp(-length(position) * 0.012);
-
     let star = tint * (1.0 - edge) * size * stars;
 
-    color = vec4(mix(ribbon * fog, star, vec3(is_star)), 1.0);
+    color = vec4(mix(ribbon, star, vec3(is_star)), 1.0);
   }
 }
