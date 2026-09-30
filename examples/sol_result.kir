@@ -1,0 +1,231 @@
+// A mission result screen: a hexagonal emblem that turns in the middle, three statistic
+// rows on the left each with a segmented bar and a seven-segment count that run up
+// together over the first three seconds, a six-digit seven-segment total across the
+// bottom counting up to its final value and five rank diamonds along the top that light
+// one after another. Draws the whole frame and reads no geometry.
+
+proc sol_result {
+  kind  L4
+  blend additive
+
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let tc   = srgb_to_linear(vec3(0.35, 0.95, 0.85));
+    let grn  = srgb_to_linear(vec3(0.25, 1.0, 0.4));
+    let red  = srgb_to_linear(vec3(1.0, 0.12, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.55, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.92, 0.25));
+    let cyan = srgb_to_linear(vec3(0.1, 0.85, 1.0));
+    let dgrn = srgb_to_linear(vec3(0.03, 0.22, 0.1));
+    let dtc  = srgb_to_linear(vec3(0.03, 0.16, 0.18));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+
+    var c = vec3(0.0);
+    let up3 = clamp(lt / 3.0, 0.0, 1.0);
+
+    // Emblem: three nested hexagons turning against each other.
+    let r   = length(p - vec2(0.55, 0.05));
+    let an  = atan2(p.y - 0.05, p.x - 0.55);
+    for h in 0..3 {
+      let fh  = float(h);
+      let sd  = 1.0 - 2.0 * mod(fh, 2.0);
+      let aa  = mod(an + sd * lt * (0.3 + 0.1 * fh), 1.0471976) - 0.5235988;
+      let dp  = r * cos(aa) - (0.22 + 0.11 * fh) * cos(0.5235988);
+      c += mix(tc, grn, vec3(step(0.5, fh))) * step(abs(dp), 0.006) * (1.0 - 0.15 * fh);
+    }
+    c += tc * step(r, 0.03);
+
+    // Rank diamonds along the top, one per second after the first.
+    for k in 0..5 {
+      let fk = float(k);
+      let dq = p - vec2(0.55 + (fk - 2.0) * 0.16, 0.85);
+      let dd = abs(dq.x) + abs(dq.y);
+      let on = step(fk + 1.0, lt);
+      c += mix(dtc * 2.0, yel, vec3(on)) * step(dd, 0.055) * (1.0 - step(dd, 0.03) * (1.0 - on));
+    }
+
+    // Three statistic rows: a glyph label, a segmented bar and a count.
+    for s in 0..3 {
+      let fs  = float(s);
+      let ry  = 0.5 - fs * 0.32;
+      let tgt = mix(137.0, mix(3.0, 12.0, fs - 1.0), step(0.5, fs));
+      let cur = floor(tgt * up3);
+      let bq  = (p.x + 1.55) / 1.0;
+      let seg = step(0.15, fract(bq * 20.0)) * step(0.0, bq) * step(bq, 1.0) * step(abs(p.y - (ry - 0.1)), 0.02);
+      let fill = clamp(cur / mix(200.0, 20.0, step(0.5, fs)), 0.0, 1.0);
+      c += grn * seg * step(bq, fill);
+      c += dgrn * 1.5 * seg * step(fill, bq);
+    }
+    let s0_fd = clamp(floor((p.x - (-0.45)) / 0.11), 0.0, 2.0);
+    let s0_dv = mod(floor((floor(137.0 * up3)) / pow(10.0, 2.0 - s0_fd)), 10.0);
+    let s0_m  = 63.0 * (1.0 - step(0.5, abs(s0_dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(s0_dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(s0_dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(s0_dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(s0_dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(s0_dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(s0_dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(s0_dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(s0_dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(s0_dv - 9.0)));
+    let s0_dl = p - vec2(-0.45 + s0_fd * 0.11, 0.4);
+    let s0s_hx = step(0.009, s0_dl.x) * step(s0_dl.x, 0.075 - 0.009);
+    let s0s_ha = s0s_hx * step(abs(s0_dl.y - 0.13), 0.009);
+    let s0s_hg = s0s_hx * step(abs(s0_dl.y - 0.13 * 0.5), 0.009);
+    let s0s_hd = s0s_hx * step(abs(s0_dl.y), 0.009);
+    let s0s_vr = step(abs(s0_dl.x - 0.075), 0.009);
+    let s0s_vl = step(abs(s0_dl.x), 0.009);
+    let s0s_vu = step(0.13 * 0.5 + 0.009, s0_dl.y) * step(s0_dl.y, 0.13 - 0.009);
+    let s0s_vw = step(0.009, s0_dl.y) * step(s0_dl.y, 0.13 * 0.5 - 0.009);
+    let s0s_a = step(0.5, mod(floor(s0_m / 1.0), 2.0));
+    let s0s_b = step(0.5, mod(floor(s0_m / 2.0), 2.0));
+    let s0s_c = step(0.5, mod(floor(s0_m / 4.0), 2.0));
+    let s0s_d = step(0.5, mod(floor(s0_m / 8.0), 2.0));
+    let s0s_e = step(0.5, mod(floor(s0_m / 16.0), 2.0));
+    let s0s_f = step(0.5, mod(floor(s0_m / 32.0), 2.0));
+    let s0s_g = step(0.5, mod(floor(s0_m / 64.0), 2.0));
+    let s0s_hit = max(max(s0s_a * s0s_ha, s0s_g * s0s_hg), max(s0s_d * s0s_hd, max(max(s0s_b * s0s_vr * s0s_vu, s0s_c * s0s_vr * s0s_vw), max(s0s_e * s0s_vl * s0s_vw, s0s_f * s0s_vl * s0s_vu))));
+    let s0_hit = s0s_hit * step(-0.45, p.x) * step(p.x, -0.45 + 3.0 * 0.11);
+    let s1_fd = clamp(floor((p.x - (-0.45)) / 0.11), 0.0, 2.0);
+    let s1_dv = mod(floor((floor(3.0 * up3)) / pow(10.0, 2.0 - s1_fd)), 10.0);
+    let s1_m  = 63.0 * (1.0 - step(0.5, abs(s1_dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(s1_dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(s1_dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(s1_dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(s1_dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(s1_dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(s1_dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(s1_dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(s1_dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(s1_dv - 9.0)));
+    let s1_dl = p - vec2(-0.45 + s1_fd * 0.11, 0.08);
+    let s1s_hx = step(0.009, s1_dl.x) * step(s1_dl.x, 0.075 - 0.009);
+    let s1s_ha = s1s_hx * step(abs(s1_dl.y - 0.13), 0.009);
+    let s1s_hg = s1s_hx * step(abs(s1_dl.y - 0.13 * 0.5), 0.009);
+    let s1s_hd = s1s_hx * step(abs(s1_dl.y), 0.009);
+    let s1s_vr = step(abs(s1_dl.x - 0.075), 0.009);
+    let s1s_vl = step(abs(s1_dl.x), 0.009);
+    let s1s_vu = step(0.13 * 0.5 + 0.009, s1_dl.y) * step(s1_dl.y, 0.13 - 0.009);
+    let s1s_vw = step(0.009, s1_dl.y) * step(s1_dl.y, 0.13 * 0.5 - 0.009);
+    let s1s_a = step(0.5, mod(floor(s1_m / 1.0), 2.0));
+    let s1s_b = step(0.5, mod(floor(s1_m / 2.0), 2.0));
+    let s1s_c = step(0.5, mod(floor(s1_m / 4.0), 2.0));
+    let s1s_d = step(0.5, mod(floor(s1_m / 8.0), 2.0));
+    let s1s_e = step(0.5, mod(floor(s1_m / 16.0), 2.0));
+    let s1s_f = step(0.5, mod(floor(s1_m / 32.0), 2.0));
+    let s1s_g = step(0.5, mod(floor(s1_m / 64.0), 2.0));
+    let s1s_hit = max(max(s1s_a * s1s_ha, s1s_g * s1s_hg), max(s1s_d * s1s_hd, max(max(s1s_b * s1s_vr * s1s_vu, s1s_c * s1s_vr * s1s_vw), max(s1s_e * s1s_vl * s1s_vw, s1s_f * s1s_vl * s1s_vu))));
+    let s1_hit = s1s_hit * step(-0.45, p.x) * step(p.x, -0.45 + 3.0 * 0.11);
+    let s2_fd = clamp(floor((p.x - (-0.45)) / 0.11), 0.0, 2.0);
+    let s2_dv = mod(floor((floor(12.0 * up3)) / pow(10.0, 2.0 - s2_fd)), 10.0);
+    let s2_m  = 63.0 * (1.0 - step(0.5, abs(s2_dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(s2_dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(s2_dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(s2_dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(s2_dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(s2_dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(s2_dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(s2_dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(s2_dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(s2_dv - 9.0)));
+    let s2_dl = p - vec2(-0.45 + s2_fd * 0.11, -0.24);
+    let s2s_hx = step(0.009, s2_dl.x) * step(s2_dl.x, 0.075 - 0.009);
+    let s2s_ha = s2s_hx * step(abs(s2_dl.y - 0.13), 0.009);
+    let s2s_hg = s2s_hx * step(abs(s2_dl.y - 0.13 * 0.5), 0.009);
+    let s2s_hd = s2s_hx * step(abs(s2_dl.y), 0.009);
+    let s2s_vr = step(abs(s2_dl.x - 0.075), 0.009);
+    let s2s_vl = step(abs(s2_dl.x), 0.009);
+    let s2s_vu = step(0.13 * 0.5 + 0.009, s2_dl.y) * step(s2_dl.y, 0.13 - 0.009);
+    let s2s_vw = step(0.009, s2_dl.y) * step(s2_dl.y, 0.13 * 0.5 - 0.009);
+    let s2s_a = step(0.5, mod(floor(s2_m / 1.0), 2.0));
+    let s2s_b = step(0.5, mod(floor(s2_m / 2.0), 2.0));
+    let s2s_c = step(0.5, mod(floor(s2_m / 4.0), 2.0));
+    let s2s_d = step(0.5, mod(floor(s2_m / 8.0), 2.0));
+    let s2s_e = step(0.5, mod(floor(s2_m / 16.0), 2.0));
+    let s2s_f = step(0.5, mod(floor(s2_m / 32.0), 2.0));
+    let s2s_g = step(0.5, mod(floor(s2_m / 64.0), 2.0));
+    let s2s_hit = max(max(s2s_a * s2s_ha, s2s_g * s2s_hg), max(s2s_d * s2s_hd, max(max(s2s_b * s2s_vr * s2s_vu, s2s_c * s2s_vr * s2s_vw), max(s2s_e * s2s_vl * s2s_vw, s2s_f * s2s_vl * s2s_vu))));
+    let s2_hit = s2s_hit * step(-0.45, p.x) * step(p.x, -0.45 + 3.0 * 0.11);
+
+    c += grn * max(max(s0_hit, s1_hit), s2_hit);
+    let lb_cx = floor((p.x - -1.55) / 0.034);
+    let lb_rw = floor((0.62 - p.y) / 0.05);
+    let lb_gx = floor(fract((p.x - -1.55) / 0.034) * 5.0);
+    let lb_gy = floor(fract((0.62 - p.y) / 0.05) * 7.0);
+    let lb_in = step(0.5, lb_gx) * step(lb_gx, 3.5) * step(0.5, lb_gy) * step(lb_gy, 5.5) * step(0.0, lb_cx) * step(0.0, lb_rw) * step(lb_rw, 1.0 - 1.0);
+    let lb_bt = step(0.4, hash1(uint(lb_cx + 50.0) * 7919u + uint(lb_rw + 5.0) * 104729u + uint(lb_gx * 8.0 + lb_gy) * 31u + 1u));
+    let lb_hit = lb_in * lb_bt * step(lb_cx, 9.0);
+    let lc_cx = floor((p.x - -1.55) / 0.034);
+    let lc_rw = floor((0.3 - p.y) / 0.05);
+    let lc_gx = floor(fract((p.x - -1.55) / 0.034) * 5.0);
+    let lc_gy = floor(fract((0.3 - p.y) / 0.05) * 7.0);
+    let lc_in = step(0.5, lc_gx) * step(lc_gx, 3.5) * step(0.5, lc_gy) * step(lc_gy, 5.5) * step(0.0, lc_cx) * step(0.0, lc_rw) * step(lc_rw, 1.0 - 1.0);
+    let lc_bt = step(0.4, hash1(uint(lc_cx + 50.0) * 7919u + uint(lc_rw + 5.0) * 104729u + uint(lc_gx * 8.0 + lc_gy) * 31u + 2u));
+    let lc_hit = lc_in * lc_bt * step(lc_cx, 9.0);
+    let ld_cx = floor((p.x - -1.55) / 0.034);
+    let ld_rw = floor((-0.02 - p.y) / 0.05);
+    let ld_gx = floor(fract((p.x - -1.55) / 0.034) * 5.0);
+    let ld_gy = floor(fract((-0.02 - p.y) / 0.05) * 7.0);
+    let ld_in = step(0.5, ld_gx) * step(ld_gx, 3.5) * step(0.5, ld_gy) * step(ld_gy, 5.5) * step(0.0, ld_cx) * step(0.0, ld_rw) * step(ld_rw, 1.0 - 1.0);
+    let ld_bt = step(0.4, hash1(uint(ld_cx + 50.0) * 7919u + uint(ld_rw + 5.0) * 104729u + uint(ld_gx * 8.0 + ld_gy) * 31u + 3u));
+    let ld_hit = ld_in * ld_bt * step(ld_cx, 9.0);
+
+    c += tc * (lb_hit + lc_hit + ld_hit);
+
+    // Total: six digits counting up to 128400.
+    let tot = floor(128400.0 * up3 * up3);
+    let tt_fd = clamp(floor((p.x - (-0.7)) / 0.2), 0.0, 5.0);
+    let tt_dv = mod(floor((tot) / pow(10.0, 5.0 - tt_fd)), 10.0);
+    let tt_m  = 63.0 * (1.0 - step(0.5, abs(tt_dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(tt_dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(tt_dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(tt_dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(tt_dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(tt_dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(tt_dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(tt_dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(tt_dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(tt_dv - 9.0)));
+    let tt_dl = p - vec2(-0.7 + tt_fd * 0.2, -0.78);
+    let tts_hx = step(0.014, tt_dl.x) * step(tt_dl.x, 0.14 - 0.014);
+    let tts_ha = tts_hx * step(abs(tt_dl.y - 0.26), 0.014);
+    let tts_hg = tts_hx * step(abs(tt_dl.y - 0.26 * 0.5), 0.014);
+    let tts_hd = tts_hx * step(abs(tt_dl.y), 0.014);
+    let tts_vr = step(abs(tt_dl.x - 0.14), 0.014);
+    let tts_vl = step(abs(tt_dl.x), 0.014);
+    let tts_vu = step(0.26 * 0.5 + 0.014, tt_dl.y) * step(tt_dl.y, 0.26 - 0.014);
+    let tts_vw = step(0.014, tt_dl.y) * step(tt_dl.y, 0.26 * 0.5 - 0.014);
+    let tts_a = step(0.5, mod(floor(tt_m / 1.0), 2.0));
+    let tts_b = step(0.5, mod(floor(tt_m / 2.0), 2.0));
+    let tts_c = step(0.5, mod(floor(tt_m / 4.0), 2.0));
+    let tts_d = step(0.5, mod(floor(tt_m / 8.0), 2.0));
+    let tts_e = step(0.5, mod(floor(tt_m / 16.0), 2.0));
+    let tts_f = step(0.5, mod(floor(tt_m / 32.0), 2.0));
+    let tts_g = step(0.5, mod(floor(tt_m / 64.0), 2.0));
+    let tts_hit = max(max(tts_a * tts_ha, tts_g * tts_hg), max(tts_d * tts_hd, max(max(tts_b * tts_vr * tts_vu, tts_c * tts_vr * tts_vw), max(tts_e * tts_vl * tts_vw, tts_f * tts_vl * tts_vu))));
+    let tt_hit = tts_hit * step(-0.7, p.x) * step(p.x, -0.7 + 6.0 * 0.2);
+
+    c += yel * tt_hit;
+    c += tc * 0.6 * step(abs(p.y + 0.84), 0.003) * step(abs(p.x + 0.1), 0.95);
+    let bax = abs(p.x);
+    let bay = abs(p.y);
+    c += tc * max(step(abs(bax - 1.72), 0.006) * step(bay, 0.94) * step(0.78, bay),
+                    step(abs(bay - 0.94), 0.006) * step(bax, 1.74) * step(1.54, bax));
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

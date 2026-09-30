@@ -1,0 +1,17 @@
+{"t":"set","id":"sol_mission","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"sol_briefing.kir"}
+{"t":"part","layer":"L4","index":1,"path":"sol_codec.kir"}
+{"t":"part","layer":"L4","index":2,"path":"sol_soliton.kir"}
+{"t":"part","layer":"L4","index":3,"path":"sol_result.kir"}
+{"t":"part","layer":"L4","index":4,"path":"sol_bug.kir"}
+{"t":"part","layer":"L5","path":"sol_phosphor.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L4","index":0,"key":"start","value":0.0}
+{"t":"param","layer":"L4","index":1,"key":"start","value":8.0}
+{"t":"param","layer":"L4","index":2,"key":"start","value":16.0}
+{"t":"param","layer":"L4","index":2,"key":"cycle","value":8.0}
+{"t":"param","layer":"L4","index":3,"key":"start","value":24.0}
+{"t":"param","layer":"L4","index":4,"key":"corner","value":3.0}
+{"t":"param","layer":"L5","key":"mono","value":0.2}
+{"t":"param","layer":"L5","key":"hue","value":0.4}

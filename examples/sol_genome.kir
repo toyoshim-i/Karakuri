@@ -1,0 +1,143 @@
+// A genetic-analysis console: a double helix turns in the middle of the frame, its two
+// strands passing in front of and behind each other, joined by rungs whose halves take
+// paired colours; on the left a ladder of coloured base blocks scrolls upward, on the
+// right a ring gauge fills while a two-digit seven-segment percentage counts, and a
+// scan line crosses the helix from top to bottom. Draws the whole frame and reads no
+// geometry.
+
+proc sol_genome {
+  kind  L4
+  blend additive
+
+  // Turning speed of the helix, in radians per second.
+  param spin  : float [0.0, 4.0] = 1.2
+
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let tc   = srgb_to_linear(vec3(0.35, 0.95, 0.85));
+    let grn  = srgb_to_linear(vec3(0.25, 1.0, 0.4));
+    let red  = srgb_to_linear(vec3(1.0, 0.12, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.55, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.92, 0.25));
+    let cyan = srgb_to_linear(vec3(0.1, 0.85, 1.0));
+    let dgrn = srgb_to_linear(vec3(0.03, 0.22, 0.1));
+    let dtc  = srgb_to_linear(vec3(0.03, 0.16, 0.18));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+
+    var c = vec3(0.0);
+    let ca = srgb_to_linear(vec3(0.2, 0.9, 1.0));
+    let cbn = srgb_to_linear(vec3(1.0, 0.45, 0.15));
+    let cg = srgb_to_linear(vec3(0.3, 1.0, 0.4));
+    let ct = srgb_to_linear(vec3(0.95, 0.9, 0.2));
+
+    // Helix: two strands with x = 0.26 sin(phase), phase turning with time and height.
+    let ph  = p.y * 7.0 + lt * spin;
+    let x1  = 0.26 * sin(ph);
+    let x2  = 0.26 * sin(ph + 3.14159265);
+    let d1  = cos(ph);
+    let w1  = 0.016 + 0.012 * d1;
+    let w2  = 0.016 - 0.012 * d1;
+    let in1 = step(abs(p.x - x1), w1) * step(abs(p.y), 0.9);
+    let in2 = step(abs(p.x - x2), w2) * step(abs(p.y), 0.9);
+    c += ca * in1 * (0.55 + 0.45 * d1);
+    c += ca * in2 * (0.55 - 0.45 * d1);
+
+    // Rungs every 0.09: from one strand to the other, halves in paired colours.
+    let rc  = floor(p.y / 0.09);
+    let ry  = (rc + 0.5) * 0.09;
+    let rph = ry * 7.0 + lt * spin;
+    let rx1 = 0.26 * sin(rph);
+    let rx2 = 0.26 * sin(rph + 3.14159265);
+    let bp  = floor(hash1(uint(rc + 100.0) * 7919u + 5u) * 4.0);
+    let cA  = mix(mix(cg, ct, vec3(step(0.5, bp))), mix(cbn, ca, vec3(step(2.5, bp))), vec3(step(1.5, bp)));
+    let cB  = mix(mix(ct, cg, vec3(step(0.5, bp))), mix(ca, cbn, vec3(step(2.5, bp))), vec3(step(1.5, bp)));
+    let mid = (rx1 + rx2) * 0.5;
+    let inr = step(abs(p.y - ry), 0.007) * step(min(rx1, rx2), p.x) * step(p.x, max(rx1, rx2)) * step(abs(p.y), 0.9);
+    let side = step(mid, p.x) * step(rx2, rx1) + step(p.x, mid) * step(rx1, rx2);
+    c += mix(cA, cB, vec3(step(0.5, side))) * inr * 0.9;
+
+    // Scan line crossing the helix from top to bottom once every four seconds.
+    let sy = 0.9 - fract(lt * 0.25) * 1.8;
+    c += vec3(1.0) * step(abs(p.y - sy), 0.004) * step(abs(p.x), 0.45) * 0.7;
+    c += ca * 0.12 * step(p.y, sy) * step(sy - 0.06, p.y) * step(abs(p.x), 0.45);
+
+    // Base ladder on the left: six columns of coloured blocks scrolling up.
+    let lx  = floor((p.x + 1.55) / 0.08);
+    let ly  = floor(p.y / 0.07 - lt * 1.5);
+    let lin = step(0.0, lx) * step(lx, 5.0) * step(abs(p.y), 0.9) * step(0.15, fract((p.x + 1.55) / 0.08)) * step(fract((p.x + 1.55) / 0.08), 0.85) * step(0.12, fract(p.y / 0.07 - lt * 1.5)) * step(fract(p.y / 0.07 - lt * 1.5), 0.88);
+    let lb  = floor(hash1(uint(lx + 10.0) * 7919u + uint(ly + 1000.0) * 104729u) * 4.0);
+    let lc  = mix(mix(cg, ct, vec3(step(0.5, lb))), mix(cbn, ca, vec3(step(2.5, lb))), vec3(step(1.5, lb)));
+    c += lc * lin * 0.85;
+    c += tc * 0.3 * step(abs(p.x + 1.1), 0.003) * step(abs(p.y), 0.9);
+
+    // Analysis ring on the right with its percentage.
+    let gq  = p - vec2(1.1, 0.15);
+    let gr  = length(gq);
+    let ga  = fract(atan2(gq.x, gq.y) / 6.2831853);
+    let pct = fract(lt / 8.0);
+    c += ca * step(abs(gr - 0.4), 0.02) * step(ga, pct);
+    c += dtc * 2.0 * step(abs(gr - 0.4), 0.02) * step(pct, ga);
+    c += tc * step(abs(gr - 0.46), 0.003);
+    let pc_fd = clamp(floor((p.x - (0.95)) / 0.16), 0.0, 1.0);
+    let pc_dv = mod(floor((floor(pct * 100.0)) / pow(10.0, 1.0 - pc_fd)), 10.0);
+    let pc_m  = 63.0 * (1.0 - step(0.5, abs(pc_dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(pc_dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(pc_dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(pc_dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(pc_dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(pc_dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(pc_dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(pc_dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(pc_dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(pc_dv - 9.0)));
+    let pc_dl = p - vec2(0.95 + pc_fd * 0.16, 0.06);
+    let pcs_hx = step(0.011, pc_dl.x) * step(pc_dl.x, 0.11 - 0.011);
+    let pcs_ha = pcs_hx * step(abs(pc_dl.y - 0.2), 0.011);
+    let pcs_hg = pcs_hx * step(abs(pc_dl.y - 0.2 * 0.5), 0.011);
+    let pcs_hd = pcs_hx * step(abs(pc_dl.y), 0.011);
+    let pcs_vr = step(abs(pc_dl.x - 0.11), 0.011);
+    let pcs_vl = step(abs(pc_dl.x), 0.011);
+    let pcs_vu = step(0.2 * 0.5 + 0.011, pc_dl.y) * step(pc_dl.y, 0.2 - 0.011);
+    let pcs_vw = step(0.011, pc_dl.y) * step(pc_dl.y, 0.2 * 0.5 - 0.011);
+    let pcs_a = step(0.5, mod(floor(pc_m / 1.0), 2.0));
+    let pcs_b = step(0.5, mod(floor(pc_m / 2.0), 2.0));
+    let pcs_c = step(0.5, mod(floor(pc_m / 4.0), 2.0));
+    let pcs_d = step(0.5, mod(floor(pc_m / 8.0), 2.0));
+    let pcs_e = step(0.5, mod(floor(pc_m / 16.0), 2.0));
+    let pcs_f = step(0.5, mod(floor(pc_m / 32.0), 2.0));
+    let pcs_g = step(0.5, mod(floor(pc_m / 64.0), 2.0));
+    let pcs_hit = max(max(pcs_a * pcs_ha, pcs_g * pcs_hg), max(pcs_d * pcs_hd, max(max(pcs_b * pcs_vr * pcs_vu, pcs_c * pcs_vr * pcs_vw), max(pcs_e * pcs_vl * pcs_vw, pcs_f * pcs_vl * pcs_vu))));
+    let pc_hit = pcs_hit * step(0.95, p.x) * step(p.x, 0.95 + 2.0 * 0.16);
+
+    c += cg * pc_hit;
+    let rt_cx = floor((p.x - 0.6) / 0.032);
+    let rt_rw = floor((-0.5 - p.y) / 0.05);
+    let rt_gx = floor(fract((p.x - 0.6) / 0.032) * 5.0);
+    let rt_gy = floor(fract((-0.5 - p.y) / 0.05) * 7.0);
+    let rt_in = step(0.5, rt_gx) * step(rt_gx, 3.5) * step(0.5, rt_gy) * step(rt_gy, 5.5) * step(0.0, rt_cx) * step(0.0, rt_rw) * step(rt_rw, 5.0 - 1.0);
+    let rt_bt = step(0.4, hash1(uint(rt_cx + 50.0) * 7919u + uint(rt_rw + 5.0) * 104729u + uint(rt_gx * 8.0 + rt_gy) * 31u + 9u));
+    let rt_hit = rt_in * rt_bt * step(rt_cx, 16.0);
+
+    c += tc * 0.8 * rt_hit * step(p.x, 1.6);
+    let bax = abs(p.x);
+    let bay = abs(p.y);
+    c += tc * max(step(abs(bax - 1.72), 0.006) * step(bay, 0.94) * step(0.78, bay),
+                    step(abs(bay - 0.94), 0.006) * step(bax, 1.74) * step(1.54, bax));
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

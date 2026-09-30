@@ -1,0 +1,138 @@
+// A codec-frequency bug: a boxed seven-segment "140.85" with its decimal point, above two
+// segmented gauges for life and psyche that sway slowly. It is the mark that ties the
+// Solid-style interface pieces in this library together and can sit over any other
+// picture. Draws the whole frame and reads no geometry.
+
+proc sol_bug {
+  kind  L4
+  blend additive
+
+  // Corner: 0 top left, 1 top right, 2 bottom left, 3 bottom right.
+  param corner : float [0.0, 3.0] = 0.0
+
+  // Brightness of the bug.
+  param level  : float [0.0, 1.0] = 1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let tc   = srgb_to_linear(vec3(0.35, 0.95, 0.85));
+    let grn  = srgb_to_linear(vec3(0.25, 1.0, 0.4));
+    let red  = srgb_to_linear(vec3(1.0, 0.12, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.55, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.92, 0.25));
+    let cyan = srgb_to_linear(vec3(0.1, 0.85, 1.0));
+    let dgrn = srgb_to_linear(vec3(0.03, 0.22, 0.1));
+    let dtc  = srgb_to_linear(vec3(0.03, 0.16, 0.18));
+
+    let cor = floor(corner + 0.5);
+    let cx  = mix(-1.42, 1.42, step(0.5, mod(cor, 2.0)));
+    let cy  = mix(0.8, -0.8, step(1.5, cor));
+    let q   = p - vec2(cx, cy);
+    let bx  = max(abs(q.x) - 0.21, abs(q.y) - 0.13);
+    var c   = tc * step(abs(bx), 0.005);
+    let dl0 = q - vec2(-0.190, 0.03);
+    let dl1 = q - vec2(-0.125, 0.03);
+    let dl2 = q - vec2(-0.060, 0.03);
+    let dl3 = q - vec2(0.025, 0.03);
+    let dl4 = q - vec2(0.090, 0.03);
+    let f0_hx = step(0.005, dl0.x) * step(dl0.x, 0.045 - 0.005);
+    let f0_ha = f0_hx * step(abs(dl0.y - 0.075), 0.005);
+    let f0_hg = f0_hx * step(abs(dl0.y - 0.075 * 0.5), 0.005);
+    let f0_hd = f0_hx * step(abs(dl0.y), 0.005);
+    let f0_vr = step(abs(dl0.x - 0.045), 0.005);
+    let f0_vl = step(abs(dl0.x), 0.005);
+    let f0_vu = step(0.075 * 0.5 + 0.005, dl0.y) * step(dl0.y, 0.075 - 0.005);
+    let f0_vw = step(0.005, dl0.y) * step(dl0.y, 0.075 * 0.5 - 0.005);
+    let f0_a = step(0.5, mod(floor(6.0 / 1.0), 2.0));
+    let f0_b = step(0.5, mod(floor(6.0 / 2.0), 2.0));
+    let f0_c = step(0.5, mod(floor(6.0 / 4.0), 2.0));
+    let f0_d = step(0.5, mod(floor(6.0 / 8.0), 2.0));
+    let f0_e = step(0.5, mod(floor(6.0 / 16.0), 2.0));
+    let f0_f = step(0.5, mod(floor(6.0 / 32.0), 2.0));
+    let f0_g = step(0.5, mod(floor(6.0 / 64.0), 2.0));
+    let f0_hit = max(max(f0_a * f0_ha, f0_g * f0_hg), max(f0_d * f0_hd, max(max(f0_b * f0_vr * f0_vu, f0_c * f0_vr * f0_vw), max(f0_e * f0_vl * f0_vw, f0_f * f0_vl * f0_vu))));
+    let f1_hx = step(0.005, dl1.x) * step(dl1.x, 0.045 - 0.005);
+    let f1_ha = f1_hx * step(abs(dl1.y - 0.075), 0.005);
+    let f1_hg = f1_hx * step(abs(dl1.y - 0.075 * 0.5), 0.005);
+    let f1_hd = f1_hx * step(abs(dl1.y), 0.005);
+    let f1_vr = step(abs(dl1.x - 0.045), 0.005);
+    let f1_vl = step(abs(dl1.x), 0.005);
+    let f1_vu = step(0.075 * 0.5 + 0.005, dl1.y) * step(dl1.y, 0.075 - 0.005);
+    let f1_vw = step(0.005, dl1.y) * step(dl1.y, 0.075 * 0.5 - 0.005);
+    let f1_a = step(0.5, mod(floor(102.0 / 1.0), 2.0));
+    let f1_b = step(0.5, mod(floor(102.0 / 2.0), 2.0));
+    let f1_c = step(0.5, mod(floor(102.0 / 4.0), 2.0));
+    let f1_d = step(0.5, mod(floor(102.0 / 8.0), 2.0));
+    let f1_e = step(0.5, mod(floor(102.0 / 16.0), 2.0));
+    let f1_f = step(0.5, mod(floor(102.0 / 32.0), 2.0));
+    let f1_g = step(0.5, mod(floor(102.0 / 64.0), 2.0));
+    let f1_hit = max(max(f1_a * f1_ha, f1_g * f1_hg), max(f1_d * f1_hd, max(max(f1_b * f1_vr * f1_vu, f1_c * f1_vr * f1_vw), max(f1_e * f1_vl * f1_vw, f1_f * f1_vl * f1_vu))));
+    let f2_hx = step(0.005, dl2.x) * step(dl2.x, 0.045 - 0.005);
+    let f2_ha = f2_hx * step(abs(dl2.y - 0.075), 0.005);
+    let f2_hg = f2_hx * step(abs(dl2.y - 0.075 * 0.5), 0.005);
+    let f2_hd = f2_hx * step(abs(dl2.y), 0.005);
+    let f2_vr = step(abs(dl2.x - 0.045), 0.005);
+    let f2_vl = step(abs(dl2.x), 0.005);
+    let f2_vu = step(0.075 * 0.5 + 0.005, dl2.y) * step(dl2.y, 0.075 - 0.005);
+    let f2_vw = step(0.005, dl2.y) * step(dl2.y, 0.075 * 0.5 - 0.005);
+    let f2_a = step(0.5, mod(floor(63.0 / 1.0), 2.0));
+    let f2_b = step(0.5, mod(floor(63.0 / 2.0), 2.0));
+    let f2_c = step(0.5, mod(floor(63.0 / 4.0), 2.0));
+    let f2_d = step(0.5, mod(floor(63.0 / 8.0), 2.0));
+    let f2_e = step(0.5, mod(floor(63.0 / 16.0), 2.0));
+    let f2_f = step(0.5, mod(floor(63.0 / 32.0), 2.0));
+    let f2_g = step(0.5, mod(floor(63.0 / 64.0), 2.0));
+    let f2_hit = max(max(f2_a * f2_ha, f2_g * f2_hg), max(f2_d * f2_hd, max(max(f2_b * f2_vr * f2_vu, f2_c * f2_vr * f2_vw), max(f2_e * f2_vl * f2_vw, f2_f * f2_vl * f2_vu))));
+    let f3_hx = step(0.005, dl3.x) * step(dl3.x, 0.045 - 0.005);
+    let f3_ha = f3_hx * step(abs(dl3.y - 0.075), 0.005);
+    let f3_hg = f3_hx * step(abs(dl3.y - 0.075 * 0.5), 0.005);
+    let f3_hd = f3_hx * step(abs(dl3.y), 0.005);
+    let f3_vr = step(abs(dl3.x - 0.045), 0.005);
+    let f3_vl = step(abs(dl3.x), 0.005);
+    let f3_vu = step(0.075 * 0.5 + 0.005, dl3.y) * step(dl3.y, 0.075 - 0.005);
+    let f3_vw = step(0.005, dl3.y) * step(dl3.y, 0.075 * 0.5 - 0.005);
+    let f3_a = step(0.5, mod(floor(127.0 / 1.0), 2.0));
+    let f3_b = step(0.5, mod(floor(127.0 / 2.0), 2.0));
+    let f3_c = step(0.5, mod(floor(127.0 / 4.0), 2.0));
+    let f3_d = step(0.5, mod(floor(127.0 / 8.0), 2.0));
+    let f3_e = step(0.5, mod(floor(127.0 / 16.0), 2.0));
+    let f3_f = step(0.5, mod(floor(127.0 / 32.0), 2.0));
+    let f3_g = step(0.5, mod(floor(127.0 / 64.0), 2.0));
+    let f3_hit = max(max(f3_a * f3_ha, f3_g * f3_hg), max(f3_d * f3_hd, max(max(f3_b * f3_vr * f3_vu, f3_c * f3_vr * f3_vw), max(f3_e * f3_vl * f3_vw, f3_f * f3_vl * f3_vu))));
+    let f4_hx = step(0.005, dl4.x) * step(dl4.x, 0.045 - 0.005);
+    let f4_ha = f4_hx * step(abs(dl4.y - 0.075), 0.005);
+    let f4_hg = f4_hx * step(abs(dl4.y - 0.075 * 0.5), 0.005);
+    let f4_hd = f4_hx * step(abs(dl4.y), 0.005);
+    let f4_vr = step(abs(dl4.x - 0.045), 0.005);
+    let f4_vl = step(abs(dl4.x), 0.005);
+    let f4_vu = step(0.075 * 0.5 + 0.005, dl4.y) * step(dl4.y, 0.075 - 0.005);
+    let f4_vw = step(0.005, dl4.y) * step(dl4.y, 0.075 * 0.5 - 0.005);
+    let f4_a = step(0.5, mod(floor(109.0 / 1.0), 2.0));
+    let f4_b = step(0.5, mod(floor(109.0 / 2.0), 2.0));
+    let f4_c = step(0.5, mod(floor(109.0 / 4.0), 2.0));
+    let f4_d = step(0.5, mod(floor(109.0 / 8.0), 2.0));
+    let f4_e = step(0.5, mod(floor(109.0 / 16.0), 2.0));
+    let f4_f = step(0.5, mod(floor(109.0 / 32.0), 2.0));
+    let f4_g = step(0.5, mod(floor(109.0 / 64.0), 2.0));
+    let f4_hit = max(max(f4_a * f4_ha, f4_g * f4_hg), max(f4_d * f4_hd, max(max(f4_b * f4_vr * f4_vu, f4_c * f4_vr * f4_vw), max(f4_e * f4_vl * f4_vw, f4_f * f4_vl * f4_vu))));
+
+    c += tc * max(max(max(f0_hit, f1_hit), max(f2_hit, f3_hit)), f4_hit);
+    c += tc * step(length(q - vec2(-0.036, 0.03)), 0.006);
+
+    // Two gauges: life, nearly full, and psyche, which swings.
+    let life = 0.88 + 0.04 * sin(t * 0.7);
+    let psy  = 0.6 + 0.25 * sin(t * 0.4);
+    let gx   = (q.x + 0.18) / 0.36;
+    let seg  = step(0.2, fract(gx * 18.0)) * step(0.0, gx) * step(gx, 1.0);
+    c += grn * seg * step(gx, life) * step(abs(q.y + 0.03), 0.014);
+    c += cyan * seg * step(gx, psy) * step(abs(q.y + 0.085), 0.014);
+
+    color = vec4(c * level, 1.0);
+
+  }
+}
