@@ -1,7 +1,7 @@
 //! ApplicationHandler event loop implementation for App.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use karakuri_console::repaint::Change;
 use karakuri_console::view::{self, Scope};
@@ -269,6 +269,15 @@ impl ApplicationHandler for App {
                 gfx.window.request_redraw();
             }
         }
+        if self
+            .gfx
+            .as_ref()
+            .is_some_and(|gfx| gfx.engine.chain_swap.building().is_some())
+        {
+            if let Some(gfx) = self.gfx.as_ref() {
+                gfx.window.request_redraw();
+            }
+        }
         // Measure costs only after the engine is initialized, retaining due state until recorded.
         if self.costs.due().is_some_and(|due| due <= now) {
             if let Some(gfx) = self.gfx.as_ref() {
@@ -326,7 +335,14 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let next = [self.egui_due, self.costs.due(), self.served]
+        let building_due = self.gfx.as_ref().and_then(|gfx| {
+            gfx.engine
+                .chain_swap
+                .building()
+                .is_some()
+                .then(|| Instant::now() + Duration::from_millis(16))
+        });
+        let next = [self.egui_due, self.costs.due(), self.served, building_due]
             .into_iter()
             .flatten()
             .min();

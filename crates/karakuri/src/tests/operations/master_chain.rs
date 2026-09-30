@@ -240,3 +240,75 @@ frag
 
     let _ = std::fs::remove_dir_all(&test_dir);
 }
+
+#[test]
+fn chain_swap_worker_compilation_and_installation() {
+    let gpu = pollster::block_on(Gpu::new(None)).expect("headless gpu");
+    let mut chain_swap = karakuri_engine::ChainSwap::new(&gpu.device, &gpu.queue);
+    let mut present =
+        karakuri_engine::Present::new(&gpu.device, karakuri_engine::Present::HDR_FORMAT, 1280, 720);
+    let zoom_blur_src = shipped::ZOOM_BLUR;
+    let proc_address = shipped::address(zoom_blur_src);
+    let slot_spec = karakuri_engine::SlotSpec {
+        procedure: proc_address.clone(),
+        cut: None,
+        params: std::collections::BTreeMap::new(),
+    };
+    let resolve = |addr: &str| resolve_procedure(None, addr);
+    let res = karakuri_environment::mix::apply_chain(
+        &mut chain_swap,
+        &mut present,
+        &gpu.queue,
+        &[slot_spec],
+        &resolve,
+    );
+    assert!(res.is_ok(), "{:?}", res);
+
+    for _ in 0..100 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        chain_swap.begin_frame(&mut present, &gpu.device, &gpu.queue);
+        for _event in chain_swap.events() {}
+        if !present.chain_reading().is_empty() {
+            break;
+        }
+    }
+    assert!(
+        !present.chain_reading().is_empty(),
+        "Chain was not installed into present after worker finished!"
+    );
+
+    let view_chain = crate::bridge::chain_view(&present, &[]);
+    assert_eq!(view_chain.slots.len(), 1);
+
+    let ctx = crate::tests::drawn_once();
+    let choices = AddChoices::none();
+
+    for (w, h) in [
+        (1440.0, 900.0),
+        (1244.0, 658.5),
+        (1920.0, 1080.0),
+        (1024.0, 768.0),
+    ] {
+        let mut readout = crate::readout::Readout::new(w, h);
+        readout.panel.solve();
+        let row = master(
+            &ctx,
+            readout.panel.layout(),
+            Some(1.0),
+            Some(&view_chain),
+            &choices,
+        )
+        .expect("master bay renders with chain slot");
+        assert_eq!(
+            row.slots.len(),
+            1,
+            "Slot should be rendered even in tight viewports ({w}x{h})"
+        );
+        if h >= 768.0 {
+            assert!(
+                !row.slots[0].params.is_empty(),
+                "Parameters should fit within viewport ({w}x{h})"
+            );
+        }
+    }
+}
