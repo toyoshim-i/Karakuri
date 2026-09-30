@@ -1,0 +1,29 @@
+// A low, slow orbit close to the gate plane: the most dramatic line of sight
+// on a rig that sits flat, so the gate looms across the frame and the floor
+// ripples to the horizon.
+//
+//     cargo run -p karakuri-cli -- --set examples/shard_reactor.kir,examples/prism_wire.kir,examples/low_orbit.kir
+
+proc low_orbit {
+  kind L3
+
+  // Distance from the target.
+  param radius    : float [2.0, 20.0] = 10.5
+
+  // Elevation above the horizontal, in radians.
+  param elevation : float [0.0, 1.5] = 0.18
+
+  // Turns per second around the vertical axis.
+  param speed     : float [-1.0, 1.0] = 0.06
+
+  // Height of the point looked at.
+  param aim       : float [-4.0, 4.0] = 0.8
+
+  camera {
+    let a = t * speed * 6.2831853;
+    let h = cos(elevation) * radius;
+
+    eye    = vec3(cos(a) * h, aim + sin(elevation) * radius, sin(a) * h);
+    target = vec3(0.0, aim, 0.0);
+  }
+}

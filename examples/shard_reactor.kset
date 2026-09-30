@@ -1,0 +1,5 @@
+{"t":"set","id":"shard_reactor","v":1}
+{"t":"part","layer":"L1","path":"shard_reactor.kir"}
+{"t":"part","layer":"L3","path":"low_orbit.kir"}
+{"t":"part","layer":"L4","path":"prism_wire.kir"}
+{"t":"bind","layer":"L1","key":"fling","signal":"onset","curve":"pow2","range":[0.0,2.5]}

@@ -1,0 +1,169 @@
+// A kinetic polyhedral rig in three parts, classic vertex-shader-art style:
+// a counter-rotating gate of jagged triangle shards that flings open on each
+// beat, an fbm-pulsed crystalline star core suspended at its centre, and a
+// sea of triangle tiles rippling into the horizon below. Every shard is an
+// independent procedural triangle: per-shard spin, phase and radius jitter,
+// so no two are alike and the whole structure shimmers as it moves.
+//
+//     cargo run -p karakuri-cli -- \
+//       --set examples/shard_reactor.kir,examples/prism_wire.kir,examples/low_orbit.kir
+//
+// or the packaged Set:
+//
+//     cargo run -p karakuri-cli -- --take-in examples/shard_reactor.kset
+
+proc shard_reactor {
+  kind     L1
+  topology triangles
+  capacity [3072, 49152] = 49152
+
+  // Turns per second of the gate rings; every other ring turns the other way.
+  param gate_speed : float [-1.0, 1.0] = 0.14
+
+  // How far the gate shards fling open on a transient hit; bind to onset.
+  param fling      : float [0.0, 2.5] = 1.2
+
+  // Base radius of the inner star core in world units.
+  param core_r     : float [0.4, 4.0] = 1.3
+
+  // Tumble of the whole core, turns per second.
+  param core_spin  : float [-1.0, 1.0] = 0.35
+
+  // Amplitude of the floor ripple and the gate swell.
+  param wave       : float [0.0, 2.0] = 0.7
+
+  // Base hue of the palette, [0, 1].
+  param hue        : float [0.0, 1.0] = 0.68
+
+  emit position, uv, tint, size
+
+  element {
+    let tri    = seed / 3u;
+    let corner = seed % 3u;
+    let total  = capacity / 3u;
+
+    // Three sections of the figure: a core of 1/8, a gate of 1/2, a floor of the rest.
+    let core_n   = total / 8u;
+    let core_end = core_n;
+    let gate_end = core_n + total / 2u;
+
+    // Barycentric coordinates for the wireframe edges in the renderer.
+    var bc = vec2(0.0);
+    if corner == 0u { bc = vec2(1.0, 0.0); }
+    if corner == 1u { bc = vec2(0.0, 1.0); }
+    uv = bc;
+
+    // Transient: sharp at each beat, carried further by the bound onset.
+    let hit    = pow(1.0 - fract(beats), 4.0);
+    let energy = clamp(hit * 0.8 + fling * 0.18, 0.0, 1.0);
+    size = energy;
+
+    var pos = vec3(0.0);
+    var col = vec3(0.0);
+
+    if tri < core_end {
+      // ---------------------------- INNER STAR CORE ----------------------------
+      // Fibonacci lattice on the sphere, spiked by fbm, flaring on the hit.
+      let f     = float(tri);
+      let phi   = f * 2.3999632;
+      let yb    = 1.0 - (f / float(core_n)) * 2.0;
+      let rs    = sqrt(max(1.0 - yb * yb, 0.0));
+      let dir   = vec3(cos(phi) * rs, yb, sin(phi) * rs);
+
+      let nval = fbm(dir * 2.5 + vec3(0.0, t * 0.15, 0.0), 3);
+      let rad  = core_r * (1.0 + max(nval, 0.0) * 1.6 + hit * 1.2);
+      let cen  = dir * rad;
+
+      let up   = normalize(cen + vec3(0.0, 0.0001, 0.0));
+      let tan  = normalize(cross(up, vec3(0.0, 1.0, 0.0)) + vec3(0.0001, 0.0, 0.0));
+      let bin  = cross(up, tan);
+
+      let tri_scale = (8.0 / sqrt(float(core_n))) * (1.0 + energy * 0.6);
+      let ang  = float(corner) * 2.0943951 + t * 2.5 + f * 0.11;
+      let off  = (tan * cos(ang) + bin * sin(ang)) * tri_scale + up * nval * tri_scale;
+
+      let c0   = vec3(0.0, 1.6, 0.0);
+      let axis = normalize(vec3(0.3, 1.0, 0.1));
+      pos = c0 + rot_axis(cen + off, axis, t * core_spin * 6.2831853);
+
+      col = hsv_to_rgb(vec3(fract(hue + 0.5 + f * 0.0008 + t * 0.06), 0.8, 0.35 + energy * 0.9));
+
+    } else {
+      if tri < gate_end {
+        // ------------------------------- GATE ---------------------------------
+        // Eight concentric rings of blades; neighbours turn in opposition, so
+        // the ring boundaries grind against each other like a reactor spinning up.
+        let g_idx = tri - core_end;
+        let per   = (gate_end - core_end) / 8u;
+        let ring  = g_idx / per;
+        let g_pos = g_idx % per;
+
+        let dir_sign = mix(1.0, -1.0, step(float(ring % 2u) * 0.5, 0.5));
+        let a = float(g_pos) / float(per) * 6.2831853
+              + t * gate_speed * 6.2831853 * dir_sign;
+
+        // Ring radius; the fling pushes inner rings out the farthest.
+        let ring_f = float(ring);
+        let rr = 3.5 + ring_f * 0.62;
+        let R  = rr * (1.0 + hit * fling * 0.5 * (1.0 - ring_f * 0.08));
+
+        // A travelling swell rides around the ring and sways it up and down.
+        let swell = value_noise(vec3(cos(a) * 1.2, sin(a) * 1.2, ring_f * 0.4 + t * 0.2));
+        let gy = 0.6 + swell * wave * 0.3 * (0.5 + energy) + hit * wave * 0.25;
+
+        let ca = cos(a);
+        let sa = sin(a);
+        let C  = vec3(ca * R, gy, sa * R);
+        let T  = vec3(-sa, 0.0, ca);             // along the ring
+        let B  = cross(T, vec3(0.0, 1.0, 0.0));  // outward radial
+
+        // Per-shard identity: each triangle gets its own spin rate, phase and scale.
+        let spin_dir = mix(1.0, -1.0, step(hash1(tri + 13u), 0.5));
+        let s  = 0.20 + 0.10 * hash1(tri);
+        let a2 = float(corner) * 2.0943951
+               + t * (0.5 + hash1(tri + 11u) * 1.6) * spin_dir
+               + hash1(tri + 7u) * 6.2831853;
+        let rc = s * (0.7 + 0.6 * hash1(seed));
+
+        // The blade, stretched along the ring so it reads as a sliver.
+        var off = (B * cos(a2) + T * sin(a2) * 1.5) * rc;
+        // The swell tilts whole shards about the radial axis; the hit flares them up.
+        off = rot_axis(off, B, swell * wave * 1.2 + hit * 0.5 * (1.0 - ring_f * 0.1));
+
+        pos = C + off;
+
+        col = hsv_to_rgb(vec3(fract(hue + ring_f * 0.075 + a * 0.02 + t * 0.04),
+                              0.85, 0.35 + energy * 0.7));
+
+      } else {
+        // ------------------------------- FLOOR --------------------------------
+        // A wide mosaic of independent triangle tiles, bent to follow a ripple
+        // that radiates out from under the reactor.
+        let f_idx = tri - gate_end;
+        let gx = f_idx % 64u;
+        let gz = f_idx / 64u;
+        let C  = vec3((float(gx) - 31.5) * 0.55, -3.0, (float(gz) - 47.5) * 0.55);
+
+        let a2 = float(corner) * 2.0943951 + hash1(tri + 3u) * 6.2831853 + t * 0.15;
+        let rc = 0.33 * (0.8 + 0.35 * hash1(seed));
+        let off = vec3(cos(a2) * rc, 0.0, sin(a2) * rc);
+
+        let px = C.x + off.x;
+        let pz = C.z + off.z;
+        let r  = sqrt(px * px + pz * pz);
+
+        let hh = (sin(r * 1.15 - t * 2.4) * 0.45
+                + value_noise(vec3(px * 0.3, pz * 0.3, t * 0.12)) * 0.3)
+                * wave * (0.55 + energy);
+
+        pos = vec3(px, -3.0 + hh, pz);
+
+        let val = clamp(0.12 + hh * 0.3 + energy * 0.3, 0.0, 1.8);
+        col = hsv_to_rgb(vec3(fract(hue + 0.35 + r * 0.025 + t * 0.03), 0.7, val));
+      }
+    }
+
+    position = pos;
+    tint     = col;
+  }
+}
