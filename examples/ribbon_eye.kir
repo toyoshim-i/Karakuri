@@ -1,0 +1,35 @@
+// A camera flown by its geometry: it stands on one element and looks at
+// another. Which two, and how they move, is the L1's business; this file adds
+// the bank and the lens.
+//
+// Bound with an edge to the geometry it reads:
+//
+//     --edge ribbon_eye.subject=ribbon_chase
+//
+// `ribbon_chase.kir` puts its eye at element 0 and its target at element 1.
+// Any L1 that places two meaningful points at its oldest elements can be flown
+// the same way.
+
+proc ribbon_eye {
+  kind L3
+  uses subject : Geometry
+  consumes position
+
+  // How far the view rolls about its line of sight, and how fast.
+  param bank : float [0.0, 1.0] = 0.5
+  param rate : float [0.0, 2.0] = 0.4
+
+  // Vertical field of view in radians.
+  param lens : float [0.6, 2.0] = 1.2
+
+  camera {
+    let from = subject[0u].position;
+    let to   = subject[1u].position;
+    let a    = t * rate;
+    let roll = bank * (0.6 * sin(a * 0.47) + 0.35 * sin(a * 1.18 + 1.0));
+    eye    = from;
+    target = to;
+    up     = rot_axis(vec3(0.0, 1.0, 0.0), normalize(to - from), roll);
+    fov_y  = lens;
+  }
+}
