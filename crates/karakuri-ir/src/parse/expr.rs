@@ -241,6 +241,19 @@ impl Parser {
     fn parse_postfix(&mut self) -> Expr {
         let mut expr = self.parse_primary();
         loop {
+            if self.peek().kind == TokKind::LBracket {
+                self.advance();
+                let index = self.parse_expr();
+                let close = self.peek().span;
+                self.expect(TokKind::RBracket, "]");
+                let span = expr.span().join(close);
+                expr = Expr::Index {
+                    value: Box::new(expr),
+                    index: Box::new(index),
+                    span,
+                };
+                continue;
+            }
             if self.peek().kind != TokKind::Dot {
                 break;
             }

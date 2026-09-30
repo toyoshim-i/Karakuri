@@ -103,12 +103,14 @@ pub fn resolve_node_names(
     Ok(names)
 }
 
-/// The validated wiring bindings: `(field_bound, camera_bound, source_bound, far_at)`.
+/// The validated wiring bindings: `(field_bound, camera_bound, source_bound,
+/// far_at, subject_bound)`. `subject_bound` is `(camera_ordinal, l1_index)`.
 pub type WiringBindings = (
     Vec<(usize, String, usize)>,
     Vec<(usize, usize)>,
     Vec<(usize, String, usize)>,
     Option<usize>,
+    Vec<(usize, usize)>,
 );
 
 /// Arguments for validating slot wirings and dependencies between nodes.
@@ -126,7 +128,7 @@ pub struct ValidateWiringCtx<'a> {
 
 /// Validates slot wirings and dependencies between nodes.
 ///
-/// Returns `(field_bound, camera_bound, source_bound, far_at)`.
+/// Returns `(field_bound, camera_bound, source_bound, far_at, subject_bound)`.
 pub fn validate_wiring<'a>(ctx: ValidateWiringCtx<'a>) -> Result<WiringBindings, SetError> {
     let ValidateWiringCtx {
         nodes,
@@ -433,6 +435,60 @@ pub fn validate_wiring<'a>(ctx: ValidateWiringCtx<'a>) -> Result<WiringBindings,
         }
     }
 
+    // Validate and record the geometry each camera reads.
+    let mut subject_bound: Vec<(usize, usize)> = Vec::new();
+    for at in camera_range.clone() {
+        let Some(node) = nodes[at] else { continue };
+        let Some(slot) = node.geometry_slot() else {
+            continue;
+        };
+        let node_name = names[at].clone();
+        let mut bound = edges
+            .iter()
+            .filter(|e| e.node == node_name && e.slot.as_str() == slot);
+        let Some(edge) = bound.next() else {
+            return Err(SetError::SlotUnbound {
+                node: node_name,
+                slot: slot.to_string(),
+                takes: karakuri_ir::SlotTy::Geometry.name(),
+                holds: holds(),
+            });
+        };
+        if let Some(second) = bound.next() {
+            return Err(SetError::SlotBoundTwice {
+                node: node_name,
+                slot: slot.to_string(),
+                first: edge.to.clone(),
+                second: second.to.clone(),
+            });
+        }
+        let Some(l1_at) = geometry_at(&edge.to) else {
+            return Err(match node_at(&edge.to) {
+                Some(other) => SetError::EdgeToNotGeometry {
+                    node: node_name,
+                    slot: slot.to_string(),
+                    to: edge.to.clone(),
+                    layer: layer_of(other),
+                    sources: sources(),
+                },
+                None => SetError::EdgeToUnknown {
+                    node: node_name,
+                    slot: slot.to_string(),
+                    to: edge.to.clone(),
+                    holds: holds(),
+                },
+            });
+        };
+        if Some(l1_at) == far_at {
+            return Err(SetError::SubjectIsPaired {
+                node: node_name,
+                slot: slot.to_string(),
+                to: edge.to.clone(),
+            });
+        }
+        subject_bound.push((at - camera_range.start, l1_at));
+    }
+
     // Validate Field instruction budgets.
     if !fields.is_empty() {
         let per_evaluation: Vec<u64> = fields
@@ -476,7 +532,13 @@ pub fn validate_wiring<'a>(ctx: ValidateWiringCtx<'a>) -> Result<WiringBindings,
         }
     }
 
-    Ok((field_bound, camera_bound, source_bound, far_at))
+    Ok((
+        field_bound,
+        camera_bound,
+        source_bound,
+        far_at,
+        subject_bound,
+    ))
 }
 
 /// Arguments for planning geometry sources and deriving attributes.
@@ -731,7 +793,7 @@ impl Set {
         let field_range = field_start..field_start + fields.len();
         let camera_range = l1s.len() + l2s.len()..l1s.len() + l2s.len() + cameras.len();
 
-        let (field_bound, camera_bound, source_bound, far_at) =
+        let (field_bound, camera_bound, source_bound, far_at, subject_bound) =
             validate_wiring(ValidateWiringCtx {
                 nodes: &nodes,
                 names: &names,
@@ -794,6 +856,41 @@ impl Set {
             seed_salt,
         })?;
 
+        // A camera reads its source's element buffer, so what it consumes
+        // must be in that buffer: emitted, or synthesised for this head.
+        let subject_bound = subject_bound
+            .into_iter()
+            .map(|(ordinal, l1_at)| {
+                let head = heads
+                    .iter()
+                    .position(|h| *h == l1_at)
+                    .expect("a bound subject is a head: the far source was refused above");
+                let l3 = cameras[ordinal].expect("only an L3 declares a geometry slot");
+                let (l1, _) = l1s[l1_at];
+                let missing: Vec<String> = l3
+                    .consumes
+                    .iter()
+                    .filter(|a| !l1.emit.contains(a) && !derived[head].contains(a))
+                    .map(|a| format!("`{}`", a.name()))
+                    .collect();
+                if missing.is_empty() {
+                    Ok((ordinal, head))
+                } else {
+                    Err(SetError::Composition {
+                        l1: l1.name.clone(),
+                        l4: l3.name.clone(),
+                        missing: missing.join(", "),
+                        hint: format!(
+                            "add {} to `{}`'s `emit`: a camera reads its source's elements as \
+                             they are stored",
+                            missing.join(", "),
+                            l1.name
+                        ),
+                    })
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(Plan {
             names,
             cameras,
@@ -801,6 +898,7 @@ impl Set {
             field_bound,
             camera_bound,
             source_bound,
+            subject_bound,
             far_at,
             heads,
             source_salts,

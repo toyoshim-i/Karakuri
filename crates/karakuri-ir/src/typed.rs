@@ -94,6 +94,43 @@ impl Checked {
             .map(|s| s.name.as_str())
     }
 
+    /// Returns true if any block reads a [`Reduction`] of the geometry slot.
+    /// Only an L3 can; the engine runs the reduction pass only when this holds.
+    pub fn reads_reduction(&self) -> bool {
+        fn in_stmts(stmts: &[TStmt]) -> bool {
+            stmts.iter().any(|s| match s {
+                TStmt::Kill { .. } => false,
+                TStmt::Let { value, .. } | TStmt::Var { value, .. } => in_expr(value),
+                TStmt::Assign { value, .. } => in_expr(value),
+                TStmt::If {
+                    cond, then, els, ..
+                } => in_expr(cond) || in_stmts(then) || in_stmts(els),
+                TStmt::For { body, .. } => in_stmts(body),
+            })
+        }
+        fn in_expr(e: &TExpr) -> bool {
+            match &e.kind {
+                TExprKind::Reduction(_) => true,
+                TExprKind::Lit(_)
+                | TExprKind::Local(_)
+                | TExprKind::Param(_)
+                | TExprKind::Attr(_)
+                | TExprKind::Far(_)
+                | TExprKind::Source { .. }
+                | TExprKind::Ambient(_) => false,
+                TExprKind::Element { index, .. } => in_expr(index),
+                TExprKind::Unary { value, .. } | TExprKind::Swizzle { value, .. } => in_expr(value),
+                TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+                TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
+                    args.iter().any(in_expr)
+                }
+                TExprKind::Field { point, .. } => in_expr(point),
+                TExprKind::Sample { at, .. } => at.as_ref().is_some_and(|a| in_expr(a)),
+            }
+        }
+        self.blocks.iter().any(|b| in_stmts(&b.stmts))
+    }
+
     /// Returns declared field slot names in header order.
     pub fn field_slots(&self) -> Vec<&str> {
         self.uses
@@ -267,6 +304,15 @@ pub enum TExprKind {
     Attr(Attr),
     /// A read of the far element's attribute in a dual-geometry L2 deformation (`<slot>.<name>`).
     Far(Attr),
+    /// An L3's read of one element of its geometry slot: `<slot>[index].<attr>`.
+    /// `index` is a `uint` age rank into the bound source's live range.
+    Element {
+        attr: Attr,
+        index: Box<TExpr>,
+    },
+    /// An L3's read of a reduction over its geometry slot's live elements:
+    /// `<slot>.centroid`, `<slot>.bounds_min`, `<slot>.bounds_max`.
+    Reduction(Reduction),
     Ambient(Ambient),
     Unary {
         op: crate::ast::UnOp,
@@ -316,6 +362,38 @@ pub enum TExprKind {
         value: Box<TExpr>,
         components: Vec<u8>,
     },
+}
+
+/// A per-frame reduction an L3 reads over the `position`s of its geometry
+/// slot's live elements. All three are produced by one pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Reduction {
+    /// Mean `position`.
+    Centroid,
+    /// Per-axis minimum `position`.
+    BoundsMin,
+    /// Per-axis maximum `position`.
+    BoundsMax,
+}
+
+impl Reduction {
+    pub const ALL: [Reduction; 3] = [
+        Reduction::Centroid,
+        Reduction::BoundsMin,
+        Reduction::BoundsMax,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Reduction::Centroid => "centroid",
+            Reduction::BoundsMin => "bounds_min",
+            Reduction::BoundsMax => "bounds_max",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Reduction> {
+        Reduction::ALL.into_iter().find(|r| r.name() == name)
+    }
 }
 
 impl TExpr {

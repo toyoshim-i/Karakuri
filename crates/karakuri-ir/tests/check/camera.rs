@@ -102,15 +102,15 @@ proc follow {
         .join("\n");
     assert!(rendered.contains("position"), "{rendered}");
     assert!(
-        rendered.contains("reduction") || rendered.contains("element zero"),
-        "the hint does not say what pointing a camera at geometry will mean: {rendered}"
+        rendered.contains("subject[0u].position"),
+        "the hint does not say how a camera reads geometry: {rendered}"
     );
 }
 
-/// And `consumes` is refused at the header for the same reason, rather than
-/// checked clean and silently ignored by a lowering that reads no geometry.
+/// `consumes` on an L3 names what it reads through its geometry slot, so
+/// without one it is refused rather than checked clean and ignored.
 #[test]
-fn an_l3_cannot_declare_consumes_yet_and_is_told_why() {
+fn an_l3_consumes_only_through_a_geometry_slot() {
     let src = r#"
 proc follow {
   kind L3
@@ -129,8 +129,8 @@ proc follow {
         .join("\n");
     assert!(rendered.contains("consume"), "{rendered}");
     assert!(
-        rendered.contains("ir-spec"),
-        "the hint does not point at where this is decided: {rendered}"
+        rendered.contains("uses subject : Geometry"),
+        "the hint does not say what `consumes` needs on an L3: {rendered}"
     );
 }
 
@@ -409,4 +409,125 @@ proc march {
 }
 "#,
     );
+}
+
+// ---------------------------------------------------------------------------
+// L3 — a camera that reads geometry
+// ---------------------------------------------------------------------------
+
+/// Wraps a camera block in an L3 that reads `subject` and consumes `consumes`.
+fn follower(consumes: &str, body: &str) -> String {
+    format!(
+        "proc follow {{\n  kind L3\n  uses subject : Geometry\n  consumes {consumes}\n  \
+         camera {{\n{body}\n  }}\n}}\n"
+    )
+}
+
+fn rendered(src: &str) -> String {
+    check_err(src)
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn a_camera_reads_elements_by_age() {
+    let checked = check_ok(&follower(
+        "position",
+        "    eye = subject[0u].position;\n    target = subject[uint(t) + 1u].position;",
+    ));
+    assert_eq!(checked.geometry_slot(), Some("subject"));
+    assert!(!checked.reads_reduction());
+}
+
+#[test]
+fn a_camera_reads_reductions_and_pays_for_them_per_element() {
+    let checked = check_ok(&follower(
+        "position",
+        "    eye = subject.centroid + vec3(0.0, 0.0, 5.0);\n    \
+         target = mix(subject.bounds_min, subject.bounds_max, vec3(0.5));",
+    ));
+    assert!(checked.reads_reduction());
+    let cost = karakuri_ir::cost::estimate(&checked).expect("within budget");
+    assert_eq!(
+        cost.ops_per_element,
+        karakuri_ir::cost::REDUCTION_OPS_PER_ELEMENT
+    );
+}
+
+#[test]
+fn an_element_index_is_a_uint() {
+    let text = rendered(&follower(
+        "position",
+        "    eye = subject[0].position;\n    target = vec3(0.0);",
+    ));
+    assert!(text.contains("`uint`") && text.contains("0u"), "{text}");
+}
+
+#[test]
+fn an_element_attribute_must_be_consumed() {
+    let text = rendered(&follower(
+        "position",
+        "    eye = subject[0u].position + subject[0u].tint;\n    target = vec3(0.0);",
+    ));
+    assert!(text.contains("tint") && text.contains("consumes"), "{text}");
+}
+
+#[test]
+fn a_reduction_reads_position_and_so_needs_it_consumed() {
+    let text = rendered(&follower(
+        "tint",
+        "    eye = subject.centroid + subject[0u].tint;\n    target = vec3(0.0);",
+    ));
+    assert!(text.contains("add `position` to `consumes`"), "{text}");
+}
+
+#[test]
+fn a_camera_has_no_paired_element_and_is_told_to_index() {
+    let text = rendered(&follower(
+        "position",
+        "    eye = subject.position;\n    target = vec3(0.0);",
+    ));
+    assert!(text.contains("subject[0u].position"), "{text}");
+}
+
+#[test]
+fn an_index_is_refused_where_it_does_not_address_an_l3_element() {
+    let src = r#"
+proc morph {
+  kind L2
+  uses far : Geometry
+  consumes position
+  deform {
+    position = far[0u].position;
+  }
+}
+"#;
+    let text = rendered(src);
+    assert!(text.contains("`camera` block"), "{text}");
+
+    let text = rendered(&follower(
+        "position",
+        "    let v = vec3(1.0);\n    eye = vec3(v[0u]);\n    target = vec3(0.0);",
+    ));
+    assert!(text.contains("no arrays"), "{text}");
+}
+
+#[test]
+fn a_camera_reads_one_geometry() {
+    let src = r#"
+proc follow {
+  kind L3
+  uses subject : Geometry
+  uses other : Geometry
+  consumes position
+  camera {
+    eye = subject[0u].position;
+    target = vec3(0.0);
+  }
+}
+"#;
+    let text = rendered(src);
+    assert!(text.contains("a camera reads one geometry"), "{text}");
 }

@@ -108,7 +108,7 @@ L5    : [Texture]          -> Texture
 
 Two declarations break L2's endomorphism and neither moves it out of its slot position:
 `amplify` breaks it on the *count* axis, one element in and several out, and `uses <name> :
-Geometry` breaks it on the *arity* axis — see [a geometry slot](#a-geometry-slot-l2-only)
+Geometry` breaks it on the *arity* axis — see [a geometry slot](#a-geometry-slot-on-an-l2)
 and [amplify](#amplify-l2-only). And `L3 : () -> Camera` says what an L3 *produces* rather
 than what it may read — [L3 — the camera](#l3--the-camera) is where that line is drawn and
 where the signature is qualified.
@@ -245,10 +245,10 @@ those refusals is a sentence about a type rather than about `uses`.
 
 | | `Geometry` | `Field` | `Camera` | `Source` |
 |---|---|---|---|---|
-| Legal on | L2 | L1, L2, L3, L4 | L4 | L1, L2, L4 |
+| Legal on | L2, L3 | L1, L2, L3, L4 | L4 | L1, L2, L4 |
 | How many | one | any number | one | any number |
 | Bound to | an L1 | a `kind Field` procedure | an L3, or the built-in camera | an L1 |
-| Read as | `far.position` — `expr . ident` | `shape(p)` — a call | `view.clip` — `expr . ident` | `only` — a value |
+| Read as | `far.position` — `expr . ident`; on an L3, `subject[i].position` and `subject.centroid` | `shape(p)` — a call | `view.clip` — `expr . ident` | `only` — a value |
 | What it binds | an element buffer | a spliced function body | a bind group | a `u32` in a uniform |
 
 All four are bound by an [`edge`](#set-file-format) and an unbound one is refused. What
@@ -272,7 +272,10 @@ reads *and* collide with that cap on a node which already declares a `far`. Whic
 why several `Source` slots are legal and cost nothing to have: `source == a || source == b`
 is an ordinary thing to want.
 
-#### A geometry slot (L2 only)
+#### A geometry slot on an L2
+
+An L3 declares the same slot and reads it by element or by reduction; see
+[What an L3 can point at](#what-an-l3-can-point-at-an-element-by-age-or-a-reduction).
 
 **An L2 that takes a second geometry and produces one.** `L2 : Geometry -> Geometry` is an
 endomorphism, and this breaks it in the second of the two possible directions: `amplify`
@@ -1158,12 +1161,11 @@ asked to do; a direction would make every "follow this" a subtraction and a norm
 author had to remember. `near` and `far` are not decorative — see the note under
 [L3 — the camera](#l3--the-camera).
 
-**It reads the clock, `dt`, and its params, and nothing else.** No `seed`, because that is a
-per-element value and an L3 runs once a frame over no element. No attributes, and `consumes`
-is refused rather than ignored: an L3 *will* read geometry, and what it will read is a
-reduction or element zero — see
-[What an L3 can point at](#what-an-l3-can-point-at-a-reduction-or-element-zero--not-built)
-— which is addressing this language does not have yet. `dt` is there although nothing can use it
+**It reads the clock, `dt`, its params, and the geometry slot it declares.** No `seed`,
+because that is a per-element value and an L3 runs once a frame over no element. No bare
+attributes, and `consumes` is refused rather than ignored: an L3 reads geometry through a
+`Geometry` slot, by element or by reduction — see
+[What an L3 can point at](#what-an-l3-can-point-at-an-element-by-age-or-a-reduction). `dt` is there although nothing can use it
 yet, because an L3 is allowed to hold state and smoothing is written against a step.
 
 `eye` is also readable, as an ambient, in a marching L4's `fragment` block. One concept,
@@ -3749,52 +3751,79 @@ camera fills it, and two L4s bound to one camera are one viewpoint drawn two way
 needed no rule — `SlotBoundTwice` forbids two edges into one *slot*, which is as right for a
 camera as for a geometry. See [Several cameras](#several-cameras).
 
-#### What an L3 can point at: a reduction, or element zero — not built
+#### What an L3 can point at: an element by age, or a reduction
 
-Two things, and the second is cheaper *and* more meaningful than this document claimed a day
-ago.
+An L3 reads geometry through a `Geometry` slot, bound by an `edge` to an L1 exactly as an
+L2's `far` is:
 
-| Addressing | Cost | What it is |
-|---|---|---|
-| Centroid, bounds | One reduction pass | Where the material is and how big it is — "keep it framed" |
-| **Element zero** | One buffer read | **The oldest living element** |
-| The element with `seed == N` | A search over `capacity` | Not built: there is no seed-to-index map |
+```
+proc follow_eye {
+  kind L3
+  uses subject : Geometry
+  consumes position
 
-**The correction is about element zero, and it comes out of a decision made for another
-reason entirely.** This document said index 0 was the cheap answer and not the stable one —
-*"compaction moves it, not the same element twice"* — and that is **false**. Compaction is
-order preserving: survivors keep their relative order, so an element at index 0 that is alive
-has zero live elements before it and stays at index 0. It moves only when it dies, and what
-it moves to is the next survivor in spawn order.
+  camera {
+    eye    = subject[0u].position;
+    target = mix(subject[1u].position, subject.centroid, vec3(0.2));
+  }
+}
+```
 
-So index 0 is not an arbitrary slot that happens to be reachable. Spawn order is age order,
-which makes it **the oldest living element** — a thing worth pointing a camera at, and a
-thing that survives every step until it is the one that dies. Order preservation was chosen
-for stable blend order and bit-exact reproduction; this is the third thing it paid for, and
-none of the three were visible from the other two.
+```
+{"t":"edge","node":"follow_eye","slot":"subject","to":"ribbon_chase"}
+--edge follow_eye.subject=ribbon_chase
+```
 
-For a procedure with no `spawn` block it is simpler still: everything is alive from frame
-zero, `seed` equals the initial slot index, and index 0 *is* `seed == 0` for as long as
-nothing kills it.
+| Read | Type | Cost per frame | What it is |
+|---|---|---|---|
+| `subject[i].<attr>` | the attribute's | one buffer read | the element `i` places after the oldest living one |
+| `subject.centroid` | `vec3` | one reduction pass over `capacity` | mean `position` of the live elements |
+| `subject.bounds_min`, `subject.bounds_max` | `vec3` | the same pass | per-axis min and max of `position` over the live elements |
 
-**Which puts the anchor in the L1 author's hands, and that is the right place for it.** An
-L1 that expects to be looked at can make element zero mean something — never kill it, spawn
-it first and deliberately, give it the role of a leader the rest follow. An L1 that does not
-care will still offer its oldest survivor, which is a defensible answer rather than a random
-one. Nothing is declared and nothing is checked: this is a convention with a stated
-consequence, which is what the language does everywhere it can instead of adding a header
-field.
+**`i` is an age rank, not a seed.** Compaction is order preserving, so the live range is in
+spawn order and index 0 is **the oldest living element** (ADR-0099); `[i]` is the `i`-th
+after it. In a procedure with no `spawn` and no `kill()` nothing moves and `i` equals
+`seed`. `i` is a `uint` expression and may change every frame. An `i` at or past the end of
+the live range reads its last entry, the youngest element. The range is the one the step
+left: an element killed in that step is still in it, and is read by index until the next
+step compacts it away. The reductions skip it.
 
-Two consequences worth stating rather than discovering:
+**Which element is the L1 author's decision, and nothing checks it.** An L1 that expects to
+be watched gives its low indices meaning — spawns them first, never kills them, makes them
+the leader the rest follow, or places invisible camera points there. One that does not care
+still offers its oldest survivors.
 
-- **When element zero dies the camera's subject changes**, to the next oldest. For a fountain
-  that is continuity; for a cloud where the anchor was chosen deliberately it is a jump. The
-  fix is upstream — do not kill the anchor — and stating that is better than a mechanism that
-  hides it.
-- **When the live range is empty there is no element to point at**, and the camera holds its
-  last position rather than snapping to the origin. Holding needs state, which an L3 is
-  allowed to have; snapping would put a hard cut in a set at the exact moment material ran
-  out, which is when an operator is least able to answer for it.
+**`consumes` lists what the camera reads through its slot**, as an L2's `consumes` covers
+`far.<attr>`. `subject[i].<attr>` is refused unless `<attr>` is consumed, and a reduction
+is refused unless `position` is. The Set refuses a camera whose source neither emits nor
+synthesises what it consumes. Without a geometry slot, `consumes` on an L3 is refused.
+
+**What is read is the L1's buffer as its step left it**, before any L2 in its chain. The
+camera pass runs after every source's step and before any renderer draws, so an element
+and the camera that follows it are from the same frame.
+
+**The reduction pass runs only when the camera block reads a reduction.** It is one
+workgroup striding over the live range, bounded by the source's `capacity`, and the L3's
+estimate charges it as `REDUCTION_OPS_PER_ELEMENT` ops per element of that source. A camera
+that reads only `subject[i]` pays one read per access.
+
+**When the live range is empty, the camera block does not run** and the camera keeps the
+state it had the frame before. A camera that reads geometry starts at the built-in orbit's
+placement, so one whose subject has never had a living element shows what the orbit would.
+
+**When element 0 dies, `subject[0u]` becomes the next oldest.** For a fountain that is
+continuity; for a cloud with a deliberate anchor it is a jump, and the fix is upstream: do
+not kill the anchor.
+
+**An L3 declares at most one `Geometry` slot.** Reading a second source is not built.
+**Several L3 nodes may bind the same source.** A camera that reads geometry is seekable
+exactly when the source it reads is.
+
+**`[ ]` is legal only after a `Geometry` slot name in an L3.** The language has no arrays;
+this is element addressing, and it is spelled as indexing because that is what it is.
+
+Decided in [ADR-0379](adr/0379-an-l3-reads-its-geometry-by-age-rank-and-by-reduction.md),
+which extends ADR-0099's element zero to any age rank.
 
 ### What a Set publishes — built
 
@@ -4780,7 +4809,7 @@ Three things get called "mixing two sources" and only one of them needs anything
 |---|---|---|
 | Crossfade | draw both, blend opacity | Nothing here. Two Sets and the L5 mixer |
 | Dissolve | hide one source's elements progressively | Nothing here. An L2 mask on `source` writing `size` or `tint` |
-| Interpolation | pair elements and blend their attributes | **A cross-source read** — `uses <name> : Geometry` and `<name>.<attr>`, [above](#a-geometry-slot-l2-only) |
+| Interpolation | pair elements and blend their attributes | **A cross-source read** — `uses <name> : Geometry` and `<name>.<attr>`, [above](#a-geometry-slot-on-an-l2) |
 
 Interpolation is the only real addition, and it is not a count change — it is an
 element-wise operation that needs to read *another source's* element at the corresponding

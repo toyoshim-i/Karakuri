@@ -401,7 +401,7 @@ pressed it. See the keys below.
 | `--capacity N` | elements per geometry. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every source in every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name. **Refused, naming them, where the nodes it lands on are not under one authority**: one bare name over a node you kept and a node an agent acts on is a control that hands the first over through the second. Nothing grants an authority yet, so nothing can meet this today; the addressed form below is never refused |
 | `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3`, `L4` and `Field`, and the index is required |
-| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field, `--edge lens.view=orbit` for a camera, `--edge dissolve.only=lattice_shell` for a source a mask names. A `.kir` that declares `uses far : Geometry`, `uses shape : Field`, `uses view : Camera` or `uses only : Source` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
+| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field, `--edge lens.view=orbit` for a camera, `--edge ribbon_eye.subject=ribbon_chase` for the geometry a camera follows, `--edge dissolve.only=lattice_shell` for a source a mask names. A `.kir` that declares `uses far : Geometry`, `uses shape : Field`, `uses view : Camera` or `uses only : Source` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
 | `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
 | `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0`. `layer`, `key`, `signal` and `range` are required; `index=N`, `curve=lin\|pow2\|sqrt\|smooth` and the `noise.*` fields are optional. `--help` lists them all |
@@ -1327,6 +1327,50 @@ no procedure behind it, so the engine declares the three where a `.kir` would:
 The other three of the orbit's six — the field of view and the two clipping distances — are the
 lens rather than the place, and are not parameters; a hand that wants them writes an L3.
 [ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md).
+
+### A camera that follows material
+
+An L3 can read the geometry it films. It declares a geometry slot, lists what it reads in
+`consumes`, and reads one element by age or a reduction over all of them:
+
+```
+proc follow_eye {
+  kind L3
+  uses subject : Geometry
+  consumes position
+
+  camera {
+    eye    = subject[0u].position;
+    target = mix(subject[1u].position, subject.centroid, vec3(0.2));
+  }
+}
+```
+
+```
+karakuri-cli --set ribbon_chase.kir,follow_eye.kir,ribbon_chase_light.kir \
+             --edge follow_eye.subject=ribbon_chase
+```
+
+`examples/ribbon_chase.kset` flies the same geometry with `examples/ribbon_eye.kir`, which
+stands on element 0, looks at element 1, and adds a bank.
+
+| Read | What it is |
+| --- | --- |
+| `subject[i].position` | the element `i` places after the oldest living one; any consumed attribute works |
+| `subject.centroid` | the mean `position` of the living elements |
+| `subject.bounds_min`, `subject.bounds_max` | the per-axis extent of the living elements |
+
+- **`i` is a `uint`** — write `0u`, or `uint(k)` for a computed one. In a geometry with no
+  `spawn` and no `kill()`, `i` is the element's `seed`, so an L1 can place invisible camera
+  points at its first seeds and the camera follows them.
+- **An `i` past the last living element reads the youngest one.**
+- **While the source has nothing alive, the camera stays where it was.** A camera whose
+  source has never had a living element sits where the built-in orbit would.
+- **The reductions cost one pass over the source's capacity each frame**; a camera that reads
+  only `subject[i]` costs nothing extra.
+- The slot is bound by `--edge` like any other, and a camera reads one geometry. The source
+  must emit what the camera consumes, and it must be one the chain runs over, not the far
+  side of a pairing.
 
 ### Two cameras at once
 

@@ -219,7 +219,8 @@ proc wrong {
 "#,
     );
     assert!(
-        errs.iter().any(|e| e.message.contains("`uses` is L2 only")),
+        errs.iter()
+            .any(|e| e.message.contains("`uses … : Geometry` is L2's and L3's")),
         "expected `uses` to be refused on a field, got: {errs:?}"
     );
 }
@@ -372,10 +373,10 @@ fn a_used_geometry_cannot_be_assigned_to() {
     );
 }
 
-/// `uses` is L2's, on the same terms `amplify` is: an L1 makes geometry rather
-/// than taking any, an L3 makes a viewpoint, and an L4 draws what reaches it.
+/// A geometry slot is an L2's and an L3's: an L1 makes geometry rather than
+/// taking any, and an L4 draws what reaches it.
 #[test]
-fn uses_is_refused_outside_an_l2() {
+fn a_geometry_slot_is_refused_outside_an_l2_and_an_l3() {
     let l1 = r#"
 proc gen {
   kind     L1
@@ -407,7 +408,8 @@ proc dots {
     for src in [l1, l4] {
         let errs = check_err(src);
         assert!(
-            errs.iter().any(|e| e.message.contains("`uses` is L2 only")),
+            errs.iter()
+                .any(|e| e.message.contains("`uses … : Geometry` is L2's and L3's")),
             "expected `uses` to be refused, got: {errs:?}"
         );
     }

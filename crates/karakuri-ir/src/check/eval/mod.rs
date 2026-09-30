@@ -11,7 +11,7 @@ pub(crate) use crate::ast::{
 pub(crate) use crate::builtin::{Builtin, Domain, Shape};
 pub(crate) use crate::error::Stage;
 pub(crate) use crate::span::Span;
-pub(crate) use crate::typed::{TExpr, TExprKind, TStmt, Target, TexRef};
+pub(crate) use crate::typed::{Reduction, TExpr, TExprKind, TStmt, Target, TexRef};
 
 /// Legacy identifier for `point_rate` recognized for user migration diagnostics.
 pub(super) const OLD_POINT_SIZE: &str = "point_size";

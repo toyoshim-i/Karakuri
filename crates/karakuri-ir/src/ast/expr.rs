@@ -105,6 +105,13 @@ pub enum Expr {
         components: String,
         span: Span,
     },
+    /// `subject[i]`. The language has no arrays: the check pass accepts this
+    /// only as an L3's element address, followed by `.<attr>`.
+    Index {
+        value: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -115,7 +122,8 @@ impl Expr {
             | Expr::Unary { span, .. }
             | Expr::Binary { span, .. }
             | Expr::Call { span, .. }
-            | Expr::Swizzle { span, .. } => *span,
+            | Expr::Swizzle { span, .. }
+            | Expr::Index { span, .. } => *span,
         }
     }
 }

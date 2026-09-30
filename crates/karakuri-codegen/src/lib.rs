@@ -75,7 +75,7 @@ pub enum Shader {
 /// Lowers a checked procedure to WGSL, selecting the pipeline generator by `checked.kind`.
 ///
 /// `elements` provides the paired L1 procedure's [`ElementLayout`], which is required
-/// when lowering an L4 procedure.
+/// when lowering an L4 procedure, and an L3 that declares a geometry slot.
 pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
     match checked.kind {
         Kind::L1 => Shader::L1(generate_l1(checked, &[], &[])),
@@ -83,7 +83,16 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
         Kind::L2 => panic!("an L2 is generated against its position in a chain: call generate_l2"),
         // Field procedures are spliced into callers and must be generated via `generate_field`.
         Kind::Field => panic!("a field lowers into its callers: call generate_field"),
-        Kind::L3 => Shader::L3(generate_l3(checked, &[])),
+        Kind::L3 => {
+            let subject = checked.geometry_slot().map(|slot| {
+                elements.unwrap_or_else(|| {
+                    panic!(
+                        "an L3 that declares `{slot} : Geometry` needs its source's ElementLayout"
+                    )
+                })
+            });
+            Shader::L3(generate_l3(checked, &[], subject))
+        }
         Kind::L5 => Shader::L5(generate_l5(checked)),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");

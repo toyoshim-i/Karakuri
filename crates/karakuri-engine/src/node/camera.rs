@@ -7,7 +7,7 @@ use karakuri_ir::typed::Checked;
 use crate::camera::{Orbit, State};
 use crate::uniforms::UniformScratch;
 
-use super::View;
+use super::{Geometry, View};
 
 /// Returns the addressable placement parameter keys for the built-in orbit camera.
 fn builtin_param_keys() -> &'static [String] {
@@ -36,6 +36,9 @@ pub(crate) struct Camera {
     read_bg: wgpu::BindGroup,
     /// Compute procedure producer if this camera is driven by an L3 procedure.
     proc: Option<Producer>,
+    /// Index of the source head this camera reads, where its L3 declares a
+    /// geometry slot. The Set supplies that source's parity to [`Camera::record`].
+    subject_head: Option<usize>,
 }
 
 /// Compiled L3 procedure pass that writes [`Camera::state`].
@@ -50,14 +53,32 @@ struct Producer {
     param_names: Vec<String>,
     /// Parameter keys addressable by name (e.g. `eye.x`, `target.y`).
     param_keys: Vec<String>,
+    /// The bound source's buffers, where the L3 declares a geometry slot.
+    subject: Option<Subject>,
+}
+
+/// An L3's view of the source bound to its geometry slot.
+struct Subject {
+    /// Element, alive, counts and reduction buffers, one group per parity.
+    bgs: [wgpu::BindGroup; 2],
+    /// The reduction pass, where the camera block reads a reduction.
+    reduce: Option<wgpu::ComputePipeline>,
+    /// Whether the state buffer has been given its starting placement. The
+    /// camera block does not run while the source is empty, so until it first
+    /// does, the state is whatever was written before it.
+    primed: bool,
 }
 
 impl Camera {
     /// Builds a camera node for the optional L3 procedure or built-in orbit.
+    ///
+    /// `subject` is the source bound to the L3's geometry slot and its index
+    /// among the Set's heads, and is `Some` exactly when the L3 declares one.
     pub(crate) fn build(
         device: &wgpu::Device,
         l3: Option<&Checked>,
         fields: karakuri_codegen::Bound<'_>,
+        subject: Option<(usize, &Geometry<'_>)>,
     ) -> Camera {
         let state = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera state"),
@@ -175,7 +196,7 @@ impl Camera {
             }],
         });
 
-        let proc = l3.map(|l3| Producer::build(device, l3, &state, fields));
+        let proc = l3.map(|l3| Producer::build(device, l3, &state, fields, subject.map(|s| s.1)));
         Camera {
             state,
             derived,
@@ -185,7 +206,13 @@ impl Camera {
             read_bgl,
             read_bg,
             proc,
+            subject_head: subject.map(|s| s.0),
         }
+    }
+
+    /// Returns the index of the source head this camera reads, if any.
+    pub(crate) fn subject_head(&self) -> Option<usize> {
+        self.subject_head
     }
 
     /// Returns true if this camera node uses the built-in orbit rather than an L3 procedure.
@@ -220,13 +247,25 @@ impl Camera {
         fallback: &State,
     ) {
         match &mut self.proc {
-            Some(p) => p.write_uniforms(queue, view, dt),
+            Some(p) => {
+                p.write_uniforms(queue, view, dt);
+                // A camera that reads geometry starts where the built-in
+                // orbit is, so an empty source holds a real placement.
+                if let Some(subject) = p.subject.as_mut().filter(|s| !s.primed) {
+                    subject.primed = true;
+                    Camera::write_state_to(&self.state, queue, fallback);
+                }
+            }
             None => self.write_state(queue, fallback),
         }
     }
 
     /// Writes raw host camera state into the GPU state buffer.
     pub(crate) fn write_state(&self, queue: &wgpu::Queue, s: &State) {
+        Camera::write_state_to(&self.state, queue, s);
+    }
+
+    fn write_state_to(state: &wgpu::Buffer, queue: &wgpu::Queue, s: &State) {
         let mut bytes = [0u8; wire::STATE_SIZE as usize];
         let put = |bytes: &mut [u8], at: usize, v: f32| {
             bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
@@ -243,7 +282,7 @@ impl Camera {
             put(&mut bytes, 32 + i * 4, *v);
         }
         put(&mut bytes, 44, s.far);
-        queue.write_buffer(&self.state, 0, &bytes);
+        queue.write_buffer(state, 0, &bytes);
     }
 
     /// Writes canvas aspect ratio into the canvas uniform buffer.
@@ -253,16 +292,25 @@ impl Camera {
         queue.write_buffer(&self.canvas, 0, &bytes);
     }
 
-    /// Records camera compute passes (procedure pass if present, followed by derivation).
-    pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder) {
+    /// Records camera compute passes (reduction and procedure passes if
+    /// present, followed by derivation). `parity` is the current parity of the
+    /// source at [`Camera::subject_head`], and is ignored when there is none.
+    pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, parity: usize) {
         if let Some(p) = &self.proc {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("camera"),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&p.pipeline);
             pass.set_bind_group(group::UNIFORMS, &p.uniform_bg, &[]);
             pass.set_bind_group(group::STATE, &p.state_bg, &[]);
+            if let Some(subject) = &p.subject {
+                pass.set_bind_group(group::SUBJECT, &subject.bgs[parity], &[]);
+                if let Some(reduce) = &subject.reduce {
+                    pass.set_pipeline(reduce);
+                    pass.dispatch_workgroups(1, 1, 1);
+                }
+            }
+            pass.set_pipeline(&p.pipeline);
             pass.dispatch_workgroups(1, 1, 1);
         }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -281,8 +329,9 @@ impl Producer {
         l3: &Checked,
         state: &wgpu::Buffer,
         fields: karakuri_codegen::Bound<'_>,
+        subject: Option<&Geometry<'_>>,
     ) -> Producer {
-        let shader = generate_l3(l3, fields);
+        let shader = generate_l3(l3, fields, subject.map(|g| g.layout));
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L3)", l3.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -337,18 +386,31 @@ impl Producer {
                 resource: state.as_entire_binding(),
             }],
         });
+        let subject_parts = subject.map(|g| Subject::layout_and_groups(device, g));
+        let mut layouts = vec![Some(&uniform_bgl), Some(&state_bgl)];
+        if let Some((bgl, _)) = &subject_parts {
+            layouts.push(Some(bgl));
+        }
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L3"),
-            bind_group_layouts: &[Some(&uniform_bgl), Some(&state_bgl)],
+            bind_group_layouts: &layouts,
             immediate_size: 0,
         });
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some(&l3.name),
-            layout: Some(&pipeline_layout),
-            module: &module,
-            entry_point: Some(karakuri_codegen::l3::ENTRY),
-            compilation_options: Default::default(),
-            cache: None,
+        let entry = |name: &str| {
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(&l3.name),
+                layout: Some(&pipeline_layout),
+                module: &module,
+                entry_point: Some(name),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+        let pipeline = entry(karakuri_codegen::l3::ENTRY);
+        let subject = subject_parts.map(|(_, bgs)| Subject {
+            bgs,
+            primed: false,
+            reduce: shader.reduces.then(|| entry(karakuri_codegen::l3::REDUCE)),
         });
 
         Producer {
@@ -360,6 +422,7 @@ impl Producer {
             state_bg,
             param_names: l3.params.iter().map(|p| p.name.clone()).collect(),
             param_keys: crate::set::declared_keys(l3),
+            subject,
         }
     }
 
@@ -385,6 +448,68 @@ impl Producer {
             view.field_value,
         );
         queue.write_buffer(&self.uniforms, 0, p.finish());
+    }
+}
+
+impl Subject {
+    /// Builds the [`group::SUBJECT`] layout and one bind group per parity over
+    /// `geometry`'s buffers. Both groups share one reduction buffer, which the
+    /// groups keep alive.
+    fn layout_and_groups(
+        device: &wgpu::Device,
+        geometry: &Geometry<'_>,
+    ) -> (wgpu::BindGroupLayout, [wgpu::BindGroup; 2]) {
+        let storage = |b: u32, read_only: bool| wgpu::BindGroupLayoutEntry {
+            binding: b,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("L3 subject"),
+            entries: &[
+                storage(binding::ELEMENT, true),
+                storage(binding::ALIVE, true),
+                storage(binding::SUBJECT_COUNTS, true),
+                storage(binding::REDUCED, false),
+            ],
+        });
+        let reduced = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("L3 reduced"),
+            size: karakuri_codegen::layout::reduced::SIZE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let group = |parity: usize| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("L3 subject"),
+                layout: &bgl,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: binding::ELEMENT,
+                        resource: geometry.elements[parity].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: binding::ALIVE,
+                        resource: geometry.alive[parity].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: binding::SUBJECT_COUNTS,
+                        resource: geometry.counts.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: binding::REDUCED,
+                        resource: reduced.as_entire_binding(),
+                    },
+                ],
+            })
+        };
+        let bgs = [group(0), group(1)];
+        (bgl, bgs)
     }
 }
 
@@ -441,11 +566,11 @@ mod tests {
             };
             let aspect = 16.0 / 9.0;
 
-            let cam = Camera::build(&gpu.device, None, &[]);
+            let cam = Camera::build(&gpu.device, None, &[], None);
             cam.write_state(&gpu.queue, &state);
             cam.write_canvas(&gpu.queue, aspect);
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            cam.record(&mut encoder);
+            cam.record(&mut encoder, 0);
             gpu.queue.submit([encoder.finish()]);
             let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
 
@@ -495,7 +620,7 @@ proc two {
             let l3 = karakuri_ir::check::check(&parsed).expect("checks");
             let aspect = 16.0 / 9.0;
 
-            let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
+            let mut cam = Camera::build(&gpu.device, Some(&l3), &[], None);
             cam.write_canvas(&gpu.queue, aspect);
             cam.prepare(
                 &gpu.queue,
@@ -518,7 +643,7 @@ proc two {
                 &crate::camera::Orbit::default().state(0.0),
             );
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            cam.record(&mut encoder);
+            cam.record(&mut encoder, 0);
             gpu.queue.submit([encoder.finish()]);
             let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
 
@@ -568,7 +693,7 @@ proc six {
             let l3 = karakuri_ir::check::check(&parsed).expect("checks");
             let aspect = 4.0 / 3.0;
 
-            let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
+            let mut cam = Camera::build(&gpu.device, Some(&l3), &[], None);
             cam.write_canvas(&gpu.queue, aspect);
             cam.prepare(
                 &gpu.queue,
@@ -589,7 +714,7 @@ proc six {
                 &crate::camera::Orbit::default().state(0.0),
             );
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            cam.record(&mut encoder);
+            cam.record(&mut encoder, 0);
             gpu.queue.submit([encoder.finish()]);
             let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
 
@@ -642,12 +767,12 @@ proc six {
                 near: 0.1,
                 far: 50.0,
             };
-            let cam = Camera::build(&gpu.device, None, &[]);
+            let cam = Camera::build(&gpu.device, None, &[], None);
             let derive = |aspect: f32| {
                 cam.write_state(&gpu.queue, &state);
                 cam.write_canvas(&gpu.queue, aspect);
                 let mut encoder = gpu.device.create_command_encoder(&Default::default());
-                cam.record(&mut encoder);
+                cam.record(&mut encoder, 0);
                 gpu.queue.submit([encoder.finish()]);
                 read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE)
             };

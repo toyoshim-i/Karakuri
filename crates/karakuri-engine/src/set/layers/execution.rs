@@ -321,7 +321,10 @@ impl Set {
     /// Records rasterization passes for all renderers into `target`.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
         for camera in &self.cameras {
-            camera.record(encoder);
+            let parity = camera
+                .subject_head()
+                .map_or(0, |head| self.sources[head].sim.parity());
+            camera.record(encoder, parity);
         }
         let merge = self.merge.as_ref();
         let depth_view = self.depth_view.as_ref();

@@ -4,7 +4,7 @@
 //! constructors, swizzles) using [`Resolver`] to handle stage-specific name resolutions.
 
 use karakuri_ir::builtin::Builtin;
-use karakuri_ir::typed::{TExpr, TExprKind, TexRef};
+use karakuri_ir::typed::{Reduction, TExpr, TExprKind, TexRef};
 use karakuri_ir::{Ambient, Attr, BinOp, Lit, Ty, UnOp};
 
 use crate::layout::{mangle_param, mangle_source_slot};
@@ -29,6 +29,20 @@ pub trait Resolver {
             attr.name()
         )
     }
+    /// Reads `attr` of the element at age rank `index` of an L3's geometry slot.
+    fn read_element(&self, attr: Attr, index: &str) -> String {
+        let _ = index;
+        unreachable!(
+            "an element read of `{}` is refused outside an L3's `camera` block",
+            attr.name()
+        )
+    }
+
+    /// Reads a reduction over an L3's geometry slot.
+    fn read_reduction(&self, r: Reduction) -> String {
+        unreachable!("`{}` is refused outside an L3's `camera` block", r.name())
+    }
+
     fn read_seed(&self) -> String;
     fn read_ambient(&self, amb: Ambient) -> String;
 
@@ -70,6 +84,11 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
             .unwrap_or_else(|| format!("u.{}", mangle_param(name))),
         TExprKind::Attr(attr) => resolver.read_attr(*attr),
         TExprKind::Far(attr) => resolver.read_far(*attr),
+        TExprKind::Element { attr, index } => {
+            let i = lower_expr(index, resolver, req);
+            resolver.read_element(*attr, &i)
+        }
+        TExprKind::Reduction(r) => resolver.read_reduction(*r),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),
         // Source slots read directly from module-level uniforms u.

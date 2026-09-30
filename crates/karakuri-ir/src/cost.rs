@@ -9,6 +9,10 @@ use crate::typed::{Checked, Cost, TExpr, TExprKind, TStmt};
 /// Maximum estimated ops per element per frame in L1 or L2 stages.
 pub const MAX_OPS_PER_ELEMENT: u64 = 4096;
 
+/// What an L3's reduction pass costs per element of the source it reads: one
+/// `position` load, an add, a min and a max, each on three components.
+pub const REDUCTION_OPS_PER_ELEMENT: u64 = 10;
+
 /// Maximum estimated ops per element in the spawn block.
 pub const MAX_OPS_PER_SPAWN: u64 = 16_384;
 
@@ -255,8 +259,12 @@ fn expr_cost(
         | TExprKind::Param(_)
         | TExprKind::Attr(_)
         | TExprKind::Far(_)
+        | TExprKind::Reduction(_)
         | TExprKind::Source { .. }
         | TExprKind::Ambient(_) => 1,
+        TExprKind::Element { index, .. } => {
+            1u64.saturating_add(expr_cost(index, mult, block, hot, calls))
+        }
         TExprKind::Unary { value, .. } => {
             1u64.saturating_add(expr_cost(value, mult, block, hot, calls))
         }
@@ -379,6 +387,12 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
             // Field procedures are charged per evaluation.
             BlockKind::Field => ops_per_evaluation = ops_per_evaluation.saturating_add(block_cost),
         }
+    }
+
+    // An L3 that reads a reduction pays for one pass over its source's
+    // elements, charged per element of that source.
+    if checked.reads_reduction() {
+        ops_per_element = ops_per_element.saturating_add(REDUCTION_OPS_PER_ELEMENT);
     }
 
     // Amplification multiplies deformation cost per input element.

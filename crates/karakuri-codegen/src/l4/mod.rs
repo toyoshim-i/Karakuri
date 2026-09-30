@@ -195,6 +195,9 @@ fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<At
         TExprKind::Far(_) => {
             unreachable!("a far read belongs to an L2 with a `uses` slot, and an L4 has none")
         }
+        TExprKind::Element { .. } | TExprKind::Reduction(_) => {
+            unreachable!("an element or reduction read belongs to an L3, and an L4 has none")
+        }
         TExprKind::Attr(a) => {
             attrs.insert(*a);
         }
