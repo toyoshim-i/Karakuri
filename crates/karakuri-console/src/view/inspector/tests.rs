@@ -34,6 +34,7 @@ fn one_node(params: usize) -> Pane {
             }),
             uses: Vec::new(),
             renderers: Vec::new(),
+            folded: false,
             params: (0..params)
                 .map(|n| Param {
                     ord: Some(n + 1),

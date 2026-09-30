@@ -55,6 +55,7 @@ fn mock() -> Pane {
                 }),
                 uses: Vec::new(),
                 renderers: Vec::new(),
+                folded: false,
                 params: vec![
                     row(1, "radius", Some((Layer::L1, 0)), [0.0, 4.0], 2.4),
                     row(2, "turbulence", Some((Layer::L1, 0)), [0.1, 2.4], 1.4),
@@ -79,6 +80,7 @@ fn mock() -> Pane {
                         live: false,
                     },
                 ],
+                folded: false,
                 params: vec![
                     // Published bare: one control over every node that
                     // declares `exposure`, drawn in this group because it

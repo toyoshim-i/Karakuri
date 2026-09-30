@@ -35,10 +35,6 @@ impl View {
         let map = self.map.as_ref();
         let armed = self.learn;
         let look_at = self.look;
-        let out = self.master_out;
-        let chain = self.master_chain.as_ref();
-        // Available chain additions for `+ add` card.
-        let adding = self.chain_choices();
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
         // Item kind tags aligned with library rows (ADR-0338).
@@ -194,7 +190,7 @@ impl View {
                             }
                             None => head_into(ui, &pal, rect, placed.region, opening),
                         }
-                        if let Some(row) = master(ui.ctx(), panel.layout(), out, chain, &adding) {
+                        if let Some(row) = self.master_row_layout(ui.ctx(), panel.layout()) {
                             master::master_into(ui, &pal, &row);
                             // Chain list drop landing indicator (ADR-0273).
                             if let Some(list) = carried.and_then(|at| row.dropped(at)) {

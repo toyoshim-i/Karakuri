@@ -30,6 +30,15 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
     {
         return Some(Turned::Library);
     }
+    if let Some(master_rect) = panel
+        .layout()
+        .find("master")
+        .map(|id| panel.layout().rect(id))
+    {
+        if crate::view::to_egui(master_rect).contains(at) {
+            return Some(Turned::Master);
+        }
+    }
     view.inspector.iter().enumerate().find_map(|(index, pane)| {
         let laid = inspector(panel.layout(), index, pane, view.scroll_in(index))?;
         laid.head
@@ -47,4 +56,6 @@ pub enum Turned {
     Pane(usize),
     /// The Library bay listing.
     Library,
+    /// The Master bay slot list.
+    Master,
 }

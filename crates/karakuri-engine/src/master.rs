@@ -323,6 +323,7 @@ pub struct ChainTargets {
     entry: Option<wgpu::TextureView>,
     ping: Vec<wgpu::TextureView>,
     binds: Vec<wgpu::BindGroup>,
+    bypass_binds: Vec<wgpu::BindGroup>,
     retained: Retained,
 }
 
@@ -340,6 +341,7 @@ impl ChainTargets {
                 entry: None,
                 ping: Vec::new(),
                 binds: Vec::new(),
+                bypass_binds: Vec::new(),
                 retained: Retained::default(),
             };
         }
@@ -377,6 +379,16 @@ impl ChainTargets {
                 .unwrap_or(src);
             slots[at].bind(device, &workshop.layout, src, held, &workshop.sampler)
         };
+        let make_bypass_bind = |src: &wgpu::TextureView| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("master chain bypass bind"),
+                layout: &workshop.retention_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(src),
+                }],
+            })
+        };
         let binds: Vec<wgpu::BindGroup> = (0..total)
             .map(|at| {
                 let src = if at == 0 {
@@ -387,11 +399,22 @@ impl ChainTargets {
                 held_for(at, src)
             })
             .collect();
+        let bypass_binds: Vec<wgpu::BindGroup> = (0..total)
+            .map(|at| {
+                let src = if at == 0 {
+                    &entry
+                } else {
+                    &ping[(at - 1) % ping.len().max(1)]
+                };
+                make_bypass_bind(src)
+            })
+            .collect();
         ChainTargets {
             at: workshop.at,
             entry: Some(entry),
             ping,
             binds,
+            bypass_binds,
             retained,
         }
     }
@@ -517,6 +540,10 @@ pub(crate) struct MasterChain {
     slots: Vec<Slot>,
     /// Bind groups per slot in order: `(src, held)`.
     binds: Vec<wgpu::BindGroup>,
+    /// Bypass bind groups per slot for muted/soloed passthrough: `src`.
+    bypass_binds: Vec<wgpu::BindGroup>,
+    /// Online status per slot, true if online (not muted / participating in solo).
+    online: Vec<bool>,
     /// Intermediate texture view where mix output is written when the chain is active.
     entry: Option<wgpu::TextureView>,
     /// Intermediate ping-pong texture views between slots.
@@ -541,6 +568,8 @@ impl MasterChain {
             retention,
             slots: Vec::new(),
             binds: Vec::new(),
+            bypass_binds: Vec::new(),
+            online: Vec::new(),
             entry: None,
             ping: Vec::new(),
             clock: std::cell::Cell::new(Clock::default()),
@@ -613,6 +642,7 @@ impl MasterChain {
             entry: self.entry.take(),
             ping: std::mem::take(&mut self.ping),
             binds: std::mem::take(&mut self.binds),
+            bypass_binds: std::mem::take(&mut self.bypass_binds),
             retained: self.retention.take(),
         }
     }
@@ -622,6 +652,7 @@ impl MasterChain {
         self.entry = targets.entry;
         self.ping = targets.ping;
         self.binds = targets.binds;
+        self.bypass_binds = targets.bypass_binds;
         self.retention.install(targets.retained);
         let viewport = [self.width.max(1) as f32, self.height.max(1) as f32];
         let clock = self.clock.get();
@@ -738,6 +769,17 @@ impl MasterChain {
         self.entry.as_ref()
     }
 
+    /// Sets online status per chain slot (true for active, false for bypassed/muted).
+    pub(crate) fn set_online(&mut self, online: &[bool]) {
+        self.online.clear();
+        self.online.extend_from_slice(online);
+    }
+
+    /// Whether slot `at` is currently online and active.
+    pub(crate) fn is_online(&self, at: usize) -> bool {
+        self.online.get(at).copied().unwrap_or(true)
+    }
+
     /// Records execution of all chain slots and history copies into `encoder`.
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, out: &wgpu::TextureView) {
         let total = self.slots.len();
@@ -750,8 +792,15 @@ impl MasterChain {
             } else {
                 &self.ping[at % self.ping.len().max(1)]
             };
-            let pass = slot.bound(&self.binds[at]);
-            pass.record(encoder, target);
+            if !self.is_online(at) {
+                if let Some(bind) = self.bypass_binds.get(at) {
+                    self.retention
+                        .record_copy(encoder, Some("master chain bypass"), target, bind);
+                }
+            } else {
+                let pass = slot.bound(&self.binds[at]);
+                pass.record(encoder, target);
+            }
         }
 
         self.retention.record(encoder);

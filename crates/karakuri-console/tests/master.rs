@@ -647,3 +647,129 @@ fn no_chain_behind_the_console_is_the_out_row_alone() {
         "the Master bay drew + add for a console with no chain behind it"
     );
 }
+
+/// Slot parameters expose 1-based ordinal numbers (1, 2, 3...) matching Inspector.
+#[test]
+fn slot_parameters_expose_1_based_ordinals() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    assert!(!it.slots.is_empty());
+    for slot in &it.slots {
+        for (idx, param) in slot.params.iter().enumerate() {
+            assert_eq!(param.ord, idx + 1);
+            assert!(param.ord_rect.min.x < param.label.min.x);
+        }
+    }
+}
+
+/// Solo and Mute toggle buttons in the title bar obey two-layer arbitration matching the Mixer.
+#[test]
+fn master_solo_mute_two_layer_arbitration() {
+    let mut v = view(MOCK);
+    assert!(v.is_master_online(0));
+    assert!(v.is_master_online(1));
+
+    // Mute slot 0
+    v.toggle_master_mute(0);
+    assert!(v.is_master_muted(0));
+    assert!(!v.is_master_online(0));
+    assert!(v.is_master_online(1));
+
+    // Solo slot 1 -> slot 1 is online, slot 0 is offline
+    v.toggle_master_solo(1);
+    assert!(v.is_master_soloed(1));
+    assert!(!v.is_master_online(0));
+    assert!(v.is_master_online(1));
+
+    // Solo slot 0 -> overrides mute!
+    v.toggle_master_solo(0);
+    assert!(v.is_master_soloed(0));
+    assert!(v.is_master_online(0));
+    assert!(!v.is_master_online(1));
+
+    // Unsolo -> falls back to muted state
+    v.toggle_master_solo(0);
+    assert!(!v.is_master_soloed(0));
+    assert!(!v.is_master_online(0));
+    assert!(v.is_master_online(1));
+
+    // Unmute slot 0
+    v.toggle_master_mute(0);
+    assert!(v.is_master_online(0));
+    assert!(v.is_master_online(1));
+}
+
+/// Folding a slot collapses its height, hides parameters, and title bar clicks toggle it.
+#[test]
+fn master_slot_folding_toggles_and_collapses_body() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let mut v = view(MOCK);
+
+    let unfolded = v
+        .master_row_layout(&ctx, panel.layout())
+        .expect("unfolded row");
+    let slot0_unfolded_h = unfolded.slots[0].well.height();
+
+    // Fold slot 0
+    v.toggle_master_fold(0);
+    assert!(v.is_master_folded(0));
+
+    let folded = v
+        .master_row_layout(&ctx, panel.layout())
+        .expect("folded row");
+    let slot0_folded = &folded.slots[0];
+    assert!(slot0_folded.is_folded);
+    assert!(slot0_folded.params.is_empty());
+    assert!(slot0_folded.well.height() < slot0_unfolded_h);
+    assert_eq!(
+        slot0_folded.well.height(),
+        size::NODE_HEAD_H,
+        "folded slot height equals header height"
+    );
+
+    // Hit-testing fold on title bar
+    let fold_click = at(slot0_folded.name.center());
+    assert_eq!(slot0_folded.fold(fold_click), Some(0));
+
+    // Clicking solo, mute, or remove button does NOT trigger fold
+    assert_eq!(slot0_folded.fold(at(slot0_folded.solo.center())), None);
+    assert_eq!(slot0_folded.fold(at(slot0_folded.mute.center())), None);
+    assert_eq!(slot0_folded.fold(at(slot0_folded.remove.center())), None);
+}
+
+/// Vertical mouse wheel scrolling scrolls Master bay smoothly and clamps at zero.
+#[test]
+fn master_scrolling_moves_slots_and_clamps() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let mut v = view(MOCK);
+    let mut slots = Vec::new();
+    for i in 0..15 {
+        slots.push(ChainSlot {
+            name: format!("fx_{i}"),
+            cut: None,
+            params: vec![SlotParam {
+                key: "param".to_owned(),
+                range: [0.0, 1.0],
+                value: 0.5,
+                default: 0.0,
+            }],
+        });
+    }
+    v.master_chain = Some(Chain { slots });
+
+    assert_eq!(v.master_scroll(), 0.0);
+    let row0 = v.master_row_layout(&ctx, panel.layout()).expect("row0");
+    let y0 = row0.slots[0].well.min.y;
+
+    // Scroll down 40 pixels
+    assert!(v.scroll_master_by(40.0));
+    assert_eq!(v.master_scroll(), 40.0);
+
+    let row1 = v.master_row_layout(&ctx, panel.layout()).expect("row1");
+    let y1 = row1.slots[0].well.min.y;
+    assert_eq!(y0 - y1, 40.0, "slots shift up by scroll amount");
+
+    // Scroll past zero clamps at 0
+    assert!(v.scroll_master_by(-100.0));
+    assert_eq!(v.master_scroll(), 0.0);
+}

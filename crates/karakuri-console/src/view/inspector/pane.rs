@@ -373,4 +373,38 @@ impl InspectorPane {
             Pos2::new(p.x, p.y),
         )
     }
+
+    /// Hit-tests a click on a node head for folding, returning the node index if clicked outside
+    /// keep and authority buttons.
+    pub fn fold_node(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        p: karakuri_layout::Point,
+    ) -> Option<usize> {
+        let at = Pos2::new(p.x, p.y);
+        if !self.body.contains(at) {
+            return None;
+        }
+        self.drawn(&pane.nodes).find(|&index| {
+            let node = &pane.nodes[index];
+            let group = self.group(&pane.nodes, index);
+            let head = Rect::from_min_max(
+                group.min,
+                Pos2::new(group.max.x, group.min.y + size::NODE_HEAD_H),
+            );
+            if !head.contains(at) {
+                return false;
+            }
+            if let Some(keep) = node_keep(ctx, head, node) {
+                if keep.contains(at) {
+                    return false;
+                }
+            }
+            if auth_chips(ctx, head, node).any(|(_, chip)| chip.contains(at)) {
+                return false;
+            }
+            true
+        })
+    }
 }

@@ -260,6 +260,11 @@ impl Present {
         self.chain.chain_len()
     }
 
+    /// Sets online status per master chain slot.
+    pub fn set_chain_online(&mut self, online: &[bool]) {
+        self.chain.set_online(online);
+    }
+
     /// Returns the sequence of `(procedure_id, cut)` identifying each slot in the chain.
     pub fn chain_shape(&self) -> Vec<(String, Option<Cut>)> {
         self.chain.shape()

@@ -122,16 +122,10 @@ impl Readout {
                         })
                         // Drops onto master chain if carrying a valid L5 procedure (ADR-0273).
                         .or_else(|| {
-                            let adding = self.view.chain_choices();
-                            master_row(
-                                ctx,
-                                self.panel.layout(),
-                                self.view.master_out,
-                                self.view.master_chain.as_ref(),
-                                &adding,
-                            )
-                            .as_ref()
-                            .and_then(|row| row.dropped(at))?;
+                            self.view
+                                .master_row_layout(ctx, self.panel.layout())
+                                .as_ref()
+                                .and_then(|row| row.dropped(at))?;
                             let carried = self.panel.carried()?;
                             Some(Landing::Chain(self.view.chain_landing(carried)))
                         }),
@@ -139,12 +133,13 @@ impl Readout {
                 };
                 did = self.released(onto);
             }
-            // Scroll inspector panes or library list based on target region (ADR-0312).
+            // Scroll inspector panes, master bay, or library list based on target region (ADR-0312).
             (Pointer::Wheel(by), _) => {
                 if let Some(turned) = wheeled(&mut self.panel, &self.view, at) {
                     let moved = match turned {
                         Turned::Pane(pane) => self.view.scroll_by(pane, by),
                         Turned::Library => self.view.scroll_library_by(by),
+                        Turned::Master => self.view.scroll_master_by(by),
                     };
                     if moved {
                         did = Acted::Pointed;

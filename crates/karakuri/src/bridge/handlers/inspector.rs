@@ -246,6 +246,7 @@ pub(crate) fn inspector(
                     Some(aiming) => uses_of(set, &aiming.at.edges, name),
                     None => Vec::new(),
                 },
+                folded: false,
                 params: params(layer, index),
             });
         }
@@ -270,6 +271,7 @@ pub(crate) fn inspector(
                 renderers,
                 // Folded renderer head represents multiple nodes and takes no direct `uses` lines (ADR-0216).
                 uses: Vec::new(),
+                folded: false,
                 params,
             });
         }

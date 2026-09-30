@@ -72,6 +72,7 @@ fn mock() -> Pane {
                     candidates: vec!["drift_shell".to_owned()],
                 }],
                 renderers: Vec::new(),
+                folded: false,
                 params: vec![
                     row(3, "amount", Some((Layer::L2, 0))),
                     // Declared and off the interface, so it keeps its row.
@@ -85,6 +86,7 @@ fn mock() -> Pane {
                 authority: None,
                 uses: Vec::new(),
                 renderers: Vec::new(),
+                folded: false,
                 params: vec![row(2, "detail", Some((Layer::L1, 1)))],
             },
             Node {
@@ -94,6 +96,7 @@ fn mock() -> Pane {
                 authority: None,
                 uses: Vec::new(),
                 renderers: Vec::new(),
+                folded: false,
                 params: vec![row(1, "exposure", None)],
             },
         ],

@@ -45,6 +45,8 @@ pub struct Node {
     pub uses: Vec<Uses>,
     /// The published controls that belong to this node.
     pub params: Vec<Param>,
+    /// Whether this node group is folded (collapsed).
+    pub folded: bool,
 }
 
 /// Declared input dependency for a node and its currently wired source (ADR-0152, [P-0086](../../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md), [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
@@ -164,6 +166,9 @@ impl UsesLine {
 
 /// Total height of a node group including its header, optional renderer row, inputs, and parameters.
 pub(crate) fn group_h(node: &Node) -> f32 {
+    if node.folded {
+        return size::NODE_HEAD_H;
+    }
     size::NODE_HEAD_H
         + uses_h(node)
         + match node.renderers.is_empty() {
@@ -391,6 +396,10 @@ pub(crate) fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node
                 colour,
             );
         });
+    }
+
+    if node.folded {
+        return;
     }
 
     // Declared inputs positioned below the head and above parameter rows.

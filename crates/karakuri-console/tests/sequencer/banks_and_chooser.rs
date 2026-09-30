@@ -118,6 +118,7 @@ fn choosing() -> View {
             keep: None,
             uses: Vec::new(),
             renderers: Vec::new(),
+            folded: false,
             params: vec![param("twist", 0), param("bend", 1)],
         }],
     }];

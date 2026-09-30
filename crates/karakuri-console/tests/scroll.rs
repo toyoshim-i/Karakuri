@@ -46,6 +46,7 @@ fn node(index: usize, params: usize) -> Node {
         }),
         uses: Vec::new(),
         renderers: Vec::new(),
+        folded: false,
         params: (0..params)
             .map(|at| row(at + 1, &format!("n{index}p{at}")))
             .collect(),
@@ -367,5 +368,37 @@ fn the_head_says_how_many_groups_are_not_shown() {
     assert!(
         some.head.contains_rect(rect),
         "the count is drawn outside the head it is in"
+    );
+}
+
+/// A node in an Inspector pane collapses its group height to NODE_HEAD_H when folded, and fold_node hit-tests.
+#[test]
+fn inspector_node_folding_collapses_height_and_toggles() {
+    let mut pane = pane_of(1, 4);
+    let (tall, ctx) = common::console(PLAUSIBLE);
+    let mut v = view_at(&pane, 0.0);
+    v.inspector = vec![pane.clone()];
+
+    let laid_unfolded = laid(&tall, &v, &pane);
+    let unfolded_h = laid_unfolded.group(&pane.nodes, 0).height();
+    assert!(unfolded_h > size::NODE_HEAD_H);
+
+    // Hit-testing fold on node head
+    let head = laid_unfolded.group(&pane.nodes, 0);
+    let click_head = at(egui::pos2(head.min.x + 10.0, head.min.y + 5.0));
+    assert_eq!(laid_unfolded.fold_node(&ctx, &pane, click_head), Some(0));
+
+    // Toggle fold via View
+    v.toggle_node_fold(0, 0);
+    assert!(v.is_node_folded(0, 0));
+    assert!(v.inspector[0].nodes[0].folded);
+
+    pane.nodes[0].folded = true;
+    let laid_folded = laid(&tall, &v, &pane);
+    let folded_h = laid_folded.group(&pane.nodes, 0).height();
+    assert_eq!(
+        folded_h,
+        size::NODE_HEAD_H,
+        "folded node height equals NODE_HEAD_H"
     );
 }

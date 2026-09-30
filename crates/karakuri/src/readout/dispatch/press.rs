@@ -458,6 +458,26 @@ impl Readout {
             return Some(Acted::Emitted(Some(operation)));
         }
 
+        let folded = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(pane_idx, pane)| {
+                let at_pane = inspector_pane(
+                    self.panel.layout(),
+                    pane_idx,
+                    pane,
+                    self.view.scroll_in(pane_idx),
+                )?;
+                let node_idx = at_pane.fold_node(ctx, pane, at)?;
+                Some((pane_idx, node_idx))
+            });
+        if let Some((pane_idx, node_idx)) = folded {
+            self.view.toggle_node_fold(pane_idx, node_idx);
+            return Some(Acted::Pointed);
+        }
+
         None
     }
 
@@ -703,13 +723,7 @@ impl Readout {
         .and_then(|row| row.chip_at(at).map(|output| (row, output)));
         let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
         let adding = self.view.chain_choices();
-        let master = master_row(
-            ctx,
-            self.panel.layout(),
-            self.view.master_out,
-            self.view.master_chain.as_ref(),
-            &adding,
-        );
+        let master = self.view.master_row_layout(ctx, self.panel.layout());
         let knob = bay
             .as_ref()
             .and_then(|bay| bay.grab(at))
@@ -742,6 +756,18 @@ impl Readout {
         let chose = master.as_ref().and_then(|row| row.chose(at, &adding));
         if let Some(chose) = chose {
             return self.chain_chose(chose);
+        }
+        if let Some(slot) = master.as_ref().and_then(|row| row.solo(at)) {
+            self.view.toggle_master_solo(slot);
+            return Acted::Pointed;
+        }
+        if let Some(slot) = master.as_ref().and_then(|row| row.mute(at)) {
+            self.view.toggle_master_mute(slot);
+            return Acted::Pointed;
+        }
+        if let Some(slot) = master.as_ref().and_then(|row| row.fold(at)) {
+            self.view.toggle_master_fold(slot);
+            return Acted::Pointed;
         }
         match (sink, knob, chip, tally, mask) {
             (Some((row, Output::Program)), ..) => Acted::Operated(self.sink(row.route(), row.op())),

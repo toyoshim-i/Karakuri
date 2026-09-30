@@ -31,6 +31,7 @@ fn renderers() -> Node {
                 live: index == 0,
             })
             .collect(),
+        folded: false,
         params: Vec::new(),
     }
 }
@@ -53,6 +54,7 @@ fn shell() -> Node {
         }),
         uses: Vec::new(),
         renderers: Vec::new(),
+        folded: false,
         params: Vec::new(),
     }
 }

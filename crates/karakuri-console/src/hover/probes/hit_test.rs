@@ -5,7 +5,7 @@ use karakuri_operation::{Layer, Operation, Output};
 
 use crate::panel::Panel;
 use crate::view::{
-    arrangement, audio_in, deck_head, inspector, keep_pill, library, look, master, mcp_pill, mixer,
+    arrangement, audio_in, deck_head, inspector, keep_pill, library, look, mcp_pill, mixer,
     outputs, program_bay, program_head, sequencer, staging, tracker_group, transition, transport,
     Field, KindChip, Scope, View,
 };
@@ -169,25 +169,13 @@ pub(crate) fn on_go(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -
 }
 
 pub(crate) fn on_master_out(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(
-        ctx,
-        panel.layout(),
-        view.master_out,
-        view.master_chain.as_ref(),
-        &view.chain_choices(),
-    )
-    .is_some_and(|row| row.grab(p).is_some())
+    view.master_row_layout(ctx, panel.layout())
+        .is_some_and(|row| row.grab(p).is_some())
 }
 
 pub(crate) fn on_master_chip(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(
-        ctx,
-        panel.layout(),
-        view.master_out,
-        view.master_chain.as_ref(),
-        &view.chain_choices(),
-    )
-    .is_some_and(|row| row.chip(p).is_some() || row.chose(p, &view.chain_choices()).is_some())
+    view.master_row_layout(ctx, panel.layout())
+        .is_some_and(|row| row.chip(p).is_some() || row.chose(p, &view.chain_choices()).is_some())
 }
 
 pub(crate) fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
