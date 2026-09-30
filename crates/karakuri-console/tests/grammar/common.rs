@@ -89,6 +89,7 @@ pub fn node() -> Node {
                 live: index == 0,
             })
             .collect(),
+        folded: false,
         params: vec![
             param(1, "radius", [0.0, 4.0], 2.0),
             param(2, "turbulence", [0.0, 3.0], 1.5),

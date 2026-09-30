@@ -77,6 +77,7 @@ fn shell() -> Node {
         }),
         uses: Vec::new(),
         renderers: Vec::new(),
+        folded: false,
         params: vec![
             row(1, "radius", 0, [0.0, 4.0], 2.4),
             Param {
@@ -108,6 +109,7 @@ fn renderers() -> Node {
                 live: index == 0,
             })
             .collect(),
+        folded: false,
         params: Vec::new(),
     }
 }

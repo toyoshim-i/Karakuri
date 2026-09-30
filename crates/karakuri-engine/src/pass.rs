@@ -342,6 +342,17 @@ impl RetentionManager {
             }
         }
     }
+
+    /// Records a fullscreen copy pass using the retention pipeline from `bind` to `target`.
+    pub fn record_copy(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        label: Option<&str>,
+        target: &wgpu::TextureView,
+        bind: &wgpu::BindGroup,
+    ) {
+        record_fullscreen_pass(encoder, label, target, &self.pipeline, &[bind]);
+    }
 }
 
 /// Compiled fullscreen image pass managing pipelines, uniforms, and textures.

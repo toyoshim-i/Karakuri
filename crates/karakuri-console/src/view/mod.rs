@@ -267,6 +267,11 @@ impl View {
             sequencer: None,
             // Prompt bay unselected and menu closed.
             prompt: PromptState::new(),
+            master_scroll: 0.0,
+            master_folded: std::collections::BTreeSet::new(),
+            master_muted: std::collections::BTreeSet::new(),
+            master_soloed: None,
+            inspector_folded: std::collections::BTreeSet::new(),
             // Pre-allocate region layout cache up to REGIONS capacity.
             placed: Vec::with_capacity(REGIONS.len()),
         }

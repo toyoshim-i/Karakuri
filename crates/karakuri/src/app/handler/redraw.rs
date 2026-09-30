@@ -272,6 +272,7 @@ impl App {
                 &mut self.readout.view.inspector,
             );
         }
+        self.readout.view.sync_inspector_folded();
 
         // Publish unified animation clock for UI strip motion on this frame.
         self.readout.view.phase = view::Phase::since(self.started.elapsed());
@@ -459,6 +460,10 @@ impl App {
                     window.request_redraw();
                 }
             }
+            let online: Vec<bool> = (0..present.chain_len())
+                .map(|at| self.readout.view.is_master_online(at as u32))
+                .collect();
+            present.set_chain_online(&online);
             let textures_delta = &mut output.textures_delta;
             let cost = &mut cost;
             // Collect picture and active auxiliary sinks into fixed array for `compose` (ADR-0171).

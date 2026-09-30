@@ -123,5 +123,15 @@ pub struct View {
     pub sequencer: Option<Sequenced>,
     /// Prompt bay terminal and agent CLI session state.
     pub prompt: PromptState,
+    /// Vertical scroll offset of the Master bay in logical pixels.
+    pub(crate) master_scroll: f32,
+    /// Master chain slots that are folded by slot index.
+    pub(crate) master_folded: std::collections::BTreeSet<u32>,
+    /// Master chain slots that are muted by slot index.
+    pub(crate) master_muted: std::collections::BTreeSet<u32>,
+    /// Master chain slot currently soloed, if any.
+    pub(crate) master_soloed: Option<u32>,
+    /// Inspector node groups that are folded by (pane_index, node_index).
+    pub(crate) inspector_folded: std::collections::BTreeSet<(usize, usize)>,
     pub(crate) placed: Vec<Placed>,
 }

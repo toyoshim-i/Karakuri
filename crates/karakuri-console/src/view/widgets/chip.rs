@@ -197,3 +197,47 @@ pub fn tally_into(
         word_into(&painter, galley, ink_to, pitch - rolled);
     }
 }
+
+/// Renders the SOLO toggle button on a channel strip or master chain slot.
+pub fn solo_button_into(painter: &Painter, pal: &Palette, rect: Rect, active: bool) {
+    let radius = CornerRadius::same((rect.height() * 0.5) as u8);
+    let (fill, stroke_col, ink) = match active {
+        true => (
+            super::super::widgets::fader::tint(pal.sun, 25),
+            pal.sun,
+            pal.sun,
+        ),
+        false => (pal.well, pal.line, pal.dim),
+    };
+    painter.rect_filled(rect, radius, fill);
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(size::HAIRLINE, stroke_col),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_job(span_at("S", size::TALLY_SIZE, ink));
+    centre_galley(painter, rect, galley, ink);
+}
+
+/// Renders the MUTE toggle button on a channel strip or master chain slot.
+pub fn mute_button_into(painter: &Painter, pal: &Palette, rect: Rect, active: bool) {
+    let radius = CornerRadius::same((rect.height() * 0.5) as u8);
+    let (fill, stroke_col, ink) = match active {
+        true => (
+            super::super::widgets::fader::tint(pal.pink, 25),
+            pal.pink,
+            pal.pink,
+        ),
+        false => (pal.well, pal.line, pal.faint),
+    };
+    painter.rect_filled(rect, radius, fill);
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(size::HAIRLINE, stroke_col),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_job(span_at("M", size::TALLY_SIZE, ink));
+    centre_galley(painter, rect, galley, ink);
+}

@@ -4,9 +4,8 @@ use karakuri_operation::gate::Class;
 use crate::panel::Panel;
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
-    library, look, map_pill, master, mcp_pill, mixer, outputs_with_plugin_name, program_bay,
-    program_head, sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, View,
-    REGIONS,
+    library, look, map_pill, mcp_pill, mixer, outputs_with_plugin_name, program_bay, program_head,
+    sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, View, REGIONS,
 };
 
 /// Hit-tests Sequencer bay controls (cells, labels, minus button, mode pill)
@@ -151,14 +150,8 @@ pub(super) fn on_tempo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point
 
 /// Hit-tests Master bay controls (out knob, effect knobs, feedback cut chip) in one derivation.
 pub(super) fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(
-        ctx,
-        panel.layout(),
-        view.master_out,
-        view.master_chain.as_ref(),
-        &view.chain_choices(),
-    )
-    .is_some_and(|row| row.owns(p))
+    view.master_row_layout(ctx, panel.layout())
+        .is_some_and(|row| row.owns(p))
 }
 
 /// Hit-tests the editable name in each Inspector pane's head.

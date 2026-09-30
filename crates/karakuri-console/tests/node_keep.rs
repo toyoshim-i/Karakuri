@@ -25,6 +25,7 @@ fn kept(addr: &str, name: &str, at: NodeAddress) -> Node {
         keep: Some(at),
         renderers: Vec::new(),
         uses: Vec::new(),
+        folded: false,
         params: Vec::new(),
     }
 }
@@ -55,6 +56,7 @@ fn folded_renderers() -> Node {
         keep: None,
         renderers: Vec::new(),
         uses: Vec::new(),
+        folded: false,
         params: Vec::new(),
     }
 }

@@ -140,6 +140,7 @@ fn a_pointed_lane_takes_its_levels_from_the_published_range() {
             keep: None,
             uses: Vec::new(),
             renderers: Vec::new(),
+            folded: false,
             params: vec![view::Param {
                 ord: Some(1),
                 name: "twist".to_owned(),
