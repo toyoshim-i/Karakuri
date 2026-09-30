@@ -114,53 +114,30 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
 **Objective**: Expand visual synthesis from 2D point/line sprites to expressive 3D procedural meshes, provide rich plug-and-play L4 material presets for LLM-driven generation, and furnish the master chain with essential live performance post-processing effects.
 
 #### Key Deliverables:
-1. **Procedural Mesh & Topology Expansion (`karakuri-ir`, `karakuri-codegen`)**:
-   - `topology triangles`: Direct vertex-shader-art generation. A vertex is an element and is addressed by `seed`, never by a slot index (P-0007, ADR-0001; `id` stays reserved).
-   - `topology grid`: Built-in tessellated grid topology with automated index buffering; allows LLMs to create reactive terrain, undulating cloth, and cyber-space meshes with simple displacement functions.
-   - `topology ribbon`: Continuous connected quad strip topology for flowing light trails and vector field paths.
-   - **Shared vertices on static sources only.** An index buffer names slot indices, and compaction moves them every frame (ir-spec *Dispatch*). A source with no `spawn` and no `kill()` never compacts and its `seed` is its slot index, so the three topologies are legal only where `Checked::is_static` holds — its third use after L2 edges and `morph.kir`.
-   - **Spec revisions this owes (`docs/ir-spec.md`, written before the code)**:
-     - *capacity / topology*: `topology` stops "constraining no renderer"; the index layout (e.g. grid W×H) becomes the L1's fact.
-     - *How an L4 says what it draws*: per-element values reach `fragment` flat because a sprite and a segment have nothing to interpolate between. Under a shared-vertex topology they interpolate; the section already says it would need revisiting.
-     - *Element lifecycle*: specify **group lifecycle** — elements spawn and die in units of k (alive flag and scan per group, `spawn` count and `capacity` multiples of k, the `min(spawn_count, capacity - survivors)` truncation made group-aligned). Order-preserving compaction then keeps each group contiguous and its indices valid, so spawning ribbons and debris can be meshes. Implementation is scheduled in M11 item 4.
-   - **Depth buffer and `blend opaque` (decided 2026-09-28; lands before the topologies above)**: no pass in the engine attaches a depth buffer today (`depth_stencil_attachment: None` throughout), so an opaque polygon drawn later covers a nearer one drawn earlier. `weighted` keeps coverage right but averages colour by depth weight — by the ir-spec formula, a 1-unit-thick object 3 units away under near 0.1 / far 52 gets about 52/48 front/back — which breaks MatCap and toon.
-     - `blend opaque`, a third value: writes and tests depth. A per-Set depth target (Depth32: ~8 MB at 1080p, ~33 MB at 4K), allocated only where a renderer declares `opaque` (P-0091). Stays inside the Set; the mixer is untouched, and opaque coverage is 1, so `over` works as is.
-     - `additive` and `weighted` test depth and do not write it, so material behind an opaque surface is hidden and early-Z drops those fragments before shading.
-     - Spec first: ir-spec *blend* and *WGSL lowering — L4*.
-     - **ADR written with the implementation, not before** — the design may still drift. It carries what this paragraph would otherwise lose: why `weighted` cannot stand in (the averaging figure above), that wgpu attaches no depth implicitly as a GL context does, and how early-Z behaves for each blend mode.
-     - Occlusion holds only where renderers overdraw one attachment. Under `merge` (renderers composited through an L5) each renderer has its own target and an opaque surface hides nothing in another. Between deck slots depth never applies; the mixer stacks layers.
-     - **Draw order within a Set (decided 2026-09-28)**: renderers overdraw in declaration order, and that rule stays. A Set that declares an `opaque` renderer after a non-opaque one is refused at Set build (a new `SetError`, beside `PairingNotFirst`, which already refuses on position), and the refusal names the renderer to move first (P-0083). Reordering silently was rejected: it draws the same picture and takes the order out of the author's hands (P-0084). `check_set` reports it before a load; a refused Set never reaches the air (P-0094).
-     - **Depth test is chosen where a renderer is placed, not in the `.kir` (decided 2026-09-28)**: a per-renderer Set setting, default *test*. *No test* draws over whatever came before regardless of depth — an overlay inside the Set, with no extra pass or target. The choice changes nothing a fragment writes, so it is the placement's answer, as `cut` is for `retains` (P-0086). `opaque` always tests and writes.
-     - **A fullscreen L4 that writes no depth is tested at the far plane (decided 2026-09-28)**, so a marched sky drawn after an opaque mesh sits behind it. With *no test* the same field is an overlay. Superseded per field by M11 item 4's depth from fullscreen fields.
-2. **Rich L4 Material Presets & Shading Helpers**:
-   - Built-in screen-space flat normal derivation (`normalize(cross(dpdx(p), dpdy(p)))`) in L4 lowering, granting faceted low-poly shading to any procedural geometry with zero authoring overhead. Depends on item 1's interpolation revision: under today's flat rule `p` is constant across a primitive and the derivative is zero.
-   - Core L4 material preset suite (`examples/` & Library):
-     - `matcap_chrome.kir`, `matcap_clay.kir`, `matcap_iridescent.kir`: Procedural texture-free MatCap reflections and shading.
-     - `cyber_wire.kir`: Barycentric / UV-edge dual rendering (filled polygon face + emissive wireframe edge).
-     - `fresnel_holo.kir`: Edge-emitting translucent hologram / X-ray styling.
-     - `toon_step.kir`: Quantized stepped lighting for cel-shaded comic aesthetics.
-3. **Master Chain (L5) Integration & Performance Effects Suite**:
-   - **Complementary L5 Performance Procedures (Filling gaps in the 23-procedure library)**:
-     - `glitch_slice.kir`: Beat-synced horizontal band slicing and pseudo-random block displacement for drop punctuation (distinct from continuous `roll_panels`).
-     - `negative_strobe.kir`: High-impact 1-frame inverted/negative-flash strobe triggered on transients.
-     - `chroma_burst.kir`: Audio-transient-reactive radial dispersion that explodes outwards on kicks and snaps back (unlike static `rgb_shift`).
-     - `film_grain.kir`: High-frequency organic film stock grain/noise to eliminate digital plastic look without heavy blur.
-     - `slit_scan.kir`: Scan-line slit scan — `retains` with the `exit` cut, one line of `src` taken each frame and the held frame shifted along, so time runs across the frame. Written on today's one-frame retention. Known limit: the shift is a `frame_step` fraction and not whole texels, so `tap` resamples every frame and older parts soften. The per-position time-delay form needs a multi-frame history (M11 item 4).
-   - **What the effects above owe**:
-     - `beats` is readable in an L5, so beat sync needs nothing new. `onset` reaches a procedure only through a `bind`, and `bind` lives in a Set file; no binding for a master chain slot's params was found. Verify first; if absent, binding chain slot params to signals is part of this item.
-   - **Dynamic Slot Manipulation & Operational Usability**:
-     - Arbitrary slot insertion (`+ add`), deletion (`— remove`), and drag-and-drop reordering with live GPU cost budget tracking.
-     - Curated master chain presets saved to and recalled from the Library (the chain-preset store lives here; M11 item 3 carries Set bundles only):
-       - *Clean Cyber*: `bloom` + `chroma_burst` (the tone map is the fixed stage after the chain, set by `look`, not an L5)
-       - *Retro Stage*: `crt_screen` + `analog_tv` + `film_grain`
-       - *Psychedelic Echo*: `feedback` + `chroma_echo` + `slit_scan`
-       - *Drop Assault*: `glitch_slice` + `negative_strobe` + `bloom`
-   - The default chain stays empty (ir-spec *L5's chain*, ADR-0340: the default look is bit-identical for free); a preset is one Library recall away.
-4. **L5 Nested in a Set, and What `retains` Answers There**:
-   - Build ADR-0098's second role: an L5 inside a Set, folding its renderers' `uses … : Texture` slots through `edge`s. Specified in ir-spec *The two roles*; `compile::sort_compiled` still refuses it.
-   - Specify which frame `held` is for a nested L5 (candidate: the Set's own previous output), after reading ADR-0238, which records the question open. This is what makes per-deck-slot reaction-diffusion, fluid ink and layer trails writable; today frame memory exists only in the master chain.
-   - Replace the refusal text at `crates/karakuri-environment/src/compile.rs` (`kind L5` arm): it still says the master chain "is still three fixed passes".
-5. **Authoring Corpus for the Exit Condition (`karakuri-mcp`)**:
+1. **Procedural Mesh & Topology Expansion (`karakuri-ir`, `karakuri-codegen`)** *(Completed — [ADR-0375](adr/0375-depth-buffer-and-opaque-blend-mode.md))*:
+   - `topology triangles`: Direct vertex-shader-art generation addressed by `seed`.
+   - `topology grid`: Built-in tessellated grid topology with automated index buffering for reactive terrain and meshes.
+   - `topology ribbon`: Continuous quad strip topology for flowing light trails and vector fields.
+   - Shared vertices on static sources (`Checked::is_static`).
+   - Depth buffer and `blend opaque`: Per-Set on-demand `Depth32Float` allocation, early-Z rejection for additive/weighted renderers, declaration-order verification (`SetError::OpaqueAfterNonOpaque`), placement-level `depth_test` toggle, and far-plane fullscreen fields ([ADR-0375](adr/0375-depth-buffer-and-opaque-blend-mode.md)).
+2. **Rich L4 Material Presets & Shading Helpers** *(Completed)*:
+   - Built-in screen-space flat normal derivation (`normalize(cross(dpdx(p), dpdy(p)))`) in L4 lowering for faceted geometry.
+   - Core L4 material presets: `matcap_chrome.kir`, `matcap_clay.kir`, `toon_step.kir`, `mesh_pyramid.kir`, and example sets (`examples/depth_occlusion.kset`).
+3. **Master Chain (L5) Integration & Performance Effects Suite** *(Completed — [ADR-0378](adr/0378-adaptive-master-chain-slot-layout-and-async-build-event-loop-polling.md))*:
+   - 5 curated L5 master performance procedures: `glitch_slice.kir`, `negative_strobe.kir`, `chroma_burst.kir`, `film_grain.kir`, and `slit_scan.kir`.
+   - 4 curated master chain presets: *Clean Cyber*, *Retro Stage*, *Psychedelic Echo*, and *Drop Assault*.
+   - Dynamic Master bay controls: slot insertion (`+ add`), removal (`−`), cut chips, parameter fader dragging, and adaptive bottom-up parameter row dropping for constrained viewports ([ADR-0378](adr/0378-adaptive-master-chain-slot-layout-and-async-build-event-loop-polling.md)).
+   - Event loop active polling during background compilation via `chain_swap.building()`, ensuring zero-stall immediate swaps without live deck playback.
+4. **L5 Nested in a Set, and What `retains` Answers There** *(Completed — [ADR-0376](adr/0376-nested-l5-post-processing-in-sets-and-per-set-frame-retention.md))*:
+   - Lifted refusal of `kind L5` in `sort_compiled`, allowing Sets to declare nested post-processing procedures.
+   - Per-Set HDR intermediate render target and `ImagePass` execution pipeline.
+   - Per-Set frame retention: `held` texture ping-pongs within the deck's own slot, isolating temporal feedback to the containing Set without leaking across decks or into master.
+   - Signal modulation via `bind` and component vector parameter uniform packing (`node::write_params`).
+5. **Procedure Favourites in Library and Store** *(Completed — [ADR-0377](adr/0377-procedure-favourites-in-the-library-bay-and-persistent-store.md))*:
+   - Store supports starring procedures (`.kir`) alongside Sets under `<store>/favourites/`.
+   - Star indicator affordance rendered and hit-tested on procedure rows across all Library scopes.
+   - `Scope::MySets` unifies starred sets and procedures into a consolidated performer palette.
+6. **Authoring Corpus for the Exit Condition (`karakuri-mcp`)** *(In Progress)*:
    - A checked-in set of fixed prompts and the `.kir` an agent produced for each, run through `check_procedure`, asserting every file passes and stays within 30 lines.
 
 **Exit Condition**:
