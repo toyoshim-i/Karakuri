@@ -1,0 +1,52 @@
+// Additive faceted renderer with a neon wireframe: each triangle gets a dark
+// fresnel-shaded face and a bright edge traced from its barycentric uv, so a
+// dense field of polygons reads as a glowing lattice rather than a solid mass.
+// Sized to pair with shard_reactor but works over any polyhedral L1.
+//
+//     cargo run -p karakuri-cli -- --set examples/shard_reactor.kir,examples/prism_wire.kir
+
+proc prism_wire {
+  kind  L4
+  blend additive
+
+  consumes position, uv, tint, size
+
+  // Barycentric width of the glowing edge, as a fraction of the triangle.
+  param wire_width : float [0.01, 0.35] = 0.10
+
+  // Brightness of the edge lines; HDR, values above 1.0 are expected.
+  param edge_gain  : float [0.5, 8.0] = 1.7
+
+  // Brightness of the face fill away from the edge.
+  param face_gain  : float [0.0, 2.0] = 0.25
+
+  // Exposure scaling for master output.
+  param exposure   : float [0.2, 4.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    // Screen-space flat normal: every triangle is one crisp facet.
+    let n = flat_normal(position);
+
+    // Barycentric distance to the nearest edge.
+    let d_edge = min(uv.x, min(uv.y, 1.0 - uv.x - uv.y));
+    let wire   = 1.0 - smoothstep(0.0, wire_width, d_edge);
+
+    // Fresnel rim: facets brighten as they turn to face the eye.
+    let view_dir = normalize(-position);
+    let fres = pow(1.0 - max(dot(n, view_dir), 0.0), 2.5);
+
+    // Dark face fill; size carries the beat energy so hits flare the whole figure.
+    let face = tint * fres * face_gain * (0.5 + size * 0.8);
+
+    // Edge glow, hot on the faces the eye catches.
+    let edge = tint * edge_gain * (0.35 + 0.65 * fres) * (1.0 + size * 1.4);
+
+    let rgb = (face + wire * edge) * exposure;
+    color = vec4(rgb, 1.0);
+  }
+}
