@@ -1,0 +1,39 @@
+// A monochrome phosphor screen over whatever it is handed: colour pulled toward one tint,
+// scanlines, a slow flicker, fine moving noise and a vignette. At zero the picture
+// keeps its own colours and only gains the lines and the noise.
+
+proc sol_phosphor {
+  kind L5
+
+  // How far colour is pulled toward the tint hue: 0 keeps the picture's colours, 1 is one hue.
+  param mono   : float [0.0, 1.0] = 0.8
+
+  // Hue of the tone on the colour wheel: 0.45 is teal, 0.33 green.
+  param hue     : float [0.0, 1.0] = 0.46
+
+  // Depth of the scanline darkening; 0 removes the lines.
+  param scan    : float [0.0, 1.0] = 0.25
+
+  // Strength of the brightness flicker.
+  param flicker : float [0.0, 0.3] = 0.04
+
+  // Level of the moving noise.
+  param noise   : float [0.0, 0.3] = 0.05
+
+  frame {
+    let s   = texel(src);
+    let l   = dot(s.xyz, vec3(0.3, 0.59, 0.11));
+    let tc  = srgb_to_linear(hsv_to_rgb(vec3(hue, 0.55, 1.0)));
+    let rgb = mix(s.xyz, tc * l * 1.3, vec3(mono));
+
+    let line = 1.0 - scan * step(0.5, fract(point_coord.y * 360.0));
+    let fl   = 1.0 + flicker * (hash1(uint(floor(t * 30.0)) * 977u + 7u) - 0.5) * 2.0;
+    let px   = floor(point_coord / frame_step(0.002));
+    let nz   = value_noise(vec3(px, floor(t * 30.0))) * noise;
+
+    let g    = point_coord * (vec2(1.0) - point_coord);
+    let vig  = 0.3 + g.x * g.y * 16.0;
+
+    color = vec4((rgb * line + vec3(nz * mono)) * fl * min(vig, 1.0), s.w);
+  }
+}

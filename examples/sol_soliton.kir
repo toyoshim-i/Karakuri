@@ -1,0 +1,177 @@
+// A soliton radar in the manner of a stealth-game HUD: a round map with range rings, a
+// cross, a maze of wall blocks, four patrol dots each throwing a vision cone, a sweep arm
+// and a player dot at the centre. The picture runs through four phases in one cycle:
+// infiltration in green, alert in red with the radar jammed and the cones converging,
+// evasion in orange with a countdown, and caution in yellow. A panel on the right shows
+// the phase mark, the countdown and a segmented life gauge. Draws the whole frame and
+// reads no geometry.
+
+proc sol_soliton {
+  kind  L4
+  blend additive
+
+  // Length of one full phase cycle, in seconds.
+  param cycle   : float [4.0, 60.0] = 24.0
+
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let tc   = srgb_to_linear(vec3(0.35, 0.95, 0.85));
+    let grn  = srgb_to_linear(vec3(0.25, 1.0, 0.4));
+    let red  = srgb_to_linear(vec3(1.0, 0.12, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.55, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.92, 0.25));
+    let cyan = srgb_to_linear(vec3(0.1, 0.85, 1.0));
+    let dgrn = srgb_to_linear(vec3(0.03, 0.22, 0.1));
+    let dtc  = srgb_to_linear(vec3(0.03, 0.16, 0.18));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+
+    let u   = mod(lt, cycle) / cycle;
+    let wi  = 1.0 - step(0.42, u);
+    let wa  = step(0.42, u) - step(0.58, u);
+    let we  = step(0.58, u) - step(0.86, u);
+    let wc  = step(0.86, u);
+    let acc = grn * wi + red * wa + org * we + yel * wc;
+    let f30 = floor(t * 30.0);
+    var c   = vec3(0.0);
+
+    // Radar disc.
+    let rc   = vec2(-0.6, 0.0);
+    let R    = 0.85;
+    let rq   = p - rc;
+    let rr   = length(rq);
+    let disc = step(rr, R);
+    c += acc * 0.05 * disc;
+
+    // Range rings, a cross and rim ticks.
+    let ringl = step(abs(rr - R), 0.008) + step(abs(rr - R * 0.667), 0.003) + step(abs(rr - R * 0.333), 0.003);
+    let cross_ = max(step(abs(rq.x), 0.002), step(abs(rq.y), 0.002)) * disc;
+    let ang   = atan2(rq.y, rq.x) / 6.2831853;
+    let ticks = step(fract(ang * 72.0), 0.06) * step(R - 0.05, rr) * step(rr, R);
+    c += acc * (0.9 * ringl + 0.3 * cross_ + 0.6 * ticks);
+
+    // Wall blocks: a coarse hashed lattice inside the disc.
+    let wc2  = floor((rq + vec2(R)) / 0.17);
+    let wf   = fract((rq + vec2(R)) / 0.17);
+    let wh   = hash1(uint(wc2.x + 100.0) * 7919u + uint(wc2.y + 100.0) * 104729u + 11u);
+    let wall = step(0.74, wh) * step(0.06, wf.x) * step(wf.x, 0.94) * step(0.06, wf.y) * step(wf.y, 0.94);
+    c += acc * 0.22 * wall * disc;
+
+    // Sweep arm and its trail, one turn every three seconds.
+    let cw   = fract(atan2(rq.x, rq.y) / 6.2831853);
+    let behind = fract(fract(lt / 3.0) - cw);
+    c += acc * (step(behind, 0.006) * 0.9 + step(behind, 0.3) * (0.3 - behind) * 0.5) * disc;
+
+    // Patrols: four dots on slow loops with a cone along their heading. In the alert and
+    // evasion phases they close on the player.
+    for e in 0..4 {
+      let fe  = float(e);
+      let a0  = t * (0.22 + 0.06 * fe) + fe * 1.7;
+      let a1  = (t + 0.1) * (0.22 + 0.06 * fe) + fe * 1.7;
+      let e0  = R * 0.62 * vec2(cos(a0), sin(a0 * 1.3 + fe));
+      let e1  = R * 0.62 * vec2(cos(a1), sin(a1 * 1.3 + fe));
+      let pull = wa * 0.75 + we * 0.35;
+      let ep  = mix(e0, vec2(0.0), vec2(pull * (0.5 + 0.1 * fe)));
+      let hd  = normalize(mix(e1 - e0, -ep, vec2(wa)) + vec2(0.0001));
+      let rl  = rq - ep;
+      let ds  = length(rl);
+      let dr  = dot(rl / max(ds, 0.0001), hd);
+      let cone = step(ds, 0.3) * step(0.92, dr);
+      c += acc * (0.35 * cone + step(ds, 0.02)) * disc;
+    }
+
+    // Jam: static over the disc during the alert.
+    let px  = floor(rq / 0.012);
+    let jam = step(0.55, hash1(uint(px.x + 200.0) * 7919u + uint(px.y + 200.0) * 104729u + uint(f30) * 977u)) * wa * disc;
+    c = mix(c, vec3(0.6, 0.05, 0.05), vec3(jam * 0.6));
+
+    // The player at the centre: a white dot with a pulsing ring.
+    c += vec3(1.0) * step(rr, 0.022);
+    c += vec3(0.9) * step(abs(rr - (0.05 + 0.02 * step(0.5, fract(t * 2.0)))), 0.004);
+
+    // Right panel: a phase mark in a box, a countdown, a life gauge.
+    let iq  = p - vec2(1.05, 0.45);
+    let ibx = step(abs(max(abs(iq.x), abs(iq.y)) - 0.24), 0.006);
+    c += acc * ibx;
+    let blink = mix(1.0, step(0.5, fract(t * 4.0)), wa);
+
+    // "!" while alert.
+    let ex = step(abs(iq.x), 0.03) * step(abs(iq.y - 0.06), 0.11) + step(length(iq - vec2(0.0, -0.14)), 0.035);
+    // "?" while cautious.
+    let qc = iq - vec2(0.0, 0.07);
+    let qa = step(abs(length(qc) - 0.08), 0.022) * (1.0 - step(qc.y, 0.0) * step(qc.x, 0.0));
+    let qs = step(abs(iq.x - 0.0), 0.022) * step(abs(iq.y + 0.04), 0.03);
+    let qd = step(length(iq - vec2(0.0, -0.14)), 0.03);
+    // Chevrons while infiltrating: three arrowheads sliding right.
+    let cf   = fract(iq.x * 2.5 - t * 0.8);
+    let chev = step(abs(abs(iq.y) - 0.14 * (1.0 - cf)), 0.022) * step(abs(iq.x), 0.2) * step(abs(iq.y), 0.16);
+    c += red * ex * wa * blink;
+    c += yel * (qa + qs + qd) * wc;
+    c += grn * chev * wi;
+    c += org * step(abs(iq.y), 0.02) * step(abs(iq.x), 0.18) * we * step(0.5, fract(t * 2.0));
+
+    // Countdown for evasion: two digits counting down from thirty.
+    let rem = clamp((0.86 - u) / 0.28, 0.0, 1.0) * 30.0 * we;
+    let fd  = clamp(floor((p.x - 0.75) / 0.2), 0.0, 1.0);
+    let dv  = mod(floor(rem / mix(10.0, 1.0, fd)), 10.0);
+    let m   = 63.0 * (1.0 - step(0.5, abs(dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(dv - 9.0)));
+    let dl  = p - vec2(0.8 + fd * 0.2, -0.36);
+    let cd_hx = step(0.012, dl.x) * step(dl.x, 0.13 - 0.012);
+    let cd_ha = cd_hx * step(abs(dl.y - 0.24), 0.012);
+    let cd_hg = cd_hx * step(abs(dl.y - 0.24 * 0.5), 0.012);
+    let cd_hd = cd_hx * step(abs(dl.y), 0.012);
+    let cd_vr = step(abs(dl.x - 0.13), 0.012);
+    let cd_vl = step(abs(dl.x), 0.012);
+    let cd_vu = step(0.24 * 0.5 + 0.012, dl.y) * step(dl.y, 0.24 - 0.012);
+    let cd_vw = step(0.012, dl.y) * step(dl.y, 0.24 * 0.5 - 0.012);
+    let cd_a = step(0.5, mod(floor(m / 1.0), 2.0));
+    let cd_b = step(0.5, mod(floor(m / 2.0), 2.0));
+    let cd_c = step(0.5, mod(floor(m / 4.0), 2.0));
+    let cd_d = step(0.5, mod(floor(m / 8.0), 2.0));
+    let cd_e = step(0.5, mod(floor(m / 16.0), 2.0));
+    let cd_f = step(0.5, mod(floor(m / 32.0), 2.0));
+    let cd_g = step(0.5, mod(floor(m / 64.0), 2.0));
+    let cd_hit = max(max(cd_a * cd_ha, cd_g * cd_hg), max(cd_d * cd_hd, max(max(cd_b * cd_vr * cd_vu, cd_c * cd_vr * cd_vw), max(cd_e * cd_vl * cd_vw, cd_f * cd_vl * cd_vu))));
+
+    c += mix(dgrn * 2.0, org, vec3(we)) * cd_hit * step(0.75, p.x) * step(p.x, 1.15);
+
+    // Life gauge: twenty segments, dropping during the alert and evasion.
+    let life = mix(0.9, 0.55, clamp((u - 0.42) / 0.3, 0.0, 1.0)) * (1.0 - wi) + 0.9 * wi;
+    let gx   = (p.x - 0.6) / 0.9;
+    let gseg = step(0.15, fract(gx * 20.0)) * step(0.0, gx) * step(gx, 1.0) * step(abs(p.y + 0.6), 0.03);
+    c += grn * gseg * step(gx, life);
+    c += dgrn * 1.5 * gseg * step(life, gx);
+
+    // Alert frame.
+    let ed = max(step(1.7, abs(p.x)), step(0.94, abs(p.y)));
+    c += red * ed * wa * step(0.5, fract(t * 2.0)) * 0.8;
+    let bax = abs(p.x);
+    let bay = abs(p.y);
+    c += acc * max(step(abs(bax - 1.72), 0.006) * step(bay, 0.94) * step(0.78, bay),
+                    step(abs(bay - 0.94), 0.006) * step(bax, 1.74) * step(1.54, bax));
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

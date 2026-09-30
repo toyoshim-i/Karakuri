@@ -1,0 +1,153 @@
+// A virtual-reality training room: a black void with a dark floor cut by green grid
+// lines that run to a glowing horizon, a green wireframe block that drifts toward the
+// viewer and wrap, a boxed banner of glyph cells at the top left, a four-digit
+// seven-segment clock at the top right and a row of ten target markers along the bottom
+// that light one by one. Draws the whole frame and reads no geometry.
+
+proc sol_vr {
+  kind  L4
+  blend additive
+
+  // Speed at which the floor runs toward the viewer, in cells per second.
+  param run   : float [0.0, 6.0] = 1.5
+
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let tc   = srgb_to_linear(vec3(0.35, 0.95, 0.85));
+    let grn  = srgb_to_linear(vec3(0.25, 1.0, 0.4));
+    let red  = srgb_to_linear(vec3(1.0, 0.12, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.55, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.92, 0.25));
+    let cyan = srgb_to_linear(vec3(0.1, 0.85, 1.0));
+    let dgrn = srgb_to_linear(vec3(0.03, 0.22, 0.1));
+    let dtc  = srgb_to_linear(vec3(0.03, 0.16, 0.18));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+
+    var c = vec3(0.0);
+
+    // Horizon glow and floor.
+    let dy  = 0.0 - p.y;
+    let fl  = step(0.0, dy);
+    let z   = 1.0 / max(dy, 0.0001);
+    c += grn * 0.25 * exp(-abs(p.y) * 10.0);
+    let u   = p.x * z;
+    let v   = z + lt * run;
+    let ln  = max(step(fract(u), 0.02 + 0.004 * z), step(fract(v), 0.03));
+    let mj  = max(step(abs(fract(u * 0.2 + 0.5) - 0.5), 0.004 + 0.001 * z), step(abs(fract(v * 0.2) - 0.5), 0.006));
+    let fog = exp(-z * 0.14);
+    c += dgrn * 0.6 * fl * fog;
+    c += grn * (0.6 * ln + 0.6 * mj) * fl * fog;
+
+    // A wire block: base on the floor, 12 edges, drifting toward the viewer and wrapping.
+    var edge = 0.0;
+    var near = 0.0;
+    for b in 0..1 {
+      let fb  = float(b);
+      let bz  = mod(4.0 - lt * run, 13.0) + 1.5;
+      let bx  = -1.4 + 2.8 * fract(floor((lt * run + 9.0) / 13.0) * 0.618);
+      let hx  = mix(1.0, 0.7, fb);
+      let hy  = mix(0.9, 1.4, fb);
+      let hzz = mix(1.0, 0.8, fb);
+      let thk = 0.004 + 0.006 / max(bz, 1.0);
+      let dimf = exp(-bz * 0.1);
+      for ax in 0..3 {
+        let fa = float(ax);
+        let w0 = 1.0 - step(0.5, fa);
+        let w1 = step(0.5, fa) - step(1.5, fa);
+        let w2 = step(1.5, fa);
+        for k in 0..4 {
+          let fk = float(k);
+          let s1 = mod(fk, 2.0) * 2.0 - 1.0;
+          let s2 = floor(fk * 0.5) * 2.0 - 1.0;
+          let a3 = vec3(-1.0, s1, s2) * w0 + vec3(s1, -1.0, s2) * w1 + vec3(s1, s2, -1.0) * w2;
+          let b3 = vec3(1.0, s1, s2) * w0 + vec3(s1, 1.0, s2) * w1 + vec3(s1, s2, 1.0) * w2;
+          let ca = vec3(bx + a3.x * hx, -1.0 + hy + a3.y * hy, bz + a3.z * hzz);
+          let cb = vec3(bx + b3.x * hx, -1.0 + hy + b3.y * hy, bz + b3.z * hzz);
+          let qa = ca.xy / max(ca.z, 0.3);
+          let qb = cb.xy / max(cb.z, 0.3);
+          let ba = qb - qa;
+          let pa = p - qa;
+          let hh = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+          let d  = length(pa - ba * hh);
+          edge = max(edge, step(d, thk) * dimf);
+        }
+      }
+    }
+    c += grn * edge * 1.3;
+
+    // Banner top left and clock top right.
+    let bq = p - vec2(-1.5, 0.82);
+    c += tc * step(abs(max(abs(bq.x - 0.35) - 0.35, abs(bq.y) - 0.06)), 0.005);
+    let bn_cx = floor((p.x - -1.45) / 0.03);
+    let bn_rw = floor((0.86 - p.y) / 0.04);
+    let bn_gx = floor(fract((p.x - -1.45) / 0.03) * 5.0);
+    let bn_gy = floor(fract((0.86 - p.y) / 0.04) * 7.0);
+    let bn_in = step(0.5, bn_gx) * step(bn_gx, 3.5) * step(0.5, bn_gy) * step(bn_gy, 5.5) * step(0.0, bn_cx) * step(0.0, bn_rw) * step(bn_rw, 2.0 - 1.0);
+    let bn_bt = step(0.4, hash1(uint(bn_cx + 50.0) * 7919u + uint(bn_rw + 5.0) * 104729u + uint(bn_gx * 8.0 + bn_gy) * 31u + 5u));
+    let bn_hit = bn_in * bn_bt * step(bn_cx, 10.0);
+
+    c += tc * bn_hit;
+    let cs = floor(lt);
+    let mnv = floor(cs / 60.0);
+    let scv = cs - mnv * 60.0;
+    let cf  = clamp(floor((p.x - 1.0) / 0.11), 0.0, 3.0);
+    let cv  = mix(mnv, scv, step(1.5, cf));
+    let cdv = mod(floor(cv / mix(10.0, 1.0, mod(cf, 2.0))), 10.0);
+    let cm  = 63.0 * (1.0 - step(0.5, abs(cdv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(cdv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(cdv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(cdv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(cdv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(cdv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(cdv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(cdv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(cdv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(cdv - 9.0)));
+    let cdl = p - vec2(1.0 + cf * 0.11 + step(1.5, cf) * 0.04, 0.76);
+    let ck_hx = step(0.008, cdl.x) * step(cdl.x, 0.07 - 0.008);
+    let ck_ha = ck_hx * step(abs(cdl.y - 0.13), 0.008);
+    let ck_hg = ck_hx * step(abs(cdl.y - 0.13 * 0.5), 0.008);
+    let ck_hd = ck_hx * step(abs(cdl.y), 0.008);
+    let ck_vr = step(abs(cdl.x - 0.07), 0.008);
+    let ck_vl = step(abs(cdl.x), 0.008);
+    let ck_vu = step(0.13 * 0.5 + 0.008, cdl.y) * step(cdl.y, 0.13 - 0.008);
+    let ck_vw = step(0.008, cdl.y) * step(cdl.y, 0.13 * 0.5 - 0.008);
+    let ck_a = step(0.5, mod(floor(cm / 1.0), 2.0));
+    let ck_b = step(0.5, mod(floor(cm / 2.0), 2.0));
+    let ck_c = step(0.5, mod(floor(cm / 4.0), 2.0));
+    let ck_d = step(0.5, mod(floor(cm / 8.0), 2.0));
+    let ck_e = step(0.5, mod(floor(cm / 16.0), 2.0));
+    let ck_f = step(0.5, mod(floor(cm / 32.0), 2.0));
+    let ck_g = step(0.5, mod(floor(cm / 64.0), 2.0));
+    let ck_hit = max(max(ck_a * ck_ha, ck_g * ck_hg), max(ck_d * ck_hd, max(max(ck_b * ck_vr * ck_vu, ck_c * ck_vr * ck_vw), max(ck_e * ck_vl * ck_vw, ck_f * ck_vl * ck_vu))));
+
+    c += grn * ck_hit * step(1.0, p.x) * step(p.x, 1.5);
+    c += grn * step(abs(p.x - 1.235), 0.006) * (step(abs(p.y - 0.8), 0.012) + step(abs(p.y - 0.85), 0.012));
+
+    // Targets along the bottom.
+    let tg  = floor((p.x + 0.55) / 0.11);
+    let tin = step(0.0, tg) * step(tg, 9.0) * step(abs(fract((p.x + 0.55) / 0.11) - 0.5), 0.3) * step(abs(p.y + 0.9), 0.03);
+    let lit = step(tg, floor(lt / 3.0) - 1.0);
+    c += mix(dgrn * 2.0, cyan, vec3(lit)) * tin;
+    let bax = abs(p.x);
+    let bay = abs(p.y);
+    c += grn * max(step(abs(bax - 1.72), 0.006) * step(bay, 0.94) * step(0.78, bay),
+                    step(abs(bay - 0.94), 0.006) * step(bax, 1.74) * step(1.54, bax));
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

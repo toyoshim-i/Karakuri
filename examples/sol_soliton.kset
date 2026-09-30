@@ -1,0 +1,9 @@
+{"t":"set","id":"sol_soliton","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"sol_soliton.kir"}
+{"t":"part","layer":"L4","index":1,"path":"sol_bug.kir"}
+{"t":"part","layer":"L5","path":"sol_phosphor.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L4","index":1,"key":"corner","value":0.0}
+{"t":"param","layer":"L5","key":"mono","value":0.0}
+{"t":"param","layer":"L5","key":"hue","value":0.33}

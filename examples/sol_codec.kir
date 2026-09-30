@@ -1,0 +1,153 @@
+// A codec call: two framed panes facing each other, each filled with a drifting signal
+// static and a name plate, with a bank of voice bars along the bottom of whichever side
+// is speaking; between them a seven-segment frequency, three stacked radio waves that
+// swell with the speech and a pair of call arrows that blink at the start of each turn;
+// below, four lines of message glyphs that type themselves out. No portraits are drawn:
+// the panes carry static only. Draws the whole frame and reads no geometry.
+
+proc sol_codec {
+  kind  L4
+  blend additive
+
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let tc   = srgb_to_linear(vec3(0.35, 0.95, 0.85));
+    let grn  = srgb_to_linear(vec3(0.25, 1.0, 0.4));
+    let red  = srgb_to_linear(vec3(1.0, 0.12, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.55, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.92, 0.25));
+    let cyan = srgb_to_linear(vec3(0.1, 0.85, 1.0));
+    let dgrn = srgb_to_linear(vec3(0.03, 0.22, 0.1));
+    let dtc  = srgb_to_linear(vec3(0.03, 0.16, 0.18));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+
+    var c   = vec3(0.0);
+    let f12 = floor(lt * 12.0);
+    let turn = floor(lt / 4.0);
+    let tl   = lt - turn * 4.0;
+
+    // Panes.
+    for sd in 0..2 {
+      let sg  = float(sd) * 2.0 - 1.0;
+      let q   = vec2(p.x - sg * 1.05, p.y - 0.1);
+      let inb = step(abs(q.x), 0.5) * step(abs(q.y), 0.45);
+      let frm = step(abs(max(abs(q.x) - 0.5, abs(q.y) - 0.45)), 0.008);
+      let cp  = floor(q / 0.02);
+      let sn  = hash1(uint(cp.x + 100.0) * 7919u + uint(cp.y + 100.0) * 104729u + uint(f12) * 977u + uint(sd) * 31u);
+      let act = step(0.5, fract(lt * 0.125 + float(sd) * 0.5 + 0.0));
+      let spk = 1.0 - step(0.5, abs(act - 1.0)) ;
+      let sweep = pow(max(1.0 - abs(fract(q.y * 0.8 - lt * 0.3) - 0.5) * 4.0, 0.0), 2.0);
+      c += tc * inb * (0.06 + 0.16 * sn + 0.22 * sweep) * (0.6 + 0.4 * act);
+      c += tc * frm;
+
+      // Voice bars along the bottom of the pane, alive only on the speaking side.
+      let bx  = floor((q.x + 0.5) / 0.05);
+      let bh  = 0.02 + 0.12 * hash1(uint(bx + 40.0) * 6151u + uint(floor(lt * 8.0)) * 131u + uint(sd) * 7u) * act;
+      let vb  = step(abs(q.x), 0.48) * step(0.15, fract((q.x + 0.5) / 0.05)) * step(-0.43, q.y) * step(q.y, -0.43 + bh);
+      c += tc * vb * 0.9;
+
+      // Name plate above the pane.
+    let np_cx = floor((q.x - -0.4) / 0.03);
+    let np_rw = floor((0.62 - q.y) / 0.045);
+    let np_gx = floor(fract((q.x - -0.4) / 0.03) * 5.0);
+    let np_gy = floor(fract((0.62 - q.y) / 0.045) * 7.0);
+    let np_in = step(0.5, np_gx) * step(np_gx, 3.5) * step(0.5, np_gy) * step(np_gy, 5.5) * step(0.0, np_cx) * step(0.0, np_rw) * step(np_rw, 1.0 - 1.0);
+    let np_bt = step(0.4, hash1(uint(np_cx + 50.0) * 7919u + uint(np_rw + 5.0) * 104729u + uint(np_gx * 8.0 + np_gy) * 31u + uint(sd) * 3u));
+    let np_hit = np_in * np_bt * step(np_cx, 9.0);
+
+      let plate = step(abs(q.x), 0.5) * step(abs(q.y - 0.56), 0.05);
+      c += tc * step(abs(max(abs(q.x) - 0.5, abs(q.y - 0.56) - 0.05)), 0.005);
+      c += tc * np_hit;
+    }
+
+    // Frequency: 140.85 in seven segments, centred.
+    let fd  = clamp(floor((p.x + 0.33) / 0.115), 0.0, 4.0);
+    let dv  = mod(floor(14085.0 / pow(10.0, 4.0 - fd)), 10.0);
+    let m   = 63.0 * (1.0 - step(0.5, abs(dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(dv - 9.0)));
+    let dl  = p - vec2(-0.33 + fd * 0.115 + 0.02, 0.3);
+    let fq_hx = step(0.008, dl.x) * step(dl.x, 0.075 - 0.008);
+    let fq_ha = fq_hx * step(abs(dl.y - 0.17), 0.008);
+    let fq_hg = fq_hx * step(abs(dl.y - 0.17 * 0.5), 0.008);
+    let fq_hd = fq_hx * step(abs(dl.y), 0.008);
+    let fq_vr = step(abs(dl.x - 0.075), 0.008);
+    let fq_vl = step(abs(dl.x), 0.008);
+    let fq_vu = step(0.17 * 0.5 + 0.008, dl.y) * step(dl.y, 0.17 - 0.008);
+    let fq_vw = step(0.008, dl.y) * step(dl.y, 0.17 * 0.5 - 0.008);
+    let fq_a = step(0.5, mod(floor(m / 1.0), 2.0));
+    let fq_b = step(0.5, mod(floor(m / 2.0), 2.0));
+    let fq_c = step(0.5, mod(floor(m / 4.0), 2.0));
+    let fq_d = step(0.5, mod(floor(m / 8.0), 2.0));
+    let fq_e = step(0.5, mod(floor(m / 16.0), 2.0));
+    let fq_f = step(0.5, mod(floor(m / 32.0), 2.0));
+    let fq_g = step(0.5, mod(floor(m / 64.0), 2.0));
+    let fq_hit = max(max(fq_a * fq_ha, fq_g * fq_hg), max(fq_d * fq_hd, max(max(fq_b * fq_vr * fq_vu, fq_c * fq_vr * fq_vw), max(fq_e * fq_vl * fq_vw, fq_f * fq_vl * fq_vu))));
+
+    c += grn * fq_hit * step(-0.34, p.x) * step(p.x, 0.26);
+    c += grn * step(length(p - vec2(0.015, 0.31)), 0.011);
+
+    // Radio waves: three stacked traces with a speech-like envelope.
+    let env = 0.25 + 0.75 * hash1(uint(floor(lt * 10.0)) * 4241u + 3u);
+    var wv = 0.0;
+    for w in 0..3 {
+      let fw2 = float(w);
+      let wy  = 0.14 * env * sin(p.x * (7.0 + 4.0 * fw2) + lt * (3.0 + 2.0 * fw2)) * (1.0 - 0.25 * fw2);
+      wv = max(wv, step(abs(p.y - 0.0 - wy), 0.006 + 0.002 * (2.0 - fw2)));
+    }
+    c += tc * wv * step(abs(p.x), 0.44);
+
+    // Call arrows blink for the first second of each turn.
+    let ring = step(tl, 1.0) * step(0.5, fract(lt * 4.0));
+    for ar in 0..2 {
+      let sg  = float(ar) * 2.0 - 1.0;
+      let aq  = vec2((p.x - sg * 0.5) * sg, p.y - 0.3);
+      let tri = step(abs(aq.y), (0.07 - aq.x) * 0.9) * step(0.0, 0.07 - aq.x) * step(-0.05, aq.x);
+      c += org * tri * ring;
+    }
+
+    // Message: four lines typing out over each eight-second turn pair.
+    let rvl = (mod(lt, 8.0) - 0.4) * 22.0;
+    let ms_cx = floor((p.x - -1.5) / 0.036);
+    let ms_rw = floor((-0.5 - p.y) / 0.06);
+    let ms_gx = floor(fract((p.x - -1.5) / 0.036) * 5.0);
+    let ms_gy = floor(fract((-0.5 - p.y) / 0.06) * 7.0);
+    let ms_in = step(0.5, ms_gx) * step(ms_gx, 3.5) * step(0.5, ms_gy) * step(ms_gy, 5.5) * step(0.0, ms_cx) * step(0.0, ms_rw) * step(ms_rw, 6.0 - 1.0);
+    let ms_bt = step(0.4, hash1(uint(ms_cx + 50.0) * 7919u + uint(ms_rw + 5.0) * 104729u + uint(ms_gx * 8.0 + ms_gy) * 31u + uint(floor(lt / 8.0)) * 977u));
+    let ms_hit = ms_in * ms_bt * step(ms_cx, rvl - float(0) * 0.0);
+
+    c += tc * 0.9 * ms_hit;
+    c += tc * 0.35 * step(abs(p.y + 0.44), 0.003) * step(abs(p.x), 1.5);
+
+    // Header: a strip of memory segments.
+    let hb = step(abs(p.y - 0.86), 0.03) * step(-1.55, p.x) * step(p.x, -0.7) * step(0.2, fract((p.x + 1.55) / 0.05));
+    c += tc * hb * step(0.35, hash1(uint(floor((p.x + 1.55) / 0.05)) * 71u + uint(floor(lt * 2.0)) * 13u));
+    let bax = abs(p.x);
+    let bay = abs(p.y);
+    c += tc * max(step(abs(bax - 1.72), 0.006) * step(bay, 0.94) * step(0.78, bay),
+                    step(abs(bay - 0.94), 0.006) * step(bax, 1.74) * step(1.54, bax));
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}
