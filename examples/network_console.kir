@@ -1,0 +1,187 @@
+// A 1980s cyberpunk-drama computer screen: a turning wireframe cube inside dashed
+// rings, a column of bar readouts on the left, scrolling blocky data on the right, a
+// segmented status header, a stepped oscilloscope along the bottom and a small radar
+// dial, all in flat cyan, magenta, orange and green on near-black. Everything is drawn
+// at twelve frames a second with hard edges, and in bursts time snaps back over a short
+// window again and again so the whole screen stutters on one moment; now and then a
+// band of the frame flashes to its negative. Draws the whole frame and reads no
+// geometry. Pair it with `tape_signal` for the tape.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/network_console.kir,examples/tape_signal.kir
+
+proc network_console {
+  kind  L4
+  blend additive
+
+  // How often time stutters: 0 never, 1 nearly always.
+  param stutter : float [0.0, 1.0] = 0.5
+
+  // Length of the repeated window while stuttering, in seconds.
+  param window  : float [0.04, 0.4] = 0.12
+
+  // Speed of everything on screen.
+  param drive   : float [0.0, 3.0] = 1.0
+
+  // How busy the readouts are: 0 holds them at rest, 1 is full activity.
+  param load    : float [0.0, 1.0] = 0.7
+
+  // Hit strength: forces a stutter, a negative band and full activity. Bind to an onset.
+  param kick    : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // Stutter clock: every 1.7 seconds a gate decides whether the next 0.6 seconds
+    // loop over one short window.
+    let seg  = floor(t / 1.7);
+    let ph   = t - seg * 1.7;
+    let gate = max(step(1.0 - stutter * 0.6, hash1(uint(seg) * 977u + 3u)), step(0.5, kick));
+    let on   = gate * step(ph, 0.6);
+    let anchor = seg * 1.7 + 0.15 + hash1(uint(seg) * 31u + 5u) * 0.3;
+    let tt   = mix(t, anchor + mod(ph, window), on) * drive;
+    let fr   = floor(tt * 12.0);
+    let act  = max(load, kick);
+
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.1, 0.55));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+
+    var c = srgb_to_linear(vec3(0.015, 0.02, 0.07));
+
+    // Fine grid, with every fifth line brighter.
+    let gx = fract(p.x * 10.0);
+    let gy = fract(p.y * 10.0);
+    let gl = max(step(gx, 0.012), step(gy, 0.012));
+    let gm = max(step(abs(p.x * 2.0 - floor(p.x * 2.0 + 0.5)), 0.006), step(abs(p.y * 2.0 - floor(p.y * 2.0 + 0.5)), 0.006));
+    c = mix(c, dim * 0.35, vec3(gl));
+    c = mix(c, dim * 0.8, vec3(gm));
+
+    // Corner brackets around the frame.
+    let ax = abs(p.x);
+    let ay = abs(p.y);
+    let br = max(step(abs(ax - 1.66), 0.006) * step(ay, 0.92) * step(0.76, ay),
+                 step(abs(ay - 0.92), 0.006) * step(ax, 1.68) * step(1.52, ax));
+    c = mix(c, cyan, vec3(br));
+
+    // Header: a title block and a strip of segments that light at random, four
+    // times a second.
+    let hy  = step(abs(p.y - 0.84), 0.035);
+    let hc  = floor((p.x + 1.6) / 0.07);
+    let hx  = step(0.15, fract((p.x + 1.6) / 0.07)) * step(0.0, p.x + 1.6) * step(p.x, 1.6);
+    let hb  = step(0.35, hash1(uint(hc + 100.0) * 7919u + uint(floor(tt * 4.0)) * 131u));
+    c = mix(c, mix(cyan, mag, vec3(step(0.9, fract(hc * 0.37)))), vec3(hy * hx * hb * step(-1.05, p.x)));
+    c = mix(c, org, vec3(hy * step(p.x, -1.05) * step(-1.6, p.x) * step(0.5, fract(p.x * 23.0))));
+
+    // Left panel: twelve bar readouts, each re-rolled at its own rate.
+    var pnl = 0.0;
+    var bar = vec3(0.0);
+    let lrow = floor((0.66 - p.y) / 0.11);
+    let lin  = step(0.0, lrow) * step(lrow, 11.0) * step(-1.6, p.x) * step(p.x, -1.0);
+    let lfy  = fract((0.66 - p.y) / 0.11);
+    let lh   = hash2(uint(lrow + 50.0) * 6151u + uint(floor(tt * (2.0 + lrow * 0.5))) * 977u);
+    let len  = 0.6 * mix(0.25, lh.x, act);
+    let lx   = (p.x + 1.6);
+    let fill = step(lx, len) * step(0.15, lfy) * step(lfy, 0.75);
+    let rail = step(lx, 0.6) * step(0.8, lfy) * step(lfy, 0.86);
+    bar = mix(cyan, mag, vec3(step(0.5, lh.x) * act)) * fill + dim * rail;
+    c = mix(c, bar, vec3(lin * max(fill, rail)));
+
+    // Right panel: blocky glyph rows that scroll upward, one row in ten highlighted.
+    let cw   = 0.045;
+    let rh   = 0.06;
+    let dy   = p.y * 1.0 + floor(tt * 8.0) * rh * 0.5 * 0.0 - tt * 0.3;
+    let drow = floor(dy / rh);
+    let dcol = floor((p.x - 1.0) / cw);
+    let din  = step(1.0, p.x) * step(p.x, 1.6) * step(abs(p.y), 0.66);
+    let gxx  = floor(fract((p.x - 1.0) / cw) * 5.0);
+    let gyy  = floor(fract(dy / rh) * 7.0);
+    let ins  = step(0.5, gxx) * step(gxx, 3.5) * step(0.5, gyy) * step(gyy, 5.5);
+    let gt   = floor(tt * 3.0);
+    let bit  = step(0.45, hash1(uint(dcol + 200.0) * 7919u + uint(drow + 5000.0) * 104729u
+                          + uint(gxx * 8.0 + gyy) * 31u + uint(gt * step(0.85, hash1(uint(drow + 5000.0) * 13u))) * 977u));
+    let hi   = step(0.9, hash1(uint(drow + 5000.0) * 271u + 3u));
+    let gcol = mix(grn, org, vec3(hi));
+    let gonly = mix(ins * bit, step(0.1, fract(dy / rh)) * step(fract(dy / rh), 0.9), hi * step(dcol, 4.0));
+    c = mix(c, gcol * (0.5 + 0.5 * act), vec3(din * gonly));
+
+    // Centre: a wireframe cube inside two dashed rings that turn in steps.
+    let ctr = vec2(0.0, 0.05);
+    let pc  = p - ctr;
+    let rr  = length(pc);
+    let an  = atan2(pc.y, pc.x) / 6.2831853 + 0.5;
+    let st  = fr / 12.0;
+    let r1  = step(abs(rr - 0.72), 0.005) * step(0.4, fract(an * 24.0 + st * 0.6));
+    let r2  = step(abs(rr - 0.8), 0.011) * step(0.7, fract(an * 4.0 - st * 0.4));
+    let tk  = step(0.9, fract(an * 72.0)) * step(0.83, rr) * step(rr, 0.87);
+    c = mix(c, cyan, vec3(r1));
+    c = mix(c, mag, vec3(max(r2, tk)));
+
+    var edge = 0.0;
+    let spin = st * 0.9;
+    let ex   = rot_x(rot_y(vec3(1.0, 0.0, 0.0), spin), 0.6);
+    let ey   = rot_x(rot_y(vec3(0.0, 1.0, 0.0), spin), 0.6);
+    let ez   = rot_x(rot_y(vec3(0.0, 0.0, 1.0), spin), 0.6);
+    for ax_i in 0..3 {
+      let fa = float(ax_i);
+      let w0 = 1.0 - step(0.5, fa);
+      let w1 = step(0.5, fa) - step(1.5, fa);
+      let w2 = step(1.5, fa);
+      for k in 0..4 {
+        let fk = float(k);
+        let s1 = mod(fk, 2.0) * 2.0 - 1.0;
+        let s2 = floor(fk * 0.5) * 2.0 - 1.0;
+        let a3 = vec3(-1.0, s1, s2) * w0 + vec3(s1, -1.0, s2) * w1 + vec3(s1, s2, -1.0) * w2;
+        let b3 = vec3(1.0, s1, s2) * w0 + vec3(s1, 1.0, s2) * w1 + vec3(s1, s2, 1.0) * w2;
+        let ra = ex * a3.x + ey * a3.y + ez * a3.z;
+        let rb = ex * b3.x + ey * b3.y + ez * b3.z;
+        let qa = ra.xy / (3.6 - ra.z) * 3.6 * 0.24;
+        let qb = rb.xy / (3.6 - rb.z) * 3.6 * 0.24;
+        let ba = qb - qa;
+        let pa = pc - qa;
+        let hh = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+        edge = max(edge, step(length(pa - ba * hh), 0.006));
+      }
+    }
+    c = mix(c, org, vec3(edge));
+
+    // Bottom strip: a stepped oscilloscope, drawn as columns from the centre line.
+    let ox  = floor(p.x / 0.025) * 0.025;
+    let wv  = (sin(ox * 21.0 + st * 6.0) + 0.6 * sin(ox * 47.0 - st * 9.0)) * 0.035 * (0.3 + act);
+    let osc = step(abs(p.y + 0.83), 0.06) * step(abs(p.x), 0.95)
+            * step(abs(p.y + 0.83 - wv * 0.5), abs(wv) * 0.5 + 0.004)
+            * step(0.2, fract(p.x / 0.025));
+    c = mix(c, cyan, vec3(osc));
+    c = mix(c, dim, vec3(step(abs(p.y + 0.83), 0.002) * step(abs(p.x), 0.95) * (1.0 - osc)));
+
+    // Radar dial at the lower right: a ring, a sweeping arm and three blips.
+    let rc  = p - vec2(1.33, -0.83);
+    let rd  = length(rc);
+    let ra2 = atan2(rc.y, rc.x) / 6.2831853 + 0.5;
+    let sw  = fract(st * 0.4);
+    let arm = step(rd, 0.14) * step(fract(sw - ra2 + 1.0), 0.06) * (1.0 - fract(sw - ra2 + 1.0) / 0.06 * 0.6);
+    var blip = 0.0;
+    for b in 0..3 {
+      let fb = float(b);
+      let bh = hash2(uint(b) * 5417u + uint(floor(tt * 0.5)) * 131u + 9u);
+      let bp = vec2(cos(bh.x * 6.2831853), sin(bh.x * 6.2831853)) * (0.03 + 0.09 * bh.y);
+      blip = max(blip, step(length(rc - bp), 0.012));
+    }
+    c = mix(c, grn, vec3(max(step(abs(rd - 0.14), 0.004) + step(abs(rd - 0.07), 0.002), arm)));
+    c = mix(c, org, vec3(blip));
+
+    // A negative band: for two frames now and then a strip of the screen inverts.
+    let nb  = floor(t * 6.0);
+    let nh  = hash2(uint(nb) * 4241u + 23u);
+    let nz  = max(step(0.93, nh.x), step(0.5, kick)) * step(abs(p.y - (nh.y * 2.0 - 1.0)), 0.07);
+    c = mix(c, vec3(1.0) - min(c, vec3(1.0)) * 0.9, vec3(nz));
+
+    color = vec4(c, 1.0);
+  }
+}

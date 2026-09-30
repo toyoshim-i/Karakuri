@@ -1,0 +1,89 @@
+// Scene three of the intrusion story, seconds 16 to 24: the padlock turns green and its
+// shackle lifts clear on one side, shock rings expand from it, a ring with a check mark
+// draws itself below, and a list of permission bars slides in from the right. Draws the
+// whole frame and reads no geometry. Part of `intrusion_story.kset`.
+
+proc intrusion_access {
+  kind  L4
+  blend additive
+
+  // Speed of the shock rings.
+  param ring : float [0.2, 3.0] = 0.9
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // The story loops every 32 seconds in four scenes of eight; this one is scene 2.
+    let lt   = mod(t, 32.0) - 2.0 * 8.0;
+    let win  = step(0.0, lt) * step(lt, 8.0);
+    let fade = clamp(min(lt, 8.0 - lt) / 0.3, 0.0, 1.0) * win;
+
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    var c = vec3(0.0);
+
+    let lift = 0.16 * smoothstep(0.3, 1.1, lt);
+
+    // The padlock, open: the shackle rises and only its right leg stays in the body.
+    let bc   = p - vec2(0.0, -0.05);
+    let body = step(abs(bc.x), 0.26) * step(abs(bc.y), 0.2);
+    let sh   = p - vec2(0.0, 0.15 + lift);
+    let arc  = step(abs(length(sh) - 0.16), 0.022) * step(0.0, sh.y);
+    let legr = step(abs(p.x - 0.16), 0.022) * step(abs(p.y - (0.09 + lift)), 0.06);
+    let legl = step(abs(p.x + 0.16), 0.022) * step(abs(p.y - (0.09 + lift)), 0.06) * step(lt, 0.4);
+    let key  = max(step(length(p - vec2(0.0, -0.03)), 0.04), step(abs(p.x), 0.014) * step(abs(p.y + 0.1), 0.05));
+    let flash = exp(-max(lt - 0.3, 0.0) * 4.0);
+    c += mix(grn, vec3(1.0), vec3(flash)) * max(max(arc, max(legr, legl)), body * (1.0 - key));
+
+    // Shock rings expanding from the lock, three at once.
+    for k in 0..3 {
+      let ph = fract(lt * ring * 0.4 + float(k) / 3.0);
+      let rr = ph * 1.9;
+      c += grn * step(abs(length(p - vec2(0.0, 0.0)) - rr), 0.008 + 0.01 * (1.0 - ph)) * (1.0 - ph) * step(0.9, lt);
+    }
+
+    // Check mark in a ring below, drawn over about one second from 1.4 s.
+    let cp  = p - vec2(0.0, -0.62);
+    let cr  = step(abs(length(cp) - 0.17), 0.012);
+    let gr  = clamp((lt - 1.4) / 1.0, 0.0, 1.0);
+    let s1a = vec2(-0.08, 0.0);
+    let s1b = vec2(-0.02, -0.07);
+    let s2b = vec2(0.09, 0.08);
+    let seg1 = clamp(gr * 2.0, 0.0, 1.0);
+    let seg2 = clamp(gr * 2.0 - 1.0, 0.0, 1.0);
+    let e1  = s1a + (s1b - s1a) * seg1;
+    let e2  = s1b + (s2b - s1b) * seg2;
+    let d1  = s1b - s1a;
+    let d2  = s2b - s1b;
+    let k1  = clamp(dot(cp - s1a, d1) / dot(d1, d1), 0.0, seg1);
+    let k2  = clamp(dot(cp - s1b, d2) / dot(d2, d2), 0.0, seg2);
+    let m1  = step(length(cp - s1a - d1 * k1), 0.014) * step(0.001, seg1);
+    let m2  = step(length(cp - s1b - d2 * k2), 0.014) * step(0.001, seg2);
+    c += grn * (cr * step(1.3, lt) + max(m1, m2));
+
+    // Permission list sliding in from the right, one bar every 0.4 s.
+    for r in 0..6 {
+      let fr  = float(r);
+      let at  = 2.0 + fr * 0.4;
+      let sl  = 1.0 - smoothstep(0.0, 0.3, lt - at);
+      let bx  = p.x - (0.85 + sl * 1.0);
+      let by  = p.y - (0.6 - fr * 0.2);
+      let ln  = 0.3 + 0.5 * hash1(uint(r) * 991u + 4u);
+      let bar = step(0.0, bx) * step(bx, ln) * step(abs(by), 0.03);
+      let tag = step(abs(bx + 0.06), 0.02) * step(abs(by), 0.03);
+      c += mix(cyan, grn, vec3(step(0.5, fract(fr * 0.5)))) * bar * step(at, lt);
+      c += org * tag * step(at, lt);
+    }
+
+    color = vec4(c * fade, 1.0);
+  }
+}

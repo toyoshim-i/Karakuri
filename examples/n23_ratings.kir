@@ -1,0 +1,146 @@
+// The ratings board of a network that lives by its numbers: a line chart that climbs and
+// jitters across the middle with a pulsing marker at its head, a bank of bars that
+// re-roll several times a second on the left, a share gauge with a swinging needle on
+// the right, a six-digit seven-segment ratings count running up along the top and a
+// ticker of copy glyphs along the bottom. Time stutters on one moment now and then.
+// Draws the whole frame and reads no geometry.
+
+proc n23_ratings {
+  kind  L4
+  blend additive
+
+  // Ratings gained per second.
+  param gain    : float [0.0, 2000.0] = 400.0
+
+  // How often time stutters: 0 never, 1 nearly always.
+  param stutter : float [0.0, 1.0] = 0.4
+
+  // Length of the repeated window while stuttering, in seconds.
+  param window  : float [0.04, 0.4] = 0.12
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+  // Hit strength: forces a stutter and pushes activity up. Bind to an onset.
+  param kick    : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let blu  = srgb_to_linear(vec3(0.1, 0.2, 0.9));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+    // Stutter clock: every 1.7 seconds a gate decides whether the next 0.6 seconds
+    // loop over one short window, so the picture repeats itself on one moment.
+    let seg  = floor(t / 1.7);
+    let ph   = t - seg * 1.7;
+    let gate = max(step(1.0 - stutter * 0.6, hash1(uint(seg) * 977u + 3u)), step(0.5, kick));
+    let on   = gate * step(ph, 0.6);
+    let anchor = seg * 1.7 + 0.15 + hash1(uint(seg) * 31u + 5u) * 0.3;
+    let tt   = mix(t, anchor + mod(ph, window), on);
+
+    var c = srgb_to_linear(vec3(0.02, 0.02, 0.08));
+    let fr  = floor(tt * 12.0);
+
+    // Grid.
+    c = mix(c, dim * 0.4, vec3(max(step(fract(p.x * 5.0), 0.012), step(fract(p.y * 5.0), 0.012))));
+
+    // Line chart across the middle: x from -0.9 to 0.9, drawn as stepped columns that
+    // rise with time and jitter with a hashed wobble.
+    let cxw = floor((p.x + 0.9) / 0.03);
+    let xn  = (cxw * 0.03) / 1.8;
+    let rise = xn * 0.5 + 0.06 * sin(xn * 9.0 + fr * 0.25) + 0.05 * (hash1(uint(cxw + 100.0) * 7919u + uint(floor(tt * 3.0)) * 31u) - 0.5);
+    let ly  = -0.2 + rise * 1.2;
+    let inx = step(-0.9, p.x) * step(p.x, 0.9);
+    let area = inx * step(-0.25, p.y) * step(p.y, ly);
+    let ln   = inx * step(abs(p.y - ly), 0.012);
+    c = mix(c, cyan * 0.22, vec3(area));
+    c = mix(c, cyan, vec3(ln));
+    let hx  = 0.9;
+    let hy  = -0.2 + (0.5 + 0.06 * sin(9.0 + fr * 0.25)) * 1.2;
+    let pls = 0.02 + 0.02 * step(0.5, fract(tt * 2.0));
+    c = mix(c, yel, vec3(step(length(p - vec2(hx, hy)), pls)));
+
+    // Bars on the left: twelve, re-rolled six times a second.
+    let brow = floor((0.6 - p.y) / 0.1);
+    let bin  = step(-1.65, p.x) * step(p.x, -1.0) * step(0.0, brow) * step(brow, 11.0) * step(0.15, fract((0.6 - p.y) / 0.1)) * step(fract((0.6 - p.y) / 0.1), 0.8);
+    let bl   = 0.65 * hash1(uint(brow + 30.0) * 6151u + uint(floor(tt * 6.0)) * 977u);
+    let bfill = bin * step(p.x + 1.65, bl);
+    c = mix(c, mix(cyan, mag, vec3(step(0.45, bl))), vec3(bfill));
+
+    // Share gauge on the right: a half ring in three zones and a swinging needle.
+    let gq  = p - vec2(1.36, -0.05);
+    let gr  = length(gq);
+    let ga  = atan2(gq.y, gq.x) / 3.1415927;
+    let gin = step(abs(gr - 0.34), 0.03) * step(0.0, ga);
+    let zone = mix(grn, mix(yel, red, vec3(step(0.66, ga))), vec3(step(0.33, ga)));
+    c = mix(c, zone * 0.9, vec3(gin));
+    let nd  = 0.5 + 0.35 * sin(fr * 0.3) + 0.1 * sin(fr * 1.7);
+    let na  = (1.0 - nd) * 3.1415927;
+    let nv  = vec2(cos(na), sin(na));
+    let nk  = clamp(dot(gq, nv), 0.0, 0.34);
+    c = mix(c, vec3(1.0), vec3(step(length(gq - nv * nk), 0.008) * step(0.0, dot(gq, nv))));
+    c = mix(c, vec3(1.0), vec3(step(gr, 0.03)));
+
+    // Ratings count: six seven-segment digits along the top, only the digit under this
+    // fragment is worked out.
+    let sv  = floor(t * gain) + floor(kick * 500.0);
+    let fd  = clamp(floor((p.x + 0.66) / 0.24), 0.0, 5.0);
+    let dv  = mod(floor(sv / pow(10.0, 5.0 - fd)), 10.0);
+    let m   = 63.0 * (1.0 - step(0.5, abs(dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(dv - 9.0)));
+    let dl  = p - vec2(-0.66 + fd * 0.24, 0.66);
+    let sc_hx = step(0.014, dl.x) * step(dl.x, 0.17 - 0.014);
+    let sc_ha = sc_hx * step(abs(dl.y - 0.24), 0.014);
+    let sc_hg = sc_hx * step(abs(dl.y - 0.24 * 0.5), 0.014);
+    let sc_hd = sc_hx * step(abs(dl.y), 0.014);
+    let sc_vr = step(abs(dl.x - 0.17), 0.014);
+    let sc_vl = step(abs(dl.x), 0.014);
+    let sc_vu = step(0.24 * 0.5 + 0.014, dl.y) * step(dl.y, 0.24 - 0.014);
+    let sc_vw = step(0.014, dl.y) * step(dl.y, 0.24 * 0.5 - 0.014);
+    let sc_a = step(0.5, mod(floor(m / 1.0), 2.0));
+    let sc_b = step(0.5, mod(floor(m / 2.0), 2.0));
+    let sc_c = step(0.5, mod(floor(m / 4.0), 2.0));
+    let sc_d = step(0.5, mod(floor(m / 8.0), 2.0));
+    let sc_e = step(0.5, mod(floor(m / 16.0), 2.0));
+    let sc_f = step(0.5, mod(floor(m / 32.0), 2.0));
+    let sc_g = step(0.5, mod(floor(m / 64.0), 2.0));
+    let sc_hit = max(max(sc_a * sc_ha, sc_g * sc_hg), max(sc_d * sc_hd, max(max(sc_b * sc_vr * sc_vu, sc_c * sc_vr * sc_vw), max(sc_e * sc_vl * sc_vw, sc_f * sc_vl * sc_vu))));
+
+    c += org * sc_hit * step(-0.66, p.x) * step(p.x, 0.78);
+
+    // Ticker of copy glyphs along the bottom, sliding left.
+    let tcw = 0.035;
+    let tx  = p.x + tt * 0.6;
+    let tcx = floor(tx / tcw);
+    let tgx = floor(fract(tx / tcw) * 5.0);
+    let tgy = floor(fract((p.y + 0.85) / 0.06) * 7.0);
+    let tin = step(abs(p.y + 0.82), 0.03) * step(0.5, tgx) * step(tgx, 3.5) * step(0.5, tgy) * step(tgy, 5.5);
+    let tb  = step(0.4, hash1(uint(tcx + 5000.0) * 7919u + uint(tgx * 8.0 + tgy) * 31u));
+    c += grn * 0.9 * tin * tb;
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

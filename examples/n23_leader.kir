@@ -1,0 +1,112 @@
+// A countdown leader in the Network 23 manner: a big seven-segment digit counting from
+// eight to one inside a ring, a sweep arm that turns once a second with a darkened wedge
+// behind it, a crosshair and tick marks, over diagonal cyan and magenta panels. The
+// picture stutters on one moment now and then. Draws the whole frame and reads no
+// geometry.
+
+proc n23_leader {
+  kind  L4
+  blend additive
+
+  // How often time stutters: 0 never, 1 nearly always.
+  param stutter : float [0.0, 1.0] = 0.4
+
+  // Length of the repeated window while stuttering, in seconds.
+  param window  : float [0.04, 0.4] = 0.12
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+  // Hit strength: forces a stutter and pushes activity up. Bind to an onset.
+  param kick    : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let blu  = srgb_to_linear(vec3(0.1, 0.2, 0.9));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+    // Stutter clock: every 1.7 seconds a gate decides whether the next 0.6 seconds
+    // loop over one short window, so the picture repeats itself on one moment.
+    let seg  = floor(t / 1.7);
+    let ph   = t - seg * 1.7;
+    let gate = max(step(1.0 - stutter * 0.6, hash1(uint(seg) * 977u + 3u)), step(0.5, kick));
+    let on   = gate * step(ph, 0.6);
+    let anchor = seg * 1.7 + 0.15 + hash1(uint(seg) * 31u + 5u) * 0.3;
+    let tt   = mix(t, anchor + mod(ph, window), on);
+
+    // Panels: two colours of diagonal band sliding slowly.
+    let dg  = p.x * 0.5 + p.y + tt * 0.15;
+    let pn  = step(0.5, fract(dg * 0.8));
+    var c   = mix(blu * 0.18, mag * 0.18, vec3(pn));
+
+    let r   = length(p);
+    // Once a second the arm makes a full turn clockwise from the top, with a dim wedge
+    // trailing a quarter turn behind it.
+    let cw     = fract(atan2(p.x, p.y) / 6.2831853);
+    let secf   = fract(lt);
+    let behind = fract(secf - cw);
+    c += cyan * step(abs(r - 0.62), 0.012);
+    c += cyan * 0.8 * step(abs(r - 0.5), 0.006);
+    c += org * step(fract(atan2(p.y, p.x) / 6.2831853 * 60.0), 0.08) * step(0.62, r) * step(r, 0.68);
+    c += yel * step(behind, 0.008) * step(r, 0.62);
+    c += cyan * 0.22 * step(behind, 0.25) * step(r, 0.5);
+
+    // Crosshair through the middle, broken at the ring.
+    c += cyan * step(abs(p.y), 0.004) * step(r, 0.88);
+    c += cyan * step(abs(p.x), 0.004) * step(r, 0.88);
+
+    // The digit: eight down to one, changing at the top of each second.
+    let num = 8.0 - floor(mod(lt, 8.0));
+    let m   = 63.0 * (1.0 - step(0.5, abs(num)))
+            + 6.0 * (1.0 - step(0.5, abs(num - 1.0)))
+            + 91.0 * (1.0 - step(0.5, abs(num - 2.0)))
+            + 79.0 * (1.0 - step(0.5, abs(num - 3.0)))
+            + 102.0 * (1.0 - step(0.5, abs(num - 4.0)))
+            + 109.0 * (1.0 - step(0.5, abs(num - 5.0)))
+            + 125.0 * (1.0 - step(0.5, abs(num - 6.0)))
+            + 7.0 * (1.0 - step(0.5, abs(num - 7.0)))
+            + 127.0 * (1.0 - step(0.5, abs(num - 8.0)));
+    let dl  = p - vec2(-0.2, -0.3);
+    let dg_hx = step(0.035, dl.x) * step(dl.x, 0.4 - 0.035);
+    let dg_ha = dg_hx * step(abs(dl.y - 0.6), 0.035);
+    let dg_hg = dg_hx * step(abs(dl.y - 0.6 * 0.5), 0.035);
+    let dg_hd = dg_hx * step(abs(dl.y), 0.035);
+    let dg_vr = step(abs(dl.x - 0.4), 0.035);
+    let dg_vl = step(abs(dl.x), 0.035);
+    let dg_vu = step(0.6 * 0.5 + 0.035, dl.y) * step(dl.y, 0.6 - 0.035);
+    let dg_vw = step(0.035, dl.y) * step(dl.y, 0.6 * 0.5 - 0.035);
+    let dg_a = step(0.5, mod(floor(m / 1.0), 2.0));
+    let dg_b = step(0.5, mod(floor(m / 2.0), 2.0));
+    let dg_c = step(0.5, mod(floor(m / 4.0), 2.0));
+    let dg_d = step(0.5, mod(floor(m / 8.0), 2.0));
+    let dg_e = step(0.5, mod(floor(m / 16.0), 2.0));
+    let dg_f = step(0.5, mod(floor(m / 32.0), 2.0));
+    let dg_g = step(0.5, mod(floor(m / 64.0), 2.0));
+    let dg_hit = max(max(dg_a * dg_ha, dg_g * dg_hg), max(dg_d * dg_hd, max(max(dg_b * dg_vr * dg_vu, dg_c * dg_vr * dg_vw), max(dg_e * dg_vl * dg_vw, dg_f * dg_vl * dg_vu))));
+
+    c += org * dg_hit;
+
+    // Corner brackets.
+    let ax = abs(p.x);
+    let ay = abs(p.y);
+    c += cyan * max(step(abs(ax - 1.66), 0.006) * step(ay, 0.92) * step(0.76, ay),
+                    step(abs(ay - 0.92), 0.006) * step(ax, 1.68) * step(1.52, ax));
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

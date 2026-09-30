@@ -1,0 +1,59 @@
+// The look of a 1980s video-effects chain over whatever it is handed: colour crushed to
+// a few flat tones per channel, hard scanlines, horizontal lines that shear sideways in
+// short bursts, a red and blue split that opens with them, and a bright band that rolls
+// down the frame. Bursts re-roll ten times a second, and each shears a few bands only.
+// Stands alone over any picture.
+
+proc tape_signal {
+  kind L5
+
+  // Tones per channel above black.
+  param levels : float [1.0, 8.0] = 5.0
+
+  // Depth of the scanline darkening; 0 removes the lines.
+  param scan   : float [0.0, 1.0] = 0.3
+
+  // How often bursts shear the picture: 0 never, 1 nearly always.
+  param tear   : float [0.0, 1.0] = 0.35
+
+  // Widest shear, as a fraction of the frame width.
+  param shear  : float [0.0, 0.3] = 0.05
+
+  // Red and blue split at rest, as a fraction of the frame width; it widens in a burst.
+  param split  : float [0.0, 0.05] = 0.004
+
+  // Brightness of the band rolling down the frame.
+  param roll   : float [0.0, 1.0] = 0.15
+
+  // Hit strength: forces a burst. Bind to an onset.
+  param kick   : float [0.0, 1.0] = 0.0
+
+  frame {
+    let tick  = floor(t * 10.0);
+    let burst = max(step(1.0 - tear * 0.5, hash1(uint(tick) * 977u + 9u)), step(0.5, kick));
+
+    // A line group is 1/40 of the frame high; a group shears when its hash passes 0.7.
+    let grp = floor(point_coord.y * 40.0);
+    let gh  = hash2(uint(grp) * 7919u + uint(tick) * 131u);
+    let off = (gh.x - 0.5) * 2.0 * shear * step(0.7, gh.y) * burst;
+    let d   = split * (1.0 + 4.0 * burst);
+    let sp  = vec2(point_coord.x + off, point_coord.y);
+
+    let r = tap(src, sp + vec2(d, 0.0)).x;
+    let g = tap(src, sp).y;
+    let b = tap(src, sp - vec2(d, 0.0)).z;
+
+    // Crush to flat tones, evenly spaced in perceived brightness.
+    let n = floor(levels);
+    let e = pow(clamp(vec3(r, g, b), vec3(0.0), vec3(1.0)), vec3(0.4545));
+    let v = pow(floor(e * n + vec3(0.5)) / n, vec3(2.2));
+
+    // Scanlines: 270 per frame, hard.
+    let line = 1.0 - scan * step(0.5, fract(point_coord.y * 270.0));
+
+    // Rolling band: a soft brightening that falls once every four seconds.
+    let band = pow(max(1.0 - abs(fract(point_coord.y + t * 0.25) - 0.5) * 6.0, 0.0), 3.0) * roll;
+
+    color = vec4(v * line + vec3(band), 1.0);
+  }
+}

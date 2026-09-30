@@ -1,0 +1,59 @@
+// Scene four of the intrusion story, seconds 24 to 32: streams of data pour down the
+// whole screen, thin at first and packed by the end, then the picture whites out and
+// falls to black as the loop restarts. Draws the whole frame and reads no geometry.
+// Part of `intrusion_story.kset`.
+
+proc intrusion_flood {
+  kind  L4
+  blend additive
+
+  // Fall speed of the streams.
+  param rain : float [0.2, 3.0] = 1.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // The story loops every 32 seconds in four scenes of eight; this one is scene 3.
+    let lt   = mod(t, 32.0) - 3.0 * 8.0;
+    let win  = step(0.0, lt) * step(lt, 8.0);
+    let fade = clamp(min(lt, 8.0 - lt) / 0.3, 0.0, 1.0) * win;
+
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    var c = vec3(0.0);
+
+    let colw = 0.04;
+    let rowh = colw * 1.4;
+    let cx   = floor(p.x / colw);
+    let hc   = hash3(uint(cx + 1000.0) * 7919u + 11u);
+    let open = step(hc.z, lt / 6.0);
+    let row  = floor(p.y / rowh);
+    let head = -lt * rain * (6.0 + 10.0 * hc.x) + hc.y * 60.0;
+    let dd   = mod(row - head, 50.0);
+    let lit  = exp(-dd * 0.14) + 2.0 * (1.0 - step(1.0, dd));
+    let gx   = floor(fract(p.x / colw) * 5.0);
+    let gy   = floor(fract(p.y / rowh) * 7.0);
+    let ins  = step(0.5, gx) * step(gx, 3.5) * step(0.5, gy) * step(gy, 5.5);
+    let gt   = floor(t * (0.7 + 4.0 * hc.z) + hc.x * 9.0);
+    let bit  = step(0.45, hash1(uint(cx + 1000.0) * 7919u + uint(row + 1000.0) * 104729u + uint(gx * 8.0 + gy) * 31u + uint(gt) * 977u));
+    let hue  = mix(cyan, grn, vec3(step(0.85, hc.z)));
+    c += hue * bit * ins * lit * open * 0.7;
+    c += vec3(1.0) * bit * ins * (1.0 - step(1.0, dd)) * open * 0.6;
+
+    // A slow cyan swell from below and, over the last second, a white-out.
+    c += cyan * 0.03 * smoothstep(-1.0, 1.0, -p.y) * (lt / 8.0);
+    let wo = smoothstep(6.6, 7.4, lt);
+    c = mix(c, vec3(1.0), vec3(wo));
+
+    color = vec4(c * fade, 1.0);
+  }
+}

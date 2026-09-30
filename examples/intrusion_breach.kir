@@ -1,0 +1,86 @@
+// Scene two of the intrusion story, seconds 8 to 16: a magenta padlock sits in the
+// centre while a bar fills below it. Matrices of blocks on either side flicker as the
+// keys are tried and settle to green one column at a time as the bar climbs, and a
+// red alarm pulses at the frame edge and in two warning triangles. Draws the whole
+// frame and reads no geometry. Part of `intrusion_story.kset`.
+
+proc intrusion_breach {
+  kind  L4
+  blend additive
+
+  // Alarm pulses per second.
+  param alarm : float [0.5, 6.0] = 2.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // The story loops every 32 seconds in four scenes of eight; this one is scene 1.
+    let lt   = mod(t, 32.0) - 1.0 * 8.0;
+    let win  = step(0.0, lt) * step(lt, 8.0);
+    let fade = clamp(min(lt, 8.0 - lt) / 0.3, 0.0, 1.0) * win;
+
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    var c = vec3(0.0);
+
+    let prog = clamp(lt / 7.2, 0.0, 1.0);
+    let pp   = floor(prog * 60.0) / 60.0;
+    let ap   = step(0.5, fract(t * alarm));
+
+    // The padlock: a body, a shackle made of an annulus and two legs, and a keyhole.
+    let bc   = p - vec2(0.0, -0.05);
+    let body = step(abs(bc.x), 0.26) * step(abs(bc.y), 0.2);
+    let sh   = p - vec2(0.0, 0.15);
+    let arc  = step(abs(length(sh) - 0.16), 0.022) * step(0.0, sh.y);
+    let legs = step(abs(abs(p.x) - 0.16), 0.022) * step(abs(p.y - 0.09), 0.06);
+    let key  = max(step(length(p - vec2(0.0, -0.03)), 0.04), step(abs(p.x), 0.014) * step(abs(p.y + 0.1), 0.05));
+    let lockc = mix(mag, red, vec3(ap));
+    c += lockc * max(max(arc, legs), body * (1.0 - key));
+
+    // Progress bar under the lock with a bright leading edge.
+    let bx  = (p.x + 0.8) / 1.6;
+    let box = step(0.0, bx) * step(bx, 1.0) * step(abs(p.y + 0.6), 0.03);
+    let fill = box * step(bx, pp);
+    let outl = step(abs(abs(p.y + 0.6) - 0.033), 0.004) * step(0.0, bx) * step(bx, 1.0);
+    c += cyan * fill + dim * outl + vec3(1.0) * box * step(abs(bx - pp), 0.006);
+
+    // Key matrices left and right: eight columns by twelve rows of blocks. A column
+    // that the bar has passed is settled green; the others flicker at twenty hertz.
+    for sd in 0..2 {
+      let sg   = float(sd) * 2.0 - 1.0;
+      let mx   = (abs(p.x) - 0.75) / 0.09;
+      let my   = (0.66 - p.y) / 0.09;
+      let cxm  = floor(mx);
+      let cym  = floor(my);
+      let inm  = step(0.0, sg * p.x) * step(0.0, mx) * step(mx, 8.0) * step(0.0, my) * step(my, 12.0);
+      let cell = step(0.15, fract(mx)) * step(fract(mx), 0.85) * step(0.15, fract(my)) * step(fract(my), 0.85);
+      let fl   = step(0.55, hash1(uint(cxm + 30.0) * 7919u + uint(cym + 30.0) * 104729u + uint(floor(t * 20.0)) * 977u + uint(sd) * 3u));
+      let done = step(cxm + 0.5, prog * 8.0);
+      let ccol = mix(mag * fl * 0.9, grn * 0.8, vec3(done));
+      c += ccol * inm * cell;
+    }
+
+    // Alarm: a red frame that pulses, and two warning triangles at the top.
+    let edge = max(step(1.7, abs(p.x)), step(0.94, abs(p.y)));
+    c += red * edge * ap * 0.9;
+    for tr in 0..2 {
+      let tx  = (float(tr) * 2.0 - 1.0) * 0.5;
+      let tq  = vec2(p.x - tx, p.y - 0.76);
+      let inn = step(abs(tq.x), (0.17 - tq.y) * 0.6) * step(tq.y, 0.17) * step(-0.14, tq.y);
+      let hole = step(abs(tq.x), (0.17 - tq.y) * 0.6 - 0.035) * step(tq.y, 0.135) * step(-0.105, tq.y);
+      let bang = step(abs(tq.x), 0.014) * step(abs(tq.y - 0.02), 0.06) + step(length(tq - vec2(0.0, -0.075)), 0.018);
+      c += red * (inn - hole + bang) * (0.3 + 0.7 * ap);
+    }
+
+    color = vec4(c * fade, 1.0);
+  }
+}

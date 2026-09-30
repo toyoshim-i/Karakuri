@@ -1,0 +1,90 @@
+// The Network 23 channel bug: a boxed seven-segment "23" with a blinking red on-air
+// dot, drawn in one corner of the frame and shaking a hair at twelve frames a second.
+// It is the mark that ties every Network 23 piece in this library together and can sit
+// over any other picture. Draws the whole frame and reads no geometry.
+
+proc n23_bug {
+  kind  L4
+  blend additive
+
+  // Corner: 0 top left, 1 top right, 2 bottom left, 3 bottom right.
+  param corner : float [0.0, 3.0] = 1.0
+
+  // Brightness of the bug.
+  param level  : float [0.0, 1.0] = 1.0
+
+  // Hit strength: makes the box flash. Bind to an onset.
+  param kick   : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let blu  = srgb_to_linear(vec3(0.1, 0.2, 0.9));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+
+    let cor = floor(corner + 0.5);
+    let cx  = mix(-1.45, 1.45, step(0.5, mod(cor, 2.0)));
+    let cy  = mix(0.8, -0.8, step(1.5, cor));
+    let hf  = floor(t * 12.0);
+    let jit = (hash2(uint(hf) * 6151u + 3u) - vec2(0.5)) * 0.01;
+    let q   = p - vec2(cx, cy) - jit;
+
+    // Box.
+    let bx  = max(abs(q.x) - 0.2, abs(q.y) - 0.09);
+    let box = step(abs(bx), 0.005);
+    let dl1 = q - vec2(-0.14, -0.05);
+    let dl2 = q - vec2(-0.04, -0.05);
+    let d2_hx = step(0.007, dl1.x) * step(dl1.x, 0.07 - 0.007);
+    let d2_ha = d2_hx * step(abs(dl1.y - 0.1), 0.007);
+    let d2_hg = d2_hx * step(abs(dl1.y - 0.1 * 0.5), 0.007);
+    let d2_hd = d2_hx * step(abs(dl1.y), 0.007);
+    let d2_vr = step(abs(dl1.x - 0.07), 0.007);
+    let d2_vl = step(abs(dl1.x), 0.007);
+    let d2_vu = step(0.1 * 0.5 + 0.007, dl1.y) * step(dl1.y, 0.1 - 0.007);
+    let d2_vw = step(0.007, dl1.y) * step(dl1.y, 0.1 * 0.5 - 0.007);
+    let d2_a = step(0.5, mod(floor(91.0 / 1.0), 2.0));
+    let d2_b = step(0.5, mod(floor(91.0 / 2.0), 2.0));
+    let d2_c = step(0.5, mod(floor(91.0 / 4.0), 2.0));
+    let d2_d = step(0.5, mod(floor(91.0 / 8.0), 2.0));
+    let d2_e = step(0.5, mod(floor(91.0 / 16.0), 2.0));
+    let d2_f = step(0.5, mod(floor(91.0 / 32.0), 2.0));
+    let d2_g = step(0.5, mod(floor(91.0 / 64.0), 2.0));
+    let d2_hit = max(max(d2_a * d2_ha, d2_g * d2_hg), max(d2_d * d2_hd, max(max(d2_b * d2_vr * d2_vu, d2_c * d2_vr * d2_vw), max(d2_e * d2_vl * d2_vw, d2_f * d2_vl * d2_vu))));
+    let d3_hx = step(0.007, dl2.x) * step(dl2.x, 0.07 - 0.007);
+    let d3_ha = d3_hx * step(abs(dl2.y - 0.1), 0.007);
+    let d3_hg = d3_hx * step(abs(dl2.y - 0.1 * 0.5), 0.007);
+    let d3_hd = d3_hx * step(abs(dl2.y), 0.007);
+    let d3_vr = step(abs(dl2.x - 0.07), 0.007);
+    let d3_vl = step(abs(dl2.x), 0.007);
+    let d3_vu = step(0.1 * 0.5 + 0.007, dl2.y) * step(dl2.y, 0.1 - 0.007);
+    let d3_vw = step(0.007, dl2.y) * step(dl2.y, 0.1 * 0.5 - 0.007);
+    let d3_a = step(0.5, mod(floor(79.0 / 1.0), 2.0));
+    let d3_b = step(0.5, mod(floor(79.0 / 2.0), 2.0));
+    let d3_c = step(0.5, mod(floor(79.0 / 4.0), 2.0));
+    let d3_d = step(0.5, mod(floor(79.0 / 8.0), 2.0));
+    let d3_e = step(0.5, mod(floor(79.0 / 16.0), 2.0));
+    let d3_f = step(0.5, mod(floor(79.0 / 32.0), 2.0));
+    let d3_g = step(0.5, mod(floor(79.0 / 64.0), 2.0));
+    let d3_hit = max(max(d3_a * d3_ha, d3_g * d3_hg), max(d3_d * d3_hd, max(max(d3_b * d3_vr * d3_vu, d3_c * d3_vr * d3_vw), max(d3_e * d3_vl * d3_vw, d3_f * d3_vl * d3_vu))));
+
+    var c = org * max(d2_hit, d3_hit) + cyan * box;
+
+    // On-air dot.
+    let dot_ = step(length(q - vec2(0.13, 0.0)), 0.026) * step(0.5, fract(t));
+    c += red * dot_;
+    c += vec3(1.0) * kick * step(bx, 0.0) * 0.25;
+
+    color = vec4(c * level, 1.0);
+
+  }
+}

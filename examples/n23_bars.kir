@@ -1,0 +1,97 @@
+// A pre-broadcast test pattern in the Network 23 manner: seven vertical colour bars over
+// a strip of reversed blocks and a grey ramp, with horizontal lines that slip sideways in
+// short bursts, a band of luminance rolling down the frame and a blinking stand-by block.
+// The picture stutters on one moment now and then. Draws the whole frame and reads no
+// geometry.
+
+proc n23_bars {
+  kind  L4
+  blend additive
+
+  // How often time stutters: 0 never, 1 nearly always.
+  param stutter : float [0.0, 1.0] = 0.4
+
+  // Length of the repeated window while stuttering, in seconds.
+  param window  : float [0.04, 0.4] = 0.12
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+  // Hit strength: forces a stutter and pushes activity up. Bind to an onset.
+  param kick    : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let blu  = srgb_to_linear(vec3(0.1, 0.2, 0.9));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+    // Stutter clock: every 1.7 seconds a gate decides whether the next 0.6 seconds
+    // loop over one short window, so the picture repeats itself on one moment.
+    let seg  = floor(t / 1.7);
+    let ph   = t - seg * 1.7;
+    let gate = max(step(1.0 - stutter * 0.6, hash1(uint(seg) * 977u + 3u)), step(0.5, kick));
+    let on   = gate * step(ph, 0.6);
+    let anchor = seg * 1.7 + 0.15 + hash1(uint(seg) * 31u + 5u) * 0.3;
+    let tt   = mix(t, anchor + mod(ph, window), on);
+
+    // Line slip: groups of lines shift sideways for a few frames at a time.
+    let tick = floor(tt * 10.0);
+    let grp  = floor(p.y * 14.0);
+    let gh   = hash2(uint(grp + 100.0) * 7919u + uint(tick) * 131u);
+    let slip = (gh.x - 0.5) * 0.5 * step(0.8, gh.y) * step(0.6, hash1(uint(tick) * 977u + 9u));
+    let x    = (p.x + slip) / 1.78;
+
+    // Seven bars, a reversed strip and a ramp.
+    let bi   = floor((x * 0.5 + 0.5) * 7.0);
+    let bw   = vec3(1.0, 1.0, 0.0) ;
+    let bar  = vec3(0.0);
+    let k0   = 1.0 - step(0.5, abs(bi - 0.0));
+    let k1   = 1.0 - step(0.5, abs(bi - 1.0));
+    let k2   = 1.0 - step(0.5, abs(bi - 2.0));
+    let k3   = 1.0 - step(0.5, abs(bi - 3.0));
+    let k4   = 1.0 - step(0.5, abs(bi - 4.0));
+    let k5   = 1.0 - step(0.5, abs(bi - 5.0));
+    let k6   = 1.0 - step(0.5, abs(bi - 6.0));
+    let bars = vec3(0.75) * k0 + yel * 0.9 * k1 + cyan * 0.9 * k2 + grn * 0.9 * k3 + mag * 0.9 * k4 + red * 0.9 * k5 + blu * k6;
+    let rev  = blu * k0 + vec3(0.0) * k1 + mag * 0.9 * k2 + vec3(0.0) * k3 + cyan * 0.9 * k4 + vec3(0.0) * k5 + vec3(0.75) * k6;
+    let ramp = vec3(clamp(x * 0.5 + 0.5, 0.0, 1.0));
+    let ry   = step(p.y, -0.3);
+    let ly   = step(p.y, -0.6);
+    var c    = mix(bars, rev, vec3(ry));
+    c        = mix(c, ramp, vec3(ly));
+
+    // Stand-by block in the middle: a box that blinks with two rows of glyph cells.
+    let sb   = step(abs(p.x), 0.55) * step(abs(p.y - 0.05), 0.16);
+    let cw   = 0.04;
+    let gx   = floor(fract((p.x + 0.5) / cw) * 5.0);
+    let gy   = floor(fract((p.y + 0.06) / 0.05) * 7.0);
+    let cxl  = floor((p.x + 0.5) / cw);
+    let row  = floor((p.y + 0.06) / 0.05);
+    let ins  = step(0.5, gx) * step(gx, 3.5) * step(0.5, gy) * step(gy, 5.5) * step(0.0, row) * step(row, 3.0);
+    let bit  = step(0.4, hash1(uint(cxl + 50.0) * 7919u + uint(row + 5.0) * 104729u + uint(gx * 8.0 + gy) * 31u));
+    let blink = step(0.5, fract(tt * 1.5));
+    c = mix(c, vec3(0.0), vec3(sb));
+    c = mix(c, vec3(1.0), vec3(sb * ins * bit * blink));
+
+    // A luminance band rolling down the frame.
+    let rollv = pow(max(1.0 - abs(fract(p.y * 0.4 + tt * 0.2) - 0.5) * 5.0, 0.0), 2.0) * 0.25;
+    c += vec3(rollv);
+
+    color = vec4(c * 0.85 * fade, 1.0);
+
+  }
+}

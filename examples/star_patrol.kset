@@ -1,0 +1,7 @@
+{"t":"set","id":"star_patrol","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"star_patrol.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"kick","signal":"audio.onset","curve":"pow2","range":[0.0,0.4]}
+{"t":"part","layer":"L4","index":1,"path":"n23_bug.kir"}
+{"t":"param","layer":"L4","index":1,"key":"corner","value":3.0}

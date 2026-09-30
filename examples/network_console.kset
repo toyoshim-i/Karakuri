@@ -1,0 +1,9 @@
+{"t":"set","id":"network_console","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"network_console.kir"}
+{"t":"part","layer":"L5","path":"tape_signal.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"kick","signal":"audio.onset","curve":"pow2","range":[0.0,1.0]}
+{"t":"bind","layer":"L5","key":"kick","signal":"audio.onset","curve":"pow2","range":[0.0,1.0]}
+{"t":"part","layer":"L4","index":1,"path":"n23_bug.kir"}
+{"t":"param","layer":"L4","index":1,"key":"corner","value":2.0}

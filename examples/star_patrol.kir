@@ -1,0 +1,178 @@
+// An arcade shooter attract screen at low resolution: three layers of stars scroll
+// past, a small ship flies an autopilot line firing a steady stream of shots, and
+// crab-like invaders in unique pixel shapes sweep in on sine paths and burst into
+// rings when they reach the ship's line. A six-digit seven-segment score climbs
+// along the top, spare ships sit at the corner and a shield bar drains along the
+// bottom. The whole picture is snapped to a coarse pixel grid. Draws the whole
+// frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/star_patrol.kir --capacity 256
+
+proc star_patrol {
+  kind  L4
+  blend additive
+
+  // Scroll speed of the stars and the sweep of the invaders.
+  param pace   : float [0.0, 3.0] = 1.0
+
+  // Size of one game pixel, in frame half-heights.
+  param pixel  : float [0.005, 0.03] = 0.012
+
+  // Score gained per second.
+  param points : float [0.0, 500.0] = 90.0
+
+  // Hit strength: flashes the screen white. Bind to an onset.
+  param kick   : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p0 = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    // Everything below is drawn on a coarse grid.
+    let p  = (floor(p0 / pixel) + vec2(0.5)) * pixel;
+    let tp = t * pace;
+
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let grn  = srgb_to_linear(vec3(0.3, 1.0, 0.4));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+
+    var c = mix(srgb_to_linear(vec3(0.03, 0.0, 0.1)), srgb_to_linear(vec3(0.0, 0.0, 0.03)), vec3(smoothstep(-1.0, 1.0, p.y)));
+
+    // A planet behind everything, drifting slowly left.
+    let pcx = 1.0 - mod(tp * 0.02, 3.6) * 1.0;
+    let pd  = length(p - vec2(pcx, -0.35));
+    let ring = step(abs(length((p - vec2(pcx, -0.35)) * vec2(1.0, 3.0)) - 0.62), 0.02) * step(-0.35, p.y + 0.1);
+    c = mix(c, srgb_to_linear(vec3(0.35, 0.1, 0.5)), vec3(step(pd, 0.38)));
+    c = mix(c, srgb_to_linear(vec3(0.55, 0.2, 0.7)), vec3(step(pd, 0.38) * step(0.0, p.x - pcx + p.y * 0.4 + 0.1)));
+
+    // Stars: three layers of one-pixel points in grid cells, faster when nearer.
+    for j in 0..3 {
+      let fj  = float(j);
+      let sc  = 14.0 + fj * 6.0;
+      let sq  = vec2(p.x * sc + tp * (0.6 + fj * 0.9), p.y * sc);
+      let cell = floor(sq);
+      let hs  = hash1(uint(cell.x + 500.0) * 7919u + uint(cell.y + 500.0) * 104729u + uint(j) * 31u);
+      let fp  = fract(sq);
+      let dot_ = step(0.975, hs) * step(abs(fp.x - 0.5), 0.28) * step(abs(fp.y - 0.5), 0.28);
+      c = max(c, vec3(0.5 + 0.25 * fj) * dot_ * (0.5 + 0.5 * step(0.5, fract(hs * 40.0 + t * 2.0))));
+    }
+
+    // Autopilot line of the ship.
+    let py_f = 0.38 * sin(tp * 0.8) + 0.12 * sin(tp * 2.3 + 1.0);
+    let ship = vec2(-1.0, py_f);
+
+    // Shots: one leaves every quarter second along the line the ship flew.
+    for k in 0..7 {
+      let ag = mod(tp, 0.25) + float(k) * 0.25;
+      let ty  = tp - ag;
+      let by  = 0.38 * sin(ty * 0.8) + 0.12 * sin(ty * 2.3 + 1.0);
+      let bx  = ship.x + 0.12 + ag * 2.2;
+      let hit = step(abs(p.y - by), 0.012) * step(abs(p.x - bx), 0.045);
+      c = mix(c, mix(yel, vec3(1.0), vec3(0.5)), vec3(hit));
+    }
+
+    // Invaders: five on sine paths. Each is a mirrored 4x5 pixel pattern of its own,
+    // and turns into an expanding ring once it reaches the ship's column.
+    for e in 0..5 {
+      let fe  = float(e);
+      let ex  = 2.2 - mod(tp * 0.5 + fe * 0.85, 4.6);
+      let ey  = 0.5 * sin(tp * 1.2 + fe * 1.7);
+      let ag = (-0.35 - ex) / (0.5 * pace + 0.0001);
+      let alive = step(-0.35, ex);
+      let rel = (p - vec2(ex, ey)) / 0.045;
+      let cx  = floor(abs(rel.x));
+      let cy  = floor(rel.y + 2.5);
+      let inb = step(cx, 3.0) * step(0.0, cy) * step(cy, 4.0);
+      let pat = step(0.5, hash1(uint(e) * 31u + uint(cx * 5.0 + cy) * 7u + 3u));
+      let eye_ = step(cx, 0.5) * step(abs(cy - 3.0), 0.5);
+      let body = inb * max(pat, step(cy, 0.5) * step(cx, 1.5)) * alive;
+      let legs = step(0.5, fract(tp * 3.0 + fe)) ;
+      c = mix(c, mix(mag, org, vec3(step(0.5, fract(fe * 0.4 + 0.2)))), vec3(body));
+      c = mix(c, vec3(1.0), vec3(body * eye_ * 0.0));
+
+      // Burst: a ring and a cross for 0.35 seconds.
+      let bx = p - vec2(-0.35, ey);
+      let br = length(bx);
+      let bg = (1.0 - alive) * step(0.0, ag) * step(ag, 0.35);
+      let rr = ag * 0.9 + 0.02;
+      let ring_e = step(abs(br - rr), 0.02) * bg;
+      c = mix(c, mix(yel, vec3(1.0), vec3(step(0.5, fract(ag * 20.0)))), vec3(ring_e));
+    }
+
+    // The ship: a pixel arrow with a flickering thruster.
+    let sr  = (p - ship) / 0.04;
+    let scx = floor(sr.x + 2.0);
+    let scy = floor(abs(sr.y));
+    let body_s = step(0.0, scx) * step(scx, 4.0) * step(scy, 2.0 - floor(scx * 0.5));
+    c = mix(c, cyan, vec3(body_s));
+    c = mix(c, vec3(1.0), vec3(step(2.5, scx) * step(scx, 3.5) * step(scy, 0.5)));
+    let flame = step(-3.5, sr.x) * step(sr.x, -2.0) * step(abs(sr.y), 0.5 + 0.4 * step(0.5, fract(t * 15.0)));
+    c = mix(c, org, vec3(flame));
+
+    // Shield bar at the bottom left, draining over eight seconds and refilling.
+    let sh = 1.0 - fract(t / 8.0);
+    let sbx = (p.x + 1.62) / 0.9;
+    let sby = abs(p.y + 0.9);
+    let sbar = step(0.0, sbx) * step(sbx, 1.0) * step(sby, 0.03);
+    let sfill = step(sbx, sh);
+    c = mix(c, mix(mag, grn, vec3(step(0.35, sh))), vec3(sbar * sfill));
+    c = mix(c, vec3(0.3), vec3(sbar * (1.0 - sfill)));
+
+    // Spare ships at the top right.
+    for l in 0..3 {
+      let lp = (p - vec2(1.45 + float(l) * 0.11, 0.88)) / 0.018;
+      let lx = floor(lp.x + 2.0);
+      let ly = floor(abs(lp.y));
+      let ic = step(0.0, lx) * step(lx, 4.0) * step(ly, 2.0 - lx * 0.5);
+      c = mix(c, cyan, vec3(ic));
+    }
+
+    // Score: six seven-segment digits at the top left.
+    let sv = floor(t * points);
+    // Each digit is six game pixels wide and eleven high on an eight-pixel pitch, and
+    // only the digit under this fragment is worked out.
+    let gp = floor(p0 / pixel) - vec2(floor(-1.62 / pixel), floor(0.72 / pixel));
+    let fd = clamp(floor(gp.x / 8.0), 0.0, 5.0);
+    let dv = mod(floor(sv / pow(10.0, 5.0 - fd)), 10.0);
+    let m  = 63.0 * (1.0 - step(0.5, abs(dv)))
+           + 6.0 * (1.0 - step(0.5, abs(dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(dv - 9.0)));
+    let dx = gp.x - fd * 8.0;
+    let dy = gp.y;
+    // Segments a b c d e f g sit in bits 0..6 of the mask.
+    let bit_a = step(0.5, mod(floor(m / 1.0), 2.0));
+    let bit_b = step(0.5, mod(floor(m / 2.0), 2.0));
+    let bit_c = step(0.5, mod(floor(m / 4.0), 2.0));
+    let bit_d = step(0.5, mod(floor(m / 8.0), 2.0));
+    let bit_e = step(0.5, mod(floor(m / 16.0), 2.0));
+    let bit_f = step(0.5, mod(floor(m / 32.0), 2.0));
+    let bit_g = step(0.5, mod(floor(m / 64.0), 2.0));
+    let hx = step(1.0, dx) * step(dx, 4.0);
+    let ha = hx * step(abs(dy - 10.0), 0.5);
+    let hg = hx * step(abs(dy - 5.0), 0.5);
+    let hd = hx * step(abs(dy), 0.5);
+    let vr = step(abs(dx - 5.0), 0.5);
+    let vl = step(abs(dx), 0.5);
+    let vu = step(6.0, dy) * step(dy, 9.0);
+    let vw = step(1.0, dy) * step(dy, 4.0);
+    let sc_hit = step(0.0, gp.x) * step(gp.x, 47.0) * step(0.0, dy) * step(dy, 10.0)
+               * max(max(bit_a * ha, bit_g * hg), max(bit_d * hd, max(max(bit_b * vr * vu, bit_c * vr * vw), max(bit_e * vl * vw, bit_f * vl * vu))));
+    c = mix(c, grn, vec3(sc_hit));
+
+    c += vec3(0.4) * kick;
+    color = vec4(c, 1.0);
+  }
+}

@@ -1,0 +1,10 @@
+{"t":"set","id":"neon_gate","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"neon_gate.kir"}
+{"t":"part","layer":"L5","path":"rgb_shift.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L5","key":"amount","value":0.15}
+{"t":"bind","layer":"L4","key":"kick","signal":"audio.onset","curve":"pow2","range":[0.0,1.0]}
+{"t":"bind","layer":"L5","key":"amount","signal":"audio.onset","curve":"pow2","range":[0.15,1.0]}
+{"t":"part","layer":"L4","index":1,"path":"n23_bug.kir"}
+{"t":"param","layer":"L4","index":1,"key":"corner","value":3.0}

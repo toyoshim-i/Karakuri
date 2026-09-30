@@ -1,0 +1,14 @@
+{"t":"set","id":"intrusion_story","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"intrusion_scan.kir"}
+{"t":"part","layer":"L4","index":1,"path":"intrusion_breach.kir"}
+{"t":"part","layer":"L4","index":2,"path":"intrusion_access.kir"}
+{"t":"part","layer":"L4","index":3,"path":"intrusion_flood.kir"}
+{"t":"part","layer":"L4","index":4,"path":"intrusion_hud.kir"}
+{"t":"part","layer":"L5","path":"tape_signal.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"param","layer":"L5","key":"levels","value":6.0}
+{"t":"param","layer":"L5","key":"tear","value":0.15}
+{"t":"param","layer":"L5","key":"roll","value":0.0}
+{"t":"part","layer":"L4","index":5,"path":"n23_bug.kir"}
+{"t":"param","layer":"L4","index":5,"key":"corner","value":2.0}

@@ -1,0 +1,120 @@
+// A control-room wall of twelve monitors in four columns, each showing something
+// different: colour bars, a moving checker, static, an oscilloscope trace, a turning
+// square frame, a radar sweep, bar readouts or falling glyphs. A red tally marks the
+// monitor that is on the air and moves every few seconds; every eight seconds the view
+// cuts hard from the whole wall into that monitor. Time stutters on one moment now and
+// then. Draws the whole frame and reads no geometry.
+
+proc n23_monitor_wall {
+  kind  L4
+  blend additive
+
+  // How often time stutters: 0 never, 1 nearly always.
+  param stutter : float [0.0, 1.0] = 0.4
+
+  // Length of the repeated window while stuttering, in seconds.
+  param window  : float [0.04, 0.4] = 0.12
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+  // Hit strength: forces a stutter and pushes activity up. Bind to an onset.
+  param kick    : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let blu  = srgb_to_linear(vec3(0.1, 0.2, 0.9));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+    // Stutter clock: every 1.7 seconds a gate decides whether the next 0.6 seconds
+    // loop over one short window, so the picture repeats itself on one moment.
+    let seg  = floor(t / 1.7);
+    let ph   = t - seg * 1.7;
+    let gate = max(step(1.0 - stutter * 0.6, hash1(uint(seg) * 977u + 3u)), step(0.5, kick));
+    let on   = gate * step(ph, 0.6);
+    let anchor = seg * 1.7 + 0.15 + hash1(uint(seg) * 31u + 5u) * 0.3;
+    let tt   = mix(t, anchor + mod(ph, window), on);
+
+    // Every 8 seconds the last two seconds cut into the live monitor.
+    let tick  = floor(tt / 4.0);
+    let live  = floor(hash1(uint(tick) * 4241u + 5u) * 12.0);
+    let lcol  = mod(live, 4.0);
+    let lrow  = floor(live / 4.0);
+    let lctr  = vec2((lcol - 1.5) * 0.85, (1.0 - lrow) * 0.62);
+    let cut   = step(2.0, mod(tt, 4.0)) ;
+    let pw    = mix(p, (p * 0.27) + lctr, vec2(cut));
+
+    // Wall: 4 by 3 monitors, 0.85 by 0.62 apart.
+    let wq   = vec2(pw.x + 1.7, 0.93 - pw.y);
+    let cxm  = floor(wq.x / 0.85);
+    let cym  = floor(wq.y / 0.62);
+    let inw  = step(0.0, cxm) * step(cxm, 3.0) * step(0.0, cym) * step(cym, 2.0);
+    let mi   = cym * 4.0 + cxm;
+    let lp   = vec2(fract(wq.x / 0.85) - 0.5, fract(wq.y / 0.62) - 0.5) * vec2(0.85, 0.62);
+    let scr  = step(abs(lp.x), 0.36) * step(abs(lp.y), 0.26);
+    let bez  = step(abs(lp.x), 0.4) * step(abs(lp.y), 0.29) * (1.0 - scr);
+    let u    = vec2(lp.x / 0.36, lp.y / 0.26);
+    let hm   = hash1(uint(mi + 20.0) * 7919u + 3u);
+    let kind = mod(mi * 5.0 + floor(hm * 2.0), 8.0);
+    let f12  = floor(tt * 12.0);
+
+    // What each monitor shows; only the chosen one is kept.
+    let bi   = floor((u.x * 0.5 + 0.5) * 7.0);
+    let s0   = hsv_to_rgb(vec3(bi / 7.0, 0.9, 0.9));
+    let s1   = vec3(step(0.5, fract(floor(u.x * 3.0 + tt) * 0.5 + floor(u.y * 3.0) * 0.5)));
+    let s2   = vec3(hash1(uint(floor((u.x + 1.0) * 30.0)) * 7919u + uint(floor((u.y + 1.0) * 22.0)) * 104729u + uint(f12) * 977u + uint(mi) * 31u));
+    let wv   = 0.4 * sin(u.x * 9.0 + tt * 6.0) + 0.2 * sin(u.x * 23.0 - tt * 9.0);
+    let s3   = vec3(0.0, 1.0, 0.4) * step(abs(u.y - wv), 0.06);
+    let sq   = max(abs(u.x), abs(u.y));
+    let sqr  = abs(fract(tt * 0.3 + mi * 0.1) * 2.0 * 3.14159);
+    let ca   = cos(tt + mi);
+    let sa   = sin(tt + mi);
+    let ru   = vec2(ca * u.x - sa * u.y, sa * u.x + ca * u.y);
+    let s4   = cyan * step(abs(max(abs(ru.x), abs(ru.y) * 1.4) - 0.6), 0.06);
+    let rr   = length(u);
+    let cwa  = fract(atan2(u.x, u.y) / 6.2831853);
+    let s5   = grn * (step(abs(rr - 0.8), 0.04) + step(fract(tt * 0.5 + mi * 0.2 - cwa), 0.15) * step(rr, 0.8) * 0.5);
+    let brw  = floor((u.y * 0.5 + 0.5) * 6.0);
+    let s6   = mix(cyan, mag, vec3(step(0.5, hash1(uint(brw) * 31u + uint(f12 / 3.0) * 7u)))) * step(u.x * 0.5 + 0.5, hash1(uint(brw) * 31u + uint(f12 / 3.0) * 7u + uint(mi) * 5u)) * step(0.2, fract((u.y * 0.5 + 0.5) * 6.0));
+    let gcx  = floor(u.x * 9.0 + 9.0);
+    let s7   = grn * step(0.5, hash1(uint(gcx) * 7919u + uint(floor(u.y * 6.0 + tt * 6.0 * (0.5 + hash1(uint(gcx) + uint(mi))) + 20.0)) * 104729u));
+    let ss   = s0 * (1.0 - step(0.5, abs(kind)))
+             + s1 * (1.0 - step(0.5, abs(kind - 1.0)))
+             + s2 * (1.0 - step(0.5, abs(kind - 2.0)))
+             + s3 * (1.0 - step(0.5, abs(kind - 3.0)))
+             + s4 * (1.0 - step(0.5, abs(kind - 4.0)))
+             + s5 * (1.0 - step(0.5, abs(kind - 5.0)))
+             + s6 * (1.0 - step(0.5, abs(kind - 6.0)))
+             + s7 * (1.0 - step(0.5, abs(kind - 7.0)));
+
+    var c = vec3(0.0);
+    c += ss * scr * 0.85;
+    c += vec3(0.08, 0.1, 0.14) * bez;
+
+    // Tally: a red bar above the live monitor, on the bezel.
+    let isl = 1.0 - step(0.5, abs(mi - live));
+    let tal = step(abs(lp.x), 0.1) * step(abs(lp.y - 0.275), 0.012);
+    c += red * tal * isl * step(0.3, fract(tt * 1.3));
+    c += org * isl * bez * 0.5;
+
+    // The whole picture carries a scan-line grain.
+    c *= inw;
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}
