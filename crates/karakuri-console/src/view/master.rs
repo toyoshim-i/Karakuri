@@ -412,13 +412,22 @@ pub fn master(
     if let Some(chain) = chain {
         let mut top = row.max.y + size::MASTER_STACK_GAP;
         for (at, slot) in chain.slots.iter().enumerate() {
-            let height = well_height(slot.params.len());
+            let available = region.max.y - size::MASTER_PAD_X - top;
+            let min_h = size::FX_PAD_Y * 2.0 + size::MASTER_ROW_H;
+            if available < min_h {
+                break;
+            }
+            let line_h = size::MASTER_ROW_H + size::FX_PAD_Y;
+            let max_params = ((available - min_h) / line_h).floor() as usize;
+            let num_params = slot.params.len().min(max_params);
+            let height = well_height(num_params);
             let well =
                 Rect::from_min_size(Pos2::new(row.min.x, top), egui::vec2(row.width(), height));
             if !region.contains_rect(well) {
                 break;
             }
-            let Some(drawn) = slot_row(ctx, at as u32, slot, well, widest, &width) else {
+            let Some(drawn) = slot_row(ctx, at as u32, slot, well, widest, &width, num_params)
+            else {
                 break;
             };
             slots.push(drawn);
@@ -491,6 +500,7 @@ fn slot_row(
     well: Rect,
     widest: f32,
     width: &dyn Fn(&str) -> f32,
+    num_params: usize,
 ) -> Option<SlotRow> {
     // The chip's word is 9px where everything else on the row is `BASE`, so
     // this row needs the one measurement `master`'s own closure cannot give it.
@@ -545,9 +555,9 @@ fn slot_row(
             egui::vec2(chip, size::MINI_H),
         )
     });
-    let mut params = Vec::with_capacity(slot.params.len());
+    let mut params = Vec::with_capacity(num_params);
     let mut top = head.max.y + size::FX_PAD_Y;
-    for param in &slot.params {
+    for param in slot.params.iter().take(num_params) {
         let line = Rect::from_min_size(
             Pos2::new(inner.min.x, top),
             egui::vec2(inner.width(), size::MASTER_ROW_H),

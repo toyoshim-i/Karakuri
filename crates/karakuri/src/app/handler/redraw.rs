@@ -375,6 +375,7 @@ impl App {
         let presets_dir = self.presets.as_ref().map(|p| p.dir.clone());
         let composed = {
             let Gfx {
+                window,
                 gpu,
                 renderer,
                 engine,
@@ -453,6 +454,9 @@ impl App {
                     chain_swap, present, &gpu.queue, chain, &resolve,
                 ) {
                     eprintln!("{refusal} — the chain keeps what it had");
+                }
+                if chain_swap.building().is_some() {
+                    window.request_redraw();
                 }
             }
             let textures_delta = &mut output.textures_delta;
@@ -590,7 +594,8 @@ impl App {
         self.costs.clock = gfx.engine.deck.clock();
         // Query panel repaint requests to maintain smooth UI animations.
         self.costs.declared = self.readout.view.animating(self.readout.panel.layout());
-        if live {
+        let building = gfx.engine.chain_swap.building().is_some();
+        if live || building {
             gfx.window.request_redraw();
             if let Some(projector) = &gfx.projector {
                 projector.window.request_redraw();
