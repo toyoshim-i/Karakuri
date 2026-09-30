@@ -33,6 +33,18 @@ impl<'a> Checker<'a> {
                 components,
                 span,
             } => self.check_swizzle(value, components, *span),
+            Expr::Index { value, span, .. } => {
+                let hint = match (value.as_ref(), self.uses) {
+                    (Expr::Ident { name, .. }, Some(slot)) if name == slot => format!(
+                        "name the attribute to read from that element — `{slot}[0u].position`"
+                    ),
+                    _ => "the language has no arrays: `[ ]` addresses one element of an \
+                          L3's geometry slot, as `subject[0u].position`"
+                        .to_string(),
+                };
+                self.err_hint(Stage::Contract, *span, "`[ ]` is not a value", hint);
+                None
+            }
         }
     }
 
@@ -95,10 +107,11 @@ impl<'a> Checker<'a> {
                     "add `{name}` to `consumes` — a mask reads what reaches this node, and an \
                      `emit`ted attribute has not been written when it runs"
                 ),
-                Some(BlockKind::Camera) => "a camera reads the clock and its params, not \
-                     elements — pointing one at geometry means naming a reduction or element \
-                     zero, which `docs/ir-spec.md` specifies and nothing builds yet"
-                    .to_string(),
+                Some(BlockKind::Camera) => format!(
+                    "a camera has no element of its own: declare `uses subject : Geometry`, \
+                     add `{name}` to `consumes`, and read one element by age — \
+                     `subject[0u].{name}`"
+                ),
                 Some(BlockKind::Frame) => format!(
                     "an L5 is handed a picture rather than the material that made it, so \
                      `{name}` — a property of an element — has nothing here to be a property \
@@ -272,14 +285,22 @@ impl<'a> Checker<'a> {
         }
         // A geometry slot name cannot be evaluated as an rvalue.
         if self.uses == Some(name) {
+            let hint = if self.block == Some(BlockKind::Camera) {
+                format!(
+                    "read one element by age — `{name}[0u].position` — or a reduction over \
+                     all of them — `{name}.centroid`"
+                )
+            } else {
+                format!(
+                    "read an attribute of the element it is paired with — `{name}.position` \
+                     — which is the whole of what a used geometry offers"
+                )
+            };
             self.err_hint(
                 Stage::Contract,
                 span,
                 format!("`{name}` is a geometry, not a value"),
-                format!(
-                    "read an attribute of the element it is paired with — `{name}.position` \
-                     — which is the whole of what a used geometry offers"
-                ),
+                hint,
             );
             return None;
         }
@@ -517,8 +538,23 @@ impl<'a> Checker<'a> {
         span: Span,
     ) -> Option<TExpr> {
         // Delegate slot member access (`<geometry>.<attr>` or `<camera>.<member>`).
+        if let Expr::Index {
+            value: inner,
+            index,
+            ..
+        } = value
+        {
+            if let Expr::Ident { name, .. } = inner.as_ref() {
+                if self.uses == Some(name.as_str()) {
+                    return self.check_element(name, index, components, span);
+                }
+            }
+        }
         if let Expr::Ident { name, .. } = value {
             if self.uses == Some(name.as_str()) {
+                if self.block == Some(BlockKind::Camera) {
+                    return self.check_reduction(name, components, span);
+                }
                 return self.check_far(name, components, span);
             }
             if self.camera == Some(name.as_str()) {

@@ -83,7 +83,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             for u in &proc.uses {
                 match u.ty {
                     SlotTy::Geometry => {
-                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                        errors.push(IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's").with_hint(
                             "remove it: an L1 makes geometry rather than taking any, so there \
                              is nothing for a second one to be blended with",
                         ))
@@ -300,12 +300,25 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("remove `amplify`: an L3 produces one viewpoint, not elements"),
                 );
             }
+            let mut geometries = proc.uses.iter().filter(|u| u.ty == SlotTy::Geometry);
+            let subject = geometries.next();
+            if let Some(first) = subject {
+                for u in geometries {
+                    errors.push(
+                        IrError::contract(u.span, "a camera reads one geometry").with_hint(
+                            format!(
+                                "`{}` is already declared. Reading a second source is not built",
+                                first.name
+                            ),
+                        ),
+                    );
+                }
+            }
             for u in &proc.uses {
                 match u.ty {
-                    SlotTy::Geometry => errors.push(
-                        IrError::contract(u.span, "`uses` is L2 only")
-                            .with_hint("remove it: an L3 produces a viewpoint, not geometry"),
-                    ),
+                    // Legal: a camera that follows material reads its elements
+                    // by age, or a reduction over them.
+                    SlotTy::Geometry => {}
                     // Legal: a camera that frames a shape evaluates a field,
                     // and evaluating one is not producing geometry.
                     SlotTy::Field => {}
@@ -344,14 +357,15 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         ),
                 );
             }
-            // L3 cannot currently consume element attributes.
-            if !proc.consumes.is_empty() {
+            // An L3's `consumes` lists what it reads through its geometry slot.
+            if !proc.consumes.is_empty() && subject.is_none() {
                 errors.push(
-                    IrError::contract(proc.span, "an L3 cannot consume attributes yet").with_hint(
-                        "remove `consumes`: a camera that reads geometry points at a reduction \
-                         — a centroid, or element zero — and that addressing is specified in \
-                         `docs/ir-spec.md` but not built. A camera on the clock alone works today",
-                    ),
+                    IrError::contract(proc.span, "an L3 consumes only through a geometry slot")
+                        .with_hint(
+                            "declare `uses subject : Geometry` and read `subject[0u].position`: \
+                             a camera has no element of its own, so `consumes` names what it \
+                             reads from the geometry it follows",
+                        ),
                 );
             }
             if !proc.blocks.iter().any(|b| b.kind == BlockKind::Camera) {
@@ -391,13 +405,14 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // Field procedures evaluate spatial functions and cannot bind geometry slots.
             for u in &proc.uses {
                 match u.ty {
-                    SlotTy::Geometry => {
-                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
-                            "remove it: a field is a function of space — it is handed `point` \
+                    SlotTy::Geometry => errors.push(
+                        IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's")
+                            .with_hint(
+                                "remove it: a field is a function of space — it is handed `point` \
                              and returns a distance, and there are no elements here for a \
                              second geometry to be read beside",
-                        ))
-                    }
+                            ),
+                    ),
                     // Fields cannot bind other fields to prevent recursive calls.
                     SlotTy::Field => errors.push(
                         IrError::contract(u.span, "a field cannot take a field").with_hint(
@@ -487,7 +502,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             for u in &proc.uses {
                 match u.ty {
                     SlotTy::Geometry => {
-                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                        errors.push(IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's").with_hint(
                             "remove it: a renderer draws what reaches it. Taking a second \
                              geometry is a deformation, above the renderer rather than inside it",
                         ))
@@ -596,13 +611,14 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // L5 can fold any number of texture inputs.
                     SlotTy::Texture => {}
                     // L5 processes frame textures and cannot access element-level slots.
-                    SlotTy::Geometry => {
-                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
-                            "remove it: an L5 is handed a picture, and the elements that drew \
+                    SlotTy::Geometry => errors.push(
+                        IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's")
+                            .with_hint(
+                                "remove it: an L5 is handed a picture, and the elements that drew \
                              it are no longer in front of it. Fold another picture in with \
                              `uses <name> : Texture` instead",
-                        ))
-                    }
+                            ),
+                    ),
                     SlotTy::Camera => errors.push(
                         IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
                             "remove it: the frame an L5 is handed may hold several decks\u{2019} \

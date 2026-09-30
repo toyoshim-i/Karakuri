@@ -317,6 +317,9 @@ fn emit_l4_stmts(
 fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<Attr>) {
     match &e.kind {
         TExprKind::Far(_) => unreachable!("far read in L4"),
+        TExprKind::Element { .. } | TExprKind::Reduction(_) => {
+            unreachable!("an element or reduction read belongs to an L3")
+        }
         TExprKind::Attr(a) => {
             attrs.insert(*a);
         }

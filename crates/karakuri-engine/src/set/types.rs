@@ -171,6 +171,17 @@ pub enum SetError {
          other"
     )]
     PairingNotStatic { l2: String, l1: String },
+    /// A camera's geometry slot is bound to the far source of a pairing.
+    #[error(
+        "`{node}.{slot}` is bound to `{to}`, which this Set reads only as the far side of a \
+         pairing\n\
+         hint: bind the camera to the geometry the chain runs over"
+    )]
+    SubjectIsPaired {
+        node: String,
+        slot: String,
+        to: String,
+    },
     /// Far source of a pairing L2 lacks attributes required by downstream derivations.
     #[error(
         "`{l2}` pairs with `{l1}`, and `{attr}` is derived from something `{l1}` does not \
@@ -578,6 +589,9 @@ pub struct Plan<'a> {
     pub(crate) camera_bound: Vec<(usize, usize)>,
     /// Bound Source slots: `(node_index, slot_name, l1_index)`.
     pub(crate) source_bound: Vec<(usize, String, usize)>,
+    /// Bound camera Geometry slots: `(camera_ordinal, head)`, where `head`
+    /// indexes [`Plan::heads`].
+    pub(crate) subject_bound: Vec<(usize, usize)>,
     /// Index into `l1s` of secondary geometry in a pairing configuration.
     pub(crate) far_at: Option<usize>,
     /// Indices of primary geometry chain heads.

@@ -403,6 +403,8 @@ impl Analysis<'_> {
             // Attributes, ambients, field samples, and texture fetches have unbounded dynamic ranges.
             TExprKind::Attr(_)
             | TExprKind::Far(_)
+            | TExprKind::Element { .. }
+            | TExprKind::Reduction(_)
             | TExprKind::Ambient(_)
             | TExprKind::Field { .. }
             | TExprKind::Sample { .. }

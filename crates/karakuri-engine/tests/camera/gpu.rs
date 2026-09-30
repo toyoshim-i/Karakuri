@@ -649,3 +649,54 @@ fn a_rebuild_keeps_a_ridden_camera_and_restates_the_rest() {
         "a number nobody moved came from somewhere other than the restatement"
     );
 }
+
+/// A camera that reads two elements looks from one at the other: from behind
+/// element 0 along the line to element 1, both land on the centre of the frame.
+/// The built-in camera, aimed at the origin, puts neither there.
+#[test]
+fn a_camera_looks_from_one_element_at_another() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let mut set = following(&gpu, &[PAIR], ALONG, "pair", W, H);
+    let (x, y) = centroid(&gpu, &mut set, W, H);
+    assert!(
+        (x - W as f32 / 2.0).abs() < 1.5 && (y - H as f32 / 2.0).abs() < 1.5,
+        "the two elements the camera reads should be on the view axis, and they \
+         landed at ({x}, {y})"
+    );
+}
+
+/// The centroid and the bounds are of the live elements: a camera over the
+/// centroid of a square, aimed at the middle of its bounds, sees the square
+/// centred. A reduction that read nothing would aim at the origin.
+#[test]
+fn a_camera_frames_the_centroid_and_bounds_of_its_source() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let mut set = following(&gpu, &[SQUARE], FRAMED, "square", W, H);
+    let (x, y) = centroid(&gpu, &mut set, W, H);
+    assert!(
+        (x - W as f32 / 2.0).abs() < 1.5 && (y - H as f32 / 2.0).abs() < 1.5,
+        "the square should be centred on its own centroid, and it landed at ({x}, {y})"
+    );
+}
+
+/// A camera whose source has no living element does not run its block, and
+/// starts where the built-in orbit is: the same frame as a Set with no L3.
+#[test]
+fn a_camera_over_an_empty_source_holds_the_built_in_placement() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let mut held = following(&gpu, &[MARK, NOTHING], FRAMED, "nothing", W, H);
+    let mut orbit = with_camera(&gpu, None, DOT, W, H);
+    let (hx, hy) = centroid(&gpu, &mut held, W, H);
+    let (ox, oy) = centroid(&gpu, &mut orbit, W, H);
+    assert!(
+        (hx - ox).abs() < 0.5 && (hy - oy).abs() < 0.5,
+        "an empty subject should leave the built-in placement: ({hx}, {hy}) against \
+         ({ox}, {oy})"
+    );
+}

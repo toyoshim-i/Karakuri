@@ -102,6 +102,7 @@ impl Set {
             field_bound,
             camera_bound,
             source_bound,
+            subject_bound,
             far_at,
             heads,
             source_salts,
@@ -121,11 +122,37 @@ impl Set {
                 .collect()
         };
 
+        // Sources first: a camera that reads geometry binds its source's buffers.
+        let sims: Vec<Simulation> = heads
+            .iter()
+            .enumerate()
+            .map(|(head, &at)| {
+                let (l1, capacity) = l1s[at];
+                Simulation::build(
+                    device,
+                    l1,
+                    capacity,
+                    source_salts[at],
+                    &derived_per_head[head],
+                    &bound_at(at),
+                )
+            })
+            .collect();
+
         let camera_nodes: Vec<crate::node::Camera> = cameras
             .iter()
             .enumerate()
             .map(|(k, l3)| {
-                crate::node::Camera::build(device, *l3, &bound_at(camera_range.start + k))
+                let subject = subject_bound
+                    .iter()
+                    .find(|(ordinal, _)| *ordinal == k)
+                    .map(|&(_, head)| (head, sims[head].geometry()));
+                crate::node::Camera::build(
+                    device,
+                    *l3,
+                    &bound_at(camera_range.start + k),
+                    subject.as_ref().map(|(head, g)| (*head, g)),
+                )
             })
             .collect();
 
@@ -156,12 +183,10 @@ impl Set {
 
         let renderer_count = l4s.len();
         let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
-        for (head, &at) in heads.iter().enumerate() {
+        for ((head, &at), sim) in heads.iter().enumerate().zip(sims) {
             let (l1, capacity) = l1s[at];
             let salt = source_salts[at];
             let derived = &derived_per_head[head];
-
-            let sim = Simulation::build(device, l1, capacity, salt, derived, &bound_at(at));
 
             let paired: Option<(Vec<karakuri_ir::Attr>, Simulation)> = match far_at {
                 None => None,

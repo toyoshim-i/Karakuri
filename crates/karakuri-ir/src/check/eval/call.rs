@@ -539,6 +539,112 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(attr.ty(), span, TExprKind::Far(attr)))
     }
 
+    /// Validates an L3's element read (`<slot>[index].<attr>`) on its geometry slot.
+    pub(super) fn check_element(
+        &mut self,
+        slot: &str,
+        index: &Expr,
+        name: &str,
+        span: Span,
+    ) -> Option<TExpr> {
+        if self.block != Some(BlockKind::Camera) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{slot}[…]` addresses an element from a `camera` block, and nowhere else"),
+                format!(
+                    "a `deform` reads the element paired with its own — `{slot}.{name}` — \
+                     because it runs once per element and a camera runs over none"
+                ),
+            );
+            return None;
+        }
+        let i = self.check_expr(index);
+        let Some(attr) = Attr::from_name(name) else {
+            let hint = if Reduction::from_name(name).is_some() {
+                format!("a reduction is over every element: `{slot}.{name}`, with no index")
+            } else {
+                format!(
+                    "an element has the attributes its source emits — `{slot}[0u].position`, \
+                     `{slot}[0u].tint` — and nothing else"
+                )
+            };
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{slot}[…].{name}` is not an attribute"),
+                hint,
+            );
+            return None;
+        };
+        let i = i?;
+        if i.ty != Ty::Uint {
+            self.err_hint(
+                Stage::Type,
+                i.span,
+                format!("an element index is `uint`, not `{}`", i.ty.name()),
+                "write a `uint` — `0u`, or `uint(k)` for a computed one".to_string(),
+            );
+            return None;
+        }
+        if !self.consumes.contains(&attr) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{slot}[…].{name}` is not consumed"),
+                format!(
+                    "add `{name}` to `consumes`: an L3 declares the attributes it reads from \
+                     its geometry, and the Set checks its source emits them"
+                ),
+            );
+            return None;
+        }
+        Some(TExpr::new(
+            attr.ty(),
+            span,
+            TExprKind::Element {
+                attr,
+                index: Box::new(i),
+            },
+        ))
+    }
+
+    /// Validates an L3's reduction read (`<slot>.centroid`, `.bounds_min`, `.bounds_max`).
+    pub(super) fn check_reduction(&mut self, slot: &str, name: &str, span: Span) -> Option<TExpr> {
+        let Some(reduction) = Reduction::from_name(name) else {
+            let hint = if Attr::from_name(name).is_some() {
+                format!(
+                    "a camera has no element of its own to pair with: read one by age — \
+                     `{slot}[0u].{name}`"
+                )
+            } else {
+                format!(
+                    "a geometry offers one element by age — `{slot}[0u].position` — and three \
+                     reductions over all of them: `{slot}.centroid`, `{slot}.bounds_min`, \
+                     `{slot}.bounds_max`"
+                )
+            };
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{slot}.{name}` is not a reduction"),
+                hint,
+            );
+            return None;
+        };
+        if !self.consumes.contains(&Attr::Position) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{slot}.{name}` reads `position`, which is not consumed"),
+                "add `position` to `consumes`: the reductions are over the elements' positions"
+                    .to_string(),
+            );
+            return None;
+        }
+        Some(TExpr::new(Ty::Vec3, span, TExprKind::Reduction(reduction)))
+    }
+
     /// Validates camera member access (`<slot>.clip`, `<slot>.eye`, `<slot>.ray`).
     pub(super) fn check_camera_member(
         &mut self,

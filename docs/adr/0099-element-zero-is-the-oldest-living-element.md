@@ -52,3 +52,8 @@ arbitrary.
 ## Evidence
 
 Session 2026-08-16T04:57Z–05:00Z.
+
+## Later
+
+Built by [ADR-0379](0379-an-l3-reads-its-geometry-by-age-rank-and-by-reduction.md), which extends
+index 0 to any age rank, `subject[i]`, and builds the centroid and bounds.

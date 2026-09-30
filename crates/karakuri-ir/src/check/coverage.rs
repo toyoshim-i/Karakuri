@@ -47,6 +47,10 @@ pub(crate) fn accumulates(stmts: &[TStmt], carried: &HashSet<Attr>) -> bool {
 pub(crate) fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
     match &e.kind {
         TExprKind::Attr(a) | TExprKind::Far(a) => carried.contains(a),
+        TExprKind::Element { attr, index } => {
+            carried.contains(attr) || reads_carried(index, carried)
+        }
+        TExprKind::Reduction(_) => carried.contains(&Attr::Position),
         TExprKind::Lit(_)
         | TExprKind::Local(_)
         | TExprKind::Param(_)
@@ -86,8 +90,10 @@ pub(crate) fn reads_beats(blocks: &[TBlock]) -> bool {
             | TExprKind::Param(_)
             | TExprKind::Attr(_)
             | TExprKind::Far(_)
+            | TExprKind::Reduction(_)
             | TExprKind::Source { .. }
             | TExprKind::Ambient(_) => false,
+            TExprKind::Element { index, .. } => in_expr(index),
             TExprKind::Unary { value, .. } => in_expr(value),
             TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
             TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {

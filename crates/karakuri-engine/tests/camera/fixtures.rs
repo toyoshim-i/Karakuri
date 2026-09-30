@@ -322,3 +322,127 @@ pub fn column(px: &[f32], w: u32, channel: usize) -> f32 {
     assert!(weight > 0.0, "channel {channel} drew nothing to measure");
     (sx / weight) as f32
 }
+
+/// Three elements: 0 and 1 on a line that looks down neither axis, and 2 far
+/// behind whatever looks from 0 toward 1.
+pub const PAIR: &str = r#"
+proc pair {
+  kind     L1
+  topology points
+  capacity [3, 3] = 3
+
+  emit position
+
+  element {
+    var p = vec3(40.0, -20.0, 60.0);
+    if seed == 0u { p = vec3(7.0, 2.0, -3.0); }
+    if seed == 1u { p = vec3(4.0, 3.0, -9.0); }
+    position = p;
+  }
+}
+"#;
+
+/// Four elements on a unit square centred at (5, -3, 2), facing +z.
+pub const SQUARE: &str = r#"
+proc square {
+  kind     L1
+  topology points
+  capacity [4, 4] = 4
+
+  emit position
+
+  element {
+    let a = float(seed) * 1.5707963;
+    position = vec3(5.0 + cos(a), -3.0 + sin(a), 2.0);
+  }
+}
+"#;
+
+/// A source that never spawns, so its live range stays empty.
+pub const NOTHING: &str = r#"
+proc nothing {
+  kind     L1
+  topology points
+  capacity [4, 4] = 4
+
+  param spawn_rate : float [0.0, 100.0] = 0.0
+
+  emit position
+
+  spawn {
+    position = vec3(0.0);
+  }
+
+  element {
+    position = position;
+  }
+}
+"#;
+
+/// Looks along the line from element 0 to element 1, from behind element 0.
+pub const ALONG: &str = r#"
+proc along {
+  kind L3
+  uses subject : Geometry
+  consumes position
+
+  camera {
+    let a = subject[0u].position;
+    let b = subject[1u].position;
+    eye    = a - (b - a);
+    target = b;
+  }
+}
+"#;
+
+/// Looks down -z at the centroid, aimed at the middle of the bounds.
+pub const FRAMED: &str = r#"
+proc framed {
+  kind L3
+  uses subject : Geometry
+  consumes position
+
+  camera {
+    eye    = subject.centroid + vec3(0.0, 0.0, 6.0);
+    target = (subject.bounds_min + subject.bounds_max) * 0.5;
+  }
+}
+"#;
+
+/// A Set of these sources, one camera whose `subject` is bound to `to`, and
+/// `DOT` over every source.
+pub fn following(gpu: &Gpu, l1s: &[&str], l3: &str, to: &str, w: u32, h: u32) -> Set {
+    let l1s: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
+    let capacities: Vec<(&Checked, u32)> = l1s
+        .iter()
+        .map(|c| (c, c.capacity.as_ref().map_or(1, |cap| cap.default)))
+        .collect();
+    let l3 = compile(l3);
+    let l4 = compile(DOT);
+    let edges = [karakuri_engine::set::Edge {
+        node: l3.name.clone(),
+        slot: "subject".into(),
+        to: to.to_string(),
+    }];
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &capacities,
+        &[],
+        &[&l3],
+        &[],
+        &[&l4],
+        &[],
+        Layering::Overdraw,
+        7,
+        &[],
+        karakuri_engine::set::Wiring {
+            edges: &edges,
+            ..Default::default()
+        },
+    )
+    .expect("sources, a camera that reads one, and one L4");
+    set.resize(&gpu.device, w, h);
+    set.aim_camera(pinned());
+    set
+}

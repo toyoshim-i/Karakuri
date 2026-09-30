@@ -69,13 +69,13 @@ fn sweep() -> Checked {
 
 #[test]
 fn a_camera_shader_parses_and_validates() {
-    validate(&karakuri_codegen::generate_l3(&sweep(), &[]).source);
+    validate(&karakuri_codegen::generate_l3(&sweep(), &[], None).source);
 }
 
 /// Tests that unassigned camera outputs receive standard defaults in the emitted WGSL.
 #[test]
 fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
-    let src = karakuri_codegen::generate_l3(&sweep(), &[]).source;
+    let src = karakuri_codegen::generate_l3(&sweep(), &[], None).source;
     for field in ["eye", "look_at", "up", "fov_y", "near", "far"] {
         assert!(
             src.contains(&format!("cam.{field}")),
@@ -112,7 +112,7 @@ fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
 /// Single-invocation camera entry point generating view and projection parameters.
 #[test]
 fn a_camera_shader_dispatches_one_invocation_over_nothing() {
-    let src = karakuri_codegen::generate_l3(&sweep(), &[]).source;
+    let src = karakuri_codegen::generate_l3(&sweep(), &[], None).source;
     assert!(src.contains("@workgroup_size(1)"), "{src}");
     assert!(
         !src.contains("global_invocation_id"),
@@ -127,7 +127,7 @@ fn a_camera_shader_dispatches_one_invocation_over_nothing() {
 /// The uniform carries the clock and the params, and nothing per element.
 #[test]
 fn a_camera_uniform_carries_the_clock_and_its_params() {
-    let shader = karakuri_codegen::generate_l3(&sweep(), &[]);
+    let shader = karakuri_codegen::generate_l3(&sweep(), &[], None);
     let names: Vec<&str> = shader
         .uniform_layout
         .fields
@@ -411,5 +411,92 @@ proc tinted {
         !shader.source.contains("elements[elem].copy"),
         "{}",
         shader.source
+    );
+}
+
+// ---------------------------------------------------------------------------
+// L3 — a camera that reads geometry
+// ---------------------------------------------------------------------------
+
+fn compiled(src: &str) -> Checked {
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    karakuri_ir::check::check(&parsed).expect("checks")
+}
+
+/// A source layout carrying `position`, `tint`, and `age` synthesised at the
+/// read site, so both read paths are exercised.
+fn subject_layout() -> karakuri_ir::layout::ElementLayout {
+    karakuri_ir::layout::generate_element_layout(
+        &[Attr::Position, Attr::Tint],
+        karakuri_ir::layout::Synthetic::NONE,
+        &[Attr::Age],
+    )
+}
+
+const FOLLOWS: &str = "
+proc follows {
+  kind L3
+  uses subject : Geometry
+  consumes position, tint, age
+
+  param lead : float [0.0, 8.0] = 2.0
+
+  camera {
+    let k = uint(lead);
+    eye    = subject[0u].position + subject[k].tint * subject[1u].age;
+    target = mix(subject[k + 1u].position, subject.centroid, vec3(0.5))
+      + (subject.bounds_max - subject.bounds_min) * 0.0;
+  }
+}
+";
+
+const POINTS_AT: &str = "
+proc points_at {
+  kind L3
+  uses subject : Geometry
+  consumes position
+
+  camera {
+    eye    = subject[0u].position + vec3(0.0, 0.0, 5.0);
+    target = subject[1u].position;
+  }
+}
+";
+
+#[test]
+fn a_camera_that_reads_elements_and_reductions_validates() {
+    let layout = subject_layout();
+    let shader = karakuri_codegen::generate_l3(&compiled(FOLLOWS), &[], Some(&layout));
+    assert!(shader.reduces);
+    validate(&shader.source);
+}
+
+#[test]
+fn a_camera_that_reads_only_elements_has_no_reduce_entry_point() {
+    let layout = subject_layout();
+    let shader = karakuri_codegen::generate_l3(&compiled(POINTS_AT), &[], Some(&layout));
+    assert!(!shader.reduces);
+    assert!(!shader.source.contains("fn reduce("), "{}", shader.source);
+    validate(&shader.source);
+}
+
+/// The camera block is skipped while the source has no live range, so the
+/// state buffer keeps the previous frame's camera; and an index is clamped to
+/// the youngest living element.
+#[test]
+fn a_camera_that_reads_geometry_holds_on_an_empty_range_and_clamps_its_index() {
+    let layout = subject_layout();
+    let src = karakuri_codegen::generate_l3(&compiled(POINTS_AT), &[], Some(&layout)).source;
+    let hold = src
+        .find("subject_counts.range == 0u")
+        .expect("an empty-range guard");
+    let write = src.find("cam.eye").expect("the state write");
+    assert!(
+        hold < write,
+        "the guard must precede the state write:\n{src}"
+    );
+    assert!(
+        src.contains("subject[min(0u, _subject_last)].position"),
+        "{src}"
     );
 }

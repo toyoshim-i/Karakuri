@@ -104,7 +104,7 @@ proc look {
 }
 "#,
     );
-    validate(&karakuri_codegen::generate_l3(&l3, &[("shape", &field)]).source);
+    validate(&karakuri_codegen::generate_l3(&l3, &[("shape", &field)], None).source);
 
     // L4 with a vertex block — per element, which is a different generator from
     // the fullscreen one below.

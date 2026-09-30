@@ -31,6 +31,9 @@ pub mod group {
     /// Reuses number 1 on the same terms as [`ATTRS`] — a module is one kind
     /// of procedure, so the two can never both be bound.
     pub const STATE: u32 = 1;
+    /// L3 only, where it declares a geometry slot: the bound source's current
+    /// element and alive buffers, its counts, and the reduction result.
+    pub const SUBJECT: u32 = 2;
 }
 
 /// Binding numbers, per group. [`group::PREV`], [`group::NEXT`] and
@@ -44,6 +47,12 @@ pub mod binding {
     pub const ALIVE: u32 = 1;
     /// Binding index for far geometry input storage buffer in an L2 node.
     pub const FAR: u32 = 2;
+    /// [`group::SUBJECT`](super::group::SUBJECT): the source's
+    /// [`super::counts`] buffer, read-only storage.
+    pub const SUBJECT_COUNTS: u32 = 2;
+    /// [`group::SUBJECT`](super::group::SUBJECT): the [`super::reduced`]
+    /// buffer, read-write storage.
+    pub const REDUCED: u32 = 3;
 
     /// A uniform buffer: `Uniforms` in [`group::UNIFORMS`], `StepArgs` in
     /// [`group::STEP`](super::group::STEP).
@@ -90,6 +99,25 @@ struct Counts {
     _pad0: u32,
     _pad1: u32,
     _pad2: u32,
+};
+";
+}
+
+/// The result of an L3's reduction pass over its geometry slot's live
+/// elements, written by the `reduce` entry point and read by `produce`.
+pub mod reduced {
+    /// Byte size of `Reduced`.
+    pub const SIZE: u64 = 48;
+
+    /// The WGSL declaration.
+    pub const WGSL: &str = "\
+struct Reduced {
+    centroid: vec3<f32>,
+    _pad0: f32,
+    bounds_min: vec3<f32>,
+    _pad1: f32,
+    bounds_max: vec3<f32>,
+    _pad2: f32,
 };
 ";
 }
