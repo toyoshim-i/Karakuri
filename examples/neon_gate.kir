@@ -1,0 +1,83 @@
+// A VJ tunnel of neon polygon frames rushing toward the viewer over radial spokes.
+// Each frame is an n-sided outline in a hard colour that steps around the wheel with
+// depth; the whole tunnel snaps a fixed angle on every beat, the background floods
+// with magenta on the downbeat, and a solid core pulses at the centre. Draws the
+// whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --set examples/step_grid.kir,examples/neon_gate.kir,examples/rgb_shift.kir --capacity 256
+
+proc neon_gate {
+  kind  L4
+  blend additive
+
+  // Sides of every frame: 3 is a triangle, 4 a square, 6 a hexagon.
+  param sides  : float [3.0, 8.0] = 6.0
+
+  // Rush speed, in frames passing per second.
+  param rush   : float [0.0, 3.0] = 0.8
+
+  // Angle the tunnel snaps through on each beat, in radians.
+  param snap   : float [0.0, 1.5] = 0.5
+
+  // Line width relative to the frame's distance.
+  param line   : float [0.005, 0.06] = 0.02
+
+  // Hit strength: flashes the background and thickens the lines. Bind to an onset.
+  param kick   : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let r  = length(p);
+    let an = atan2(p.y, p.x);
+    let bt = max(beats, 0.0);
+    let fb = fract(bt);
+    let hit = max(exp(-fb * 6.0), kick);
+
+    // The tunnel turns by a fixed step on each beat, eased over the first fifth.
+    let turn = (floor(bt) + smoothstep(0.0, 0.2, fb)) * snap;
+
+    let n    = floor(sides);
+    let seg  = 6.2831853 / n;
+    var c    = vec3(0.0);
+
+    // Background flood on the beat.
+    c += srgb_to_linear(vec3(0.9, 0.05, 0.5)) * 0.12 * hit;
+
+    // Spokes.
+    let sa = an - turn;
+    let sp = step(fract(sa / seg + 0.5), 0.02) * step(0.06, r);
+    c += srgb_to_linear(vec3(0.1, 0.6, 1.0)) * sp * exp(-r * 0.6) * 0.8;
+
+    // Frames: twelve rings whose depth cycles once every twelfth of a second-unit.
+    for k in 0..12 {
+      let fk  = float(k);
+      let u   = fract(fk / 12.0 + t * rush * 0.083);
+      let rad = 0.03 + 2.6 * u * u;
+      let rot = turn * (1.0 + 0.15 * fk) + fk * 0.11;
+      let aa  = mod(an - rot, seg) - seg * 0.5;
+      let dp  = r * cos(aa) - rad * cos(seg * 0.5);
+      let w   = (line + 0.03 * hit) * (0.2 + rad);
+      let on  = step(abs(dp), w);
+      let hue = floor(fract(fk * 0.17 + bt * 0.125) * 6.0) / 6.0;
+      let col = hsv_to_rgb(vec3(hue, 1.0, 1.0));
+      let fade = smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.85, 1.0, u));
+      c = max(c, srgb_to_linear(col) * on * fade);
+    }
+
+    // Core: a solid polygon that pulses and inverts on the downbeat.
+    let core_r = 0.05 + 0.08 * hit;
+    let ca     = mod(an - turn, seg) - seg * 0.5;
+    let cd     = r * cos(ca) - core_r * cos(seg * 0.5);
+    let core   = step(cd, 0.0);
+    c = mix(c, vec3(1.0), vec3(core));
+    c = mix(c, vec3(0.0), vec3(step(abs(cd + core_r * 0.5), 0.008) * core));
+
+    color = vec4(c, 1.0);
+  }
+}

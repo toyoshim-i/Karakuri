@@ -1,0 +1,155 @@
+// The 1985 idea of a computer-generated world: a wire-edged checker plane running to a
+// horizon under a sky of hard diagonal bands, three wireframe cubes floating at
+// different distances and turning in steps, and a seven-segment countdown along the top
+// running from twenty minutes to zero. The whole scene is drawn at twelve frames a second
+// and time stutters on one moment now and then. Draws the whole frame and reads no
+// geometry.
+
+proc n23_cg_world {
+  kind  L4
+  blend additive
+
+  // Speed of the plane running toward the viewer.
+  param run     : float [0.0, 4.0] = 1.0
+
+  // How often time stutters: 0 never, 1 nearly always.
+  param stutter : float [0.0, 1.0] = 0.4
+
+  // Length of the repeated window while stuttering, in seconds.
+  param window  : float [0.04, 0.4] = 0.12
+  // Start of this piece's eight-second window inside a 32-second loop, in seconds;
+  // negative runs it all the time.
+  param start   : float [-1.0, 24.0] = -1.0
+  // Hit strength: forces a stutter and pushes activity up. Bind to an onset.
+  param kick    : float [0.0, 1.0] = 0.0
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let red  = srgb_to_linear(vec3(1.0, 0.1, 0.1));
+    let org  = srgb_to_linear(vec3(1.0, 0.6, 0.1));
+    let yel  = srgb_to_linear(vec3(1.0, 0.95, 0.3));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let blu  = srgb_to_linear(vec3(0.1, 0.2, 0.9));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    // Eight-second window inside a 32-second loop; a negative start disables it.
+    let lt0  = mod(t, 32.0) - start;
+    let lt   = mix(t, lt0, step(0.0, start));
+    let win  = mix(1.0, step(0.0, lt0) * step(lt0, 8.0), step(0.0, start));
+    let fade = mix(1.0, clamp(min(lt0, 8.0 - lt0) / 0.15, 0.0, 1.0), step(0.0, start)) * win;
+    // Stutter clock: every 1.7 seconds a gate decides whether the next 0.6 seconds
+    // loop over one short window, so the picture repeats itself on one moment.
+    let seg  = floor(t / 1.7);
+    let ph   = t - seg * 1.7;
+    let gate = max(step(1.0 - stutter * 0.6, hash1(uint(seg) * 977u + 3u)), step(0.5, kick));
+    let on   = gate * step(ph, 0.6);
+    let anchor = seg * 1.7 + 0.15 + hash1(uint(seg) * 31u + 5u) * 0.3;
+    let tt   = mix(t, anchor + mod(ph, window), on);
+
+    let st  = floor(tt * 12.0) / 12.0;
+
+    // Sky: hard diagonal bands stepping through orange, magenta and blue.
+    let dg  = (p.x * 0.4 + p.y) * 3.0 - st * 0.5;
+    let bi  = floor(dg);
+    let hb  = mod(bi, 3.0);
+    var c   = (org * 0.7 * (1.0 - step(0.5, hb)) + mag * 0.55 * (step(0.5, hb) - step(1.5, hb)) + blu * 0.7 * step(1.5, hb)) * 0.55;
+
+    // Floor: checker plane below the horizon, lines only, with a ring of fog toward the
+    // horizon.
+    let hz  = -0.05;
+    let dy  = hz - p.y;
+    let fl  = step(0.0, dy);
+    let z   = 1.0 / max(dy, 0.0001);
+    let u   = p.x * z * 0.9;
+    let v   = z * 0.9 + st * run * 2.0;
+    let lnf = max(step(fract(u), 0.03 + 0.01 * z), step(fract(v), 0.05));
+    let chk = step(0.5, fract(floor(u) * 0.5 + floor(v) * 0.5));
+    let fog = exp(-z * 0.22);
+    c = mix(c, vec3(0.01, 0.01, 0.06), vec3(fl));
+    c = mix(c, blu * 0.35 * chk, vec3(fl * fog));
+    c = mix(c, cyan, vec3(fl * lnf * fog));
+
+    // Three cubes: one shape, projected once, drawn at three centres and scales.
+    var edge = 0.0;
+    let spin = st * 0.9;
+    let ex   = rot_x(rot_y(vec3(1.0, 0.0, 0.0), spin), 0.5);
+    let ey   = rot_x(rot_y(vec3(0.0, 1.0, 0.0), spin), 0.5);
+    let ez   = rot_x(rot_y(vec3(0.0, 0.0, 1.0), spin), 0.5);
+    let bob  = 0.04 * sin(st * 2.0);
+    let pc1  = (p - vec2(-0.85, 0.32 + bob)) / 0.28;
+    let pc2  = (p - vec2(0.75, 0.42 - bob)) / 0.2;
+    let pc3  = (p - vec2(0.05, 0.62 + bob)) / 0.13;
+    for ax in 0..3 {
+      let fa = float(ax);
+      let w0 = 1.0 - step(0.5, fa);
+      let w1 = step(0.5, fa) - step(1.5, fa);
+      let w2 = step(1.5, fa);
+      for k in 0..4 {
+        let fk = float(k);
+        let s1 = mod(fk, 2.0) * 2.0 - 1.0;
+        let s2 = floor(fk * 0.5) * 2.0 - 1.0;
+        let a3 = vec3(-1.0, s1, s2) * w0 + vec3(s1, -1.0, s2) * w1 + vec3(s1, s2, -1.0) * w2;
+        let b3 = vec3(1.0, s1, s2) * w0 + vec3(s1, 1.0, s2) * w1 + vec3(s1, s2, 1.0) * w2;
+        let ra = ex * a3.x + ey * a3.y + ez * a3.z;
+        let rb = ex * b3.x + ey * b3.y + ez * b3.z;
+        let qa = ra.xy / (3.6 - ra.z) * 0.9;
+        let qb = rb.xy / (3.6 - rb.z) * 0.9;
+        let ba = qb - qa;
+        let ib = 1.0 / dot(ba, ba);
+        let h1 = clamp(dot(pc1 - qa, ba) * ib, 0.0, 1.0);
+        let h2 = clamp(dot(pc2 - qa, ba) * ib, 0.0, 1.0);
+        let h3 = clamp(dot(pc3 - qa, ba) * ib, 0.0, 1.0);
+        edge = max(edge, max(step(length(pc1 - qa - ba * h1), 0.03),
+                     max(step(length(pc2 - qa - ba * h2), 0.04), step(length(pc3 - qa - ba * h3), 0.06))));
+      }
+    }
+    c = mix(c, org, vec3(edge));
+
+    // Countdown from 20:00: minutes and seconds as four digits, and a colon.
+    let left = max(1200.0 - floor(mod(t, 1200.0)), 0.0);
+    let mn   = floor(left / 60.0);
+    let sc   = left - mn * 60.0;
+    let fd   = clamp(floor((p.x + 0.48) / 0.2), 0.0, 3.0);
+    let dv   = mod(floor(mix(mn, sc, step(1.5, fd)) / mix(10.0, 1.0, mod(fd, 2.0))), 10.0);
+    let m    = 63.0 * (1.0 - step(0.5, abs(dv - 0.0)))
+           + 6.0 * (1.0 - step(0.5, abs(dv - 1.0)))
+           + 91.0 * (1.0 - step(0.5, abs(dv - 2.0)))
+           + 79.0 * (1.0 - step(0.5, abs(dv - 3.0)))
+           + 102.0 * (1.0 - step(0.5, abs(dv - 4.0)))
+           + 109.0 * (1.0 - step(0.5, abs(dv - 5.0)))
+           + 125.0 * (1.0 - step(0.5, abs(dv - 6.0)))
+           + 7.0 * (1.0 - step(0.5, abs(dv - 7.0)))
+           + 127.0 * (1.0 - step(0.5, abs(dv - 8.0)))
+           + 111.0 * (1.0 - step(0.5, abs(dv - 9.0)));
+    let dl   = p - vec2(-0.48 + fd * 0.2 + step(1.5, fd) * 0.08, 0.72);
+    let cd_hx = step(0.012, dl.x) * step(dl.x, 0.13 - 0.012);
+    let cd_ha = cd_hx * step(abs(dl.y - 0.2), 0.012);
+    let cd_hg = cd_hx * step(abs(dl.y - 0.2 * 0.5), 0.012);
+    let cd_hd = cd_hx * step(abs(dl.y), 0.012);
+    let cd_vr = step(abs(dl.x - 0.13), 0.012);
+    let cd_vl = step(abs(dl.x), 0.012);
+    let cd_vu = step(0.2 * 0.5 + 0.012, dl.y) * step(dl.y, 0.2 - 0.012);
+    let cd_vw = step(0.012, dl.y) * step(dl.y, 0.2 * 0.5 - 0.012);
+    let cd_a = step(0.5, mod(floor(m / 1.0), 2.0));
+    let cd_b = step(0.5, mod(floor(m / 2.0), 2.0));
+    let cd_c = step(0.5, mod(floor(m / 4.0), 2.0));
+    let cd_d = step(0.5, mod(floor(m / 8.0), 2.0));
+    let cd_e = step(0.5, mod(floor(m / 16.0), 2.0));
+    let cd_f = step(0.5, mod(floor(m / 32.0), 2.0));
+    let cd_g = step(0.5, mod(floor(m / 64.0), 2.0));
+    let cd_hit = max(max(cd_a * cd_ha, cd_g * cd_hg), max(cd_d * cd_hd, max(max(cd_b * cd_vr * cd_vu, cd_c * cd_vr * cd_vw), max(cd_e * cd_vl * cd_vw, cd_f * cd_vl * cd_vu))));
+
+    let colon = step(abs(p.x - 0.0), 0.012) * (step(abs(p.y - 0.78), 0.02) + step(abs(p.y - 0.86), 0.02)) * step(0.5, fract(t));
+    c = mix(c, vec3(0.0), vec3(step(abs(p.x), 0.66) * step(abs(p.y - 0.82), 0.16)));
+    c += yel * (cd_hit * step(-0.48, p.x) * step(p.x, 0.56) + colon);
+
+    color = vec4(c * fade, 1.0);
+
+  }
+}

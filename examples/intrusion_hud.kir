@@ -1,0 +1,99 @@
+// The frame around the intrusion story: corner brackets, a header of four scene tabs
+// whose accent colour changes with the scene, a two-digit seven-segment second counter
+// for the current scene and a thin bar along the bottom that fills over the 32-second
+// loop. Draws the whole frame and reads no geometry. Part of `intrusion_story.kset`.
+
+proc intrusion_hud {
+  kind  L4
+  blend additive
+
+  // Overall brightness of the frame.
+  param level : float [0.0, 1.0] = 0.8
+
+  fragment {
+    // Isotropic frame coordinates: y runs -1..1 bottom to top. Assumes the
+    // built-in 60 degree field of view.
+    let fw = normalize(-eye);
+    let rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up = cross(rt, fw);
+    let p  = vec2(dot(ray, rt), dot(ray, up)) / (dot(ray, fw) * 0.57735027);
+
+    let ls   = mod(t, 32.0);
+    let scn  = floor(ls / 8.0);
+    let sec  = floor(ls - scn * 8.0);
+    let cyan = srgb_to_linear(vec3(0.1, 0.9, 1.0));
+    let mag  = srgb_to_linear(vec3(1.0, 0.15, 0.55));
+    let grn  = srgb_to_linear(vec3(0.2, 1.0, 0.4));
+    let dim  = srgb_to_linear(vec3(0.05, 0.25, 0.45));
+    let white = vec3(1.0);
+
+    // Accent by scene: cyan, magenta, green, white.
+    let acc = cyan * (1.0 - step(0.5, scn))
+            + mag * (step(0.5, scn) - step(1.5, scn))
+            + grn * (step(1.5, scn) - step(2.5, scn))
+            + white * step(2.5, scn);
+
+    var c = vec3(0.0);
+
+    // Corner brackets.
+    let ax = abs(p.x);
+    let ay = abs(p.y);
+    let br = max(step(abs(ax - 1.72), 0.006) * step(ay, 0.94) * step(0.78, ay),
+                 step(abs(ay - 0.94), 0.006) * step(ax, 1.74) * step(1.54, ax));
+    c += acc * br;
+
+    // Four tabs across the top; the current one is filled, past ones outlined.
+    for k in 0..4 {
+      let fk  = float(k);
+      let q   = vec2(p.x - (-1.05 + fk * 0.4), p.y - 0.86);
+      let inb = step(abs(q.x), 0.17) * step(abs(q.y), 0.035);
+      let ol  = inb * (1.0 - step(abs(q.x), 0.16) * step(abs(q.y), 0.025));
+      let cur = step(abs(fk - scn), 0.5);
+      let past = step(fk, scn - 0.5);
+      let gl  = step(0.5, hash1(uint(floor((q.x + 0.17) / 0.03)) * 71u + uint(k) * 13u)) * step(abs(q.y), 0.014) * step(abs(q.x), 0.15);
+      c += mix(dim, acc, vec3(cur)) * (ol + inb * cur * 0.0);
+      c += acc * cur * inb * (1.0 - step(abs(q.y), 0.015) * step(abs(q.x), 0.15));
+      c += mix(dim, acc, vec3(past)) * gl * (1.0 - cur) * (0.4 + 0.6 * past);
+      c += vec3(0.0, 0.0, 0.0) * gl;
+    }
+
+    // Second counter: two seven-segment digits at the top right.
+    for d in 0..2 {
+      let fd = float(d);
+      let dv = mod(floor(sec / pow(10.0, 1.0 - fd)), 10.0);
+      let m  = 63.0 * (1.0 - step(0.5, abs(dv)))
+             + 6.0 * (1.0 - step(0.5, abs(dv - 1.0)))
+             + 91.0 * (1.0 - step(0.5, abs(dv - 2.0)))
+             + 79.0 * (1.0 - step(0.5, abs(dv - 3.0)))
+             + 102.0 * (1.0 - step(0.5, abs(dv - 4.0)))
+             + 109.0 * (1.0 - step(0.5, abs(dv - 5.0)))
+             + 125.0 * (1.0 - step(0.5, abs(dv - 6.0)))
+             + 7.0 * (1.0 - step(0.5, abs(dv - 7.0)));
+      let dl = p - vec2(1.28 + fd * 0.13, 0.8);
+      let bit_a = step(0.5, mod(floor(m / 1.0), 2.0));
+      let bit_b = step(0.5, mod(floor(m / 2.0), 2.0));
+      let bit_c = step(0.5, mod(floor(m / 4.0), 2.0));
+      let bit_d = step(0.5, mod(floor(m / 8.0), 2.0));
+      let bit_e = step(0.5, mod(floor(m / 16.0), 2.0));
+      let bit_f = step(0.5, mod(floor(m / 32.0), 2.0));
+      let bit_g = step(0.5, mod(floor(m / 64.0), 2.0));
+      let hx = step(abs(dl.x - 0.045), 0.035);
+      let ha = hx * step(abs(dl.y - 0.12), 0.007);
+      let hg = hx * step(abs(dl.y - 0.06), 0.007);
+      let hd = hx * step(abs(dl.y), 0.007);
+      let vr = step(abs(dl.x - 0.09), 0.007);
+      let vl = step(abs(dl.x), 0.007);
+      let vu = step(abs(dl.y - 0.09), 0.03);
+      let vw = step(abs(dl.y - 0.03), 0.03);
+      c += acc * max(max(bit_a * ha, bit_g * hg), max(bit_d * hd, max(max(bit_b * vr * vu, bit_c * vr * vw), max(bit_e * vl * vw, bit_f * vl * vu))));
+    }
+
+    // Loop bar along the bottom.
+    let bx  = (p.x + 1.62) / 3.24;
+    let bar = step(0.0, bx) * step(bx, 1.0) * step(abs(p.y + 0.94), 0.008);
+    c += mix(dim, acc, vec3(step(bx, ls / 32.0))) * bar;
+    c += acc * step(abs(bx - ls / 32.0), 0.002) * step(abs(p.y + 0.94), 0.03);
+
+    color = vec4(c * level, 1.0);
+  }
+}
