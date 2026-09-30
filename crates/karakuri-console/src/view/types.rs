@@ -34,6 +34,8 @@ pub struct View {
     pub transport: Option<Transport>,
     /// Active arrangement name, stored presets, and dropdown menu state for the transport row.
     pub arrangement: Arrangement,
+    /// MCP server configuration and state for the transport row.
+    pub mcp_server: McpServer,
     /// Audio input device selection and card state, or `None` if unconfigured (ADR-0156).
     pub audio: Option<AudioIn>,
     /// Indicates whether MIDI learn mode is armed, illuminating the transport learn pill (ADR-0336, Rule 4).

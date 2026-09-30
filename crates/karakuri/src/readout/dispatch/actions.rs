@@ -123,6 +123,46 @@ impl Readout {
         }
     }
 
+    /// Dispatches MCP server configuration interactions.
+    pub(crate) fn mcp_configured(&mut self, ask: view::McpAsk) -> Acted {
+        match ask {
+            view::McpAsk::ToggleMenu => {
+                if self.view.mcp_server.open() {
+                    self.view.mcp_server.shut();
+                } else {
+                    self.view.mcp_server.opened();
+                }
+                Acted::Nothing
+            }
+            view::McpAsk::Shut => {
+                self.view.mcp_server.shut();
+                Acted::Nothing
+            }
+            view::McpAsk::EditAddr => {
+                self.view.mcp_server.start_editing();
+                Acted::Nothing
+            }
+            view::McpAsk::ToggleRunning => {
+                self.view.mcp_server.shut();
+                if self.view.mcp_server.running {
+                    Acted::McpServer(McpServerAct::Stop)
+                } else {
+                    Acted::McpServer(McpServerAct::Start(self.view.mcp_server.addr.clone()))
+                }
+            }
+            view::McpAsk::SetAddr(addr) => {
+                self.view.mcp_server.addr = addr.clone();
+                self.view.mcp_server.shut();
+                println!("mcp: configured address:port `{addr}`");
+                if self.view.mcp_server.running {
+                    Acted::McpServer(McpServerAct::Restart(addr))
+                } else {
+                    Acted::Nothing
+                }
+            }
+        }
+    }
+
     /// Dispatches input wiring card interactions, toggling the dropdown card or emitting wire operations (ADR-0329).
     pub(crate) fn wired(&mut self, ask: Wiring) -> Acted {
         match ask {
@@ -325,7 +365,36 @@ impl Readout {
         match self.view.active_text_input() {
             Some(view::TextInputKind::Arrangement) => self.named(),
             Some(view::TextInputKind::DeckName(_)) => Acted::Emitted(self.view.named_set()),
+            Some(view::TextInputKind::McpServerAddr) => self.committed_mcp_addr(),
             None => Acted::Nothing,
+        }
+    }
+
+    /// Commits typed MCP address:port, updating server configuration.
+    pub(crate) fn committed_mcp_addr(&mut self) -> Acted {
+        let typed = self
+            .view
+            .mcp_server
+            .editing()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        self.view.mcp_server.shut();
+        if typed.is_empty() {
+            println!("mcp: address unchanged: `{}`", self.view.mcp_server.addr);
+            return Acted::Nothing;
+        }
+        let target = if typed.contains(':') {
+            typed
+        } else {
+            format!("127.0.0.1:{typed}")
+        };
+        self.view.mcp_server.addr = target.clone();
+        println!("mcp: configured address:port `{target}`");
+        if self.view.mcp_server.running {
+            Acted::McpServer(McpServerAct::Restart(target))
+        } else {
+            Acted::Nothing
         }
     }
 

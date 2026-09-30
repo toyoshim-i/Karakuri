@@ -366,6 +366,20 @@ impl View {
             {
                 transport::arrangement_into(ui, &pal, &pill, arr);
             }
+            if let Some(pill) = mcp_server_pill(
+                ui.ctx(),
+                panel.layout(),
+                values,
+                audio,
+                tracking,
+                map,
+                arr,
+                &self.mcp_server,
+                self.theme_mode,
+                self.theme_menu_open,
+            ) {
+                transport::mcp_server_into(ui, &pal, &pill, &self.mcp_server);
+            }
             if let Some(pill) = theme_pill(
                 ui.ctx(),
                 panel.layout(),

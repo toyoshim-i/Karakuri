@@ -175,6 +175,12 @@ impl App {
             slot_policies.policy(2),
             slot_policies.policy(3),
         ];
+        if let Some(ref reporter) = mcp {
+            readout.view.mcp_server.running = true;
+            readout.view.mcp_server.addr = reporter.addr().to_string();
+        } else {
+            readout.view.mcp_server.running = false;
+        }
         let (built_tx, built) = std::sync::mpsc::channel();
         let (save_tx, saves) = std::sync::mpsc::channel();
         let (send_tx, sends) = std::sync::mpsc::channel();
@@ -271,6 +277,7 @@ impl App {
             Acted::Opened => otherwise,
             // Acted::Pointed moves the library cursor without generating an operation.
             Acted::Pointed => otherwise,
+            Acted::McpServer(_) => Repaint::Now,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
                 if let Some(operation) = operation.as_ref() {
@@ -521,5 +528,56 @@ impl App {
                 });
             }
         }
+    }
+
+    /// Handles an MCP server lifecycle or configuration action from UI controls.
+    pub(crate) fn handle_mcp_server_act(&mut self, act: McpServerAct) {
+        match act {
+            McpServerAct::Start(addr) => {
+                self.start_mcp(&addr);
+            }
+            McpServerAct::Stop => {
+                self.stop_mcp();
+            }
+            McpServerAct::Restart(addr) => {
+                self.stop_mcp();
+                self.start_mcp(&addr);
+            }
+        }
+    }
+
+    /// Starts the MCP server on `addr` and registers event loop polling.
+    pub(crate) fn start_mcp(&mut self, addr: &str) {
+        match mcp::serve_at(
+            addr,
+            self.pointing.clone(),
+            self.store.clone(),
+            true,
+            self.readout.opening.clone(),
+            self.readout.slot_policies.clone(),
+        ) {
+            Ok(reporter) => {
+                let bound = reporter.addr();
+                println!("mcp: {bound} — server started");
+                self.readout.view.mcp_server.running = true;
+                self.readout.view.mcp_server.addr = bound.to_string();
+                self.keeping.mcp = Some(reporter);
+                self.served = Some(Instant::now());
+            }
+            Err(why) => {
+                eprintln!("mcp: start failed: {why}");
+                self.readout.view.mcp_server.running = false;
+            }
+        }
+    }
+
+    /// Stops the running MCP server and halts event loop polling.
+    pub(crate) fn stop_mcp(&mut self) {
+        if let Some(reporter) = self.keeping.mcp.take() {
+            reporter.shutdown();
+            println!("mcp: server stopped");
+        }
+        self.readout.view.mcp_server.running = false;
+        self.served = None;
     }
 }

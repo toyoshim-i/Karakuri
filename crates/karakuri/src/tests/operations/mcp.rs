@@ -271,3 +271,92 @@ fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() 
         "a refused request re-aimed a watcher"
     );
 }
+
+#[test]
+fn the_mcp_server_pill_opens_and_dispatches_server_actions() {
+    let ctx = crate::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+    readout.view.transport = Some(karakuri_console::view::Transport {
+        bpm: 128.0,
+        beats: 144.0,
+        beats_per_bar: 4,
+        fps: Some(60.0),
+        frame_ms: 16.6,
+        budget_ms: Some(16.6),
+        chain_ms: None,
+        health: Some(karakuri_console::view::Stage::Landed),
+        rec: Some(karakuri_console::view::Rec::Idle),
+    });
+
+    let pill = karakuri_console::view::mcp_server_pill(
+        &ctx,
+        readout.panel.layout(),
+        readout.view.transport,
+        readout.view.audio.as_ref(),
+        readout.view.tracker,
+        readout.view.map.as_ref(),
+        &readout.view.arrangement,
+        &readout.view.mcp_server,
+        readout.view.theme_mode,
+        readout.view.theme_menu_open,
+    )
+    .expect("mcp server pill is positioned in transport");
+
+    let center = Point::new(pill.pill.center().x, pill.pill.center().y);
+
+    // 1. Click pill while shut -> opens menu
+    readout.pointer(&ctx, Pointer::Moved(center));
+    let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(acted, Acted::Nothing);
+    assert!(readout.view.mcp_server.open());
+
+    // 2. Click Row 0 (Start server) -> returns Acted::McpServer(Start)
+    let open_pill = karakuri_console::view::mcp_server_pill(
+        &ctx,
+        readout.panel.layout(),
+        readout.view.transport,
+        readout.view.audio.as_ref(),
+        readout.view.tracker,
+        readout.view.map.as_ref(),
+        &readout.view.arrangement,
+        &readout.view.mcp_server,
+        readout.view.theme_mode,
+        readout.view.theme_menu_open,
+    )
+    .expect("open pill");
+
+    let row0 = open_pill.row(0).expect("row 0");
+    let p0 = Point::new(row0.center().x, row0.center().y);
+    readout.pointer(&ctx, Pointer::Moved(p0));
+    let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(
+        acted,
+        Acted::McpServer(McpServerAct::Start("127.0.0.1:4040".to_string()))
+    );
+    assert!(!readout.view.mcp_server.open());
+
+    // 3. Mark server running and verify Stop action
+    readout.view.mcp_server.running = true;
+    readout.view.mcp_server.opened();
+    readout.pointer(&ctx, Pointer::Moved(p0));
+    let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(acted, Acted::McpServer(McpServerAct::Stop));
+
+    // 4. Test inline address editing and commit
+    readout.view.mcp_server.running = true;
+    readout.mcp_configured(karakuri_console::view::McpAsk::EditAddr);
+    assert!(readout.view.mcp_server.editing().is_some());
+    readout.view.cancel_active_text_input();
+    assert!(readout.view.mcp_server.editing().is_none());
+
+    readout.mcp_configured(karakuri_console::view::McpAsk::EditAddr);
+    readout.view.mcp_server.menu =
+        karakuri_console::view::McpServerMenu::Editing("127.0.0.1:9090".to_string());
+    let acted = readout.commit_active_text_input();
+    assert_eq!(
+        acted,
+        Acted::McpServer(McpServerAct::Restart("127.0.0.1:9090".to_string()))
+    );
+    assert_eq!(readout.view.mcp_server.addr, "127.0.0.1:9090");
+}

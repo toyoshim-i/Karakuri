@@ -5,12 +5,12 @@ use serde_json::{json, Value};
 
 use crate::*;
 
-/// Serves MCP on `port` over loopback until the process ends.
+/// Serves MCP at `addr` (e.g. "127.0.0.1:4040" or "4040") until shutdown or dropped.
 ///
 /// Returns the [`Reporter`] handle for the render loop to send notifications and events.
 /// The server runs on dedicated threads decoupled from frame rendering.
-pub fn serve(
-    port: u16,
+pub fn serve_at(
+    addr: &str,
     slots: Slots,
     store: std::path::PathBuf,
     watching: bool,
@@ -20,22 +20,26 @@ pub fn serve(
     if slots.count() == 0 {
         return Err("this run has no procedure files to serve — see `--load-set`".into());
     }
-    let listener = std::net::TcpListener::bind(("127.0.0.1", port))
-        .map_err(|e| format!("port {port}: {e}"))?;
-    // Asked back rather than echoed: `--mcp 0` binds an ephemeral port, and
-    // printing the 0 tells the operator a port that is not the port.
+    let target = if addr.contains(':') {
+        addr.to_string()
+    } else {
+        format!("127.0.0.1:{addr}")
+    };
+    let listener =
+        std::net::TcpListener::bind(&target).map_err(|e| format!("addr {target}: {e}"))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("set_nonblocking: {e}"))?;
     let bound = listener
         .local_addr()
-        .map_err(|e| format!("port {port}: {e}"))?;
+        .map_err(|e| format!("addr {target}: {e}"))?;
     let (tx, rx) = mpsc::sync_channel(QUEUED);
-    // The other direction, made here for the same reason: the render loop is
-    // handed one half of everything it shares with this server, once, before a
-    // frame has run.
     let (asked, requests) = mpsc::sync_channel(ASKED);
-    // The edges, on a channel of their own — see [`Reporter::wires`].
     let (wiring, wires) = mpsc::sync_channel(ASKED);
-    // And the operations, on a third — see [`Reporter::operations`].
     let (operating, operations) = mpsc::sync_channel(ASKED);
+
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let shutdown_thread = shutdown.clone();
 
     let state = std::sync::Arc::new(std::sync::Mutex::new(State {
         slots,
@@ -55,20 +59,31 @@ pub fn serve(
     std::thread::Builder::new()
         .name("mcp".into())
         .spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(stream) = stream else { continue };
-                let state = state.clone();
-                // Spawns a dedicated worker thread per incoming TCP connection.
-                let spawned =
-                    std::thread::Builder::new()
-                        .name("mcp-conn".into())
-                        .spawn(move || {
-                            if let Err(e) = handle(stream, &state) {
-                                eprintln!("mcp: {e}");
-                            }
-                        });
-                if spawned.is_err() {
-                    eprintln!("mcp: could not start a thread for a connection");
+            while !shutdown_thread.load(std::sync::atomic::Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        let state = state.clone();
+                        let spawned =
+                            std::thread::Builder::new()
+                                .name("mcp-conn".into())
+                                .spawn(move || {
+                                    if let Err(e) = handle(stream, &state) {
+                                        eprintln!("mcp: {e}");
+                                    }
+                                });
+                        if spawned.is_err() {
+                            eprintln!("mcp: could not start a thread for a connection");
+                        }
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    Err(e) => {
+                        if !shutdown_thread.load(std::sync::atomic::Ordering::Relaxed) {
+                            eprintln!("mcp: accept: {e}");
+                        }
+                        break;
+                    }
                 }
             }
         })
@@ -80,8 +95,31 @@ pub fn serve(
         wires,
         operations,
         dropped,
-        port: bound.port(),
+        shutdown,
+        addr: bound,
     })
+}
+
+/// Serves MCP on `port` over loopback until the process ends.
+///
+/// Returns the [`Reporter`] handle for the render loop to send notifications and events.
+/// The server runs on dedicated threads decoupled from frame rendering.
+pub fn serve(
+    port: u16,
+    slots: Slots,
+    store: std::path::PathBuf,
+    watching: bool,
+    opening: karakuri_environment::Opening,
+    slot_policies: karakuri_environment::SlotPolicies,
+) -> Result<Reporter, String> {
+    serve_at(
+        &format!("127.0.0.1:{port}"),
+        slots,
+        store,
+        watching,
+        opening,
+        slot_policies,
+    )
 }
 
 // -- the transport ---------------------------------------------------------
