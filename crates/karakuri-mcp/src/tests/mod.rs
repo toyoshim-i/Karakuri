@@ -53,5 +53,6 @@ fn section<'a>(rendered: &'a str, heading: &str) -> &'a str {
 mod operations;
 mod routes;
 mod save;
+mod server;
 mod tools;
 mod vocabulary;

@@ -30,6 +30,8 @@ pub enum ModalOverlay {
     PromptCliMenu,
     /// Transport theme selection dropdown menu.
     ThemeMenu,
+    /// Transport MCP server configuration dropdown menu.
+    McpServerMenu,
 }
 
 impl ModalOverlay {
@@ -47,6 +49,7 @@ impl ModalOverlay {
             Self::MasterChainAddChooser => "MasterChainAddChooser",
             Self::PromptCliMenu => "PromptCliMenu",
             Self::ThemeMenu => "ThemeMenu",
+            Self::McpServerMenu => "McpServerMenu",
         }
     }
 }
@@ -86,6 +89,9 @@ impl View {
         }
         if self.theme_menu_open {
             return Some(ModalOverlay::ThemeMenu);
+        }
+        if self.mcp_server.open() {
+            return Some(ModalOverlay::McpServerMenu);
         }
         None
     }
@@ -129,6 +135,10 @@ impl View {
                 self.theme_menu_open = false;
                 true
             }
+            ModalOverlay::McpServerMenu => {
+                self.mcp_server.shut();
+                true
+            }
         }
     }
 
@@ -136,6 +146,8 @@ impl View {
     pub fn active_text_input(&self) -> Option<TextInputKind> {
         if self.arrangement.naming().is_some() {
             Some(TextInputKind::Arrangement)
+        } else if self.mcp_server.editing().is_some() {
+            Some(TextInputKind::McpServerAddr)
         } else {
             self.naming_set()
                 .map(|naming| TextInputKind::DeckName(naming.pane))
@@ -149,6 +161,13 @@ impl View {
                 let mut moved = false;
                 for c in text.chars() {
                     moved |= self.arrangement.typed(c);
+                }
+                moved
+            }
+            Some(TextInputKind::McpServerAddr) => {
+                let mut moved = false;
+                for c in text.chars() {
+                    moved |= self.mcp_server.typed(c);
                 }
                 moved
             }
@@ -167,6 +186,7 @@ impl View {
     pub fn rub_out_active(&mut self) -> bool {
         match self.active_text_input() {
             Some(TextInputKind::Arrangement) => self.arrangement.rubbed_out(),
+            Some(TextInputKind::McpServerAddr) => self.mcp_server.rubbed_out(),
             Some(TextInputKind::DeckName(_)) => self.rub_out_of_name(),
             None => false,
         }
@@ -177,6 +197,10 @@ impl View {
         match self.active_text_input() {
             Some(TextInputKind::Arrangement) => {
                 self.arrangement.shut();
+                true
+            }
+            Some(TextInputKind::McpServerAddr) => {
+                self.mcp_server.shut();
                 true
             }
             Some(TextInputKind::DeckName(_)) => {
@@ -193,6 +217,8 @@ impl View {
 pub enum TextInputKind {
     /// Transport arrangement save naming mode.
     Arrangement,
+    /// Transport MCP server address:port editing mode.
+    McpServerAddr,
     /// Inspector inline deck name editing mode on pane `index`.
     DeckName(usize),
 }

@@ -13,7 +13,7 @@ mod tests;
 
 pub use karakuri_ir::{Diagnostic, DiagnosticReport};
 pub use protocol::PROTOCOL;
-pub use server::serve;
+pub use server::{serve, serve_at};
 pub use state::{Event, Pointed, Reply, Reporter, SaveRequest, Slots, WireRequest};
 pub use tools::{check_procedure, check_set_configuration, checked_id, OperateRequest, LISTED};
 

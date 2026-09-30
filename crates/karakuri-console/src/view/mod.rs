@@ -29,12 +29,13 @@ pub(crate) use transport::next_tonemap;
 
 /// Transport bay module re-exports (ADR-0121).
 pub use transport::{
-    arrangement, audio_in, beat_at, exposure_at, learn_pill, look, map_pill, offset_at, theme_pill,
-    tracker_group, transport, unit_of, unit_of_offset, Arrangement, ArrangementPill, Ask, AudioAsk,
-    AudioIn, AudioInPill, Item, LearnPill, Look, LookRow, MapPill, MapRow, Menu, Rec, ThemeAsk,
-    ThemePill, Tracker, TrackerGroup, Transport, TransportRow, BEAT_PITCH, BEAT_STALENESS,
+    arrangement, audio_in, beat_at, exposure_at, learn_pill, look, map_pill, mcp_server_pill,
+    offset_at, theme_pill, tracker_group, transport, unit_of, unit_of_offset, Arrangement,
+    ArrangementPill, Ask, AudioAsk, AudioIn, AudioInPill, Item, LearnPill, Look, LookRow, MapPill,
+    MapRow, McpAsk, McpServer, McpServerMenu, McpServerPill, Menu, Rec, ThemeAsk, ThemePill,
+    Tracker, TrackerGroup, Transport, TransportRow, BEAT_PITCH, BEAT_STALENESS, DEFAULT_MCP_ADDR,
     EXPOSURE_MAX, EXPOSURE_MIN, EXPOSURE_TRACK_W, LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS,
-    LATENCY_OFFSET_STEP_MS, OFFSET_TRACK_W, TEMPO_BAND, TEMPO_SPAN,
+    LATENCY_OFFSET_STEP_MS, MCP_MENU_ROWS, OFFSET_TRACK_W, PRESET_ADDRS, TEMPO_BAND, TEMPO_SPAN,
 };
 
 mod mixer;
@@ -192,6 +193,7 @@ impl View {
             transport: None,
             // Default empty arrangement.
             arrangement: Arrangement::NONE,
+            mcp_server: McpServer::new(),
             // Audio input configuration unassigned.
             audio: None,
             // Learn mode disarmed by default (P-0094).

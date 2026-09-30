@@ -193,6 +193,9 @@ impl App {
             .map(|r| r.name);
         let ctx = gfx.egui.egui_ctx().clone();
         let (claim, acted) = self.readout.pointer(&ctx, which);
+        if let Acted::McpServer(ref act) = acted {
+            self.handle_mcp_server_act(act.clone());
+        }
         let focus_moved = self
             .readout
             .view

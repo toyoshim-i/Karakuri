@@ -119,7 +119,7 @@ impl App {
             // Inline text input session (Arrangement save or Inspector deck rename) claims
             // all keystrokes symmetrically through [`TextInputSession`] (P42, P46) until committed or cancelled.
             if let Some(session) = self.readout.view.active_text_input() {
-                Self::handle_active_text_input(
+                let acted = Self::handle_active_text_input(
                     gfx,
                     self.started,
                     &mut self.readout,
@@ -131,6 +131,9 @@ impl App {
                     key,
                     session,
                 );
+                if let Acted::McpServer(act) = acted {
+                    self.handle_mcp_server_act(act);
+                }
                 return;
             }
             let op = match key.logical_key.as_ref() {
@@ -263,12 +266,15 @@ impl App {
         store: &std::path::Path,
         key: &winit::event::KeyEvent,
         session: TextInputKind,
-    ) {
+    ) -> Acted {
         let (acted, moved) = match key.logical_key.as_ref() {
             Key::Named(NamedKey::Escape) => {
                 match session {
                     TextInputKind::Arrangement => {
                         println!("arrangement: nothing was saved");
+                    }
+                    TextInputKind::McpServerAddr => {
+                        println!("mcp: address editing cancelled");
                     }
                     TextInputKind::DeckName(_) => {
                         println!("inspector: nothing was kept");
@@ -294,6 +300,7 @@ impl App {
         .repaint;
         App::wants(gfx, egui_due, costs, repaint);
         handle_post_event_side_effects(keeping, &gfx.engine, store, &mut readout.view, &acted);
+        acted
     }
 
     #[allow(clippy::too_many_arguments)]

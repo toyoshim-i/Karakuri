@@ -40,6 +40,22 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                     return Claim::Panel;
                 }
             }
+            if let Some(pill) = crate::view::mcp_server_pill(
+                ctx,
+                panel.layout(),
+                view.transport,
+                view.audio.as_ref(),
+                view.tracker,
+                view.map.as_ref(),
+                &view.arrangement,
+                &view.mcp_server,
+                view.theme_mode,
+                view.theme_menu_open,
+            ) {
+                if pill.hit(p) {
+                    return Claim::Panel;
+                }
+            }
             if let Some(pill) = crate::view::theme_pill(
                 ctx,
                 panel.layout(),

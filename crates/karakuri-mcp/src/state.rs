@@ -64,7 +64,8 @@ pub struct Reporter {
     pub(crate) wires: mpsc::Receiver<WireRequest>,
     pub(crate) operations: mpsc::Receiver<OperateRequest>,
     pub(crate) dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub(crate) port: u16,
+    pub(crate) shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) addr: std::net::SocketAddr,
 }
 
 impl Reporter {
@@ -95,9 +96,26 @@ impl Reporter {
         self.operations.try_iter()
     }
 
+    /// Returns the bound server socket address.
+    pub fn addr(&self) -> std::net::SocketAddr {
+        self.addr
+    }
+
     /// Returns the bound server port.
     pub fn port(&self) -> u16 {
-        self.port
+        self.addr.port()
+    }
+
+    /// Signals the background listener thread to stop accepting connections and terminate.
+    pub fn shutdown(&self) {
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Drop for Reporter {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 

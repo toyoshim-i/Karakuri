@@ -33,4 +33,14 @@ pub(crate) enum Acted {
     Opened,
     /// Moved library cursor row without emitting an engine operation (ADR-0265).
     Pointed,
+    /// MCP server start, stop, or address reconfiguration action.
+    McpServer(McpServerAct),
+}
+
+/// Action to control the MCP server lifecycle and address binding from UI controls.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum McpServerAct {
+    Start(String),
+    Stop,
+    Restart(String),
 }
