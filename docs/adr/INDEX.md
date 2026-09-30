@@ -401,6 +401,9 @@ number; new records continue from the end.
 | [ADR-0373](0373-prompt-capture-mode-bypasses-all-keymaps-and-forwards-escape-and-control-keys-directly-to-the-pty.md) | Prompt capture mode bypasses all keymaps and forwards escape and control keys directly to the pty | 2026-09-27 | accepted |
 | [ADR-0374](0374-the-built-in-camera-expands-to-six-placement-parameters-and-procedural-l3-camera-procedures.md) | The built-in camera expands to six placement parameters and procedural L3 camera procedures | 2026-09-27 | accepted |
 | [ADR-0375](0375-depth-buffer-and-opaque-blend-mode.md) | Depth buffer, blend opaque, and draw-order verification within a Set | 2026-09-28 | accepted |
+| [ADR-0376](0376-nested-l5-post-processing-in-sets-and-per-set-frame-retention.md) | Nested L5 post-processing procedures in Sets and per-Set frame retention | 2026-09-29 | accepted |
+| [ADR-0377](0377-procedure-favourites-in-the-library-bay-and-persistent-store.md) | Procedure favourites in the Library bay and persistent store | 2026-09-29 | accepted |
+| [ADR-0378](0378-adaptive-master-chain-slot-layout-and-async-build-event-loop-polling.md) | Adaptive master chain slot layout and async compilation event loop polling | 2026-09-30 | accepted |
 
 ## Retired numbers
 
