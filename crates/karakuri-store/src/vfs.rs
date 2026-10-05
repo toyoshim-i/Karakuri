@@ -177,6 +177,7 @@ impl FileType {
 pub struct Metadata {
     len: u64,
     modified: SystemTime,
+    is_dir: bool,
 }
 
 impl Metadata {
@@ -185,6 +186,12 @@ impl Metadata {
     }
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+    pub fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+    pub fn is_file(&self) -> bool {
+        !self.is_dir
     }
     pub fn modified(&self) -> io::Result<SystemTime> {
         Ok(self.modified)
@@ -198,6 +205,7 @@ pub fn metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {
         return Ok(Metadata {
             len: bytes.len() as u64,
             modified: SystemTime::UNIX_EPOCH,
+            is_dir: false,
         });
     }
     let path_str = path.to_string_lossy();
@@ -213,6 +221,7 @@ pub fn metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {
         return Ok(Metadata {
             len: 0,
             modified: SystemTime::UNIX_EPOCH,
+            is_dir: true,
         });
     }
     Err(Error::new(
@@ -248,6 +257,7 @@ impl DirEntry {
         Ok(Metadata {
             len: self.len,
             modified: SystemTime::UNIX_EPOCH,
+            is_dir: false,
         })
     }
 }

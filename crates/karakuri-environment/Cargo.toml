@@ -49,6 +49,10 @@ serde.workspace = true
 serde_json.workspace = true
 web-time = "1.1"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "wasmbind"] }
+
+
 [dev-dependencies]
 # The scratch, the history, a session stream and a Set file are directories on
 # a disk, and the round trip is only worth checking against a real one.

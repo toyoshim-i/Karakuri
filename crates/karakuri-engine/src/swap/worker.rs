@@ -10,9 +10,9 @@ use crate::binding::Signals;
 use crate::estimate::{estimate, Estimate};
 use crate::probe::{Measurement, Probe};
 use crate::set::Set;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::set::SetError;
 
+use super::types::Request;
 use super::types::PROBE_STEPS;
 #[cfg(not(target_arch = "wasm32"))]
 use super::types::{unpacked, Built, Done, Polled, Sizes, Source};
@@ -37,6 +37,94 @@ pub fn measure(
     set.rewind(device, queue);
     set.resize(device, viewport.0, viewport.1);
     measurement
+}
+
+/// Builds and configures a Set from a build request.
+pub(crate) fn build_set(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    request: Request,
+    label: &str,
+) -> Result<Set, SetError> {
+    let build = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        Set::build_many(
+            device,
+            queue,
+            &request.l1s.iter().map(|(p, c)| (p, *c)).collect::<Vec<_>>(),
+            &request.l2s.iter().collect::<Vec<_>>(),
+            &request.l3s.iter().collect::<Vec<_>>(),
+            &request.fields.iter().collect::<Vec<_>>(),
+            &request.l4s.iter().collect::<Vec<_>>(),
+            &request.l5s.iter().collect::<Vec<_>>(),
+            request.layering,
+            request.seed_salt,
+            &request.salts,
+            crate::set::Wiring {
+                l1s: &request.names.l1s,
+                l2s: &request.names.l2s,
+                l3s: &request.names.l3s,
+                l4s: &request.names.l4s,
+                fields: &request.names.fields,
+                l5s: &request.names.l5s,
+                depth_tests: &request.names.depth_tests,
+                edges: &request.edges,
+            },
+        )
+        .map(|mut set| {
+            set.aim_camera(request.camera);
+            if let Some(at) = request.live {
+                if !set.select_renderer(at as usize) {
+                    eprintln!(
+                        "  this build has no renderer {at} to fold to — every renderer is live"
+                    );
+                }
+            }
+            for write in &request.params {
+                match set.write_param(write) {
+                    Ok(0) => eprintln!("  no parameter named `{}`, ignoring", write.key),
+                    Ok(_) => {}
+                    Err(refused) => eprintln!("  {refused}"),
+                }
+            }
+            for control in request.published {
+                let name = control.name.clone();
+                if let Err(e) = set.publish(control) {
+                    eprintln!("  `{name}` is not published: {e}");
+                }
+            }
+            for binding in request.bindings {
+                let (layer, key) = (binding.layer, binding.key.clone());
+                let signal = binding.signal.clone();
+                match set.bind(binding) {
+                    crate::set::Bound::Yes => {}
+                    crate::set::Bound::NoSuchParam => {
+                        eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring")
+                    }
+                    crate::set::Bound::NoSuchControl => eprintln!(
+                        "  `{signal}` is not published by this Set, so `{layer:?} {key}` \
+                         is not bound"
+                    ),
+                }
+            }
+            for stated in &request.authorities {
+                let (layer, index) = stated.at;
+                if !set.set_authority(layer, index, stated.authority) {
+                    eprintln!(
+                        "  this build has no {layer:?} node {index} to give authority to, \
+                         ignoring"
+                    );
+                }
+            }
+            set
+        })
+    }));
+    match build {
+        Ok(result) => result,
+        Err(payload) => Err(SetError::Panicked {
+            label: label.to_string(),
+            detail: panic_detail(&payload),
+        }),
+    }
 }
 
 /// Main execution loop for the background build and compilation worker.
@@ -70,89 +158,9 @@ pub(crate) fn run_worker(
             None => continue,
         };
         let id = request.id;
-        let label: Arc<str> = request.label.into();
+        let label: Arc<str> = request.label.clone().into();
 
-        let build = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            Set::build_many(
-                &device,
-                &queue,
-                &request.l1s.iter().map(|(p, c)| (p, *c)).collect::<Vec<_>>(),
-                &request.l2s.iter().collect::<Vec<_>>(),
-                &request.l3s.iter().collect::<Vec<_>>(),
-                &request.fields.iter().collect::<Vec<_>>(),
-                &request.l4s.iter().collect::<Vec<_>>(),
-                &request.l5s.iter().collect::<Vec<_>>(),
-                request.layering,
-                request.seed_salt,
-                &request.salts,
-                crate::set::Wiring {
-                    l1s: &request.names.l1s,
-                    l2s: &request.names.l2s,
-                    l3s: &request.names.l3s,
-                    l4s: &request.names.l4s,
-                    fields: &request.names.fields,
-                    l5s: &request.names.l5s,
-                    depth_tests: &request.names.depth_tests,
-                    edges: &request.edges,
-                },
-            )
-            .map(|mut set| {
-                set.aim_camera(request.camera);
-                if let Some(at) = request.live {
-                    if !set.select_renderer(at as usize) {
-                        eprintln!(
-                            "  this build has no renderer {at} to fold to — every renderer is live"
-                        );
-                    }
-                }
-                for write in &request.params {
-                    match set.write_param(write) {
-                        Ok(0) => eprintln!("  no parameter named `{}`, ignoring", write.key),
-                        Ok(_) => {}
-                        Err(refused) => eprintln!("  {refused}"),
-                    }
-                }
-                for control in request.published {
-                    let name = control.name.clone();
-                    if let Err(e) = set.publish(control) {
-                        eprintln!("  `{name}` is not published: {e}");
-                    }
-                }
-                for binding in request.bindings {
-                    let (layer, key) = (binding.layer, binding.key.clone());
-                    let signal = binding.signal.clone();
-                    match set.bind(binding) {
-                        crate::set::Bound::Yes => {}
-                        crate::set::Bound::NoSuchParam => {
-                            eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring")
-                        }
-                        crate::set::Bound::NoSuchControl => eprintln!(
-                            "  `{signal}` is not published by this Set, so `{layer:?} {key}` \
-                             is not bound"
-                        ),
-                    }
-                }
-                for stated in &request.authorities {
-                    let (layer, index) = stated.at;
-                    if !set.set_authority(layer, index, stated.authority) {
-                        eprintln!(
-                            "  this build has no {layer:?} node {index} to give authority to, \
-                             ignoring"
-                        );
-                    }
-                }
-                set
-            })
-        }));
-        let result = match build {
-            Ok(result) => result,
-            Err(payload) => Err(SetError::Panicked {
-                label: label.to_string(),
-                detail: panic_detail(&payload),
-            }),
-        };
-
-        let mut result = result;
+        let mut result = build_set(&device, &queue, request, &label);
         let mut cost = None;
         let mut prediction: Option<Estimate> = None;
         if let Ok(set) = &mut result {
@@ -212,8 +220,7 @@ pub(crate) fn run_worker(
 }
 
 /// Extracts a displayable message from a caught panic payload.
-#[cfg(not(target_arch = "wasm32"))]
-fn panic_detail(payload: &Box<dyn std::any::Any + Send>) -> String {
+pub(crate) fn panic_detail(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {
         (*s).to_string()
     } else if let Some(s) = payload.downcast_ref::<String>() {

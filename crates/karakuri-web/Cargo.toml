@@ -19,13 +19,17 @@ karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-r
 karakuri-pattern = { version = "0.1.0", path = "../karakuri-pattern" }
 karakuri-signal.workspace = true
 karakuri-store.workspace = true
+karakuri-mcp = { version = "0.1.0", path = "../karakuri-mcp" }
 karakuri = { version = "0.1.0", path = "../karakuri" }
+serde.workspace = true
+serde_json.workspace = true
 
 wgpu = "30.0.1"
 winit = { version = "0.30.13", features = ["rwh_06"] }
 web-time = "1.1"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
 console_error_panic_hook = "0.1"
 log = "0.4"
 console_log = "1.0"
@@ -37,7 +41,18 @@ features = [
     "Element",
     "HtmlCanvasElement",
     "Window",
+    "Navigator",
     "Location",
     "Performance",
     "Node",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "Headers",
+    "Storage",
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "AbortController",
+    "AbortSignal",
 ]

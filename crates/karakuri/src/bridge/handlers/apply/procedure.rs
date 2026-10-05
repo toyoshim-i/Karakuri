@@ -37,7 +37,7 @@ pub(crate) fn overlaying(
         .chain(aim.at.rest.iter().cloned())
         .collect();
     let at = files.iter().enumerate().find_map(|(index, file)| {
-        let source = std::fs::read(&file.path).ok()?;
+        let source = karakuri_store::fs::read(&file.path).ok()?;
         let declared = karakuri_environment::history::declared_kind(&source)
             .unwrap_or(if index == 0 { "L1" } else { "L4" });
         (declared == kind).then_some(index)
@@ -111,7 +111,7 @@ pub(crate) fn kept_source(
     }
     let shipped = presets.map(|dir| dir.join(format!("{name}.kir")));
     if let Some(path) = shipped {
-        if let Ok(source) = std::fs::read(&path) {
+        if let Ok(source) = karakuri_store::fs::read(&path) {
             return Ok((source, "shipped"));
         }
     }
@@ -194,7 +194,7 @@ pub(crate) fn put_back(
             version
         }
     };
-    let source = match std::fs::read(&version.file) {
+    let source = match karakuri_store::fs::read(&version.file) {
         Ok(source) => source,
         Err(e) => {
             return format!(
@@ -214,7 +214,7 @@ pub(crate) fn put_back(
             );
         }
     };
-    match std::fs::write(&target, &source) {
+    match karakuri_store::fs::write(&target, &source) {
         Ok(()) => format!(
             "  put back: deck {letter} {}:{} <- `{}` -> written into {}; the worker \
              builds it and the budget judges it, and the version it replaces is kept because \

@@ -56,17 +56,46 @@ impl WebApp {
                 .collect(),
         );
 
-        let app = App::new(
+        let (reporter, in_process_mcp) = karakuri_mcp::in_process(
+            pointing.clone(),
+            launch.store.clone(),
+            true,
+            opening.clone(),
+            slot_policies.clone(),
+        );
+
+        let mut app = App::new(
             launch,
             running,
             held,
             snapshots,
-            None,
+            Some(reporter),
             opening,
             pointing,
             proxy.clone(),
             slot_policies,
         );
+
+        let mcp_for_harness = in_process_mcp.clone();
+        let proxy_for_harness = proxy.clone();
+        app.set_prompt_spawner(move |id, _args| {
+            let (session, _harness) = crate::harness::create_harness_session(
+                id.to_string(),
+                mcp_for_harness.clone(),
+                proxy_for_harness.clone(),
+            );
+            session
+        });
+
+        // Initialize Prompt bay default selection to in-process agent harness
+        let prompt_state = app.prompt_state();
+        prompt_state.select(karakuri_console::view::prompt::CliSelection::Custom(
+            "in-process".to_string(),
+        ));
+
+        if let Err(e) = crate::webmcp::setup_webmcp(in_process_mcp, proxy.clone()) {
+            log::warn!("Karakuri Web: Failed to initialize WebMCP: {e:?}");
+        }
 
         Self {
             app,

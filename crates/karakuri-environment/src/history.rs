@@ -6,6 +6,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use karakuri_store::fs;
+
 /// The subdirectory of the store this lives in.
 pub const DIR: &str = "history";
 
@@ -90,7 +92,7 @@ impl Snapshots {
         }
         let now = chrono::Local::now();
         let dir = self.root.join(now.format("%Y/%m/%d").to_string());
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
 
         let stamp = now.format(TIME).to_string();
         // The index is in the name only when it is not the first, so every
@@ -115,7 +117,7 @@ impl Snapshots {
             sanitize(proc_name)
         );
         let path = dir.join(name);
-        std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
+        fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
         self.last.insert(chain, source.to_vec());
         Ok(Some(path))
     }
@@ -259,8 +261,8 @@ fn dated(
 }
 
 /// Reads directory entries, returning an empty vector if `dir` does not exist.
-fn read(dir: &Path) -> Result<Vec<std::io::Result<std::fs::DirEntry>>, String> {
-    match std::fs::read_dir(dir) {
+fn read(dir: &Path) -> Result<Vec<std::io::Result<fs::DirEntry>>, String> {
+    match fs::read_dir(dir) {
         Ok(entries) => Ok(entries.collect()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(cannot_be_listed(dir, &e)),
@@ -275,7 +277,7 @@ fn cannot_be_listed(dir: &Path, why: &std::io::Error) -> String {
 }
 
 /// Parses a directory entry name into a [`Version`], or returns `None` if unrecognized.
-fn version(date: &str, entry: &std::fs::DirEntry) -> Option<Version> {
+fn version(date: &str, entry: &fs::DirEntry) -> Option<Version> {
     let name = entry.file_name();
     let stem = name.to_str()?.strip_suffix(".kir")?;
     // Set identifier is stripped from the tail after the final `@`.
@@ -359,7 +361,7 @@ pub fn seed<'a>(
         let mut counts: std::collections::HashMap<&'static str, usize> =
             std::collections::HashMap::new();
         for (positional, path) in paths.into_iter().enumerate() {
-            let Ok(source) = std::fs::read(path) else {
+            let Ok(source) = fs::read(path) else {
                 continue;
             };
             let layer = declared_kind(&source).unwrap_or(if positional == 0 { "L1" } else { "L4" });

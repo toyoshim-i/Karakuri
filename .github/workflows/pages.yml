@@ -50,7 +50,7 @@ jobs:
       - name: Build Web Application with Trunk
         run: |
           mkdir -p dist/demo
-          trunk build --release crates/karakuri-web/index.html --dist dist/demo --public-url /Karakuri/demo/
+          trunk build crates/karakuri-web/index.html --release --dist dist/demo --public-url /Karakuri/demo/
 
       - name: Stage docs and assemble site
         run: |

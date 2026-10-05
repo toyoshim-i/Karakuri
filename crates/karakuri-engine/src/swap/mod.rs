@@ -41,6 +41,7 @@ pub struct HotSwap {
     measure_at: Arc<AtomicU64>,
     /// Output resolution the worker's `estimate` answers for, packed as `(width << 32) | height`.
     estimate_at: Arc<AtomicU64>,
+    #[allow(dead_code)]
     graveyard: Arc<Mutex<Vec<Set>>>,
     /// Sets retired by the render thread pending handover to the worker graveyard.
     retired: Vec<Set>,
@@ -48,6 +49,12 @@ pub struct HotSwap {
     worker: Option<JoinHandle<()>>,
     /// Whether worker channel disconnection has already been reported.
     worker_lost: bool,
+    #[cfg(target_arch = "wasm32")]
+    source: Option<Box<dyn Source>>,
+    #[cfg(target_arch = "wasm32")]
+    queue: Option<wgpu::Queue>,
+    #[cfg(target_arch = "wasm32")]
+    done_tx: Option<std::sync::mpsc::Sender<Done>>,
 }
 
 impl HotSwap {
@@ -89,9 +96,9 @@ impl HotSwap {
             )
         };
         #[cfg(target_arch = "wasm32")]
-        let worker = {
-            drop((source, done_tx, sizes));
-            None
+        let (worker, source_field, queue_field, done_tx_field) = {
+            drop(sizes);
+            (None, Some(source), _queue.clone(), done_tx)
         };
 
         HotSwap {
@@ -112,6 +119,12 @@ impl HotSwap {
             stop,
             worker,
             worker_lost: false,
+            #[cfg(target_arch = "wasm32")]
+            source: source_field,
+            #[cfg(target_arch = "wasm32")]
+            queue: Some(queue_field),
+            #[cfg(target_arch = "wasm32")]
+            done_tx: Some(done_tx_field),
         }
     }
 
@@ -151,6 +164,12 @@ impl HotSwap {
             stop: Arc::new(AtomicBool::new(false)),
             worker: None,
             worker_lost: false,
+            #[cfg(target_arch = "wasm32")]
+            source: None,
+            #[cfg(target_arch = "wasm32")]
+            queue: None,
+            #[cfg(target_arch = "wasm32")]
+            done_tx: None,
         }
     }
 
@@ -339,6 +358,34 @@ impl HotSwap {
 
     /// Installs and evaluates the newest completed build from the worker channel, if available.
     fn install_if_ready(&mut self, device: &wgpu::Device) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let (Some(source), Some(queue), Some(done_tx)) =
+                (&mut self.source, &self.queue, &self.done_tx)
+            {
+                while let Some(polled) = source.poll() {
+                    match polled {
+                        Polled::Refused(refusal) => {
+                            let _ = done_tx.send(Done::Refused(refusal));
+                        }
+                        Polled::Build(request) => {
+                            let id = request.id;
+                            let label: Arc<str> = request.label.clone().into();
+                            let result =
+                                crate::swap::worker::build_set(device, queue, request, &label);
+                            let _ = done_tx.send(Done::Built(Built {
+                                id,
+                                label,
+                                result,
+                                cost: None,
+                                estimate: None,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
         let mut newest: Option<Built> = None;
         loop {
             match self.done.try_recv() {
@@ -408,6 +455,9 @@ impl HotSwap {
         if self.retired.is_empty() {
             return;
         }
+        #[cfg(target_arch = "wasm32")]
+        self.retired.clear();
+        #[cfg(not(target_arch = "wasm32"))]
         if let Ok(mut graveyard) = self.graveyard.try_lock() {
             graveyard.append(&mut self.retired);
         }

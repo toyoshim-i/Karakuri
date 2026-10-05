@@ -41,6 +41,27 @@ cargo run -p karakuri-cli -- --watch
 cargo run -p karakuri-cli -- --render out.png --frames 240
 ```
 
+### Running the Web / WebAssembly Version
+
+The Web port runs 100% client-side in any modern browser supporting WebGPU (Chrome, Edge, etc.).
+
+```sh
+# Ensure wasm target and trunk are installed
+rustup target add wasm32-unknown-unknown
+cargo install --locked trunk
+
+# Launch the local development server with hot-reloading (http://127.0.0.1:8080)
+trunk serve --open
+
+# If port 8080 is in use (e.g. by local LLMs), specify a different port:
+trunk serve --port 8088 --open
+```
+
+> **Note for Local LLM Agent Integration (`/model`)**:
+> When using the in-process Prompt Bay with local LLMs (Ollama, LM Studio), enable CORS on the server so the browser can connect to localhost:
+> - **Ollama**: Start with `OLLAMA_ORIGINS="*" ollama serve`
+> - **LM Studio**: Turn on **Enable CORS** under Developer / Server Settings
+
 ### Key Components
 
 - **Console Application (`karakuri`)**: Complete visual interface containing Program output, Deck previews, Transport, Mixer, Library browser, and Node Inspector.

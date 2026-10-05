@@ -2,6 +2,10 @@
 
 #[cfg(target_arch = "wasm32")]
 mod app;
+#[cfg(any(target_arch = "wasm32", test))]
+pub mod harness;
+#[cfg(any(target_arch = "wasm32", test))]
+pub mod webmcp;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;

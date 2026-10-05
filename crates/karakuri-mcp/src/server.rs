@@ -248,7 +248,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
 // -- the protocol ----------------------------------------------------------
 
 /// A JSON-RPC reply or pending asynchronous operation to be awaited with [`State`] unlocked.
-pub(crate) enum Pending {
+pub enum Pending {
     /// Nothing left to do. `None` is a notification, which is answered with no body
     /// at all.
     Done(Option<Value>),
@@ -275,11 +275,73 @@ pub(crate) enum Pending {
 }
 
 impl Pending {
+    /// Checks whether this operation is already done without waiting.
+    pub fn is_done(&self) -> bool {
+        matches!(self, Pending::Done(_))
+    }
+
+    /// Polls non-blockingly for completion.
+    ///
+    /// Returns:
+    /// - `Ok(Some(value))` if the operation has completed
+    /// - `Ok(None)` if still waiting on the render loop
+    /// - `Err(message)` if the render loop channel was disconnected
+    pub fn poll_settled(&mut self) -> Result<Option<Value>, String> {
+        match self {
+            Pending::Done(reply) => Ok(reply.take()),
+            Pending::Saving { id, news } => match news.try_recv() {
+                Ok(News::Settled(outcome)) => Ok(Some(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": tool_result(outcome),
+                }))),
+                Ok(News::Accepted(_)) => Ok(None),
+                Err(mpsc::TryRecvError::Empty) => Ok(None),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    Err("the render loop ended before it took this save: nothing was saved".into())
+                }
+            },
+            Pending::Operating { id, news } => match news.try_recv() {
+                Ok(News::Settled(outcome)) => Ok(Some(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": tool_result(outcome),
+                }))),
+                Ok(News::Accepted(_)) => Ok(None),
+                Err(mpsc::TryRecvError::Empty) => Ok(None),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    Err("the render loop disconnected before this operation completed".into())
+                }
+            },
+            Pending::Wiring { id, news, note } => match news.try_recv() {
+                Ok(News::Settled(outcome)) => {
+                    let note = note.clone();
+                    Ok(Some(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": tool_result(outcome.map(|said| {
+                            if note.is_empty() {
+                                said
+                            } else {
+                                format!("{said}\n\n{note}")
+                            }
+                        })),
+                    })))
+                }
+                Ok(News::Accepted(_)) => Ok(None),
+                Err(mpsc::TryRecvError::Empty) => Ok(None),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    Err("the render loop disconnected before this wire completed".into())
+                }
+            },
+        }
+    }
+
     /// The reply, waiting for the render loop if that is what is left.
     ///
     /// Called with the state unlocked, which is the entire reason this type exists
     /// — see above.
-    pub(crate) fn settled(self) -> Option<Value> {
+    pub fn settled(self) -> Option<Value> {
         match self {
             Pending::Done(reply) => reply,
             Pending::Saving { id, news } => Some(json!({
