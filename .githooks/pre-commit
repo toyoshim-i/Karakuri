@@ -119,6 +119,46 @@ if [ -n "$crossed" ]; then
     echo "not a reason to stop — worth a look before it grows further."
 fi
 
+# **Direct `std::fs` usage is prohibited outside native backend crates (ADR-0386).**
+# All filesystem operations across the workspace must route through `karakuri_store::fs`.
+# Native adapters (karakuri-store/src/vfs/native.rs, types.rs, stream.rs), host font/cli
+# detectors in console, build scripts, examples, and tests are exempted.
+is_allowed_stdfs() {
+    case "$1" in
+        crates/karakuri-store/src/vfs/native.rs) return 0 ;;
+        crates/karakuri-store/src/vfs/types.rs) return 0 ;;
+        crates/karakuri-store/src/stream.rs) return 0 ;;
+        crates/karakuri-console/src/room/font.rs) return 0 ;;
+        crates/karakuri-console/src/view/prompt/cli.rs) return 0 ;;
+        build.rs | */build.rs) return 0 ;;
+        examples/* | */examples/*) return 0 ;;
+        tests/* | */tests/* | *test*.rs) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+stdfs_violators=""
+for f in $files; do
+    if is_allowed_stdfs "$f"; then
+        continue
+    fi
+    violating_lines=$(git show ":$f" | grep -n -E '^\s*([^/]|/[^/])*\bstd::fs\b' || true)
+    if [ -n "$violating_lines" ]; then
+        stdfs_violators="$stdfs_violators$f:
+$violating_lines
+"
+    fi
+done
+
+if [ -n "$stdfs_violators" ]; then
+    echo "direct std::fs usage is prohibited (ADR-0386):"
+    printf '%s' "$stdfs_violators"
+    echo
+    echo "route all filesystem operations through \`karakuri_store::fs\`."
+    echo "see docs/adr/0386-pluggable-virtual-filesystem-abstraction-with-web-persistent-storage.md"
+    exit 1
+fi
+
 # **Clippy checks the workspace for lints and warnings.**
 # Kept clean across the entire workspace (Phase 14 / P72-P73).
 if ! command -v cargo >/dev/null 2>&1; then

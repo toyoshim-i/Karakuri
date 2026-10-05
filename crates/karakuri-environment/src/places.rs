@@ -255,7 +255,8 @@ pub struct Plugins {
 impl Plugins {
     /// Lists all executable plugin binaries in this directory, sorted deterministically.
     pub fn list_executables(&self) -> Result<Vec<PathBuf>, String> {
-        let entries = std::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
+        let entries =
+            karakuri_store::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
         let mut out = Vec::new();
         for entry in entries {
             let entry = entry.map_err(|e| self.cannot_be_listed(&e))?;
@@ -270,8 +271,8 @@ impl Plugins {
                 let is_exec = {
                     #[cfg(unix)]
                     {
-                        use std::os::unix::fs::PermissionsExt;
-                        std::fs::metadata(&path)
+                        use karakuri_store::fs::PermissionsExt;
+                        karakuri_store::fs::metadata(&path)
                             .map(|m| m.permissions().mode() & 0o111 != 0)
                             .unwrap_or(false)
                     }

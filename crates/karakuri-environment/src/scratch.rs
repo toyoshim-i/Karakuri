@@ -103,8 +103,8 @@ mod tests {
 
     fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
         let path = dir.join(name);
-        std::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
-        std::fs::write(&path, body).expect("write");
+        karakuri_store::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
+        karakuri_store::fs::write(&path, body).expect("write");
         path
     }
 
@@ -137,14 +137,17 @@ mod tests {
             sets[0].1[0]
         );
         assert_eq!(
-            std::fs::read_to_string(&sets[0].0).expect("read"),
+            karakuri_store::fs::read_to_string(&sets[0].0).expect("read"),
             "original l1"
         );
 
         // And writing through the deck's path leaves the preset alone, which is
         // the whole point rather than a consequence worth assuming.
-        std::fs::write(&sets[0].0, "rewritten").expect("write");
-        assert_eq!(std::fs::read_to_string(&l1).expect("read"), "original l1");
+        karakuri_store::fs::write(&sets[0].0, "rewritten").expect("write");
+        assert_eq!(
+            karakuri_store::fs::read_to_string(&l1).expect("read"),
+            "original l1"
+        );
     }
 
     /// Verifies that the same preset in two slots materializes as distinct files so editing one slot does not affect the other.
@@ -181,20 +184,20 @@ mod tests {
         );
 
         // The edit the operator makes, through deck A's own file.
-        std::fs::write(&sets[0].0, "deck A only").expect("write");
+        karakuri_store::fs::write(&sets[0].0, "deck A only").expect("write");
 
         assert_eq!(
-            std::fs::read_to_string(&sets[0].0).expect("read"),
+            karakuri_store::fs::read_to_string(&sets[0].0).expect("read"),
             "deck A only",
             "the edit did not land on the deck it was made on"
         );
         assert_eq!(
-            std::fs::read_to_string(&sets[1].0).expect("read"),
+            karakuri_store::fs::read_to_string(&sets[1].0).expect("read"),
             "the geometry",
             "the edit moved deck B as well, which is the failure this rule exists to stop"
         );
         assert_eq!(
-            std::fs::read_to_string(&l1).expect("read"),
+            karakuri_store::fs::read_to_string(&l1).expect("read"),
             "the geometry",
             "the edit reached the preset the operator named"
         );
@@ -265,8 +268,14 @@ mod tests {
             sets[0].0, sets[1].0,
             "two different sources became one file"
         );
-        assert_eq!(std::fs::read_to_string(&sets[0].0).expect("read"), "first");
-        assert_eq!(std::fs::read_to_string(&sets[1].0).expect("read"), "second");
+        assert_eq!(
+            karakuri_store::fs::read_to_string(&sets[0].0).expect("read"),
+            "first"
+        );
+        assert_eq!(
+            karakuri_store::fs::read_to_string(&sets[1].0).expect("read"),
+            "second"
+        );
     }
 
     /// A Set loaded from the store becomes a file the deck can run from and an
@@ -285,7 +294,7 @@ mod tests {
         assert!(path.starts_with(store.join(DIR)), "{}", path.display());
         assert_eq!(path.file_name().expect("name"), "A0-beat_strands.kir");
         assert_eq!(
-            std::fs::read_to_string(&path).expect("read"),
+            karakuri_store::fs::read_to_string(&path).expect("read"),
             "proc beat_strands {}"
         );
     }
@@ -320,7 +329,7 @@ mod tests {
 
         assert_eq!(sets[0].0, placed, "the placed procedure was moved");
         assert_eq!(
-            std::fs::read_to_string(&placed).expect("read"),
+            karakuri_store::fs::read_to_string(&placed).expect("read"),
             "from the store"
         );
     }
@@ -347,11 +356,17 @@ mod tests {
         let tmp_file = tmp.path().join("target.kir.tmp");
 
         write_atomic(&target, b"initial").expect("first write");
-        assert_eq!(std::fs::read_to_string(&target).unwrap(), "initial");
+        assert_eq!(
+            karakuri_store::fs::read_to_string(&target).unwrap(),
+            "initial"
+        );
         assert!(!tmp_file.exists());
 
         write_atomic(&target, b"updated").expect("second write");
-        assert_eq!(std::fs::read_to_string(&target).unwrap(), "updated");
+        assert_eq!(
+            karakuri_store::fs::read_to_string(&target).unwrap(),
+            "updated"
+        );
         assert!(!tmp_file.exists());
     }
 }
