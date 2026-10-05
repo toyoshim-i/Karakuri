@@ -96,6 +96,8 @@ pub struct App {
     pub(crate) last_mixer_revision: u64,
     /// Timestamp and position of previous mouse press for double-click detection.
     pub(crate) last_click: Option<(Instant, karakuri_layout::Point)>,
+    /// Optional CJK fallback font bytes loaded dynamically (e.g. on wasm32).
+    pub(crate) cjk_font_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,7 +179,17 @@ impl App {
         ];
         if let Some(ref reporter) = mcp {
             readout.view.mcp_server.running = true;
-            readout.view.mcp_server.addr = reporter.addr().to_string();
+            #[cfg(target_arch = "wasm32")]
+            {
+                let _ = reporter;
+                readout.view.mcp_server.addr = "WebMCP".to_string();
+                readout.view.mcp_server.is_webmcp = true;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                readout.view.mcp_server.addr = reporter.addr().to_string();
+                readout.view.mcp_server.is_webmcp = false;
+            }
         } else {
             readout.view.mcp_server.running = false;
         }
@@ -244,6 +256,7 @@ impl App {
             clock: Clock::new(Instant::now()),
             last_mixer_revision: 0,
             last_click: None,
+            cjk_font_bytes: None,
         }
     }
 
@@ -595,5 +608,27 @@ impl App {
             + 'static,
     {
         self.readout.view.prompt.sessions.set_spawner(spawner);
+    }
+
+    /// Returns the solved bounding rect of the Prompt bay, if laid out.
+    pub fn prompt_rect(&mut self) -> Option<karakuri_console::egui::Rect> {
+        let layout = self.readout.panel.layout();
+        if layout.viewport().w <= 0.0 || layout.viewport().h <= 0.0 {
+            return None;
+        }
+        self.readout.panel.solve();
+        let layout = self.readout.panel.layout();
+        let id = layout.find("prompt")?;
+        let r = layout.rect(id);
+        Some(karakuri_console::view::to_egui(r))
+    }
+
+    /// Dynamically injects CJK fallback font bytes into the egui context.
+    pub fn add_cjk_font(&mut self, bytes: Vec<u8>) {
+        if let Some(ref gfx) = self.gfx {
+            karakuri_console::room::add_cjk_font(gfx.egui.egui_ctx(), bytes.clone());
+            gfx.window.request_redraw();
+        }
+        self.cjk_font_bytes = Some(bytes);
     }
 }

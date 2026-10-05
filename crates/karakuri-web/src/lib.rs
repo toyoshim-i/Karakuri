@@ -3,7 +3,11 @@
 #[cfg(target_arch = "wasm32")]
 mod app;
 #[cfg(any(target_arch = "wasm32", test))]
+pub mod font_loader;
+#[cfg(any(target_arch = "wasm32", test))]
 pub mod harness;
+#[cfg(target_arch = "wasm32")]
+pub mod ime_overlay;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod webmcp;
 

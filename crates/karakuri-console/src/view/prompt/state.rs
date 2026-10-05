@@ -6,6 +6,12 @@ use std::sync::{Arc, Mutex};
 use super::cli::{CliPreset, CliSelection};
 use super::session::{SessionManager, TerminalSession};
 
+/// Row and column coordinate `(row, col)` of a character cell in the terminal.
+pub type CellPos = (usize, usize);
+
+/// Text selection coordinate span `((start_row, start_col), (end_row, end_col))`.
+pub type SelectionRange = (CellPos, CellPos);
+
 /// State of the Prompt bay including active selection, dropdown menu, session manager, and prompt input.
 #[derive(Debug, Clone, Default)]
 pub struct PromptState {
@@ -23,6 +29,10 @@ pub struct PromptState {
     pub sessions: SessionManager,
     /// Whether Prompt bay is currently in input capture mode for the terminal.
     pub captured: Arc<AtomicBool>,
+    /// Active text selection range: `Some((start_cell, end_cell))` where each is `(row, col)`.
+    pub selection_range: Arc<Mutex<Option<SelectionRange>>>,
+    /// Mouse drag anchor position when selecting text: `Some((row, col))`.
+    pub selection_anchor: Arc<Mutex<Option<CellPos>>>,
 }
 
 impl PartialEq for PromptState {
@@ -58,6 +68,36 @@ impl PromptState {
     /// Sets whether the Prompt bay is capturing keyboard input.
     pub fn set_captured(&self, val: bool) {
         self.captured.store(val, Ordering::Relaxed);
+    }
+
+    /// Returns the active text selection range `((start_row, start_col), (end_row, end_col))`.
+    pub fn selection_range(&self) -> Option<SelectionRange> {
+        self.selection_range.lock().ok().and_then(|r| *r)
+    }
+
+    /// Sets the active text selection range.
+    pub fn set_selection_range(&self, range: Option<SelectionRange>) {
+        if let Ok(mut lock) = self.selection_range.lock() {
+            *lock = range;
+        }
+    }
+
+    /// Returns the mouse drag selection anchor position.
+    pub fn selection_anchor(&self) -> Option<CellPos> {
+        self.selection_anchor.lock().ok().and_then(|r| *r)
+    }
+
+    /// Sets the mouse drag selection anchor position.
+    pub fn set_selection_anchor(&self, anchor: Option<CellPos>) {
+        if let Ok(mut lock) = self.selection_anchor.lock() {
+            *lock = anchor;
+        }
+    }
+
+    /// Clears the active text selection and anchor.
+    pub fn clear_selection(&self) {
+        self.set_selection_range(None);
+        self.set_selection_anchor(None);
     }
     /// Creates a default, unselected Prompt bay state.
     pub fn new() -> Self {

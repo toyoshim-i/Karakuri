@@ -38,6 +38,8 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
         "copy_slot",
         "check_procedure",
         "check_set",
+        "list_resources",
+        "read_resource",
     ];
     let mut published: Vec<String> = tools()
         .as_array()
@@ -79,6 +81,8 @@ fn every_workflow_tool_is_published_and_callable() {
         "copy_slot",
         "check_procedure",
         "check_set",
+        "list_resources",
+        "read_resource",
     ] {
         let published = tools()
             .as_array()
@@ -94,6 +98,13 @@ fn every_workflow_tool_is_published_and_callable() {
     });
     let rep = dispatch(&req, &mut state).settled().expect("rep");
     assert_eq!(rep["result"]["isError"], false);
+
+    let req_res = json!({
+        "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": { "name": "read_resource", "arguments": { "uri": "karakuri://operations" } }
+    });
+    let rep_res = dispatch(&req_res, &mut state).settled().expect("rep_res");
+    assert_eq!(rep_res["result"]["isError"], false);
 }
 
 /// Verifies that every vocabulary operation is spelled uniquely in the SPELLED table.

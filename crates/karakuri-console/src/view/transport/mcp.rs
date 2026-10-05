@@ -15,6 +15,9 @@ pub const DEFAULT_MCP_ADDR: &str = "127.0.0.1:4040";
 /// Number of interactive rows in the MCP configuration dropdown menu.
 pub const MCP_MENU_ROWS: usize = 5;
 
+/// Number of status rows in the WebMCP dropdown card.
+pub const WEBMCP_MENU_ROWS: usize = 3;
+
 /// Quick preset address:port options in the menu.
 pub const PRESET_ADDRS: &[&str] = &["127.0.0.1:4040", "127.0.0.1:8000", "127.0.0.1:0"];
 
@@ -32,20 +35,40 @@ pub enum McpServerMenu {
 /// Transport row MCP server runtime state and configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct McpServer {
-    /// Configured or bound address:port string (e.g. "127.0.0.1:4040").
+    /// Configured or bound address:port string (e.g. "127.0.0.1:4040"), or "WebMCP".
     pub addr: String,
     /// Whether the server is currently listening.
     pub running: bool,
+    /// Whether running in browser / WebAssembly mode via in-process WebMCP.
+    pub is_webmcp: bool,
     /// Popover menu state.
     pub menu: McpServerMenu,
 }
 
 impl McpServer {
-    /// Creates a new MCP server configuration defaulted to stopped at 127.0.0.1:4040.
+    /// Creates a new MCP server configuration.
     pub fn new() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self::web()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self {
+                addr: DEFAULT_MCP_ADDR.to_string(),
+                running: false,
+                is_webmcp: false,
+                menu: McpServerMenu::Shut,
+            }
+        }
+    }
+
+    /// Creates an active WebMCP configuration for browser / in-process execution.
+    pub fn web() -> Self {
         Self {
-            addr: DEFAULT_MCP_ADDR.to_string(),
-            running: false,
+            addr: "WebMCP".to_string(),
+            running: true,
+            is_webmcp: true,
             menu: McpServerMenu::Shut,
         }
     }
@@ -100,7 +123,13 @@ impl McpServer {
     /// Returns the number of visible rows in the open menu.
     pub fn rows(&self) -> usize {
         match self.menu {
-            McpServerMenu::Open => MCP_MENU_ROWS,
+            McpServerMenu::Open => {
+                if self.is_webmcp {
+                    WEBMCP_MENU_ROWS
+                } else {
+                    MCP_MENU_ROWS
+                }
+            }
             _ => 0,
         }
     }
@@ -181,6 +210,9 @@ impl McpServerPill {
         if mcp.editing().is_some() {
             return None;
         }
+        if mcp.is_webmcp {
+            return Some(McpAsk::Shut);
+        }
         let at = Pos2::new(p.x, p.y);
         for index in 0..self.rows {
             if let Some(r) = self.row(index) {
@@ -202,7 +234,9 @@ impl McpServerPill {
 
 /// Formats the pill text depending on server status.
 fn pill_label(mcp: &McpServer) -> String {
-    if mcp.running {
+    if mcp.is_webmcp {
+        "mcp · WebMCP".to_string()
+    } else if mcp.running {
         format!("mcp · {}", mcp.addr)
     } else {
         "mcp · off".to_string()
@@ -285,11 +319,16 @@ pub fn mcp_server_pill(
     );
 
     let menu = if mcp.open() {
-        let menu_w = 200.0f32.max(pill_w);
+        let menu_w = 220.0f32.max(pill_w);
+        let num_rows = if mcp.is_webmcp {
+            WEBMCP_MENU_ROWS
+        } else {
+            MCP_MENU_ROWS
+        };
         let menu_h = if mcp.editing().is_some() {
             size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H
         } else {
-            size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * MCP_MENU_ROWS as f32 + size::HAIRLINE
+            size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * num_rows as f32 + size::HAIRLINE
         };
         let viewport = to_egui(layout.viewport());
         Some(held_inside(
@@ -310,6 +349,8 @@ pub fn mcp_server_pill(
         menu,
         rows: if mcp.editing().is_some() {
             0
+        } else if mcp.is_webmcp {
+            WEBMCP_MENU_ROWS
         } else {
             MCP_MENU_ROWS
         },
@@ -347,6 +388,37 @@ pub(crate) fn mcp_server_into(ui: &Ui, pal: &Palette, pill: &McpServerPill, mcp:
         return;
     };
     popup_card(painter, pal, card);
+
+    if mcp.is_webmcp {
+        for index in 0..pill.rows {
+            if let Some(row) = pill.row(index) {
+                match index {
+                    0 => {
+                        let label = "● WebMCP (in-process)";
+                        card_row_text(painter, row, label, pal.mint);
+                        let rule_y = row.max.y + size::HAIRLINE * 0.5;
+                        painter.line_segment(
+                            [
+                                Pos2::new(card.min.x + size::LIB_LIST_PAD, rule_y),
+                                Pos2::new(card.max.x - size::LIB_LIST_PAD, rule_y),
+                            ],
+                            Stroke::new(size::HAIRLINE, pal.hair),
+                        );
+                    }
+                    1 => {
+                        let label = "W3C · document.modelContext";
+                        card_row_text(painter, row, label, pal.dim);
+                    }
+                    2 => {
+                        let label = "JS API · window.__karakuri_mcp";
+                        card_row_text(painter, row, label, pal.dim);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        return;
+    }
 
     if let Some(typed) = mcp.editing() {
         let field = Rect::from_min_size(

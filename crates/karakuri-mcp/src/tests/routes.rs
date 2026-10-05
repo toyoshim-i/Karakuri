@@ -98,6 +98,8 @@ const WORKFLOW_TOOLS: &[&str] = &[
     "copy_slot",
     "check_procedure",
     "check_set",
+    "list_resources",
+    "read_resource",
 ];
 
 /// Every tool this server publishes, with the operation one call names.

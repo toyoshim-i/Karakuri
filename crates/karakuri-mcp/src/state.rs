@@ -173,7 +173,7 @@ impl Slots {
             // Reuses standardized slot range error message from no_such_slot.
             .ok_or_else(|| karakuri_environment::no_such_slot(slot, held.len()))?;
         // Resolves node layer kind from procedure header, falling back to L1 for head nodes.
-        let head = std::fs::read(&pair.0)
+        let head = karakuri_store::fs::read(&pair.0)
             .ok()
             .and_then(|source| karakuri_environment::history::declared_kind(&source))
             .and_then(layer_named)
@@ -184,7 +184,7 @@ impl Slots {
         // it is L1 number 1 rather than the beginning of a fresh count.
         let mut next: Vec<(Kind, usize)> = vec![(head, 1)];
         for path in &pair.1 {
-            let layer = std::fs::read(path)
+            let layer = karakuri_store::fs::read(path)
                 .ok()
                 .and_then(|source| karakuri_environment::history::declared_kind(&source))
                 .and_then(layer_named)

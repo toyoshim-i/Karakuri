@@ -23,7 +23,9 @@ pub struct WebApp {
     proxy: EventLoopProxy<()>,
     window: Option<Arc<Window>>,
     pending_gpu: Rc<RefCell<PendingGpu>>,
+    pending_font: Rc<RefCell<Option<Vec<u8>>>>,
     initialized: bool,
+    ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
 }
 
 impl WebApp {
@@ -97,12 +99,24 @@ impl WebApp {
             log::warn!("Karakuri Web: Failed to initialize WebMCP: {e:?}");
         }
 
+        let pending_font = Rc::new(RefCell::new(None));
+        let font_proxy = proxy.clone();
+        let pending_font_clone = Rc::clone(&pending_font);
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Some(bytes) = crate::font_loader::fetch_cjk_font().await {
+                *pending_font_clone.borrow_mut() = Some(bytes);
+                let _ = font_proxy.send_event(());
+            }
+        });
+
         Self {
             app,
             proxy,
             window: None,
             pending_gpu: Rc::new(RefCell::new(None)),
+            pending_font,
             initialized: false,
+            ime_overlay: None,
         }
     }
 }
@@ -143,6 +157,7 @@ impl ApplicationHandler<()> for WebApp {
             .with_title("The Karakuri console")
             .with_canvas(Some(canvas.clone()));
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
+        window.set_ime_allowed(true);
         self.window = Some(window.clone());
 
         let canvas_clone = canvas;
@@ -194,12 +209,30 @@ impl ApplicationHandler<()> for WebApp {
                 }
             }
         });
+
+        match crate::ime_overlay::ImeOverlay::new(
+            self.app.prompt_state().clone(),
+            self.proxy.clone(),
+        ) {
+            Ok(overlay) => {
+                self.ime_overlay = Some(overlay);
+            }
+            Err(e) => {
+                log::warn!("Karakuri Web: Failed to initialize IME overlay: {e:?}");
+            }
+        }
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
         if let Some((window, surface, gpu)) = self.pending_gpu.borrow_mut().take() {
             self.app.attach_gfx(window.clone(), surface, gpu);
             window.request_redraw();
+        }
+        if let Some(font_bytes) = self.pending_font.borrow_mut().take() {
+            self.app.add_cjk_font(font_bytes);
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
         }
     }
 
@@ -208,6 +241,15 @@ impl ApplicationHandler<()> for WebApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(ref overlay) = self.ime_overlay {
+            let rect = self.app.prompt_rect();
+            let scale = self
+                .window
+                .as_ref()
+                .map(|w| w.scale_factor())
+                .unwrap_or(1.0);
+            overlay.sync(rect, scale);
+        }
         self.app.on_about_to_wait(event_loop);
     }
 }

@@ -420,5 +420,40 @@ pub(crate) fn tools() -> Value {
                 "required": ["id"],
             },
         },
+        {
+            "name": "list_resources",
+            "description":
+                "Lists all available reference documentation, language specifications, \
+                 and operation manuals (e.g. karakuri://operations, karakuri://ir-spec, \
+                 karakuri://ir-vocabulary). Call this to discover reference URIs.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        {
+            "name": "read_resource",
+            "description":
+                "Reads the full content of a Karakuri reference resource by URI. \
+                 Available URIs include: \
+                 - `karakuri://operations`: Supported command names, payloads, and parameter schemas for the `operate` tool. \
+                 - `karakuri://ir-spec`: Complete .kir shading language specification, grammar, semantics, and examples. \
+                 - `karakuri://ir-vocabulary`: Built-in function signatures and geometry topologies.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "uri": {
+                        "type": "string",
+                        "description": "the URI of the resource to read",
+                        "enum": [
+                            "karakuri://operations",
+                            "karakuri://ir-spec",
+                            "karakuri://ir-vocabulary",
+                        ],
+                    },
+                },
+                "required": ["uri"],
+            },
+        },
     ])
 }

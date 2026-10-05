@@ -36,6 +36,62 @@ pub fn prompt_head_into(ui: &Ui, pal: &Palette, bay_rect: Rect, state: &PromptSt
     chevron_down(ui.painter(), chevron_rect, chevron_color);
 }
 
+/// Extracts selected text from terminal cell rows given normalized start and end coordinates.
+pub fn extract_selected_text(
+    cell_rows: &[Vec<super::ansi::Cell>],
+    start: (usize, usize),
+    end: (usize, usize),
+) -> String {
+    let (start, end) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    let mut lines = Vec::new();
+    let max_r = end.0.min(cell_rows.len().saturating_sub(1));
+    for (r, row) in cell_rows.iter().enumerate().take(max_r + 1).skip(start.0) {
+        let c_start = if r == start.0 {
+            start.1.min(row.len())
+        } else {
+            0
+        };
+        let c_end = if r == end.0 {
+            end.1.min(row.len())
+        } else {
+            row.len()
+        };
+        if c_start < c_end {
+            let line: String = (c_start..c_end).map(|c| row[c].ch).collect();
+            lines.push(line.trim_end().to_string());
+        } else {
+            lines.push(String::new());
+        }
+    }
+    lines.join("\n")
+}
+
+/// Checks whether the cell at (r, c) falls inside the normalized selection range.
+pub fn is_cell_selected(r: usize, c: usize, start: (usize, usize), end: (usize, usize)) -> bool {
+    let (start, end) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    if r < start.0 || r > end.0 {
+        return false;
+    }
+    if start.0 == end.0 {
+        return c >= start.1 && c < end.1;
+    }
+    if r == start.0 {
+        c >= start.1
+    } else if r == end.0 {
+        c < end.1
+    } else {
+        true
+    }
+}
+
 /// Paints the floating CLI preset dropdown menu (Rule 2 modal overlay).
 pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptState) {
     let Some(id) = layout.find("prompt") else {
@@ -141,6 +197,17 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
     }
 }
 
+/// Copies text to clipboard across desktop and WASM web environments.
+pub fn copy_to_clipboard(ctx: &egui::Context, text: &str) {
+    ctx.copy_text(text.to_string());
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(win) = web_sys::window() {
+            let _ = win.navigator().clipboard().write_text(text);
+        }
+    }
+}
+
 /// Terminal and input font size in the Prompt bay.
 pub const PROMPT_FONT_SIZE: f32 = 10.0;
 
@@ -187,10 +254,54 @@ pub fn prompt_into(
                 }
                 CliSelection::Preset(_) | CliSelection::Custom(_) => {
                     if let Some(session) = state.active_session() {
+                        let cell_rows = session.rows();
+
                         // Dynamic PTY window size adjustment based on bay geometry
                         let cols = ((body_rect.width() - 8.0) / 6.0).max(20.0) as u16;
                         let rows = ((body_rect.height() - 8.0) / 12.0).max(5.0) as u16;
                         session.resize(rows, cols);
+
+                        let char_w = ui.fonts_mut(|f| f.glyph_width(&font_id, 'M')).max(6.0);
+                        let row_h = ui.fonts_mut(|f| f.row_height(&font_id)).max(12.0);
+
+                        // Mouse drag selection handling across the terminal cell grid
+                        let hover_pos = ui
+                            .input(|i| i.pointer.hover_pos().or_else(|| i.pointer.interact_pos()));
+                        if let Some(pos) = hover_pos {
+                            if body_rect.contains(pos) {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+
+                                let rel_x = (pos.x - body_rect.min.x - 4.0).max(0.0);
+                                let rel_y = (pos.y - body_rect.min.y - 4.0).max(0.0);
+                                let col = (rel_x / char_w) as usize;
+                                let row = (rel_y / row_h) as usize;
+
+                                let pressed = ui.input(|i| i.pointer.primary_pressed());
+                                let down = ui.input(|i| i.pointer.primary_down());
+                                let released = ui.input(|i| i.pointer.primary_released());
+
+                                if pressed {
+                                    state.set_selection_anchor(Some((row, col)));
+                                    state.set_selection_range(None);
+                                } else if down {
+                                    if let Some(anchor) = state.selection_anchor() {
+                                        if anchor != (row, col) {
+                                            state.set_selection_range(Some((anchor, (row, col))));
+                                        }
+                                    }
+                                } else if released {
+                                    if let Some(anchor) = state.selection_anchor() {
+                                        if anchor == (row, col) {
+                                            state.clear_selection();
+                                            state.set_captured(true);
+                                        } else {
+                                            state.set_selection_range(Some((anchor, (row, col))));
+                                            state.set_selection_anchor(None);
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         // Direct interactive keyboard streaming to PTY stdin while in capture mode
                         if state.is_captured() {
@@ -203,6 +314,39 @@ pub fn prompt_into(
                                         modifiers,
                                         ..
                                     } => {
+                                        // ⌘C on Mac or Ctrl+C with active text selection: copy selected text
+                                        let is_mac_cmd_c = (modifiers.command || modifiers.mac_cmd)
+                                            && key == egui::Key::C;
+                                        let is_ctrl_c = modifiers.ctrl && key == egui::Key::C;
+
+                                        if is_mac_cmd_c
+                                            || (is_ctrl_c && state.selection_range().is_some())
+                                        {
+                                            if let Some((start, end)) = state.selection_range() {
+                                                let text =
+                                                    extract_selected_text(&cell_rows, start, end);
+                                                if !text.is_empty() {
+                                                    copy_to_clipboard(ui.ctx(), &text);
+                                                }
+                                            }
+                                            continue;
+                                        }
+
+                                        // ⌘A on Mac or Ctrl+A: select all terminal text
+                                        let is_mac_cmd_a = (modifiers.command || modifiers.mac_cmd)
+                                            && key == egui::Key::A;
+                                        let is_ctrl_a = modifiers.ctrl && key == egui::Key::A;
+                                        if is_mac_cmd_a || is_ctrl_a {
+                                            let max_r = cell_rows.len().saturating_sub(1);
+                                            let max_c =
+                                                cell_rows.last().map(|r| r.len()).unwrap_or(0);
+                                            state.set_selection_range(Some((
+                                                (0, 0),
+                                                (max_r, max_c),
+                                            )));
+                                            continue;
+                                        }
+
                                         if modifiers.ctrl {
                                             match key {
                                                 egui::Key::C => {
@@ -275,6 +419,9 @@ pub fn prompt_into(
                                                 egui::Key::Delete => {
                                                     let _ = session.send_bytes(b"\x1b[3~");
                                                 }
+                                                egui::Key::Tab => {
+                                                    let _ = session.send_bytes(b"\t");
+                                                }
                                                 _ => {}
                                             }
                                         }
@@ -282,22 +429,41 @@ pub fn prompt_into(
                                     egui::Event::Text(text) => {
                                         let _ = session.send_bytes(text.as_bytes());
                                     }
+                                    egui::Event::Ime(egui::ImeEvent::Commit(text)) => {
+                                        let _ = session.send_bytes(text.as_bytes());
+                                    }
+                                    egui::Event::Paste(text) => {
+                                        let _ = session.send_bytes(text.as_bytes());
+                                    }
                                     _ => {}
                                 }
                             }
                         }
 
-                        // Activate capture mode when console body is clicked
-                        let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
-                        if pointer_clicked {
-                            if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                                if body_rect.contains(pos) {
-                                    state.set_captured(true);
+                        // Global copy shortcut when Prompt bay has an active text selection or terminal focus
+                        let copy_shortcut = ui.input(|i| {
+                            let is_mac = i.modifiers.command || i.modifiers.mac_cmd;
+                            let is_ctrl = i.modifiers.ctrl;
+                            (is_mac || is_ctrl) && i.key_pressed(egui::Key::C)
+                        });
+                        if copy_shortcut {
+                            if let Some((start, end)) = state.selection_range() {
+                                let text = extract_selected_text(&cell_rows, start, end);
+                                if !text.is_empty() {
+                                    copy_to_clipboard(ui.ctx(), &text);
+                                }
+                            } else if state.is_captured() {
+                                // If captured but no range is selected, copy all terminal output
+                                let max_r = cell_rows.len().saturating_sub(1);
+                                let max_c = cell_rows.last().map(|r| r.len()).unwrap_or(0);
+                                let text =
+                                    extract_selected_text(&cell_rows, (0, 0), (max_r, max_c));
+                                if !text.is_empty() {
+                                    copy_to_clipboard(ui.ctx(), &text);
                                 }
                             }
                         }
 
-                        let cell_rows = session.rows();
                         let cursor = session.cursor();
                         let cursor_visible = session.is_cursor_visible();
                         let is_captured = state.is_captured();
@@ -360,6 +526,14 @@ pub fn prompt_into(
                                     }
                                 }
 
+                                // Apply text selection highlight
+                                if state.selection_range().is_some_and(|(start, end)| {
+                                    is_cell_selected(r_idx, c_idx, start, end)
+                                }) {
+                                    format.background = pal.mint;
+                                    format.color = pal.panel;
+                                }
+
                                 if let Some(ref active_fmt) = current_format {
                                     if active_fmt == &format {
                                         current_span.push(ch);
@@ -392,4 +566,67 @@ pub fn prompt_into(
             }
             ui.add_space(2.0);
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::view::prompt::ansi::Cell;
+
+    #[test]
+    fn test_extract_selected_text_single_and_multi_line() {
+        let rows = vec![
+            "Hello, world!"
+                .chars()
+                .map(|ch| Cell {
+                    ch,
+                    style: Default::default(),
+                })
+                .collect::<Vec<_>>(),
+            "Karakuri Console"
+                .chars()
+                .map(|ch| Cell {
+                    ch,
+                    style: Default::default(),
+                })
+                .collect::<Vec<_>>(),
+            "Third line text"
+                .chars()
+                .map(|ch| Cell {
+                    ch,
+                    style: Default::default(),
+                })
+                .collect::<Vec<_>>(),
+        ];
+
+        // Single line selection
+        let sel = extract_selected_text(&rows, (0, 0), (0, 5));
+        assert_eq!(sel, "Hello");
+
+        // Multi-line selection
+        let sel_multi = extract_selected_text(&rows, (0, 7), (1, 8));
+        assert_eq!(sel_multi, "world!\nKarakuri");
+
+        // Reversed coordinates selection (drag backwards)
+        let sel_rev = extract_selected_text(&rows, (1, 8), (0, 7));
+        assert_eq!(sel_rev, "world!\nKarakuri");
+    }
+
+    #[test]
+    fn test_is_cell_selected() {
+        // Single row selection from col 2 to 5
+        assert!(!is_cell_selected(0, 1, (0, 2), (0, 5)));
+        assert!(is_cell_selected(0, 2, (0, 2), (0, 5)));
+        assert!(is_cell_selected(0, 4, (0, 2), (0, 5)));
+        assert!(!is_cell_selected(0, 5, (0, 2), (0, 5)));
+
+        // Multi row selection (row 1, col 3 to row 3, col 2)
+        assert!(!is_cell_selected(0, 5, (1, 3), (3, 2)));
+        assert!(is_cell_selected(1, 3, (1, 3), (3, 2)));
+        assert!(is_cell_selected(1, 10, (1, 3), (3, 2)));
+        assert!(is_cell_selected(2, 0, (1, 3), (3, 2)));
+        assert!(is_cell_selected(3, 1, (1, 3), (3, 2)));
+        assert!(!is_cell_selected(3, 2, (1, 3), (3, 2)));
+        assert!(!is_cell_selected(4, 0, (1, 3), (3, 2)));
+    }
 }
