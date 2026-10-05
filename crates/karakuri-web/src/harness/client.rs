@@ -14,7 +14,13 @@ use crate::webmcp::execute_tool_async;
 pub fn mcp_tools_to_openai(mcp_tools: &serde_json::Value) -> serde_json::Value {
     let mut openai_tools = Vec::new();
 
-    if let Some(tools_array) = mcp_tools.get("tools").and_then(|t| t.as_array()) {
+    let tools_array_opt = if let Some(arr) = mcp_tools.as_array() {
+        Some(arr)
+    } else {
+        mcp_tools.get("tools").and_then(|t| t.as_array())
+    };
+
+    if let Some(tools_array) = tools_array_opt {
         for t in tools_array {
             let name = t.get("name").and_then(|n| n.as_str()).unwrap_or_default();
             let desc = t
@@ -42,75 +48,235 @@ pub fn mcp_tools_to_openai(mcp_tools: &serde_json::Value) -> serde_json::Value {
     json!(openai_tools)
 }
 
-/// Formats messages for the LLM. If `merge_system` is true (e.g. for Gemma or models without system role),
-/// any system prompt is prepended to the first user message instead of being an independent role.
-pub fn prepare_messages(
-    messages: &[serde_json::Value],
-    merge_system: bool,
-) -> Vec<serde_json::Value> {
-    if !merge_system {
-        return messages.to_vec();
-    }
+/// Extracts tool calls from unstructured or markdown text when models emit
+/// raw JSON blocks instead of native OpenAI `tool_calls` deltas.
+/// Returns the extracted tool calls and the remaining cleaned text with tool call blocks removed.
+pub fn extract_text_tool_calls_and_clean(
+    text: &str,
+    valid_tool_names: &[String],
+) -> (Vec<(String, String)>, Option<String>) {
+    let mut results = Vec::new();
+    let mut removal_ranges = Vec::new();
 
-    let mut system_text = String::new();
-    let mut other_messages = Vec::new();
-
-    for m in messages {
-        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or_default();
-        if role == "system" {
-            if let Some(content) = m.get("content").and_then(|c| c.as_str()) {
-                if !system_text.is_empty() {
-                    system_text.push('\n');
-                }
-                system_text.push_str(content);
-            }
+    // 1. Look for ```json ... ``` or ``` ... ``` blocks
+    let mut search_idx = 0;
+    while let Some(start_tick) = text[search_idx..].find("```") {
+        let abs_start = search_idx + start_tick;
+        let inner_start = abs_start + 3;
+        let content_start = if let Some(newline_pos) = text[inner_start..].find('\n') {
+            inner_start + newline_pos + 1
         } else {
-            other_messages.push(m.clone());
-        }
-    }
+            inner_start
+        };
 
-    if system_text.is_empty() {
-        return other_messages;
-    }
-
-    let mut merged = Vec::new();
-    let mut system_prepended = false;
-
-    for mut m in other_messages {
-        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or_default();
-        if role == "user" && !system_prepended {
-            let current_content = m
-                .get("content")
-                .and_then(|c| c.as_str())
-                .unwrap_or_default();
-            let new_content = format!(
-                "[System Instructions]\n{}\n\n[User Query]\n{}",
-                system_text, current_content
-            );
-            if let Some(obj) = m.as_object_mut() {
-                obj.insert("content".to_string(), json!(new_content));
+        if let Some(end_tick) = text[content_start..].find("```") {
+            let block = text[content_start..content_start + end_tick].trim();
+            if let Some(parsed) = try_parse_candidate_tool_call(block, valid_tool_names) {
+                results.extend(parsed);
+                let abs_end = content_start + end_tick + 3;
+                removal_ranges.push((abs_start, abs_end));
             }
-            system_prepended = true;
+            search_idx = content_start + end_tick + 3;
+        } else {
+            break;
         }
-        merged.push(m);
     }
 
-    if !system_prepended {
-        merged.insert(
-            0,
-            json!({
-                "role": "user",
-                "content": format!("[System Instructions]\n{}", system_text),
-            }),
-        );
+    // 2. Look for <tool_call> ... </tool_call> tags
+    search_idx = 0;
+    while let Some(start_tag) = text[search_idx..].find("<tool_call>") {
+        let abs_start = search_idx + start_tag;
+        let content_start = abs_start + 11;
+        if let Some(end_tag) = text[content_start..].find("</tool_call>") {
+            let block = text[content_start..content_start + end_tag].trim();
+            if let Some(parsed) = try_parse_candidate_tool_call(block, valid_tool_names) {
+                results.extend(parsed);
+                let abs_end = content_start + end_tag + 12;
+                removal_ranges.push((abs_start, abs_end));
+            }
+            search_idx = content_start + end_tag + 12;
+        } else {
+            break;
+        }
     }
 
-    merged
+    // 3. If no fenced blocks yielded valid calls, try parsing the entire trimmed text or raw {...} substring
+    if results.is_empty() {
+        if let Some(parsed) = try_parse_candidate_tool_call(text.trim(), valid_tool_names) {
+            results.extend(parsed);
+            removal_ranges.push((0, text.len()));
+        } else if let (Some(first_brace), Some(last_brace)) = (text.find('{'), text.rfind('}')) {
+            if first_brace < last_brace {
+                let sub = &text[first_brace..=last_brace];
+                if let Some(parsed) = try_parse_candidate_tool_call(sub, valid_tool_names) {
+                    results.extend(parsed);
+                    removal_ranges.push((first_brace, last_brace + 1));
+                }
+            }
+        }
+    }
+
+    if results.is_empty() {
+        let clean = text.trim();
+        let ret = if clean.is_empty() {
+            None
+        } else {
+            Some(clean.to_string())
+        };
+        return (results, ret);
+    }
+
+    // Remove the ranges from text
+    let mut cleaned = String::with_capacity(text.len());
+    let mut last_idx = 0;
+    for (start, end) in removal_ranges {
+        if start >= last_idx {
+            cleaned.push_str(&text[last_idx..start]);
+            last_idx = end;
+        }
+    }
+    if last_idx < text.len() {
+        cleaned.push_str(&text[last_idx..]);
+    }
+
+    let trimmed = cleaned.trim();
+    let ret = if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    };
+
+    (results, ret)
+}
+
+/// Extracts tool calls from unstructured or markdown text when models emit
+/// raw JSON blocks instead of native OpenAI `tool_calls` deltas.
+pub fn extract_text_tool_calls(text: &str, valid_tool_names: &[String]) -> Vec<(String, String)> {
+    extract_text_tool_calls_and_clean(text, valid_tool_names).0
+}
+
+fn try_parse_candidate_tool_call(
+    json_str: &str,
+    valid_tool_names: &[String],
+) -> Option<Vec<(String, String)>> {
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) else {
+        return None;
+    };
+
+    let mut found = Vec::new();
+
+    if let Some(arr) = val.as_array() {
+        for item in arr {
+            if let Some((name, args)) = parse_single_tool_call_value(item, valid_tool_names) {
+                found.push((name, args));
+            }
+        }
+    } else if let Some((name, args)) = parse_single_tool_call_value(&val, valid_tool_names) {
+        found.push((name, args));
+    }
+
+    if found.is_empty() {
+        None
+    } else {
+        Some(found)
+    }
+}
+
+fn parse_single_tool_call_value(
+    val: &serde_json::Value,
+    valid_tool_names: &[String],
+) -> Option<(String, String)> {
+    let obj = val.as_object()?;
+
+    let name_opt = obj
+        .get("name")
+        .or_else(|| obj.get("tool"))
+        .or_else(|| obj.get("action"))
+        .or_else(|| obj.get("function"))
+        .and_then(|v| {
+            if let Some(s) = v.as_str() {
+                Some(s.to_string())
+            } else if let Some(fn_obj) = v.as_object() {
+                fn_obj
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        });
+
+    let name = name_opt?;
+    if !valid_tool_names.iter().any(|v| v == &name) {
+        return None;
+    }
+
+    let args_val = if let Some(args) = obj
+        .get("arguments")
+        .or_else(|| obj.get("parameters"))
+        .or_else(|| obj.get("args"))
+        .or_else(|| obj.get("input"))
+    {
+        if let Some(s) = args.as_str() {
+            serde_json::from_str(s).unwrap_or_else(|_| serde_json::json!({}))
+        } else {
+            args.clone()
+        }
+    } else if name == "operate" && obj.contains_key("operation") {
+        val.clone()
+    } else {
+        let mut clean = obj.clone();
+        clean.remove("name");
+        clean.remove("tool");
+        clean.remove("action");
+        clean.remove("function");
+        serde_json::Value::Object(clean)
+    };
+
+    Some((name, args_val.to_string()))
+}
+
+/// Extracts the underlying payload text from an MCP JSON-RPC response.
+pub fn extract_mcp_result_text(result_val: &serde_json::Value) -> String {
+    // 1. If wrapped in JSON-RPC: result.content
+    if let Some(res) = result_val.get("result") {
+        if let Some(content_arr) = res.get("content").and_then(|c| c.as_array()) {
+            let mut texts = Vec::new();
+            for item in content_arr {
+                if let Some(t) = item.get("text").and_then(|s| s.as_str()) {
+                    texts.push(t.to_string());
+                }
+            }
+            if !texts.is_empty() {
+                return texts.join("\n");
+            }
+        }
+        return res.to_string();
+    }
+    // 2. If it is already a content array:
+    if let Some(content_arr) = result_val.get("content").and_then(|c| c.as_array()) {
+        let mut texts = Vec::new();
+        for item in content_arr {
+            if let Some(t) = item.get("text").and_then(|s| s.as_str()) {
+                texts.push(t.to_string());
+            }
+        }
+        if !texts.is_empty() {
+            return texts.join("\n");
+        }
+    }
+    result_val.to_string()
+}
+
+/// Prepares messages for sending to the LLM. Messages remain strictly immutable
+/// to ensure prefix caching (prompt caching / KV cache) hits across multi-turn interactions.
+pub fn prepare_messages(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    messages.to_vec()
 }
 
 /// Executes a chat completion query against the configured LLM endpoint, streaming tokens
 /// and dispatching any emitted `tool_calls` in-process. Automatically falls back to chat-only
-/// mode if the model does not support tools schema or system prompt roles (e.g. Gemma).
+/// mode if the model does not support tools schema.
 pub async fn run_agent_loop<F>(
     config: HarnessConfig,
     mcp: InProcessMcp,
@@ -129,12 +295,11 @@ where
     let model_lower = config.model.to_lowercase();
     let is_likely_gemma = model_lower.contains("gemma") || model_lower.contains("phi");
     let mut enable_tools = !is_likely_gemma;
-    let mut merge_system = is_likely_gemma;
 
     while round < MAX_ROUNDS {
         round += 1;
 
-        let outgoing_messages = prepare_messages(messages, merge_system);
+        let outgoing_messages = prepare_messages(messages);
 
         let mut request_body = json!({
             "model": config.model,
@@ -192,19 +357,18 @@ where
                 .unwrap_or_default();
 
             let lower_body = body.to_lowercase();
-            // If the failure was due to tools/function calling or system prompt, retry in fallback mode
+            // If the failure was due to tools/function calling or schema, retry in chat-only mode
+            // without modifying message history prefixes.
             if enable_tools
                 && (status == 400
                     || lower_body.contains("tool")
                     || lower_body.contains("function")
                     || lower_body.contains("support")
-                    || lower_body.contains("system")
                     || lower_body.contains("schema"))
             {
                 enable_tools = false;
-                merge_system = true;
                 on_output(
-                    "\r\n\x1b[2;33m[Notice: Model does not support function calling tools; falling back to direct chat mode]\x1b[0m\r\n",
+                    "\r\n\x1b[36m[Notice: Model does not support function calling tools; falling back to direct chat mode]\x1b[0m\r\n",
                 );
                 continue;
             }
@@ -321,10 +485,44 @@ where
             }
         }
 
+        // Resolve tool calls: either from native streaming delta `tool_calls`,
+        // or extracted from markdown/raw JSON blocks in `assistant_content` (for models that emit JSON in text).
+        let mut resolved_tool_calls: Vec<(String, String, String)> =
+            tool_calls_map.into_values().collect();
+
+        let mut cleaned_assistant_text: Option<String> = if assistant_content.trim().is_empty() {
+            None
+        } else {
+            Some(assistant_content.trim().to_string())
+        };
+
+        if resolved_tool_calls.is_empty() && enable_tools {
+            let valid_names: Vec<String> = mcp
+                .tools()
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|t| {
+                            t.get("name")
+                                .and_then(|n| n.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let (fallback_calls, clean_text) =
+                extract_text_tool_calls_and_clean(&assistant_content, &valid_names);
+            cleaned_assistant_text = clean_text;
+            for (idx, (fn_name, args_str)) in fallback_calls.into_iter().enumerate() {
+                resolved_tool_calls.push((format!("call_{idx}"), fn_name, args_str));
+            }
+        }
+
         // If tools were called, execute them and append to conversation
-        if !tool_calls_map.is_empty() {
+        if !resolved_tool_calls.is_empty() {
             let mut tool_calls_json = Vec::new();
-            for (call_id, fn_name, args_str) in tool_calls_map.values() {
+            for (call_id, fn_name, args_str) in &resolved_tool_calls {
                 let id = if call_id.is_empty() {
                     "call_1".to_string()
                 } else {
@@ -342,19 +540,20 @@ where
 
             messages.push(json!({
                 "role": "assistant",
-                "content": if assistant_content.is_empty() { serde_json::Value::Null } else { json!(assistant_content) },
+                "content": match cleaned_assistant_text {
+                    Some(text) => json!(text),
+                    None => serde_json::Value::Null,
+                },
                 "tool_calls": tool_calls_json,
             }));
 
-            for (call_id, fn_name, args_str) in tool_calls_map.into_values() {
+            for (call_id, fn_name, args_str) in resolved_tool_calls {
                 let id = if call_id.is_empty() {
                     "call_1".to_string()
                 } else {
-                    call_id.clone()
+                    call_id
                 };
-                on_output(&format!(
-                    "\r\n\x1b[33m⚡ Executing tool:\x1b[0m \x1b[1;37m{fn_name}\x1b[0m({args_str})...\r\n"
-                ));
+                on_output(&format!("\r\n\x1b[36m⚡ Executing {fn_name}...\x1b[0m\r\n"));
 
                 let args_val: serde_json::Value =
                     serde_json::from_str(&args_str).unwrap_or_else(|_| json!({}));
@@ -363,13 +562,23 @@ where
                     .await
                 {
                     Ok(result) => {
-                        let res_str = result.to_string();
-                        on_output(&format!("  \x1b[32m✔ Result:\x1b[0m {res_str}\r\n"));
+                        let payload_text = extract_mcp_result_text(&result);
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            web_sys::console::log_2(
+                                &wasm_bindgen::JsValue::from_str(&format!(
+                                    "[Karakuri Tool: {fn_name}]"
+                                )),
+                                &wasm_bindgen::JsValue::from_str(&payload_text),
+                            );
+                        }
+                        log::info!("[Karakuri Tool: {fn_name}] => {payload_text}");
+
                         messages.push(json!({
                             "role": "tool",
                             "tool_call_id": id,
                             "name": fn_name,
-                            "content": res_str,
+                            "content": payload_text,
                         }));
                     }
                     Err(e) => {

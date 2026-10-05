@@ -4,6 +4,7 @@
 
 pub mod client;
 pub mod config;
+pub mod editor;
 pub mod menu;
 pub mod probe;
 
@@ -20,15 +21,19 @@ use serde_json::json;
 use winit::event_loop::EventLoopProxy;
 
 use self::config::HarnessConfig;
+use self::editor::{
+    insert_str_at, next_word_boundary, prev_word_boundary, redraw_prompt_line, remove_char_at,
+    remove_char_range,
+};
 use self::menu::{MenuAction, ModelMenu};
 
-const PROMPT_LABEL: &str = "\x1b[1;36mYou\x1b[0m > ";
+pub const PROMPT_LABEL: &str = "\x1b[1;36mYou\x1b[0m > ";
 const AGENT_LABEL: &str = "\x1b[1;35mKarakuri\x1b[0m > ";
 
 const SYSTEM_PROMPT: &str = r#"You are the Karakuri AI VJ Assistant running directly inside the browser.
-You control a real-time procedural WebGPU visual performance engine with 14 in-process MCP tools.
+You control a real-time procedural WebGPU visual performance engine with in-process MCP tools.
 You can read slots, wire parameters, transition decks, inspect performance costs, and execute operations.
-When the user asks you to operate the mixer, change BPM, swap procedures, or alter visuals, call the appropriate Karakuri tool.
+When the user asks you to operate the mixer, change BPM, swap procedures, or alter visuals, invoke the appropriate function/tool call directly. Do not output raw JSON tool call blocks in your text message unless asked.
 Respond concisely and helpfully in the user's language."#;
 
 #[derive(Debug, Clone, Copy)]
@@ -78,6 +83,8 @@ pub struct Harness {
     scrollback: Arc<Mutex<Scrollback>>,
     messages: Arc<Mutex<Vec<serde_json::Value>>>,
     input_buffer: Arc<Mutex<String>>,
+    cursor_pos: Arc<Mutex<usize>>,
+    undo_stack: Arc<Mutex<Vec<(String, usize)>>>,
     active_menu: Arc<Mutex<Option<ModelMenu>>>,
     is_busy: Arc<Mutex<bool>>,
     completion_index: Arc<Mutex<Option<usize>>>,
@@ -116,6 +123,8 @@ impl Harness {
             scrollback,
             messages: Arc::new(Mutex::new(initial_messages)),
             input_buffer: Arc::new(Mutex::new(String::new())),
+            cursor_pos: Arc::new(Mutex::new(0)),
+            undo_stack: Arc::new(Mutex::new(Vec::new())),
             active_menu: Arc::new(Mutex::new(None)),
             is_busy: Arc::new(Mutex::new(false)),
             completion_index: Arc::new(Mutex::new(None)),
@@ -199,8 +208,24 @@ impl Harness {
         }
         drop(menu_opt);
 
+        let mut buf_lock = self.input_buffer.lock().unwrap();
+        let mut cur_lock = self.cursor_pos.lock().unwrap();
+        let mut undo_lock = self.undo_stack.lock().unwrap();
+
+        let save_undo = |buf: &String, cur: usize, undo: &mut Vec<(String, usize)>| {
+            if undo.last().map(|(s, _)| s != buf).unwrap_or(true) {
+                undo.push((buf.clone(), cur));
+                if undo.len() > 50 {
+                    undo.remove(0);
+                }
+            }
+        };
+
         // 3. Tab: Slash command autocompletion
         if bytes == b"\t" {
+            drop(buf_lock);
+            drop(cur_lock);
+            drop(undo_lock);
             self.handle_tab_completion();
             return;
         }
@@ -208,12 +233,14 @@ impl Harness {
         // 4. Enter: Execute command or prompt
         if bytes == b"\r" || bytes == b"\n" {
             *self.completion_index.lock().unwrap() = None;
-            let line = {
-                let mut buf = self.input_buffer.lock().unwrap();
-                let taken = buf.clone();
-                buf.clear();
-                taken
-            };
+            let line = buf_lock.clone();
+            buf_lock.clear();
+            *cur_lock = 0;
+            undo_lock.clear();
+            drop(buf_lock);
+            drop(cur_lock);
+            drop(undo_lock);
+
             if let Ok(mut sb) = self.scrollback.lock() {
                 sb.push_str("\r\n");
             }
@@ -221,23 +248,169 @@ impl Harness {
             return;
         }
 
-        // 5. Backspace
+        // 5. Backspace: delete character before cursor
         if bytes == b"\x7f" || bytes == b"\x08" {
             *self.completion_index.lock().unwrap() = None;
-            let mut buf = self.input_buffer.lock().unwrap();
-            if !buf.is_empty() {
-                buf.pop();
+            if *cur_lock > 0 {
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                *cur_lock -= 1;
+                remove_char_at(&mut buf_lock, *cur_lock);
                 if let Ok(mut sb) = self.scrollback.lock() {
-                    sb.push_str("\x08 \x08");
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
                 }
             }
             return;
         }
 
-        // 6. Ctrl+C
+        // 6. Delete character at cursor (Delete key \x1b[3~ or Ctrl+D \x04)
+        if bytes == b"\x1b[3~" || bytes == b"\x04" {
+            *self.completion_index.lock().unwrap() = None;
+            let total = buf_lock.chars().count();
+            if *cur_lock < total {
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                remove_char_at(&mut buf_lock, *cur_lock);
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 7. Delete line to start (⌘Backspace / Ctrl+U \x15)
+        if bytes == b"\x15" {
+            *self.completion_index.lock().unwrap() = None;
+            if *cur_lock > 0 {
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                remove_char_range(&mut buf_lock, 0, *cur_lock);
+                *cur_lock = 0;
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 8. Delete word before cursor (⌥Backspace / Ctrl+Backspace / Ctrl+W \x17)
+        if bytes == b"\x17" {
+            *self.completion_index.lock().unwrap() = None;
+            if *cur_lock > 0 {
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                let prev = prev_word_boundary(&buf_lock, *cur_lock);
+                remove_char_range(&mut buf_lock, prev, *cur_lock);
+                *cur_lock = prev;
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 9. Delete word after cursor (⌥Delete / Ctrl+Delete \x1bd)
+        if bytes == b"\x1bd" {
+            *self.completion_index.lock().unwrap() = None;
+            let total = buf_lock.chars().count();
+            if *cur_lock < total {
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                let next = next_word_boundary(&buf_lock, *cur_lock);
+                remove_char_range(&mut buf_lock, *cur_lock, next);
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 10. Delete line to end (⌘K / Ctrl+K \x0b)
+        if bytes == b"\x0b" {
+            *self.completion_index.lock().unwrap() = None;
+            let total = buf_lock.chars().count();
+            if *cur_lock < total {
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                remove_char_range(&mut buf_lock, *cur_lock, total);
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 11. Cursor to start of line (⌘Left / Home / Ctrl+A: \x1b[H or \x01)
+        if bytes == b"\x1b[H" || bytes == b"\x01" {
+            *cur_lock = 0;
+            if let Ok(mut sb) = self.scrollback.lock() {
+                redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+            }
+            return;
+        }
+
+        // 12. Cursor to end of line (⌘Right / End / Ctrl+E: \x1b[F or \x05)
+        if bytes == b"\x1b[F" || bytes == b"\x05" {
+            *cur_lock = buf_lock.chars().count();
+            if let Ok(mut sb) = self.scrollback.lock() {
+                redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+            }
+            return;
+        }
+
+        // 13. Cursor one character left (ArrowLeft / Ctrl+B: \x1b[D or \x02)
+        if bytes == b"\x1b[D" || bytes == b"\x02" {
+            if *cur_lock > 0 {
+                *cur_lock -= 1;
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 14. Cursor one character right (ArrowRight / Ctrl+F: \x1b[C or \x06)
+        if bytes == b"\x1b[C" || bytes == b"\x06" {
+            let total = buf_lock.chars().count();
+            if *cur_lock < total {
+                *cur_lock += 1;
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 15. Cursor word backward (⌥Left / Ctrl+Left: \x1bb)
+        if bytes == b"\x1bb" {
+            *cur_lock = prev_word_boundary(&buf_lock, *cur_lock);
+            if let Ok(mut sb) = self.scrollback.lock() {
+                redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+            }
+            return;
+        }
+
+        // 16. Cursor word forward (⌥Right / Ctrl+Right: \x1bf)
+        if bytes == b"\x1bf" {
+            *cur_lock = next_word_boundary(&buf_lock, *cur_lock);
+            if let Ok(mut sb) = self.scrollback.lock() {
+                redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+            }
+            return;
+        }
+
+        // 17. Undo (⌘Z / Ctrl+Z: \x1f or \x1a)
+        if bytes == b"\x1f" || bytes == b"\x1a" {
+            if let Some((prev_buf, prev_cur)) = undo_lock.pop() {
+                *buf_lock = prev_buf;
+                *cur_lock = prev_cur;
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
+                }
+            }
+            return;
+        }
+
+        // 18. Ctrl+C: Cancel / clear current input line
         if bytes == b"\x03" {
             *self.completion_index.lock().unwrap() = None;
-            self.input_buffer.lock().unwrap().clear();
+            buf_lock.clear();
+            *cur_lock = 0;
+            undo_lock.clear();
             if let Ok(mut sb) = self.scrollback.lock() {
                 sb.push_str("^C\r\n");
                 sb.push_str(PROMPT_LABEL);
@@ -245,29 +418,32 @@ impl Harness {
             return;
         }
 
-        // 7. Ctrl+L (Clear screen)
+        // 19. Ctrl+L: Clear screen
         if bytes == b"\x0c" {
             *self.completion_index.lock().unwrap() = None;
             if let Ok(mut sb) = self.scrollback.lock() {
                 sb.push_str("\x1b[2J\x1b[H");
-                sb.push_str(PROMPT_LABEL);
-                let buf = self.input_buffer.lock().unwrap();
-                sb.push_str(&buf);
+                redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
             }
             return;
         }
 
-        // 8. Normal text input (including multibyte Japanese IME text)
+        // 20. Normal text input (including paste & multibyte Japanese IME text)
         if let Ok(s) = std::str::from_utf8(bytes) {
             if !s.chars().any(|c| c.is_control()) {
                 *self.completion_index.lock().unwrap() = None;
-                self.input_buffer.lock().unwrap().push_str(s);
+                save_undo(&buf_lock, *cur_lock, &mut undo_lock);
+                insert_str_at(&mut buf_lock, *cur_lock, s);
+                *cur_lock += s.chars().count();
                 if let Ok(mut sb) = self.scrollback.lock() {
-                    sb.push_str(s);
+                    redraw_prompt_line(&mut sb, &buf_lock, *cur_lock);
                 }
 
                 // If user just typed '/', hint available commands inline
-                if self.input_buffer.lock().unwrap().as_str() == "/" {
+                if buf_lock.as_str() == "/" {
+                    drop(buf_lock);
+                    drop(cur_lock);
+                    drop(undo_lock);
                     self.show_command_hints();
                 }
             }
@@ -300,18 +476,11 @@ impl Harness {
         let chosen = matches[next_idx];
         let replacement = format!("{} ", chosen.name);
 
-        // Erase old input from terminal line
-        let old_len = current.len();
-        let mut erase_seq = String::new();
-        for _ in 0..old_len {
-            erase_seq.push_str("\x08 \x08");
-        }
-        erase_seq.push_str(&replacement);
-
-        *self.input_buffer.lock().unwrap() = replacement;
+        *self.input_buffer.lock().unwrap() = replacement.clone();
+        *self.cursor_pos.lock().unwrap() = replacement.chars().count();
 
         if let Ok(mut sb) = self.scrollback.lock() {
-            sb.push_str(&erase_seq);
+            redraw_prompt_line(&mut sb, &replacement, replacement.chars().count());
         }
     }
 

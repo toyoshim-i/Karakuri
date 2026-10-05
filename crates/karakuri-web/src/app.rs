@@ -251,5 +251,13 @@ impl ApplicationHandler<()> for WebApp {
             overlay.sync(rect, scale);
         }
         self.app.on_about_to_wait(event_loop);
+        if matches!(
+            event_loop.control_flow(),
+            winit::event_loop::ControlFlow::Wait
+        ) {
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
+                web_time::Instant::now() + std::time::Duration::from_millis(32),
+            ));
+        }
     }
 }

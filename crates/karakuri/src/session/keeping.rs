@@ -165,9 +165,10 @@ impl Keeping {
             values,
         };
         let tx = self.save_tx.clone();
-        // Spawn background thread to write save without blocking current frame.
+        // Spawn background thread to write save without blocking current frame on native,
+        // or execute synchronously on wasm32 where threading is unsupported.
         self.in_flight += 1;
-        std::thread::spawn(move || {
+        let job = move || {
             let (slot, asked, id) = (save.slot, save.asked, save.id.clone());
             let outcome = save.run();
             let _ = tx.send(Saved {
@@ -177,7 +178,11 @@ impl Keeping {
                 outcome,
                 reply,
             });
-        });
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(job);
+        #[cfg(target_arch = "wasm32")]
+        job();
     }
 
     /// Writes a single node procedure into the library on a background worker thread
@@ -240,11 +245,16 @@ impl Keeping {
             reply,
         };
         let tx = self.keep_tx.clone();
-        // Spawn background thread to persist kept procedure off the frame path.
+        // Spawn background thread to persist kept procedure off the frame path on native,
+        // or execute synchronously on wasm32 where threading is unsupported.
         self.in_flight += 1;
-        std::thread::spawn(move || {
+        let job = move || {
             let _ = tx.send(kept.run());
-        });
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(job);
+        #[cfg(target_arch = "wasm32")]
+        job();
     }
 
     /// Collects completed procedure save tasks and returns true if any operator keep landed.

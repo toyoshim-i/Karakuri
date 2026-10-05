@@ -9,7 +9,7 @@ use web_sys::HtmlTextAreaElement;
 use winit::event_loop::EventLoopProxy;
 
 use karakuri_console::egui::Rect;
-use karakuri_console::view::prompt::PromptState;
+use karakuri_console::view::prompt::{extract_selected_text, PromptState};
 
 pub struct ImeOverlay {
     element: HtmlTextAreaElement,
@@ -40,7 +40,7 @@ impl ImeOverlay {
         textarea.set_attribute("tabindex", "0")?;
 
         let style = textarea.style();
-        style.set_property("position", "absolute")?;
+        style.set_property("position", "fixed")?;
         style.set_property("left", "0px")?;
         style.set_property("top", "0px")?;
         style.set_property("width", "10px")?;
@@ -59,6 +59,9 @@ impl ImeOverlay {
         style.set_property("line-height", "12px")?;
         style.set_property("padding", "0")?;
         style.set_property("margin", "0")?;
+        style.set_property("pointer-events", "none")?;
+        style.set_property("user-select", "none")?;
+        style.set_property("-webkit-user-select", "none")?;
 
         body.append_child(&textarea)?;
 
@@ -178,6 +181,26 @@ impl ImeOverlay {
                             bytes_to_send = Some(b"\x1b[D");
                             handled = true;
                         }
+                        "c" | "C" if cmd || (ctrl && state.selection_range().is_some()) => {
+                            if let Some(session) = state.active_session() {
+                                let rows = session.rows();
+                                let text = if let Some((start, end)) = state.selection_range() {
+                                    extract_selected_text(&rows, start, end)
+                                } else if state.is_captured() {
+                                    let max_r = rows.len().saturating_sub(1);
+                                    let max_c = rows.last().map(|r| r.len()).unwrap_or(0);
+                                    extract_selected_text(&rows, (0, 0), (max_r, max_c))
+                                } else {
+                                    String::new()
+                                };
+                                if !text.is_empty() {
+                                    if let Some(win) = web_sys::window() {
+                                        let _ = win.navigator().clipboard().write_text(&text);
+                                    }
+                                }
+                            }
+                            handled = true;
+                        }
                         "c" | "C" if ctrl => {
                             bytes_to_send = Some(b"\x03");
                             handled = true;
@@ -228,6 +251,40 @@ impl ImeOverlay {
             closures.push(cb);
         }
 
+        // 5. copy (handles native ⌘C, browser Edit -> Copy, and context menu Copy)
+        {
+            let state = prompt_state.clone();
+            let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+                if let Some(session) = state.active_session() {
+                    let rows = session.rows();
+                    let text = if let Some((start, end)) = state.selection_range() {
+                        extract_selected_text(&rows, start, end)
+                    } else if state.is_captured() {
+                        let max_r = rows.len().saturating_sub(1);
+                        let max_c = rows.last().map(|r| r.len()).unwrap_or(0);
+                        extract_selected_text(&rows, (0, 0), (max_r, max_c))
+                    } else {
+                        String::new()
+                    };
+
+                    if !text.is_empty() {
+                        if let Ok(clip_ev) = ev.clone().dyn_into::<web_sys::ClipboardEvent>() {
+                            if let Some(dt) = clip_ev.clipboard_data() {
+                                let _ = dt.set_data("text/plain", &text);
+                                ev.prevent_default();
+                            }
+                        }
+                        if let Some(win) = web_sys::window() {
+                            let _ = win.navigator().clipboard().write_text(&text);
+                        }
+                    }
+                }
+            });
+            textarea.add_event_listener_with_callback("copy", cb.as_ref().unchecked_ref())?;
+            window.add_event_listener_with_callback("copy", cb.as_ref().unchecked_ref())?;
+            closures.push(cb);
+        }
+
         Ok(Self {
             element: textarea,
             prompt_state,
@@ -240,6 +297,7 @@ impl ImeOverlay {
     pub fn sync(&self, bay_rect: Option<Rect>, _scale: f64) {
         let is_captured = self.prompt_state.is_captured();
         if !is_captured {
+            let _ = self.element.blur();
             return;
         }
 
@@ -265,6 +323,19 @@ impl ImeOverlay {
         let _ = style.set_property("left", &format!("{:.1}px", cursor_x));
         let _ = style.set_property("top", &format!("{:.1}px", cursor_y));
 
-        let _ = self.element.focus();
+        if let Some(win) = web_sys::window() {
+            if let Some(doc) = win.document() {
+                let is_already_active = doc
+                    .active_element()
+                    .map(|el| el == *self.element.as_ref())
+                    .unwrap_or(false);
+                if !is_already_active {
+                    let opts = web_sys::FocusOptions::new();
+                    opts.set_prevent_scroll(true);
+                    let _ = self.element.focus_with_options(&opts);
+                }
+            }
+            win.scroll_to_with_x_and_y(0.0, 0.0);
+        }
     }
 }

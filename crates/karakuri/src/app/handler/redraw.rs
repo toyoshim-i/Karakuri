@@ -21,6 +21,7 @@ impl App {
         let now = Instant::now();
         if let Some(last) = self.frame_drawn_at {
             if now.duration_since(last) < Duration::from_millis(4) {
+                gfx.window.request_redraw();
                 return;
             }
         }
@@ -84,7 +85,9 @@ impl App {
                     self.costs.owes();
                     gfx.window.request_redraw();
                 }
-                Missed::Idle => {}
+                Missed::Idle => {
+                    gfx.window.request_redraw();
+                }
                 Missed::Fault => {
                     if !self.faulted {
                         self.faulted = true;
@@ -96,6 +99,9 @@ impl App {
                 }
             }
             if gfx.projector.is_none() {
+                if !self.faulted {
+                    gfx.window.request_redraw();
+                }
                 return;
             }
             None
@@ -106,6 +112,7 @@ impl App {
                 | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => Some(frame),
                 _ => {
                     if gfx.projector.is_none() {
+                        gfx.window.request_redraw();
                         return;
                     }
                     None

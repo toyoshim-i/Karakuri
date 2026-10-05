@@ -233,63 +233,139 @@ pub fn prompt_into(
 
     let mut terminal_ui = ui.new_child(egui::UiBuilder::new().max_rect(body_rect));
     terminal_ui.spacing_mut().item_spacing.y = 1.0;
+    terminal_ui.style_mut().interaction.selectable_labels = false;
+
+    let scroll_id_salt = "prompt_terminal_scroll";
+    let scroll_id = terminal_ui.id().with(egui::IdSalt::new(scroll_id_salt));
+    let has_selection = state.selection_range().is_some() || state.selection_anchor().is_some();
+    let scroll_state =
+        egui::scroll_area::State::load(terminal_ui.ctx(), scroll_id).unwrap_or_default();
+    let scroll_y = scroll_state.offset.y;
 
     egui::ScrollArea::vertical()
-        .stick_to_bottom(true)
+        .id_salt(scroll_id_salt)
+        .stick_to_bottom(!has_selection)
         .auto_shrink([false, false])
         .show(&mut terminal_ui, |ui| {
             ui.add_space(2.0);
             match &state.selection {
                 CliSelection::Unselected => {
-                    ui.label(
-                        egui::RichText::new("karakuri agent terminal (m9)")
-                            .font(font_id.clone())
-                            .color(pal.faint),
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new("karakuri agent terminal (m9)")
+                                .font(font_id.clone())
+                                .color(pal.faint),
+                        )
+                        .selectable(false),
                     );
-                    ui.label(
-                        egui::RichText::new("select an agent cli above to start")
-                            .font(font_id.clone())
-                            .color(pal.faint),
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new("select an agent cli above to start")
+                                .font(font_id.clone())
+                                .color(pal.faint),
+                        )
+                        .selectable(false),
                     );
                 }
                 CliSelection::Preset(_) | CliSelection::Custom(_) => {
                     if let Some(session) = state.active_session() {
                         let cell_rows = session.rows();
 
-                        // Dynamic PTY window size adjustment based on bay geometry
-                        let cols = ((body_rect.width() - 8.0) / 6.0).max(20.0) as u16;
-                        let rows = ((body_rect.height() - 8.0) / 12.0).max(5.0) as u16;
-                        session.resize(rows, cols);
+                        // Measure true glyph metrics including CJK fallbacks to prevent cumulative row drift
+                        let (char_w, row_h) = ui.fonts_mut(|f| {
+                            let char_w = f.glyph_width(&font_id, 'M').max(6.0);
+                            let sample = f.layout_no_wrap(
+                                "Mあ".to_string(),
+                                font_id.clone(),
+                                egui::Color32::WHITE,
+                            );
+                            let sample_h = sample.size().y.ceil();
+                            let row_h = f.row_height(&font_id).max(sample_h).max(12.0);
+                            (char_w, row_h)
+                        });
 
-                        let char_w = ui.fonts_mut(|f| f.glyph_width(&font_id, 'M')).max(6.0);
-                        let row_h = ui.fonts_mut(|f| f.row_height(&font_id)).max(12.0);
+                        // Dynamic PTY window size adjustment based on bay geometry
+                        let cols = ((body_rect.width() - 8.0) / char_w).max(20.0) as u16;
+                        let rows = ((body_rect.height() - 8.0) / row_h).max(5.0) as u16;
+                        session.resize(rows, cols);
 
                         // Mouse drag selection handling across the terminal cell grid
                         let hover_pos = ui
                             .input(|i| i.pointer.hover_pos().or_else(|| i.pointer.interact_pos()));
                         if let Some(pos) = hover_pos {
-                            if body_rect.contains(pos) {
+                            let pressed = ui.input(|i| i.pointer.primary_pressed());
+                            let down = ui.input(|i| i.pointer.primary_down());
+                            let released = ui.input(|i| i.pointer.primary_released());
+                            let secondary_clicked = ui.input(|i| i.pointer.secondary_clicked());
+
+                            let is_dragging = down && state.selection_anchor().is_some();
+                            let is_ending_drag = released && state.selection_anchor().is_some();
+                            let is_in_bay = body_rect.contains(pos);
+
+                            // Right-click (secondary click) copies selection or full terminal content
+                            if secondary_clicked && is_in_bay {
+                                if let Some((start, end)) = state.selection_range() {
+                                    let text = extract_selected_text(&cell_rows, start, end);
+                                    if !text.is_empty() {
+                                        copy_to_clipboard(ui.ctx(), &text);
+                                    }
+                                } else if state.is_captured() {
+                                    let max_r = cell_rows.len().saturating_sub(1);
+                                    let max_c = cell_rows.last().map(|r| r.len()).unwrap_or(0);
+                                    let text =
+                                        extract_selected_text(&cell_rows, (0, 0), (max_r, max_c));
+                                    if !text.is_empty() {
+                                        copy_to_clipboard(ui.ctx(), &text);
+                                    }
+                                }
+                            }
+
+                            if is_in_bay || is_dragging || is_ending_drag {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
 
-                                let rel_x = (pos.x - body_rect.min.x - 4.0).max(0.0);
-                                let rel_y = (pos.y - body_rect.min.y - 4.0).max(0.0);
+                                // Auto-scroll terminal when dragging near or past bay vertical boundaries
+                                let mut effective_scroll_y = scroll_y;
+                                if is_dragging {
+                                    let scroll_edge = 20.0;
+                                    if pos.y < body_rect.min.y + scroll_edge {
+                                        let dist = (body_rect.min.y + scroll_edge - pos.y).max(1.0);
+                                        let speed = (dist * 0.8).clamp(8.0, 40.0);
+                                        ui.scroll_with_delta(egui::Vec2::new(0.0, speed));
+                                        effective_scroll_y = (effective_scroll_y - speed).max(0.0);
+                                        ui.ctx().request_repaint();
+                                    } else if pos.y > body_rect.max.y - scroll_edge {
+                                        let dist =
+                                            (pos.y - (body_rect.max.y - scroll_edge)).max(1.0);
+                                        let speed = (dist * 0.8).clamp(8.0, 40.0);
+                                        ui.scroll_with_delta(egui::Vec2::new(0.0, -speed));
+                                        effective_scroll_y += speed;
+                                        ui.ctx().request_repaint();
+                                    }
+                                }
+
+                                let clamped_x =
+                                    pos.x.clamp(body_rect.min.x + 4.0, body_rect.max.x - 4.0);
+                                let rel_x = (clamped_x - (body_rect.min.x + 4.0)).max(0.0);
+                                let clamped_y = pos.y.clamp(body_rect.min.y, body_rect.max.y);
+                                let line_pitch = row_h + ui.spacing().item_spacing.y;
+                                let top_padding = 2.0; // matching ui.add_space(2.0)
+                                let rel_y = (clamped_y - body_rect.min.y + effective_scroll_y
+                                    - top_padding)
+                                    .max(0.0);
                                 let col = (rel_x / char_w) as usize;
-                                let row = (rel_y / row_h) as usize;
+                                let row = ((rel_y / line_pitch) as usize)
+                                    .min(cell_rows.len().saturating_sub(1));
 
-                                let pressed = ui.input(|i| i.pointer.primary_pressed());
-                                let down = ui.input(|i| i.pointer.primary_down());
-                                let released = ui.input(|i| i.pointer.primary_released());
-
-                                if pressed {
+                                if pressed && is_in_bay {
                                     state.set_selection_anchor(Some((row, col)));
                                     state.set_selection_range(None);
-                                } else if down {
+                                } else if is_dragging {
                                     if let Some(anchor) = state.selection_anchor() {
                                         if anchor != (row, col) {
                                             state.set_selection_range(Some((anchor, (row, col))));
                                         }
                                     }
-                                } else if released {
+                                } else if is_ending_drag {
                                     if let Some(anchor) = state.selection_anchor() {
                                         if anchor == (row, col) {
                                             state.clear_selection();
@@ -305,148 +381,18 @@ pub fn prompt_into(
 
                         // Direct interactive keyboard streaming to PTY stdin while in capture mode
                         if state.is_captured() {
-                            let events = ui.input(|i| i.events.clone());
-                            for ev in events {
-                                match ev {
-                                    egui::Event::Key {
-                                        key,
-                                        pressed: true,
-                                        modifiers,
-                                        ..
-                                    } => {
-                                        // ⌘C on Mac or Ctrl+C with active text selection: copy selected text
-                                        let is_mac_cmd_c = (modifiers.command || modifiers.mac_cmd)
-                                            && key == egui::Key::C;
-                                        let is_ctrl_c = modifiers.ctrl && key == egui::Key::C;
-
-                                        if is_mac_cmd_c
-                                            || (is_ctrl_c && state.selection_range().is_some())
-                                        {
-                                            if let Some((start, end)) = state.selection_range() {
-                                                let text =
-                                                    extract_selected_text(&cell_rows, start, end);
-                                                if !text.is_empty() {
-                                                    copy_to_clipboard(ui.ctx(), &text);
-                                                }
-                                            }
-                                            continue;
-                                        }
-
-                                        // ⌘A on Mac or Ctrl+A: select all terminal text
-                                        let is_mac_cmd_a = (modifiers.command || modifiers.mac_cmd)
-                                            && key == egui::Key::A;
-                                        let is_ctrl_a = modifiers.ctrl && key == egui::Key::A;
-                                        if is_mac_cmd_a || is_ctrl_a {
-                                            let max_r = cell_rows.len().saturating_sub(1);
-                                            let max_c =
-                                                cell_rows.last().map(|r| r.len()).unwrap_or(0);
-                                            state.set_selection_range(Some((
-                                                (0, 0),
-                                                (max_r, max_c),
-                                            )));
-                                            continue;
-                                        }
-
-                                        if modifiers.ctrl {
-                                            match key {
-                                                egui::Key::C => {
-                                                    let _ = session.send_bytes(b"\x03");
-                                                }
-                                                egui::Key::D => {
-                                                    let _ = session.send_bytes(b"\x04");
-                                                }
-                                                egui::Key::Z => {
-                                                    let _ = session.send_bytes(b"\x1a");
-                                                }
-                                                egui::Key::L => {
-                                                    let _ = session.send_bytes(b"\x0c");
-                                                }
-                                                egui::Key::U => {
-                                                    let _ = session.send_bytes(b"\x15");
-                                                }
-                                                egui::Key::W => {
-                                                    let _ = session.send_bytes(b"\x17");
-                                                }
-                                                egui::Key::A => {
-                                                    let _ = session.send_bytes(b"\x01");
-                                                }
-                                                egui::Key::E => {
-                                                    let _ = session.send_bytes(b"\x05");
-                                                }
-                                                egui::Key::R => {
-                                                    let _ = session.send_bytes(b"\x12");
-                                                }
-                                                egui::Key::K => {
-                                                    let _ = session.send_bytes(b"\x0b");
-                                                }
-                                                _ => {}
-                                            }
-                                        } else {
-                                            match key {
-                                                egui::Key::Enter => {
-                                                    let _ = session.send_bytes(b"\r");
-                                                }
-                                                egui::Key::Backspace => {
-                                                    let _ = session.send_bytes(b"\x7f");
-                                                }
-                                                egui::Key::Escape => {
-                                                    let _ = session.send_bytes(b"\x1b");
-                                                }
-                                                egui::Key::ArrowUp => {
-                                                    let _ = session.send_bytes(b"\x1b[A");
-                                                }
-                                                egui::Key::ArrowDown => {
-                                                    let _ = session.send_bytes(b"\x1b[B");
-                                                }
-                                                egui::Key::ArrowRight => {
-                                                    let _ = session.send_bytes(b"\x1b[C");
-                                                }
-                                                egui::Key::ArrowLeft => {
-                                                    let _ = session.send_bytes(b"\x1b[D");
-                                                }
-                                                egui::Key::Home => {
-                                                    let _ = session.send_bytes(b"\x1b[H");
-                                                }
-                                                egui::Key::End => {
-                                                    let _ = session.send_bytes(b"\x1b[F");
-                                                }
-                                                egui::Key::PageUp => {
-                                                    let _ = session.send_bytes(b"\x1b[5~");
-                                                }
-                                                egui::Key::PageDown => {
-                                                    let _ = session.send_bytes(b"\x1b[6~");
-                                                }
-                                                egui::Key::Delete => {
-                                                    let _ = session.send_bytes(b"\x1b[3~");
-                                                }
-                                                egui::Key::Tab => {
-                                                    let _ = session.send_bytes(b"\t");
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                    egui::Event::Text(text) => {
-                                        let _ = session.send_bytes(text.as_bytes());
-                                    }
-                                    egui::Event::Ime(egui::ImeEvent::Commit(text)) => {
-                                        let _ = session.send_bytes(text.as_bytes());
-                                    }
-                                    egui::Event::Paste(text) => {
-                                        let _ = session.send_bytes(text.as_bytes());
-                                    }
-                                    _ => {}
-                                }
-                            }
+                            super::input::handle_terminal_events(ui, state, &session, &cell_rows);
                         }
 
                         // Global copy shortcut when Prompt bay has an active text selection or terminal focus
+                        let has_copy_event =
+                            ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy)));
                         let copy_shortcut = ui.input(|i| {
                             let is_mac = i.modifiers.command || i.modifiers.mac_cmd;
                             let is_ctrl = i.modifiers.ctrl;
                             (is_mac || is_ctrl) && i.key_pressed(egui::Key::C)
                         });
-                        if copy_shortcut {
+                        if copy_shortcut || has_copy_event {
                             if let Some((start, end)) = state.selection_range() {
                                 let text = extract_selected_text(&cell_rows, start, end);
                                 if !text.is_empty() {
@@ -513,7 +459,22 @@ pub fn prompt_into(
                                     }
                                 }
                                 if cell_style.dim {
-                                    format.color = tint(format.color, 140);
+                                    format.color = pal.dim;
+                                }
+
+                                // In light themes (e.g. DAY), bright gray or white text is unreadable against white backgrounds.
+                                // Adapt light text colors to pal.text for high contrast.
+                                let is_light_theme = pal.panel.r() > 128
+                                    && pal.panel.g() > 128
+                                    && pal.panel.b() > 128;
+                                if is_light_theme && format.background == egui::Color32::TRANSPARENT
+                                {
+                                    let lum = 0.299 * format.color.r() as f32
+                                        + 0.587 * format.color.g() as f32
+                                        + 0.114 * format.color.b() as f32;
+                                    if lum > 190.0 {
+                                        format.color = pal.text;
+                                    }
                                 }
 
                                 if is_cursor_cell {
@@ -556,10 +517,16 @@ pub fn prompt_into(
                             }
 
                             if job.text.is_empty() {
-                                ui.label(egui::RichText::new(" ").font(font_id.clone()));
-                            } else {
-                                ui.label(job);
+                                job.append(
+                                    " ",
+                                    0.0,
+                                    TextFormat {
+                                        font_id: font_id.clone(),
+                                        ..Default::default()
+                                    },
+                                );
                             }
+                            ui.add(egui::Label::new(job).selectable(false));
                         }
                     }
                 }

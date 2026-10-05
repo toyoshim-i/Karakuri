@@ -86,24 +86,24 @@ impl ModelMenu {
                     out.push_str("   ");
                 }
                 out.push_str(&format!(
-                    "\x1b[1;37m{:<22}\x1b[0m \x1b[2m({} · {})\x1b[0m",
+                    "\x1b[1m{:<22}\x1b[0m \x1b[2m({} · {})\x1b[0m",
                     item.model_id, item.server_name, item.base_url
                 ));
             } else {
                 out.push_str("    ");
                 if i < 9 {
-                    out.push_str(&format!("\x1b[2m{}.\x1b[0m ", i + 1));
+                    out.push_str(&format!("{}. ", i + 1));
                 } else {
                     out.push_str("   ");
                 }
                 out.push_str(&format!(
-                    "\x1b[37m{:<22}\x1b[0m \x1b[2m({} · {})\x1b[0m",
+                    "{:<22} \x1b[2m({} · {})\x1b[0m",
                     item.model_id, item.server_name, item.base_url
                 ));
             }
 
             if is_cur {
-                out.push_str(" \x1b[33m[active]\x1b[0m");
+                out.push_str(" \x1b[36m[active]\x1b[0m");
             }
             out.push_str("\r\n");
         }
