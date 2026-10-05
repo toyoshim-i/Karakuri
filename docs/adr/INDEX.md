@@ -409,6 +409,7 @@ number; new records continue from the end.
 | [ADR-0381](0381-wasm32-set-compilation-offloading-and-build-debouncing.md) | wasm32 Set compilation offloading and build debouncing | 2026-10-03 | accepted |
 | [ADR-0382](0382-ir-specification-decomposition-and-single-source-mcp-publishing.md) | IR specification decomposition and single-source MCP publishing | 2026-10-03 | accepted |
 | [ADR-0383](0383-prompt-bay-inline-ime-composition-and-cursor-area-anchoring.md) | Prompt bay inline IME composition and cursor area anchoring | 2026-10-03 | accepted |
+| [ADR-0384](0384-web-audio-api-microphone-input-via-unified-pcm-audio-core.md) | Web Audio API microphone input via unified PCM audio core | 2026-10-05 | accepted |
 
 ## Retired numbers
 

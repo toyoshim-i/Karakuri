@@ -2,6 +2,8 @@
 
 #[cfg(target_arch = "wasm32")]
 mod app;
+#[cfg(target_arch = "wasm32")]
+pub mod audio;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod font_loader;
 #[cfg(any(target_arch = "wasm32", test))]

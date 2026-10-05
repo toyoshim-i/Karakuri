@@ -24,6 +24,8 @@ pub struct WebApp {
     window: Option<Arc<Window>>,
     pending_gpu: Rc<RefCell<PendingGpu>>,
     pending_font: Rc<RefCell<Option<Vec<u8>>>>,
+    pending_audio: Rc<RefCell<Option<karakuri_environment::audio::Audio>>>,
+    _audio_session: Rc<RefCell<Option<crate::audio::WebAudioSession>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
 }
@@ -109,12 +111,49 @@ impl WebApp {
             }
         });
 
+        let pending_audio = Rc::new(RefCell::new(None));
+        let audio_session = Rc::new(RefCell::new(None));
+        let audio_requested = Rc::new(RefCell::new(false));
+
+        let audio_proxy = proxy.clone();
+        let pending_audio_clone = Rc::clone(&pending_audio);
+        let audio_session_clone = Rc::clone(&audio_session);
+        let audio_requested_clone = Rc::clone(&audio_requested);
+
+        app.set_audio_request_hook(move || {
+            if *audio_requested_clone.borrow() {
+                return;
+            }
+            *audio_requested_clone.borrow_mut() = true;
+
+            let pending = Rc::clone(&pending_audio_clone);
+            let session_slot = Rc::clone(&audio_session_clone);
+            let proxy = audio_proxy.clone();
+            let req = Rc::clone(&audio_requested_clone);
+
+            wasm_bindgen_futures::spawn_local(async move {
+                match crate::audio::start_web_audio(120.0).await {
+                    Ok((audio, session)) => {
+                        *session_slot.borrow_mut() = Some(session);
+                        *pending.borrow_mut() = Some(audio);
+                        let _ = proxy.send_event(());
+                    }
+                    Err(e) => {
+                        log::warn!("Karakuri Web: Failed to activate Web Audio: {e:?}");
+                        *req.borrow_mut() = false;
+                    }
+                }
+            });
+        });
+
         Self {
             app,
             proxy,
             window: None,
             pending_gpu: Rc::new(RefCell::new(None)),
             pending_font,
+            pending_audio,
+            _audio_session: audio_session,
             initialized: false,
             ime_overlay: None,
         }
@@ -230,6 +269,12 @@ impl ApplicationHandler<()> for WebApp {
         }
         if let Some(font_bytes) = self.pending_font.borrow_mut().take() {
             self.app.add_cjk_font(font_bytes);
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+        if let Some(audio) = self.pending_audio.borrow_mut().take() {
+            self.app.attach_audio(audio);
             if let Some(ref window) = self.window {
                 window.request_redraw();
             }

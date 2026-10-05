@@ -1624,6 +1624,7 @@ dependencies = [
  "console_log",
  "js-sys",
  "karakuri",
+ "karakuri-audio",
  "karakuri-console",
  "karakuri-engine",
  "karakuri-environment",

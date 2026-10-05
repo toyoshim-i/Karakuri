@@ -147,6 +147,12 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
    - **First-Class Vector Parameters** (`docs/design-notes.md` § *A vector `param` is one such omission*): Support declared vector parameters (`vec2`, `vec3`, `vec4`) beyond scalar floats in `.kir` declarations and console faders.
    - **Set Format Validation & Round-Trip Conformance** (`docs/set-format.md`): Ensure full JSON/binary round-trip parser conformance with strict schema diagnostics.
    - **Session Stream Refusal & Replay Verification** (`docs/session-stream.md` § *What it does not yet do is refuse anything on its own*): Implement stream-level validation refusals and replay bit-exactness test coverage.
+8. **WebAssembly Platform Parity & Web Audio Input (`karakuri-web`, `karakuri-audio`)** *(Completed — [ADR-0381](adr/0381-wasm32-set-compilation-offloading-and-build-debouncing.md), [ADR-0383](adr/0383-prompt-bay-inline-ime-composition-and-cursor-area-anchoring.md), [ADR-0384](adr/0384-web-audio-api-microphone-input-via-unified-pcm-audio-core.md))*:
+   - Web Audio API microphone capture via `getUserMedia` and `ScriptProcessorNode` feeding raw PCM samples to `AudioCore::feed(...)` with zero-gain destination routing to prevent feedback loops.
+   - User gesture-driven permission triggering on transport `audio-in` pill click (`AudioAsk::Open`) and dropdown attachment (`Operation::AttachBeatSource`).
+   - Unified Rust audio core architecture decoupling downstream spectral analysis and beat tracking from CPAL, guaranteeing 100% zero-modification compatibility for M11 audio spectrogram and waterfall history textures.
+   - Modern inline Japanese/CJK composition rendering with underline styling and exact cursor area anchoring for native IME palettes ([ADR-0383](adr/0383-prompt-bay-inline-ime-composition-and-cursor-area-anchoring.md)).
+   - Multi-threaded Set compilation offloaded to Web Workers with debounced background builds ([ADR-0381](adr/0381-wasm32-set-compilation-offloading-and-build-debouncing.md)).
 
 **Exit Condition**:
 - `cargo test -p karakuri-mcp --test authoring_corpus` passes (the test is item 5's).

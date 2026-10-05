@@ -228,6 +228,12 @@ impl App {
         if claim == Claim::Egui {
             App::to_egui(gfx, &mut self.costs, event);
         }
+        if matches!(acted, Acted::AudioRequest) {
+            self.on_audio_requested();
+        }
+        if let Acted::Emitted(Some(Operation::AttachBeatSource { .. })) = acted {
+            self.on_audio_requested();
+        }
         if let Acted::Emitted(Some(Operation::RouteFrame { output, on })) = acted {
             if let Some(line) = routed(gfx, event_loop, output, on) {
                 println!("{line}");

@@ -25,7 +25,7 @@ impl Readout {
                     }
                 );
                 audio.opened();
-                Acted::Nothing
+                Acted::AudioRequest
             }
             AudioAsk::Shut => {
                 audio.shut();
