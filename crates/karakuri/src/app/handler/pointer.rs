@@ -133,6 +133,70 @@ impl App {
                 );
             }
 
+            WindowEvent::Touch(touch) => {
+                use winit::event::TouchPhase;
+
+                let p = Point::new(
+                    (touch.location.x / self.scale) as f32,
+                    (touch.location.y / self.scale) as f32,
+                );
+
+                match touch.phase {
+                    TouchPhase::Started => {
+                        let ctx = gfx.egui.egui_ctx().clone();
+                        let (claim, acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
+                        let _ = App::performed(
+                            &mut gfx,
+                            self.started,
+                            &mut self.readout,
+                            self.recording.recorder(),
+                            &acted,
+                            Change::Pointer(claim).repaint(),
+                        );
+                        App::to_egui(&mut gfx, &mut self.costs, &event);
+                        self.handle_left_mouse_input(
+                            &mut gfx,
+                            event_loop,
+                            &event,
+                            ElementState::Pressed,
+                        );
+                    }
+                    TouchPhase::Moved => {
+                        let ctx = gfx.egui.egui_ctx().clone();
+                        let (claim, acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
+                        App::to_egui(&mut gfx, &mut self.costs, &event);
+                        let repaint = App::performed(
+                            &mut gfx,
+                            self.started,
+                            &mut self.readout,
+                            self.recording.recorder(),
+                            &acted,
+                            Change::Pointer(claim).repaint(),
+                        )
+                        .repaint;
+                        let tip = self.hover.moved(
+                            claim,
+                            &self.readout.panel,
+                            &ctx,
+                            &self.readout.view,
+                            p,
+                            self.started.elapsed(),
+                        );
+                        let repaint = repaint.soonest(Change::Tip(tip).repaint());
+                        App::wants(&gfx, &mut self.egui_due, &mut self.costs, repaint);
+                    }
+                    TouchPhase::Ended | TouchPhase::Cancelled => {
+                        App::to_egui(&mut gfx, &mut self.costs, &event);
+                        self.handle_left_mouse_input(
+                            &mut gfx,
+                            event_loop,
+                            &event,
+                            ElementState::Released,
+                        );
+                    }
+                }
+            }
+
             // Track Shift modifier state for reverse tab cycling (ADR-0259) while forwarding to egui ([`App::shift`]).
             _ => {}
         }
