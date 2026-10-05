@@ -453,7 +453,8 @@ impl App {
             WindowEvent::CursorMoved { .. }
             | WindowEvent::CursorLeft { .. }
             | WindowEvent::MouseInput { .. }
-            | WindowEvent::MouseWheel { .. } => {
+            | WindowEvent::MouseWheel { .. }
+            | WindowEvent::Touch(_) => {
                 self.handle_pointer_event(event_loop, event);
             }
             WindowEvent::ModifiersChanged(state) => {

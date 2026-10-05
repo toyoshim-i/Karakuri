@@ -32,14 +32,16 @@ Unlike native desktop Karakuri, which relies on host operating system facilities
 │   ┌────────────────────────────────┐   ┌───────────────────────────┐   │
 │   │   WebGPU Engine (karakuri-     │   │ In-Process Agent Harness  │   │
 │   │   engine + wgpu WebGPU target) │   │ (wasm-bindgen-futures)    │   │
-│   └───────────────┬────────────────┘   └─────────────┬─────────────┘   │
-│                   │                                  │                 │
-│      [Render]     │ [Sync State]              [Fetch Stream]           │
-│                   ▼                                  ▼                 │
-│   ┌───────────────────────────────┐    ┌───────────────────────────┐   │
-│   │ Projector Popup Window        │    │ OpenAI-Compatible API     │   │
-│   │ (window.open / BroadcastChan) │    │ (Ollama, LMStudio, Cloud) │   │
-│   └───────────────────────────────┘    └───────────────────────────┘   │
+│   └───────┬──────────────┬─────────┘   └─────────────┬─────────────┘   │
+│           │              │                           │                 │
+│     [State Sync]    [Frame Sink]              [Fetch Stream]           │
+│           │              │                           │                 │
+│           ▼              ▼                           ▼                 │
+│   ┌──────────────┐ ┌──────────────┐    ┌───────────────────────────┐   │
+│   │ Projector    │ │ Plugin Sinks │    │ OpenAI-Compatible API     │   │
+│   │ Secondary Win│ │ ├─ WebRTC    │    │ (Ollama, LMStudio, Cloud) │   │
+│   │ (State Sync) │ │ └─ WebVR XR  │    │                           │   │
+│   └──────────────┘ └──────────────┘    └───────────────────────────┘   │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -139,22 +141,60 @@ Instead of a TCP loopback socket, Karakuri Web uses a unified in-process dispatc
 
 ---
 
-### 3.5 Projector Display: Popout Window & Fullscreen
+### 3.5 External Outputs: Projector, WebRTC Streaming, and Immersive WebVR
 
-#### The Problem on Web
-Desktop Karakuri exports frames to other VJ software using OS-level shared GPU memory (`IOSurface` on macOS, `DXGI` on Windows). Browsers do not expose raw GPU handle sharing.
+#### The Challenge on Web
+Desktop Karakuri manages external video distribution via OS-level facilities:
+- Secondary full-screen monitors via native `winit` windows ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md)).
+- Inter-application texture sharing via out-of-process GPU handles (macOS Syphon `IOSurface`, Windows Spout `DXGI`, [ADR-0369](adr/0369-gpu-output-plugins-are-isolated-processes-discovered-dynamically-over-pipes-and-sharing-zero-copy-surfaces.md)).
 
-#### The Solution: Browser Popout Window
-External output is solved by launching a clean projector display window:
+Web browsers run inside a sandboxed multi-process security model and do not expose raw OS shared-memory GPU texture handles. Karakuri Web provides three distinct browser-native output modalities corresponding to physical venue screens, broadcasting, and spatial performance:
 
-1. **Popout Projector Window**:
-   - Operator clicks `[ Popout Projector ]` or uses a shortcut.
-   - Executes `window.open("projector.html", "projector", "popup=true,width=1920,height=1080")`.
-2. **State Synchronization (`BroadcastChannel`)**:
-   - The main console window broadcasts frame state, active deck transitions, and master chain parameters via a `BroadcastChannel("karakuri-frame-sync")`.
-   - The projector window initializes its own lightweight WebGPU pipeline, rendering the exact output scene in real time at full projector resolution.
-3. **Single-Window Fullscreen Alternative**:
-   - The program preview canvas can be enlarged to native fullscreen using the browser Fullscreen API (`canvas.requestFullscreen()`).
+---
+
+#### 3.5.1 Projector: Deterministic State Synchronization (再生という名の再生性)
+Rather than copying heavy uncompressed 4K video framebuffers across browser windows (which induces PCIe/RAM bus saturation and framerate throttling):
+
+1. **Secondary Window via `window.open` or Presentation API**:
+   - The operator activates `[ Projector ]` in the Outputs bay.
+   - The browser opens a clean popout window (`projector.html`) or requests a wireless presentation display via the W3C **Presentation API** (`navigator.presentation.request()`).
+2. **Deterministic State Synchronization (`BroadcastChannel`)**:
+   - Instead of streaming pixel bytes, the console broadcasts lightweight frame metadata: `(timestamp, current_step, slot_assignments, active_transitions, master_chain_params)`.
+   - Following **P-0092** (*"The same inputs produce the same frame"*), the secondary window executes its own identical WebGPU render pipeline.
+3. **Key Advantages**:
+   - **Resolution Independence**: The console preview can run on a 1080p laptop while the projector window renders at native 4K (3840×2160) on the venue screen without overhead.
+   - **Zero Transfer Overhead**: Zero gigabytes of pixel copies per second; latency is strictly bound to sub-millisecond postMessage dispatch.
+   - **Refresh Rate Decoupling**: 60 Hz venue projector and 120 Hz laptop display advance independently without frame tearing.
+
+---
+
+#### 3.5.2 Plugin Sink 1: Low-Latency WebRTC & Cast Streaming
+Corresponding to native desktop Syphon/Spout plugin sinks (ADR-0369), Web Karakuri provides native real-time video distribution for broadcasting and remote collaboration:
+
+1. **Canvas MediaStream Capture**:
+   - Captures the composited master program canvas via `canvas.captureStream(60)`.
+2. **WebRTC Direct Ingestion (WHIP / P2P)**:
+   - Feeds the stream into an `RTCPeerConnection` using WHIP (WebRTC-HTTP Ingestion Protocol) or direct P2P.
+   - Allows direct ingestion into OBS Studio (via Browser / WebRTC source), Discord, or remote VJ streaming relays with ultra-low glass-to-glass latency (< 50 ms).
+3. **Wireless Casting (Google Cast / AirPlay)**:
+   - Transmits live performance video wirelessly to smart displays and wireless projectors in club settings where HDMI cabling is impractical.
+
+---
+
+#### 3.5.3 Plugin Sink 2: WebVR Immersive Spatial Mode (WebXR Virtual Cockpit)
+Corresponding to spatial XR headsets (Meta Quest, Apple Vision Pro, PCVR), Karakuri Web integrates a dedicated spatial performance mode:
+
+```
+Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebVR ]
+```
+
+When `WebVR` is toggled:
+1. **Three-Tier Spatial Topology**:
+   - **Tier 1 (Personal Deck HUD)**: A floating 30-inch virtual control desk positioned 70 cm in front of the performer at a 35° incline, rendering the full egui 2D console with controller raycast pointer interaction.
+   - **Tier 2 (3D World Geometry)**: Karakuri's procedural 3D vertex pipelines (`topology triangles`, `grid`, `ribbon`) are rendered directly into the 6DoF stereo eye buffers, surrounding the performer.
+   - **Tier 3 (Celestial Dome)**: Fragment shaders and L5 Master Chain post-effects are mapped onto an encompassing 180°–220° geodesic sky dome behind the spatial geometry via dome-master fisheye projection.
+2. **Specification & Implementation Plan**:
+   - Full technical specifications, coordinate mathematics, and interaction mappings are documented in **[docs/immersive.md](immersive.md)**.
 
 ---
 
@@ -198,10 +238,16 @@ External output is solved by launching a clean projector display window:
 - Direct in-process tool dispatcher (14-tool MCP matrix bridge) and WebMCP standard bridge
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 4: Multi-Window Projector & Storage Persistence (~3-5 days)      │
-│ - BroadcastChannel synchronization for projector.html popup           │
-│ - IndexedDB / OPFS store backend for saved procedures & sets           │
-│ - File export / import drag-and-drop support                           │
+│ Phase 4: Storage Persistence & Virtual FileSystem (Completed)
+- Pluggable FileSystem abstraction with zero-latency synchronous fs::* API (ADR-0386)
+- IndexedDB non-blocking background write-through and startup hydration
+- Full persistence across browser sessions for sets, procedures, and MIDI/key mappings
+├────────────────────────────────────┬───────────────────────────────────┤
+│                                    ▼                                   │
+│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebVR (~1-2 weeks)  │
+│ - Projector popout with BroadcastChannel / Presentation API sync       │
+│ - WebRTC low-latency streaming sink (canvas.captureStream / WHIP)      │
+│ - WebVR Immersive mode: 30" Deck HUD + 3D World Geometry + Sky Dome   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -219,5 +265,6 @@ External output is solved by launching a clean projector display window:
 | **UI Framework** | egui + winit + egui-wgpu (Native) | egui + winit + egui-wgpu (WASM Canvas) | Native wasm32-unknown-unknown support |
 | **Audio Input** | cpal (CoreAudio / WASAPI / ALSA) | cpal (Web Audio API) | Native browser microphone & audio support |
 | **MIDI Input** | midir (CoreMIDI / WinMM / ALSA) | midir (Web MIDI API) | Native browser USB MIDI device support |
-| **File Storage** | `std::fs` under `~/.karakuri/store` | IndexedDB / OPFS + memory bundles | Sandboxed web persistence |
-| **Video Output** | Syphon (macOS) / Spout (Windows) | Popout Window (`BroadcastChannel`) / Fullscreen | Eliminates OS shared-memory requirement |
+| **File Storage** | `std::fs` under `~/.karakuri/store` | `karakuri_store::fs` + IndexedDB write-through | Sandboxed persistent VFS (ADR-0386) |
+| **Projector Output**| `winit` secondary fullscreen window  | Popout Window / Presentation API state sync    | Full 4K GPU rendering without frame copies|
+| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows)     | WebRTC (WHIP) & WebVR Immersive (WebXR)        | Browser-native broadcasting & spatial 6DoF|
