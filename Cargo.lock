@@ -1513,6 +1513,7 @@ dependencies = [
  "pollster",
  "serde",
  "thiserror 2.0.19",
+ "wasm-bindgen-futures",
  "web-time",
  "wgpu",
  "winit",

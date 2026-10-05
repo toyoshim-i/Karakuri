@@ -363,25 +363,34 @@ impl HotSwap {
             if let (Some(source), Some(queue), Some(done_tx)) =
                 (&mut self.source, &self.queue, &self.done_tx)
             {
+                let mut latest_build = None;
                 while let Some(polled) = source.poll() {
                     match polled {
                         Polled::Refused(refusal) => {
                             let _ = done_tx.send(Done::Refused(refusal));
                         }
                         Polled::Build(request) => {
-                            let id = request.id;
-                            let label: Arc<str> = request.label.clone().into();
-                            let result =
-                                crate::swap::worker::build_set(device, queue, request, &label);
-                            let _ = done_tx.send(Done::Built(Built {
-                                id,
-                                label,
-                                result,
-                                cost: None,
-                                estimate: None,
-                            }));
+                            latest_build = Some(request);
                         }
                     }
+                }
+                if let Some(request) = latest_build {
+                    let id = request.id;
+                    let label: Arc<str> = request.label.clone().into();
+                    let device = device.clone();
+                    let queue = queue.clone();
+                    let done_tx = done_tx.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let result =
+                            crate::swap::worker::build_set(&device, &queue, request, &label);
+                        let _ = done_tx.send(Done::Built(Built {
+                            id,
+                            label,
+                            result,
+                            cost: None,
+                            estimate: None,
+                        }));
+                    });
                 }
             }
         }

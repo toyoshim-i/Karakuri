@@ -3,6 +3,7 @@
 pub mod ansi;
 mod cli;
 mod head;
+mod input;
 mod paint;
 mod session;
 mod state;
@@ -16,6 +17,9 @@ pub use head::{
     MENU_COL_GAP, MENU_COL_W, MENU_ITEM_COUNT, MENU_ITEM_H, MENU_PAD_X, MENU_PAD_Y,
     MENU_ROWS_PER_COL, PROMPT_TITLE,
 };
-pub use paint::{prompt_head_into, prompt_into, prompt_menu_into, PROMPT_FONT_SIZE};
+pub use paint::{
+    copy_to_clipboard, extract_selected_text, is_cell_selected, prompt_head_into, prompt_into,
+    prompt_menu_into, PROMPT_FONT_SIZE,
+};
 pub use session::{SessionManager, SessionStatus, TerminalSession};
 pub use state::PromptState;

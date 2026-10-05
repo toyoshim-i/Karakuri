@@ -132,10 +132,15 @@ impl Sessions {
         let root = root.to_path_buf();
         let tx = self.tx.clone();
         self.working = true;
-        // Spawn background worker thread to initialize session on disk.
-        std::thread::spawn(move || {
+        // Spawn background worker thread to initialize session on disk on native,
+        // or execute synchronously on wasm32 where threading is unsupported.
+        let job = move || {
             let _ = tx.send(began(root, id, starting));
-        });
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(job);
+        #[cfg(target_arch = "wasm32")]
+        job();
     }
 
     /// Stops the active recording, offloading writer flush and join to a background thread.
@@ -146,10 +151,14 @@ impl Sessions {
         println!("  rec: `{id}` stopped — the last records are being flushed");
         let tx = self.tx.clone();
         self.working = true;
-        std::thread::spawn(move || {
+        let job = move || {
             let written = recorder.finish();
             let _ = tx.send(Ended::Finished { id, written });
-        });
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(job);
+        #[cfg(target_arch = "wasm32")]
+        job();
     }
 
     /// Every start and stop that has landed since the last frame, said.

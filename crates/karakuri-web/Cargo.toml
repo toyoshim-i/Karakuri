@@ -61,8 +61,11 @@ features = [
     "Clipboard",
     "CacheStorage",
     "Cache",
+    "FocusOptions",
     "Event",
     "CompositionEvent",
     "InputEvent",
     "KeyboardEvent",
+    "ClipboardEvent",
+    "DataTransfer",
 ]

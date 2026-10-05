@@ -19,6 +19,9 @@ wgpu = "30.0.1"
 winit = "0.30.13"
 web-time = "1.1"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+
 [dev-dependencies]
 # For the `tonemap_compare` example only: it writes PNGs the same way
 # `karakuri-cli`'s `--render` does, so the comparison it produces is a
