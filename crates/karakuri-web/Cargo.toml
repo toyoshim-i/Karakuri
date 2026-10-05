@@ -20,6 +20,7 @@ karakuri-pattern = { version = "0.1.0", path = "../karakuri-pattern" }
 karakuri-signal.workspace = true
 karakuri-store.workspace = true
 karakuri-mcp = { version = "0.1.0", path = "../karakuri-mcp" }
+karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
 karakuri = { version = "0.1.0", path = "../karakuri" }
 serde.workspace = true
 serde_json.workspace = true
@@ -68,4 +69,17 @@ features = [
     "KeyboardEvent",
     "ClipboardEvent",
     "DataTransfer",
+    "AudioContext",
+    "AudioContextOptions",
+    "MediaDevices",
+    "MediaStream",
+    "MediaStreamConstraints",
+    "MediaStreamAudioSourceNode",
+    "ScriptProcessorNode",
+    "AudioProcessingEvent",
+    "AudioBuffer",
+    "GainNode",
+    "MediaStreamTrack",
+    "AudioNode",
+    "AudioParam",
 ]

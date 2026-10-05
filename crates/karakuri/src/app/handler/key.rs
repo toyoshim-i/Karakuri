@@ -205,6 +205,20 @@ impl App {
                             );
                             return;
                         }
+                        focus::Asked::Listened(ref ask) => {
+                            if matches!(ask, karakuri_console::view::AudioAsk::Open) {
+                                Self::trigger_audio_request(&mut self.audio_request_hook);
+                            }
+                            let repaint = answered(
+                                gfx,
+                                self.started,
+                                &mut self.readout,
+                                self.recording.recorder(),
+                                &asked,
+                            );
+                            App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                            return;
+                        }
                         asked => {
                             let repaint = answered(
                                 gfx,

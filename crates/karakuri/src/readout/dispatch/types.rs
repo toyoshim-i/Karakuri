@@ -35,6 +35,8 @@ pub(crate) enum Acted {
     Pointed,
     /// MCP server start, stop, or address reconfiguration action.
     McpServer(McpServerAct),
+    /// User interaction requesting audio input activation or card open (e.g. for Web Audio permission).
+    AudioRequest,
 }
 
 /// Action to control the MCP server lifecycle and address binding from UI controls.

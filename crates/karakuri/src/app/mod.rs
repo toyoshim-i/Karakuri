@@ -98,6 +98,8 @@ pub struct App {
     pub(crate) last_click: Option<(Instant, karakuri_layout::Point)>,
     /// Optional CJK fallback font bytes loaded dynamically (e.g. on wasm32).
     pub(crate) cjk_font_bytes: Option<Vec<u8>>,
+    /// Optional callback invoked when the user interacts with audio input controls (ADR-0384).
+    pub(crate) audio_request_hook: Option<Box<dyn FnMut()>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +259,42 @@ impl App {
             last_mixer_revision: 0,
             last_click: None,
             cjk_font_bytes: None,
+            audio_request_hook: None,
+        }
+    }
+
+    /// Registers a callback to be invoked when the user interacts with audio input controls
+    /// (e.g. clicking the audio-in pill to trigger Web Audio microphone permission on wasm32).
+    pub fn set_audio_request_hook<F: FnMut() + 'static>(&mut self, hook: F) {
+        self.audio_request_hook = Some(Box::new(hook));
+    }
+
+    /// Triggers the registered audio request hook if present.
+    pub(crate) fn on_audio_requested(&mut self) {
+        Self::trigger_audio_request(&mut self.audio_request_hook);
+    }
+
+    /// Triggers audio request hook directly using disjoint field borrow.
+    pub(crate) fn trigger_audio_request(hook: &mut Option<Box<dyn FnMut()>>) {
+        if let Some(ref mut h) = hook {
+            h();
+        }
+    }
+
+    /// Attaches an initialized live audio session to the application.
+    pub fn attach_audio(&mut self, audio: karakuri_environment::audio::Audio) {
+        let desc = audio.description().to_string();
+        let rate = audio.sample_rate();
+        let offset = audio.latency_offset_ms();
+        println!(
+            "audio in: {desc} at {rate} Hz — energy, onset and band0..7 are measured from this room now. offset {offset:.0} ms"
+        );
+        if let Some(ref mut gfx) = self.gfx {
+            let bpm = gfx.engine.deck.signals().oscillator().bpm();
+            gfx.audio = Some(audio);
+            self.readout.view.audio = Some(told(gfx.audio.as_ref()));
+            self.readout.view.tracker = Some(tracking(gfx.audio.as_ref(), bpm));
+            gfx.window.request_redraw();
         }
     }
 
@@ -290,6 +328,7 @@ impl App {
             Acted::Opened => otherwise,
             // Acted::Pointed moves the library cursor without generating an operation.
             Acted::Pointed => otherwise,
+            Acted::AudioRequest => otherwise,
             Acted::McpServer(_) => Repaint::Now,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {

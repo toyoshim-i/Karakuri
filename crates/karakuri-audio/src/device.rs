@@ -58,10 +58,62 @@ struct Published {
     at: Instant,
 }
 
+/// Core audio analysis pipeline decoupled from driver stream handles.
+/// Processes mono PCM samples in fixed-size blocks, running spectral analysis,
+/// onset detection, and beat tracking.
+pub struct AudioCore {
+    analyzer: Analyzer,
+    tracker: Tracker,
+    ring: Vec<f32>,
+    block: Vec<f32>,
+    write: usize,
+    filled: usize,
+    since_hop: usize,
+    window_lag: f32,
+    publisher: Arc<Mutex<Option<Published>>>,
+    centre_bpm: Arc<AtomicU32>,
+}
+
+impl AudioCore {
+    /// Ingests an iterator of mono PCM samples, running spectral analysis and tempo tracking
+    /// whenever a hop boundary is reached.
+    pub fn feed(&mut self, mono: &mut dyn Iterator<Item = f32>, frames: usize, rate: f32) {
+        for (index, sample) in mono.enumerate() {
+            self.ring[self.write] = sample;
+            self.write = (self.write + 1) % BLOCK;
+            self.filled = (self.filled + 1).min(BLOCK);
+            self.since_hop += 1;
+            if self.since_hop < HOP || self.filled < BLOCK {
+                continue;
+            }
+            self.since_hop = 0;
+
+            let (tail, head) = self.ring.split_at(self.write);
+            self.block[..head.len()].copy_from_slice(head);
+            self.block[head.len()..].copy_from_slice(tail);
+
+            let analysis = self.analyzer.analyze(&self.block);
+            self.tracker
+                .set_centre_bpm(f32::from_bits(self.centre_bpm.load(Ordering::Relaxed)));
+            self.tracker.push(analysis.novelty);
+
+            if let Ok(mut slot) = self.publisher.try_lock() {
+                let after = (frames.saturating_sub(1 + index)) as f32 / rate;
+                *slot = Some(Published {
+                    frame: analysis.frame,
+                    estimate: self.tracker.estimate(),
+                    analysis_lag: after + self.window_lag,
+                    at: Instant::now(),
+                });
+            }
+        }
+    }
+}
+
 /// An open input stream.
 pub struct AudioInput {
-    /// Held because dropping it closes the stream. Nothing calls it.
-    _stream: cpal::Stream,
+    /// Held because dropping it closes the stream. None when fed from custom sources (e.g. Web Audio API).
+    _stream: Option<cpal::Stream>,
     shared: Arc<Mutex<Option<Published>>>,
     /// The tracking window's centre, as `f32` bits, written by the render
     /// thread and read in the callback. See [`AudioInput::set_centre_bpm`].
@@ -75,6 +127,48 @@ pub struct AudioInput {
 }
 
 impl AudioInput {
+    /// Creates an `AudioInput` paired with an `AudioCore` feeder for custom PCM sources
+    /// (such as Web Audio API on wasm32 or synthetic signal generators).
+    pub fn custom(
+        description: impl Into<String>,
+        sample_rate: u32,
+        centre_bpm: f32,
+    ) -> (AudioInput, Arc<Mutex<AudioCore>>) {
+        let analyzer = Analyzer::new(sample_rate);
+        let bands = analyzer.band_count();
+        let window_lag = analyzer.window_lag();
+        let tracker = Tracker::new(analyzer.hop_seconds(), window_lag, centre_bpm);
+        let shared: Arc<Mutex<Option<Published>>> = Arc::new(Mutex::new(None));
+        let publisher = Arc::clone(&shared);
+        let centre_bpm_atomic = Arc::new(AtomicU32::new(centre_bpm.to_bits()));
+        let follower = Arc::clone(&centre_bpm_atomic);
+
+        let core = AudioCore {
+            analyzer,
+            tracker,
+            ring: vec![0.0f32; BLOCK],
+            block: vec![0.0f32; BLOCK],
+            write: 0,
+            filled: 0,
+            since_hop: 0,
+            window_lag,
+            publisher,
+            centre_bpm: follower,
+        };
+
+        let input = AudioInput {
+            _stream: None,
+            shared,
+            centre_bpm: centre_bpm_atomic,
+            last: None,
+            description: description.into(),
+            sample_rate,
+            bands,
+        };
+
+        (input, Arc::new(Mutex::new(core)))
+    }
+
     /// Opens an audio input stream matching `selector` with tracking centered at `centre_bpm`.
     pub fn open(selector: &str, centre_bpm: f32) -> Result<AudioInput, AudioError> {
         let host = cpal::default_host();
@@ -89,83 +183,19 @@ impl AudioInput {
         let sample_rate = config.sample_rate;
         let channels = config.channels as usize;
 
-        let mut analyzer = Analyzer::new(sample_rate);
-        let bands = analyzer.band_count();
-        let window_lag = analyzer.window_lag();
-        let mut tracker = Tracker::new(analyzer.hop_seconds(), window_lag, centre_bpm);
-        let shared: Arc<Mutex<Option<Published>>> = Arc::new(Mutex::new(None));
-        let publisher = Arc::clone(&shared);
-        // Thread-safe atomic float communication for target tracking tempo.
-        let centre_bpm = Arc::new(AtomicU32::new(centre_bpm.to_bits()));
-        let follower = Arc::clone(&centre_bpm);
-
-        // Every buffer the callback touches, allocated here. The callback is
-        // real-time code: an allocation in it is a lock in disguise.
-        let mut ring = vec![0.0f32; BLOCK];
-        let mut block = vec![0.0f32; BLOCK];
-        let mut write = 0usize;
-        let mut filled = 0usize;
-        let mut since_hop = 0usize;
-
-        // `frames` is how many this callback delivered and `rate` its sample
-        // rate, so that a hop landing part-way through a buffer can say how
-        // much of that buffer came *after* it — see the lag below.
-        let mut on_samples =
-            move |mono: &mut dyn Iterator<Item = f32>, frames: usize, rate: f32| {
-                for (index, sample) in mono.enumerate() {
-                    ring[write] = sample;
-                    write = (write + 1) % BLOCK;
-                    filled = (filled + 1).min(BLOCK);
-                    since_hop += 1;
-                    if since_hop < HOP || filled < BLOCK {
-                        continue;
-                    }
-                    since_hop = 0;
-
-                    // Oldest first, so the newest sample is the last one — which is
-                    // the instant every phase in this crate is measured against.
-                    let (tail, head) = ring.split_at(write);
-                    block[..head.len()].copy_from_slice(head);
-                    block[head.len()..].copy_from_slice(tail);
-
-                    let analysis = analyzer.analyze(&block);
-                    tracker.set_centre_bpm(f32::from_bits(follower.load(Ordering::Relaxed)));
-                    tracker.push(analysis.novelty);
-
-                    if let Ok(mut slot) = publisher.try_lock() {
-                        // Computes tail latency from the block boundary to the end of the driver buffer.
-                        let after = (frames - 1 - index) as f32 / rate;
-                        *slot = Some(Published {
-                            frame: analysis.frame,
-                            estimate: tracker.estimate(),
-                            analysis_lag: after + window_lag,
-                            at: Instant::now(),
-                        });
-                    }
-                }
-            };
+        let (mut input, core) = Self::custom(description, sample_rate, centre_bpm);
 
         let error = |e: cpal::Error| {
-            // Printed rather than propagated: by the time this fires the stream
-            // is running, and the frame path's answer to a broken device is
-            // already correct — confidence decays and the bindings hand their
-            // parameters back.
             eprintln!("audio: {e}");
         };
 
-        // One arm per sample format the host might hand us. The conversion is
-        // the same in each; only the type differs.
         macro_rules! stream {
-            ($sample:ty) => {
+            ($sample:ty) => {{
+                let core_cb = Arc::clone(&core);
                 device.build_input_stream(
                     config.clone(),
                     move |data: &[$sample], _: &cpal::InputCallbackInfo| {
-                        // From what actually arrived rather than from the
-                        // requested buffer size, because a host is free to
-                        // ignore that.
                         let frames = data.len() / channels.max(1);
-                        // Downmix: a level is a level, and a stereo input whose
-                        // channels differ is not two measurements.
                         let mut mono = data.chunks(channels.max(1)).map(|frame| {
                             frame
                                 .iter()
@@ -173,12 +203,14 @@ impl AudioInput {
                                 .sum::<f32>()
                                 / channels.max(1) as f32
                         });
-                        on_samples(&mut mono, frames, sample_rate as f32);
+                        if let Ok(mut c) = core_cb.lock() {
+                            c.feed(&mut mono, frames, sample_rate as f32);
+                        }
                     },
                     error,
                     None,
                 )
-            };
+            }};
         }
 
         let stream = match format {
@@ -191,19 +223,13 @@ impl AudioInput {
             other => return Err(AudioError::SampleFormat(format!("{other:?}"))),
         }
         .map_err(|e| AudioError::Build(e.to_string()))?;
+
         stream
             .play()
             .map_err(|e| AudioError::Build(e.to_string()))?;
 
-        Ok(AudioInput {
-            _stream: stream,
-            shared,
-            centre_bpm,
-            last: None,
-            description,
-            sample_rate,
-            bands,
-        })
+        input._stream = Some(stream);
+        Ok(input)
     }
 
     pub fn description(&self) -> &str {
@@ -308,9 +334,14 @@ fn describe(device: &cpal::Device) -> String {
 /// Returns the list of available audio input device names from the host.
 ///
 /// Enumerates devices directly from the host audio subsystem on demand without caching.
-/// An empty vector indicates no input devices are currently detected.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn inputs() -> Vec<String> {
     named(&enumerated(&cpal::default_host()))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn inputs() -> Vec<String> {
+    vec!["Default Microphone".to_string()]
 }
 
 /// Enumerates input devices available on the host.

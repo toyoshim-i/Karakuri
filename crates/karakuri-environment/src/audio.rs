@@ -77,8 +77,15 @@ impl Audio {
         dt: f32,
         session_bpm: f32,
     ) -> Result<Audio, AudioError> {
-        Ok(Audio {
-            input: AudioInput::open(selector, session_bpm)?,
+        let input = AudioInput::open(selector, session_bpm)?;
+        Ok(Self::from_input(input, latency_offset_ms, dt))
+    }
+
+    /// Creates an `Audio` session wrapping an existing `AudioInput`
+    /// (e.g. created via `AudioInput::custom` on wasm32).
+    pub fn from_input(input: AudioInput, latency_offset_ms: f32, dt: f32) -> Audio {
+        Audio {
+            input,
             lock: BeatLock::new(),
             latency_offset_ms: clamped_latency(latency_offset_ms),
             // Starts at the simulation step and is corrected by measurement
@@ -93,7 +100,7 @@ impl Audio {
                 bands: Vec::with_capacity(MAX_BANDS),
                 confidence: 0.0,
             },
-        })
+        }
     }
 
     pub fn description(&self) -> &str {
