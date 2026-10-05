@@ -405,6 +405,9 @@ number; new records continue from the end.
 | [ADR-0377](0377-procedure-favourites-in-the-library-bay-and-persistent-store.md) | Procedure favourites in the Library bay and persistent store | 2026-09-29 | accepted |
 | [ADR-0378](0378-adaptive-master-chain-slot-layout-and-async-build-event-loop-polling.md) | Adaptive master chain slot layout and async compilation event loop polling | 2026-09-30 | accepted |
 | [ADR-0379](0379-an-l3-reads-its-geometry-by-age-rank-and-by-reduction.md) | An L3 reads its geometry by age rank and by reduction | 2026-09-30 | accepted |
+| [ADR-0380](0380-render-loop-chain-preservation-and-web-idle-deadline-capping.md) | Render loop chain preservation and web idle deadline capping | 2026-10-03 | accepted |
+| [ADR-0381](0381-wasm32-set-compilation-offloading-and-build-debouncing.md) | wasm32 Set compilation offloading and build debouncing | 2026-10-03 | accepted |
+| [ADR-0382](0382-ir-specification-decomposition-and-single-source-mcp-publishing.md) | IR specification decomposition and single-source MCP publishing | 2026-10-03 | accepted |
 
 ## Retired numbers
 
