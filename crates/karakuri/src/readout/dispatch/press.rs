@@ -306,7 +306,7 @@ impl Readout {
         )
         .is_some_and(|row| row.pill.contains(egui::Pos2::new(at.x, at.y)))
         {
-            return Some(Acted::Nothing);
+            return Some(Acted::MidiRequest);
         }
 
         let row = transport_row(ctx, self.panel.layout(), self.view.transport);

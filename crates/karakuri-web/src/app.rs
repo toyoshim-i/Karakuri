@@ -18,6 +18,32 @@ use winit::window::{Window, WindowId};
 
 type PendingGpu = Option<(Arc<Window>, wgpu::Surface<'static>, Gpu)>;
 
+fn spawn_web_midi_scan(
+    pending_midi: Rc<RefCell<Option<karakuri_environment::midi::Surface>>>,
+    midi_session: Rc<RefCell<Option<crate::midi::WebMidiSession>>>,
+    midi_scanning: Rc<RefCell<bool>>,
+    proxy: EventLoopProxy<()>,
+) {
+    if *midi_scanning.borrow() {
+        return;
+    }
+    *midi_scanning.borrow_mut() = true;
+
+    wasm_bindgen_futures::spawn_local(async move {
+        match crate::midi::start_web_midi(proxy.clone()).await {
+            Ok((surface, session)) => {
+                *midi_session.borrow_mut() = Some(session);
+                *pending_midi.borrow_mut() = Some(surface);
+                let _ = proxy.send_event(());
+            }
+            Err(e) => {
+                log::info!("Karakuri Web: Web MIDI scan: {e}");
+            }
+        }
+        *midi_scanning.borrow_mut() = false;
+    });
+}
+
 pub struct WebApp {
     app: App,
     proxy: EventLoopProxy<()>,
@@ -26,6 +52,8 @@ pub struct WebApp {
     pending_font: Rc<RefCell<Option<Vec<u8>>>>,
     pending_audio: Rc<RefCell<Option<karakuri_environment::audio::Audio>>>,
     _audio_session: Rc<RefCell<Option<crate::audio::WebAudioSession>>>,
+    pending_midi: Rc<RefCell<Option<karakuri_environment::midi::Surface>>>,
+    _midi_session: Rc<RefCell<Option<crate::midi::WebMidiSession>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
 }
@@ -146,6 +174,31 @@ impl WebApp {
             });
         });
 
+        let pending_midi = Rc::new(RefCell::new(None));
+        let midi_session = Rc::new(RefCell::new(None));
+        let midi_scanning = Rc::new(RefCell::new(false));
+
+        // Auto-detect connected Web MIDI controllers on startup
+        spawn_web_midi_scan(
+            Rc::clone(&pending_midi),
+            Rc::clone(&midi_session),
+            Rc::clone(&midi_scanning),
+            proxy.clone(),
+        );
+
+        let midi_proxy = proxy.clone();
+        let pending_midi_hook = Rc::clone(&pending_midi);
+        let midi_session_hook = Rc::clone(&midi_session);
+        let midi_scanning_hook = Rc::clone(&midi_scanning);
+        app.set_midi_request_hook(move || {
+            spawn_web_midi_scan(
+                Rc::clone(&pending_midi_hook),
+                Rc::clone(&midi_session_hook),
+                Rc::clone(&midi_scanning_hook),
+                midi_proxy.clone(),
+            );
+        });
+
         Self {
             app,
             proxy,
@@ -154,6 +207,8 @@ impl WebApp {
             pending_font,
             pending_audio,
             _audio_session: audio_session,
+            pending_midi,
+            _midi_session: midi_session,
             initialized: false,
             ime_overlay: None,
         }
@@ -275,6 +330,12 @@ impl ApplicationHandler<()> for WebApp {
         }
         if let Some(audio) = self.pending_audio.borrow_mut().take() {
             self.app.attach_audio(audio);
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+        if let Some(surface) = self.pending_midi.borrow_mut().take() {
+            self.app.attach_midi(surface);
             if let Some(ref window) = self.window {
                 window.request_redraw();
             }

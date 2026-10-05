@@ -10,6 +10,8 @@ pub mod font_loader;
 pub mod harness;
 #[cfg(target_arch = "wasm32")]
 pub mod ime_overlay;
+#[cfg(target_arch = "wasm32")]
+pub mod midi;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod webmcp;
 
