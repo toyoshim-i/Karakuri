@@ -1607,13 +1607,17 @@ version = "0.1.0"
 name = "karakuri-store"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "karakuri-layout",
+ "log",
  "memmap2",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "thiserror 2.0.19",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

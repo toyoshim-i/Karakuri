@@ -34,7 +34,7 @@ pub fn to_sequence(
     frames: u32,
     dir: &Path,
 ) -> Result<(), String> {
-    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    karakuri_store::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     sequence(gpu, deck, look, width, height, frames, |i| {
         Some(dir.join(format!("{i:05}.png")))
     })
@@ -196,7 +196,8 @@ impl Sink for PngSink {
         drop(mapped);
         self.readback.unmap();
 
-        let file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let file = karakuri_store::fs::File::create(&path)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
         let mut png = png::Encoder::new(std::io::BufWriter::new(file), self.width, self.height);
         png.set_color(png::ColorType::Rgba);
         png.set_depth(png::BitDepth::Eight);

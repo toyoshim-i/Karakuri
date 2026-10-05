@@ -533,7 +533,7 @@ mod tests {
     fn bind_action_persists_and_updates_runtime_binding() {
         let temp_dir =
             std::env::temp_dir().join(format!("karakuri_test_keymap_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = karakuri_store::fs::remove_dir_all(&temp_dir);
 
         let mut keymap = Keymap::default_keymap();
         let res = keymap.bind_action(&temp_dir, ActionId::TapBeat, Some("transport"), "x", true);
@@ -549,10 +549,10 @@ mod tests {
         // Check file was persisted
         let file_path = temp_dir.join("keymaps/default.keymap");
         assert!(file_path.is_file());
-        let content = std::fs::read_to_string(&file_path).unwrap();
+        let content = karakuri_store::fs::read_to_string(&file_path).unwrap();
         assert!(content.contains("transport: x global -> tap_beat"));
 
         // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = karakuri_store::fs::remove_dir_all(&temp_dir);
     }
 }

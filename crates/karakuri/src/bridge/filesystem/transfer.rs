@@ -239,7 +239,7 @@ pub(crate) fn sent(root: &std::path::Path, id: String, to: Option<std::path::Pat
         };
     };
     let outcome = bundled(root, &id).and_then(|text| {
-        std::fs::write(&to, text).map_err(|e| format!("writing `{}`: {e}", to.display()))
+        karakuri_store::fs::write(&to, text).map_err(|e| format!("writing `{}`: {e}", to.display()))
     });
     Sent {
         id,

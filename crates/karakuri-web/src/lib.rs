@@ -21,10 +21,13 @@ use wasm_bindgen::prelude::*;
 /// Web entry point invoked on WASM module startup.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
-pub fn start() {
+pub async fn start() {
     console_error_panic_hook::set_once();
     let _ = console_log::init_with_level(log::Level::Info);
     log::info!("Karakuri Web starting up...");
+
+    let mem_fs = karakuri_store::fs::default_memory_fs();
+    karakuri_store::vfs::hydrate_web_fs(&mem_fs).await;
 
     use app::WebApp;
     use winit::event_loop::EventLoop;

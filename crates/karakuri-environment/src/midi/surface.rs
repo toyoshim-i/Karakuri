@@ -65,7 +65,7 @@ impl Surface {
     ) -> Result<(Surface, Vec<String>), String> {
         let (text, name) = match map_path {
             Some(path) => {
-                let text = std::fs::read_to_string(path)
+                let text = karakuri_store::fs::read_to_string(path)
                     .map_err(|e| format!("reading MIDI map `{}`: {e}", path.display()))?;
                 let name = path
                     .file_stem()
@@ -152,12 +152,14 @@ impl Surface {
     pub fn learn(&mut self, message: Message, target: &str, to: &Path) -> Result<String, String> {
         let line = self.router.map.learn(message, target)?;
         if let Some(dir) = to.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("making `{}`: {e}", dir.display()))?;
+            karakuri_store::fs::create_dir_all(dir)
+                .map_err(|e| format!("making `{}`: {e}", dir.display()))?;
         }
-        let held = std::fs::read_to_string(to).ok();
+        let held = karakuri_store::fs::read_to_string(to).ok();
         let key = line.split_once("->").map(|(from, _)| from).unwrap_or("");
         let text = appended(held, &self.seed(), key, &line);
-        std::fs::write(to, text).map_err(|e| format!("writing `{}`: {e}", to.display()))?;
+        karakuri_store::fs::write(to, text)
+            .map_err(|e| format!("writing `{}`: {e}", to.display()))?;
         self.map_name = to
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned());

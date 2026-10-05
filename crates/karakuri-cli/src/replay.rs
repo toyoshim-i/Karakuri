@@ -99,7 +99,7 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
     let sequence = args.seq_to.is_some();
     // Ensure output directory exists when writing image sequences.
     if let Some(dir) = &args.seq_to {
-        if let Err(e) = std::fs::create_dir_all(dir) {
+        if let Err(e) = karakuri_store::fs::create_dir_all(dir) {
             eprintln!("karakuri-cli: {}: {e}", dir.display());
             std::process::exit(1);
         }
