@@ -5,6 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lib]
+name = "karakuri"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "karakuri"
+path = "src/main.rs"
+
 # **The instrument: the program a player launches.** `cargo run -p karakuri`.
 #
 # This package is a *surface* and nothing else — a window, an event loop, the
@@ -91,6 +99,7 @@ karakuri-store.workspace = true
 # `wgpu` 30, which is the pairing ADR-0155 bought.
 wgpu = "30.0.1"
 winit = "0.30.13"
+web-time = "1.1"
 # How `Gpu`'s async constructor is reached off the event loop, which is not an
 # async context — and, since 2026-09-09, how the save dialog's future is
 # awaited on the worker that writes the file `rfd` came back with.

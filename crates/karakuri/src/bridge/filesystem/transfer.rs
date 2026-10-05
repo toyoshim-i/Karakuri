@@ -190,6 +190,7 @@ pub(crate) fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
 /// The other direction of that row: a Set out of this store and into a file the
 /// operator names, asked for and answered without a frame waiting on either
 /// half.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn sending(
     window: &Arc<Window>,
     root: &std::path::Path,
@@ -212,7 +213,23 @@ pub(crate) fn sending(
     });
 }
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn sending(
+    _window: &Arc<Window>,
+    _root: &std::path::Path,
+    _folder: Option<&std::path::Path>,
+    id: &str,
+    tx: std::sync::mpsc::Sender<Sent>,
+) {
+    let _ = tx.send(Sent {
+        id: id.to_owned(),
+        to: None,
+        outcome: Err("file save dialog not supported on web".to_string()),
+    });
+}
+
 /// Processes the outcome of an export file dialog, writing the bundled Set or returning a cancelled status.
+#[allow(dead_code)]
 pub(crate) fn sent(root: &std::path::Path, id: String, to: Option<std::path::PathBuf>) -> Sent {
     let Some(to) = to else {
         return Sent {
@@ -232,6 +249,7 @@ pub(crate) fn sent(root: &std::path::Path, id: String, to: Option<std::path::Pat
 }
 
 /// Packages a Set from the store into a bundled `.kbset` byte vector (ADR-0231, ADR-0260).
+#[allow(dead_code)]
 pub(crate) fn bundled(root: &std::path::Path, id: &str) -> Result<String, String> {
     let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
     Ok(setfile::bundle(&store, id)?

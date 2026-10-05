@@ -2,75 +2,11 @@
 //!
 //! Runs `winit`/`egui`/`wgpu` pipelines with audio, MIDI, MCP, and session recording (ADR-0164, ADR-0217).
 
-use std::time::Duration;
-
-use karakuri_engine::deck::MAX_SLOTS;
+use karakuri::*;
 use karakuri_environment::{Opening, SlotPolicies};
 use karakuri_mcp as mcp;
 use karakuri_store::store::Store;
 use winit::event_loop::{ControlFlow, EventLoop};
-
-mod session;
-pub(crate) use session::{rewired, watched, Keeping};
-
-/// Keyboard bindings ([`keymap::KEY_BINDINGS`]) and key context handling for the window loop.
-mod keymap;
-
-/// The window this opens, in logical pixels. Comfortably above the smallest
-/// viewport the arrangement is claimed to work at, so nothing starts clamped.
-pub(crate) const WINDOW: (f64, f64) = (1440.0, 900.0);
-
-mod readout;
-pub(crate) use readout::*;
-
-// ---------------------------------------------------------------------------
-// The engine in the Program bay
-// ---------------------------------------------------------------------------
-
-/// Default canvas resolution (1280x720) used as the starting session frame canvas and aspect ratio reference (ADR-0246, ADR-0247, ADR-0270).
-pub(crate) const CANVAS: (u32, u32) = (1280, 720);
-
-/// Which profile this binary was built with, for the legend's own reading.
-#[allow(dead_code)]
-pub(crate) const PROFILE: &str = match cfg!(debug_assertions) {
-    true => "debug profile with dependencies at opt-level 3",
-    false => "release profile",
-};
-
-/// Initial RNG seed salt for Deck A.
-pub(crate) const SEED_SALT: u32 = 7;
-
-/// Maximum slot capacity for the deck, matching [`MAX_SLOTS`] (ADR-0178).
-///
-/// The deck opens with slot 0 on air and remaining slots muted.
-pub(crate) const SLOTS: usize = MAX_SLOTS;
-
-/// Slot index opened on air at launch.
-pub(crate) const ON_AIR: usize = 0;
-#[allow(dead_code)]
-pub(crate) const ASKED_TO_PRIME: usize = 1;
-
-/// Command-line argument parsing and working-copy setup for launch procedure pairs (ADR-0230).
-mod launch;
-pub(crate) use launch::*;
-
-/// Periodic poll interval (100 ms) for event loop wakeups when MCP serving is active (ADR-0164).
-pub(crate) const SERVED: Duration = Duration::from_millis(100);
-
-/// Pre-allocated buffer capacity for draining MIDI operations per frame without allocations (P-0091).
-pub(crate) const MAPPED: usize = 32;
-
-// Note: Simulation step counts are measured dynamically per frame via App::clock (ADR-0297).
-
-mod bridge;
-pub(crate) use bridge as engine_bridge;
-pub(crate) use bridge::*;
-
-mod gfx;
-pub(crate) use gfx::*;
-
-mod app;
-pub(crate) use app::*;
 
 /// Application entry point: parses CLI arguments, initializes scratch storage and MCP, then runs the event loop.
 fn main() {
@@ -175,10 +111,3 @@ fn main() {
         ))
         .expect("run");
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests;

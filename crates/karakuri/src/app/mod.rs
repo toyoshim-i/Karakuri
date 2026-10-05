@@ -1,6 +1,6 @@
 //! Application state and event loop handling.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use karakuri_console::egui_winit;
 use karakuri_console::repaint::{Change, Repaint};
@@ -29,7 +29,7 @@ mod operations;
 pub(crate) use audio_midi::*;
 pub(crate) use operations::*;
 
-pub(crate) struct App {
+pub struct App {
     pub(crate) gfx: Option<Gfx>,
     /// Initial material pair requested on the command line, used to seed decks in `resumed`.
     pub(crate) sources: Sources,
@@ -142,7 +142,7 @@ impl App {
     }
     /// Initialize application state with pre-configured MCP handles and launch environment.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub fn new(
         launch: Launch,
         running: Vec<Sources>,
         held: std::sync::Arc<Store>,

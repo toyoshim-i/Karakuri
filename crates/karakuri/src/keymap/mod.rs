@@ -2,7 +2,7 @@
 //!
 //! Maps keyboard shortcuts to panel actions, focus transitions, or handled operations.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use karakuri_console::focus;
 use karakuri_console::panel::Op;

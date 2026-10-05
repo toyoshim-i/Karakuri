@@ -1,6 +1,7 @@
 //! Redraw rendering pass and frame composition.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use winit::event_loop::ActiveEventLoop;
 
@@ -407,11 +408,11 @@ impl App {
                     karakuri_environment::mix::resolve_procedure(Some(held), address)
                         .or_else(|| {
                             let dir = presets_dir.as_ref()?;
-                            let entries = std::fs::read_dir(dir).ok()?;
+                            let entries = karakuri_store::fs::read_dir(dir).ok()?;
                             for entry in entries.flatten() {
                                 let path = entry.path();
                                 if path.extension().and_then(|s| s.to_str()) == Some("kir") {
-                                    if let Ok(src) = std::fs::read_to_string(&path) {
+                                    if let Ok(src) = karakuri_store::fs::read_to_string(&path) {
                                         let name =
                                             path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
                                         if name == address
@@ -574,12 +575,19 @@ impl App {
                 .costs
                 .audit()
                 .then(|| {
-                    let owed = Instant::now();
-                    gfx.gpu
-                        .device
-                        .poll(wgpu::PollType::wait_indefinitely())
-                        .is_ok()
-                        .then(|| owed.elapsed())
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let owed = Instant::now();
+                        gfx.gpu
+                            .device
+                            .poll(wgpu::PollType::wait_indefinitely())
+                            .is_ok()
+                            .then(|| owed.elapsed())
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        None
+                    }
                 })
                 .flatten();
 

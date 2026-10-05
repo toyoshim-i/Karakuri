@@ -129,6 +129,31 @@ pub(crate) fn set_row(set: &setfile::SetSummary) -> RowKind {
     }
 }
 
+/// Extracts layer badges from a preset `.kset` or `.kbset` file (ADR-0338, P-0091).
+pub(crate) fn preset_set_row(path: &std::path::Path) -> RowKind {
+    let Ok(lines) = karakuri_store::ndjson::read(path) else {
+        return RowKind::default();
+    };
+    let mut badges: Vec<karakuri_operation::Layer> = Vec::new();
+    for line in lines {
+        let layer = match line.record() {
+            Record::Part { layer, .. } => Some(*layer),
+            Record::Slot { at, .. } => Some(at.layer),
+            _ => None,
+        };
+        if let Some(l) = layer {
+            let op_layer = asked(l);
+            if !badges.contains(&op_layer) {
+                badges.push(op_layer);
+            }
+        }
+    }
+    RowKind {
+        badges,
+        procedure: false,
+    }
+}
+
 /// What a kept procedure's row is: its one declared kind, and that it is a
 /// procedure. A file that declares none draws no badge.
 pub(crate) fn kept_row(kept: &ListedProcedure) -> RowKind {
@@ -340,12 +365,18 @@ pub(crate) fn listing(
                     presets_listing(presets)
                         .into_iter()
                         .filter(|preset| view.starred.contains(&preset.id))
-                        .filter(|_| kinds.shows_sets())
                         .map(|preset| {
-                            let written = std::fs::metadata(&preset.path)
+                            let kind = preset_set_row(&preset.path);
+                            let written = karakuri_store::fs::metadata(&preset.path)
                                 .and_then(|m| m.modified())
                                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-                            (preset.id, RowKind::default(), written)
+                            (preset.id, kind, written)
+                        })
+                        .filter(|(_, kind, _)| {
+                            kinds.shows_sets()
+                                && (!kinds.narrowing()
+                                    || kind.badges.is_empty()
+                                    || kind.badges.iter().any(|&l| kinds.shows_layer(l)))
                         }),
                 )
                 .chain(
@@ -355,7 +386,7 @@ pub(crate) fn listing(
                         .filter(|shipped| shows_kept(kinds, shipped.kind.and_then(kind_of)))
                         .map(|shipped| {
                             let kind = shipped_row(&shipped);
-                            let written = std::fs::metadata(&shipped.file)
+                            let written = karakuri_store::fs::metadata(&shipped.file)
                                 .and_then(|m| m.modified())
                                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
                             (shipped.name.clone(), kind, written)
@@ -384,12 +415,20 @@ pub(crate) fn listing(
             rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
             rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()
         }
-        // Shipped presets and procedures sorted by name; preset sets omit badges to avoid disk reads (P-0091).
+        // Shipped presets and procedures sorted by name (ADR-0338, P-0091).
         Scope::Presets => {
             let mut rows: Vec<(String, RowKind)> = presets_listing(presets)
                 .into_iter()
-                .filter(|_| kinds.shows_sets())
-                .map(|preset| (preset.id, RowKind::default()))
+                .map(|preset| {
+                    let kind = preset_set_row(&preset.path);
+                    (preset.id, kind)
+                })
+                .filter(|(_, kind)| {
+                    kinds.shows_sets()
+                        && (!kinds.narrowing()
+                            || kind.badges.is_empty()
+                            || kind.badges.iter().any(|&l| kinds.shows_layer(l)))
+                })
                 .chain(
                     shipped
                         .iter()

@@ -1,4 +1,4 @@
-use std::fs;
+use karakuri_store::fs;
 use std::path::Path;
 use winit::keyboard::Key;
 

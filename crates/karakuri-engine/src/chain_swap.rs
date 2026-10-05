@@ -1,5 +1,6 @@
 //! Master chain compilation on a worker thread, installed atomically at frame boundaries.
 
+#![allow(unused_imports)]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,7 @@ pub struct ChainSlot {
 }
 
 /// A chain to build off the render thread.
+#[allow(dead_code)]
 struct Job {
     id: u64,
     slots: Vec<ChainSlot>,
@@ -110,7 +112,7 @@ pub struct ChainSwap {
 
 impl ChainSwap {
     /// Creates a coordinator backed by a `karakuri-chain` worker thread.
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> ChainSwap {
+    pub fn new(_device: &wgpu::Device, _queue: &wgpu::Queue) -> ChainSwap {
         let (jobs_tx, jobs_rx) = mpsc::channel();
         let (done_tx, done_rx) = mpsc::channel();
         let graveyard = Arc::new(Mutex::new(Vec::with_capacity(GRAVEYARD_CAPACITY)));
@@ -118,16 +120,26 @@ impl ChainSwap {
 
         let built = Arc::new(AtomicU64::new(0));
 
+        #[cfg(not(target_arch = "wasm32"))]
         let worker = {
-            let device = device.clone();
-            let queue = queue.clone();
+            let device = _device.clone();
+            let queue = _queue.clone();
             let graveyard = Arc::clone(&graveyard);
             let stop = Arc::clone(&stop);
             let built = Arc::clone(&built);
-            std::thread::Builder::new()
-                .name("karakuri-chain".into())
-                .spawn(move || run_worker(device, queue, jobs_rx, done_tx, graveyard, stop, built))
-                .expect("spawn chain worker")
+            Some(
+                std::thread::Builder::new()
+                    .name("karakuri-chain".into())
+                    .spawn(move || {
+                        run_worker(device, queue, jobs_rx, done_tx, graveyard, stop, built)
+                    })
+                    .expect("spawn chain worker"),
+            )
+        };
+        #[cfg(target_arch = "wasm32")]
+        let worker = {
+            drop((jobs_rx, done_tx));
+            None
         };
 
         ChainSwap {
@@ -136,7 +148,7 @@ impl ChainSwap {
             graveyard,
             retired: Vec::with_capacity(GRAVEYARD_CAPACITY),
             stop,
-            worker: Some(worker),
+            worker,
             building: None,
             events: Vec::with_capacity(EVENT_CAPACITY),
             next_id: 0,
@@ -315,6 +327,7 @@ impl Drop for ChainSwap {
 /// Main execution loop for the chain build worker.
 ///
 /// Builds requested chains and drops the chains the render thread retired.
+#[cfg(not(target_arch = "wasm32"))]
 fn run_worker(
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -354,6 +367,7 @@ fn run_worker(
 }
 
 /// Compiles every slot of a job and allocates the targets they run through.
+#[cfg(not(target_arch = "wasm32"))]
 fn build(device: &wgpu::Device, job: &Job) -> Result<Chain, ChainRefusal> {
     let mut slots = Vec::with_capacity(job.slots.len());
     for (at, want) in job.slots.iter().enumerate() {
@@ -375,6 +389,7 @@ fn build(device: &wgpu::Device, job: &Job) -> Result<Chain, ChainRefusal> {
 // Static assertion ensuring a chain, its slots, what is built and what is
 // retired all remain Send: the build happens on `karakuri-chain` and the drop
 // happens there too.
+#[cfg(not(target_arch = "wasm32"))]
 const _: fn() = || {
     fn assert_send<T: Send>() {}
     assert_send::<Slot>();

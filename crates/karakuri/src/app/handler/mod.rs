@@ -1,7 +1,8 @@
 //! ApplicationHandler event loop implementation for App.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use karakuri_console::repaint::Change;
 use karakuri_console::view::{self, Scope};
@@ -43,9 +44,8 @@ impl ApplicationHandler for App {
                 karakuri_console::MINIMUM_VIEWPORT.1,
             ));
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
-        let size = window.inner_size();
+        let _size = window.inner_size();
         self.scale = window.scale_factor();
-
         let instance = Gpu::instance();
         window.set_ime_allowed(true);
         // Report surface and adapter errors instead of panicking across the winit/OS boundary (ADR-0168).
@@ -57,7 +57,111 @@ impl ApplicationHandler for App {
             Ok(gpu) => gpu,
             Err(e) => no_gpu(&format!("no adapter: {e}")),
         };
+        self.attach_gfx(window, surface, gpu);
+    }
 
+    /// Handle due deadlines at iteration start, checking both deadlines regardless of [`StartCause`].
+    /// Drains [`App::operated`] and routes operations requiring the event loop (ADR-0341).
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, _cause: StartCause) {
+        let now = Instant::now();
+        if self.egui_due.is_some_and(|due| due <= now) {
+            self.egui_due = None;
+            if let Some(gfx) = self.gfx.as_ref() {
+                // One frame, now that the delay `egui` asked for has passed.
+                gfx.window.request_redraw();
+            }
+        }
+        if self
+            .gfx
+            .as_ref()
+            .is_some_and(|gfx| gfx.engine.chain_swap.building().is_some())
+        {
+            if let Some(gfx) = self.gfx.as_ref() {
+                gfx.window.request_redraw();
+            }
+        }
+        // Measure costs only after the engine is initialized, retaining due state until recorded.
+        if self.costs.due().is_some_and(|due| due <= now) {
+            if let Some(gfx) = self.gfx.as_ref() {
+                // Cost reading labels active workload by joining current slot material names in order.
+                let (capacity, material) = (gfx.engine.capacity, gfx.material.join(" / "));
+                // Record refresh interval and composite output size for accurate cost reporting.
+                let at = gfx.engine.present.size();
+                self.costs.say(capacity, &material, gfx.budget_ms, at);
+            }
+        }
+        // Process scheduled MCP requests when the timer expires ([`SERVED`]).
+        if self.served.is_some_and(|due| due <= now) {
+            self.served = Some(now + SERVED);
+            if let Some(gfx) = self.gfx.as_mut() {
+                self.keeping.requests(&mut gfx.engine, &self.store);
+                // Drain and execute operations requested by the MCP model ([`App::operated`]).
+                App::operated(
+                    gfx,
+                    event_loop,
+                    self.started,
+                    &mut self.readout,
+                    &mut self.recording,
+                    &mut self.keeping,
+                    &self.store,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                );
+                // Drain both save and kept procedure channels using bitwise OR to avoid short-circuiting.
+                if self.keeping.finished_saves() | self.keeping.finished_keeps() {
+                    let running = aimed_set(gfx, &self.readout.view);
+                    println!(
+                        "{}",
+                        listing(
+                            &mut self.readout.view,
+                            &self.store,
+                            self.presets.as_ref(),
+                            self.folder.as_deref(),
+                            running.as_deref(),
+                        )
+                    );
+                }
+                // Request a redraw when a build finishes so the swap takes effect at the frame boundary.
+                gfx.window.request_redraw();
+            }
+        }
+    }
+
+    /// Update event loop control flow (`Wait` vs `WaitUntil`) based on soonest pending deadline (ADR-0164, [`SERVED`]).
+    /// Triggers redraw if wake events or MIDI inputs are queued ([`App::waker`]).
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _wake: ()) {
+        if let Some(gfx) = self.gfx.as_ref() {
+            self.costs.owes();
+            gfx.window.request_redraw();
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.on_about_to_wait(event_loop);
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.on_window_event(event_loop, id, event);
+        }));
+        if let Err(payload) = res {
+            let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic payload".to_string()
+            };
+            eprintln!("panicked in window_event: {msg}");
+        }
+    }
+}
+
+impl App {
+    /// Attaches the initialized GPU, window, and presentation context to App.
+    pub fn attach_gfx(&mut self, window: Arc<Window>, surface: wgpu::Surface<'static>, gpu: Gpu) {
+        let size = window.inner_size();
+        self.scale = window.scale_factor();
         let caps = surface.get_capabilities(&gpu.adapter);
         // Egui expects a non-sRGB surface format because its shaders output sRGB-encoded colors (P-0064).
         let format = caps
@@ -69,6 +173,9 @@ impl ApplicationHandler for App {
         // Picture present pass requires an sRGB target format offered by the surface (P-0064).
         let picture_format = match caps.formats.iter().copied().find(|f| f.is_srgb()) {
             Some(format) => format,
+            #[cfg(target_arch = "wasm32")]
+            None => format.add_srgb_suffix(),
+            #[cfg(not(target_arch = "wasm32"))]
             // Refuse initialization if no compatible sRGB target format is offered (P-0083).
             None => no_gpu(&format!(
                 "no sRGB surface format: the present pass writes through the hardware's sRGB \
@@ -258,83 +365,8 @@ impl ApplicationHandler for App {
         });
     }
 
-    /// Handle due deadlines at iteration start, checking both deadlines regardless of [`StartCause`].
-    /// Drains [`App::operated`] and routes operations requiring the event loop (ADR-0341).
-    fn new_events(&mut self, event_loop: &ActiveEventLoop, _cause: StartCause) {
-        let now = Instant::now();
-        if self.egui_due.is_some_and(|due| due <= now) {
-            self.egui_due = None;
-            if let Some(gfx) = self.gfx.as_ref() {
-                // One frame, now that the delay `egui` asked for has passed.
-                gfx.window.request_redraw();
-            }
-        }
-        if self
-            .gfx
-            .as_ref()
-            .is_some_and(|gfx| gfx.engine.chain_swap.building().is_some())
-        {
-            if let Some(gfx) = self.gfx.as_ref() {
-                gfx.window.request_redraw();
-            }
-        }
-        // Measure costs only after the engine is initialized, retaining due state until recorded.
-        if self.costs.due().is_some_and(|due| due <= now) {
-            if let Some(gfx) = self.gfx.as_ref() {
-                // Cost reading labels active workload by joining current slot material names in order.
-                let (capacity, material) = (gfx.engine.capacity, gfx.material.join(" / "));
-                // Record refresh interval and composite output size for accurate cost reporting.
-                let at = gfx.engine.present.size();
-                self.costs.say(capacity, &material, gfx.budget_ms, at);
-            }
-        }
-        // Process scheduled MCP requests when the timer expires ([`SERVED`]).
-        if self.served.is_some_and(|due| due <= now) {
-            self.served = Some(now + SERVED);
-            if let Some(gfx) = self.gfx.as_mut() {
-                self.keeping.requests(&mut gfx.engine, &self.store);
-                // Drain and execute operations requested by the MCP model ([`App::operated`]).
-                App::operated(
-                    gfx,
-                    event_loop,
-                    self.started,
-                    &mut self.readout,
-                    &mut self.recording,
-                    &mut self.keeping,
-                    &self.store,
-                    &mut self.egui_due,
-                    &mut self.costs,
-                );
-                // Drain both save and kept procedure channels using bitwise OR to avoid short-circuiting.
-                if self.keeping.finished_saves() | self.keeping.finished_keeps() {
-                    let running = aimed_set(gfx, &self.readout.view);
-                    println!(
-                        "{}",
-                        listing(
-                            &mut self.readout.view,
-                            &self.store,
-                            self.presets.as_ref(),
-                            self.folder.as_deref(),
-                            running.as_deref(),
-                        )
-                    );
-                }
-                // Request a redraw when a build finishes so the swap takes effect at the frame boundary.
-                gfx.window.request_redraw();
-            }
-        }
-    }
-
-    /// Update event loop control flow (`Wait` vs `WaitUntil`) based on soonest pending deadline (ADR-0164, [`SERVED`]).
-    /// Triggers redraw if wake events or MIDI inputs are queued ([`App::waker`]).
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _wake: ()) {
-        if let Some(gfx) = self.gfx.as_ref() {
-            self.costs.owes();
-            gfx.window.request_redraw();
-        }
-    }
-
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    /// Configures event loop control flow and scheduling deadlines.
+    pub fn on_about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let building_due = self.gfx.as_ref().and_then(|gfx| {
             gfx.engine
                 .chain_swap
@@ -347,30 +379,24 @@ impl ApplicationHandler for App {
             .flatten()
             .min();
         event_loop.set_control_flow(match next {
+            #[cfg(not(target_arch = "wasm32"))]
             Some(at) => ControlFlow::WaitUntil(at),
+            #[cfg(target_arch = "wasm32")]
+            Some(at) => {
+                let delay = at.saturating_duration_since(Instant::now());
+                ControlFlow::WaitUntil(web_time::Instant::now() + delay)
+            }
             None => ControlFlow::Wait,
         });
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.on_window_event(event_loop, id, event);
-        }));
-        if let Err(payload) = res {
-            let msg = if let Some(s) = payload.downcast_ref::<&str>() {
-                (*s).to_string()
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "unknown panic payload".to_string()
-            };
-            eprintln!("panicked in window_event: {msg}");
-        }
-    }
-}
-
-impl App {
-    fn on_window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    /// Handles incoming window events, UI inputs, and redraw requests.
+    pub fn on_window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        id: WindowId,
+        event: WindowEvent,
+    ) {
         if self.gfx.is_none() {
             return;
         }

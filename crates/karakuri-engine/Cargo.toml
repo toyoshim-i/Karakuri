@@ -17,6 +17,7 @@ thiserror.workspace = true
 
 wgpu = "30.0.1"
 winit = "0.30.13"
+web-time = "1.1"
 
 [dev-dependencies]
 # For the `tonemap_compare` example only: it writes PNGs the same way

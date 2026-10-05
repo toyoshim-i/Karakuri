@@ -1,13 +1,21 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::mpsc::Sender;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex};
 
 use crate::binding::Signals;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::estimate::{estimate, Estimate};
 use crate::probe::{Measurement, Probe};
-use crate::set::{Set, SetError};
+use crate::set::Set;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::set::SetError;
 
-use super::types::{unpacked, Built, Done, Polled, Sizes, Source, PROBE_STEPS};
+use super::types::PROBE_STEPS;
+#[cfg(not(target_arch = "wasm32"))]
+use super::types::{unpacked, Built, Done, Polled, Sizes, Source};
 
 /// Measures one frame execution cost of `set` at target resolution `at` and restores initial state.
 ///
@@ -32,6 +40,7 @@ pub fn measure(
 }
 
 /// Main execution loop for the background build and compilation worker.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn run_worker(
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -203,6 +212,7 @@ pub(crate) fn run_worker(
 }
 
 /// Extracts a displayable message from a caught panic payload.
+#[cfg(not(target_arch = "wasm32"))]
 fn panic_detail(payload: &Box<dyn std::any::Any + Send>) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {
         (*s).to_string()

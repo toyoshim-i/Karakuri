@@ -3,7 +3,7 @@
 //! Preserves original on-disk text alongside parsed [`Record`]s so unrecognized
 //! lines ([`Record::Unknown`]) round-trip without data corruption.
 
-use std::fs;
+use crate::fs;
 use std::path::Path;
 
 use crate::record::Record;

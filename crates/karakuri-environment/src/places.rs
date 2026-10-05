@@ -147,7 +147,8 @@ pub struct PresetProcedure {
 impl Presets {
     /// Lists all `.kset` files directly within this preset root, ordered ascending by id.
     pub fn list_sets(&self) -> Result<Vec<PresetSet>, String> {
-        let entries = std::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
+        let entries =
+            karakuri_store::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
         let mut out = Vec::new();
         for entry in entries {
             let entry = entry.map_err(|e| self.cannot_be_listed(&e))?;
@@ -173,7 +174,8 @@ impl Presets {
 
     /// Lists all `.kir` procedures directly within this preset root, ordered ascending by name.
     pub fn list_procedures(&self) -> Result<Vec<PresetProcedure>, String> {
-        let entries = std::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
+        let entries =
+            karakuri_store::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
         let mut out = Vec::new();
         for entry in entries {
             let entry = entry.map_err(|e| self.cannot_be_listed(&e))?;
@@ -189,7 +191,7 @@ impl Presets {
                 continue;
             }
             let path = entry.path();
-            let Ok(source) = std::fs::read(&path) else {
+            let Ok(source) = karakuri_store::fs::read(&path) else {
                 continue;
             };
             out.push(PresetProcedure {

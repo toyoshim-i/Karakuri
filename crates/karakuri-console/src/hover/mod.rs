@@ -103,6 +103,27 @@ impl Hover {
         self.resting.map(|rest| (rest.at, rest.on))
     }
 
+    /// Whether a tooltip is currently up on screen.
+    pub fn is_up(&self) -> bool {
+        self.up
+    }
+
+    /// Explicitly dismisses the active tooltip, dwell state, and any active key learning.
+    pub fn dismiss(&mut self) -> Tip {
+        self.learning_key = None;
+        let owed = match self.up {
+            true => Tip::Gone,
+            false => Tip::Still,
+        };
+        self.up = false;
+        self.tip_box = None;
+        self.key_badge_rect = None;
+        self.key_global_rect = None;
+        self.resting = None;
+        self.galley = None;
+        owed
+    }
+
     /// Whether the hover layer is currently in Key Learn mode for a control.
     pub fn learning_key(&self) -> Option<usize> {
         self.learning_key
@@ -197,10 +218,10 @@ impl Hover {
             return Tip::Still;
         }
         let pos = egui::pos2(p.x, p.y);
-        if self.up && self.tip_box.is_some_and(|b| b.contains(pos)) {
+        if self.learning_key.is_some() {
             return Tip::Still;
         }
-        if self.learning_key.is_some() {
+        if self.up && self.tip_box.is_some_and(|b| b.expand(8.0).contains(pos)) {
             return Tip::Still;
         }
         let on = match claim == Claim::Panel && !panel.dragging() {
@@ -208,17 +229,23 @@ impl Hover {
             false => None,
         };
         match (self.resting, on) {
-            // The same control: a tip that is up stays exactly where it is,
-            // and one that is not yet up starts its dwell again from here.
+            // The same control: if a tip was up, moving away from the tooltip box dismisses it
+            // and restarts the dwell at the new position. If not yet up, dwell restarts here.
             (Some(rest), Some(on)) if rest.on == on => {
-                if !self.up {
-                    self.resting = Some(Rest {
-                        at: p,
-                        since: now,
-                        on,
-                    });
-                }
-                Tip::Still
+                let owed = match self.up {
+                    true => Tip::Gone,
+                    false => Tip::Still,
+                };
+                self.up = false;
+                self.tip_box = None;
+                self.key_badge_rect = None;
+                self.key_global_rect = None;
+                self.resting = Some(Rest {
+                    at: p,
+                    since: now,
+                    on,
+                });
+                owed
             }
             // Another control, or none at all.
             (_, on) => {

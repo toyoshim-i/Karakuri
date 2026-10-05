@@ -11,7 +11,7 @@ use karakuri_environment::{audio, midi};
 use karakuri_layout::Point;
 use karakuri_operation::{BeatSource, GridScale, Operation};
 use karakuri_store::record::Record;
-use std::time::Instant;
+use web_time::Instant;
 use winit::event_loop::EventLoopProxy;
 
 use crate::bridge::asked_layer;

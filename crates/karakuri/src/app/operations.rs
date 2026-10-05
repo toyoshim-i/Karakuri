@@ -8,7 +8,7 @@ use karakuri_console::view::View;
 use karakuri_engine::WindowSink;
 use karakuri_operation::{Operation, Output};
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 

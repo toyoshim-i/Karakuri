@@ -76,6 +76,8 @@ impl App {
                 button: MouseButton::Right,
                 ..
             } => {
+                let tip = self.hover.dismiss();
+                let tip_repaint = Change::Tip(tip).repaint();
                 let ctx = gfx.egui.egui_ctx().clone();
                 let (claim, acted) = self.readout.pointer(&ctx, Pointer::Secondary);
                 // Card clicks via secondary press trigger selection, matching left-click behavior.
@@ -100,10 +102,13 @@ impl App {
                     &acted,
                     Change::Pointer(claim).repaint(),
                 )
-                .repaint;
+                .repaint
+                .soonest(tip_repaint);
                 App::wants(&gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { delta, .. } => {
+                let tip = self.hover.dismiss();
+                let tip_repaint = Change::Tip(tip).repaint();
                 // Convert vertical scroll delta to logical pixels (`LineDelta` scaled by `WHEEL_STEP`, `PixelDelta` scaled by DPI).
                 // Negate delta so positive wheel deflection scrolls down content.
                 let by = match delta {
@@ -122,7 +127,9 @@ impl App {
                     &gfx,
                     &mut self.egui_due,
                     &mut self.costs,
-                    Change::Wheeled(claim, acted == Acted::Pointed).repaint(),
+                    Change::Wheeled(claim, acted == Acted::Pointed)
+                        .repaint()
+                        .soonest(tip_repaint),
                 );
             }
 
@@ -141,7 +148,7 @@ impl App {
     ) {
         let which = match state {
             ElementState::Pressed => {
-                let now = std::time::Instant::now();
+                let now = Instant::now();
                 let cursor = self.readout.panel.cursor();
                 let is_double = if let Some((prev_time, prev_pos)) = self.last_click {
                     now.duration_since(prev_time).as_millis() <= 400
@@ -183,7 +190,23 @@ impl App {
                 return;
             }
             if self.hover.hit_tip_box(cursor) {
+                let tip = self.hover.dismiss();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Tip(tip).repaint(),
+                );
                 return;
+            }
+            if self.hover.is_up() || self.hover.learning_key().is_some() {
+                let tip = self.hover.dismiss();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Tip(tip).repaint(),
+                );
             }
         }
         let prev_focus = self
