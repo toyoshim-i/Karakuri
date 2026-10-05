@@ -197,7 +197,15 @@ pub fn handle_terminal_events(
             egui::Event::Text(text) => {
                 let _ = session.send_bytes(text.as_bytes());
             }
+            egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => {
+                if text.is_empty() {
+                    state.clear_preedit();
+                } else {
+                    state.set_preedit(Some(text));
+                }
+            }
             egui::Event::Ime(egui::ImeEvent::Commit(text)) => {
+                state.clear_preedit();
                 let _ = session.send_bytes(text.as_bytes());
             }
             egui::Event::Paste(text) => {

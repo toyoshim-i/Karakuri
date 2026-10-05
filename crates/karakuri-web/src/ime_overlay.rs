@@ -81,7 +81,31 @@ impl ImeOverlay {
             closures.push(cb);
         }
 
-        // 2. compositionend
+        // 2. compositionupdate
+        {
+            let state = prompt_state.clone();
+            let px = proxy.clone();
+            let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+                let text = ev
+                    .dyn_into::<web_sys::CompositionEvent>()
+                    .ok()
+                    .and_then(|e| e.data())
+                    .unwrap_or_default();
+                if !text.is_empty() {
+                    state.set_preedit(Some(text));
+                } else {
+                    state.clear_preedit();
+                }
+                let _ = px.send_event(());
+            });
+            textarea.add_event_listener_with_callback(
+                "compositionupdate",
+                cb.as_ref().unchecked_ref(),
+            )?;
+            closures.push(cb);
+        }
+
+        // 3. compositionend
         {
             let is_comp = is_composing.clone();
             let state = prompt_state.clone();
@@ -89,6 +113,7 @@ impl ImeOverlay {
             let px = proxy.clone();
             let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
                 is_comp.set(false);
+                state.clear_preedit();
                 let text = ev
                     .dyn_into::<web_sys::CompositionEvent>()
                     .ok()
@@ -312,11 +337,19 @@ impl ImeOverlay {
             .map(|s| s.cursor())
             .unwrap_or((0, 0));
 
+        let preedit_len = self
+            .prompt_state
+            .preedit()
+            .as_ref()
+            .map(|s| s.chars().count())
+            .unwrap_or(0);
+        let effective_col = cursor_col + preedit_len;
+
         let char_w = 6.0;
         let row_h = 12.0;
         let head_h = 24.0;
 
-        let cursor_x = rect.min.x as f64 + 4.0 + (cursor_col as f64 * char_w);
+        let cursor_x = rect.min.x as f64 + 4.0 + (effective_col as f64 * char_w);
         let cursor_y = rect.min.y as f64 + head_h + (cursor_row as f64 * row_h);
 
         let style = self.element.style();

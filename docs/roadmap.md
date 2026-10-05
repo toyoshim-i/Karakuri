@@ -65,7 +65,7 @@ Karakuri is a real-time visual performance system where human performers and aut
   - Left-pane Prompt bay layout integration beneath Library and Staging with flexible height budgeting and 27px retained header bar on fold (ADR-0343, ADR-0364, ADR-0365).
   - Multi-session detached PTY background process multiplexer with 1024-line scrollback buffers and automatic lifecycle cleanup on process exit.
   - 18 sorted AI CLI presets (`agy`, `aider`, `claude`, `ollama`, ...) plus `custom...` defaulting to system interactive shell (`sh`/`powershell`).
-  - Terminal cursor-anchored borderless multiline input with native macOS/Windows IME candidate positioning for Japanese and multilingual prompt drafting.
+  - Terminal cursor-anchored borderless multiline input with native macOS/Windows IME candidate positioning and full inline preedit composition for Japanese and multilingual prompt drafting (ADR-0383).
   - ANSI VT100 / xterm sequence emulation (24-bit Truecolor, relative cursor positioning, alternate screen buffer, raw LF/CR semantics, and cursor visibility toggles).
   - Smooth console focus ladder with keyboard capture mode forwarding arrow keys and control characters to PTY stdin while preserving `Tab` bay navigation and `Esc` release.
 

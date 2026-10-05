@@ -290,11 +290,7 @@ where
     let tools_schema = mcp_tools_to_openai(&mcp.tools());
     let mut round = 0;
     const MAX_ROUNDS: usize = 5;
-
-    // Detect if model is Gemma or known tools-unsupported model by name
-    let model_lower = config.model.to_lowercase();
-    let is_likely_gemma = model_lower.contains("gemma") || model_lower.contains("phi");
-    let mut enable_tools = !is_likely_gemma;
+    let mut enable_tools = true;
 
     while round < MAX_ROUNDS {
         round += 1;

@@ -413,13 +413,45 @@ pub fn prompt_into(
                         let cursor = session.cursor();
                         let cursor_visible = session.is_cursor_visible();
                         let is_captured = state.is_captured();
+                        let active_preedit = state.preedit();
 
-                        // Render each terminal row with formatted ANSI spans and visible cursor
+                        // Report precise IME cursor position to egui so OS displays candidate popup anchored to cursor
+                        if is_captured {
+                            let line_pitch = row_h + ui.spacing().item_spacing.y;
+                            let preedit_len = active_preedit
+                                .as_ref()
+                                .map(|s| s.chars().count())
+                                .unwrap_or(0);
+                            let effective_col = cursor.1 + preedit_len;
+                            let cursor_x = body_rect.min.x + 4.0 + (effective_col as f32 * char_w);
+                            let cursor_y = (body_rect.min.y + 2.0 + (cursor.0 as f32 * line_pitch)
+                                - scroll_y)
+                                .max(body_rect.min.y);
+                            let cursor_rect = Rect::from_min_size(
+                                Pos2::new(cursor_x, cursor_y),
+                                egui::Vec2::new(char_w, row_h),
+                            );
+                            ui.ctx().output_mut(|o| {
+                                o.ime = Some(egui::output::IMEOutput {
+                                    rect: cursor_rect,
+                                    cursor_rect,
+                                    purpose: egui::IMEPurpose::Terminal,
+                                    should_interrupt_composition: false,
+                                });
+                            });
+                        }
+
+                        // Render each terminal row with formatted ANSI spans, visible cursor, and inline IME preedit
                         let total_rows = cell_rows.len().max(cursor.0 + 1);
                         for r_idx in 0..total_rows {
                             let empty_row = Vec::new();
                             let row = cell_rows.get(r_idx).unwrap_or(&empty_row);
                             let is_cursor_row = cursor_visible && r_idx == cursor.0;
+                            let has_preedit = is_cursor_row
+                                && active_preedit
+                                    .as_ref()
+                                    .map(|s| !s.is_empty())
+                                    .unwrap_or(false);
                             let max_col = if is_cursor_row {
                                 row.len().max(cursor.1 + 1)
                             } else {
@@ -431,6 +463,26 @@ pub fn prompt_into(
                             let mut current_format: Option<TextFormat> = None;
 
                             for c_idx in 0..max_col {
+                                // Inline IME preedit composition rendering at cursor position
+                                if has_preedit && c_idx == cursor.1 {
+                                    if let Some(ref preedit_str) = active_preedit {
+                                        if let Some(active_fmt) = current_format.take() {
+                                            if !current_span.is_empty() {
+                                                job.append(&current_span, 0.0, active_fmt);
+                                                current_span.clear();
+                                            }
+                                        }
+                                        let preedit_fmt = TextFormat {
+                                            font_id: font_id.clone(),
+                                            color: pal.mint,
+                                            background: tint(pal.mint, 40),
+                                            underline: Stroke::new(1.5, pal.mint),
+                                            ..Default::default()
+                                        };
+                                        job.append(preedit_str, 0.0, preedit_fmt);
+                                    }
+                                }
+
                                 let (ch, cell_style) = if c_idx < row.len() {
                                     (row[c_idx].ch, row[c_idx].style)
                                 } else {
@@ -477,7 +529,7 @@ pub fn prompt_into(
                                     }
                                 }
 
-                                if is_cursor_cell {
+                                if is_cursor_cell && !has_preedit {
                                     if is_captured {
                                         format.background = pal.mint;
                                         format.color = pal.panel;
@@ -595,5 +647,23 @@ mod tests {
         assert!(is_cell_selected(3, 1, (1, 3), (3, 2)));
         assert!(!is_cell_selected(3, 2, (1, 3), (3, 2)));
         assert!(!is_cell_selected(4, 0, (1, 3), (3, 2)));
+    }
+
+    #[test]
+    fn test_preedit_state_lifecycle() {
+        let state = PromptState::default();
+        assert_eq!(state.preedit(), None);
+
+        // Setting active composition text
+        state.set_preedit(Some("とうきょう".to_string()));
+        assert_eq!(state.preedit(), Some("とうきょう".to_string()));
+
+        // Updating to converted kanji
+        state.set_preedit(Some("東京".to_string()));
+        assert_eq!(state.preedit(), Some("東京".to_string()));
+
+        // Clearing on commit
+        state.clear_preedit();
+        assert_eq!(state.preedit(), None);
     }
 }
