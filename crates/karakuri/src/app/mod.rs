@@ -100,6 +100,8 @@ pub struct App {
     pub(crate) cjk_font_bytes: Option<Vec<u8>>,
     /// Optional callback invoked when the user interacts with audio input controls (ADR-0384).
     pub(crate) audio_request_hook: Option<Box<dyn FnMut()>>,
+    /// Optional callback invoked when the user interacts with MIDI controls (ADR-0385).
+    pub(crate) midi_request_hook: Option<Box<dyn FnMut()>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,6 +262,7 @@ impl App {
             last_click: None,
             cjk_font_bytes: None,
             audio_request_hook: None,
+            midi_request_hook: None,
         }
     }
 
@@ -298,6 +301,51 @@ impl App {
         }
     }
 
+    /// Registers a callback to be invoked when the user interacts with MIDI controls
+    /// (e.g. clicking the map pill to request Web MIDI permission or rescan on wasm32).
+    pub fn set_midi_request_hook<F: FnMut() + 'static>(&mut self, hook: F) {
+        self.midi_request_hook = Some(Box::new(hook));
+    }
+
+    /// Triggers the registered MIDI request hook if present.
+    pub(crate) fn on_midi_requested(&mut self) {
+        Self::trigger_midi_request(&mut self.midi_request_hook);
+    }
+
+    /// Triggers MIDI request hook directly using disjoint field borrow.
+    pub(crate) fn trigger_midi_request(hook: &mut Option<Box<dyn FnMut()>>) {
+        if let Some(ref mut h) = hook {
+            h();
+        }
+    }
+
+    /// Attaches an initialized MIDI surface to the application.
+    pub fn attach_midi(&mut self, surface: karakuri_environment::midi::Surface) {
+        let name = surface.port_name().to_string();
+        let map_name = surface.map_name().map(str::to_owned);
+        let mappings = surface.mappings();
+        println!(
+            "midi in: `{name}`{}",
+            match map_name.as_deref() {
+                Some(map) => format!(
+                    ", map `{map}` — {mappings} mapping{}.",
+                    if mappings == 1 { "" } else { "s" }
+                ),
+                None => ", no map — turn a knob to map it.".to_string(),
+            }
+        );
+        self.readout.view.map = Some(karakuri_console::view::MapPill { name: map_name });
+        if let Some(ref mut gfx) = self.gfx {
+            gfx.midi = Some(surface);
+            gfx.window.request_redraw();
+        }
+    }
+
+    /// Returns a clone of the event loop waker proxy.
+    pub fn waker(&self) -> EventLoopProxy<()> {
+        self.waker.clone()
+    }
+
     /// Forwards window events to egui context without consulting `consumed` (ADR-0259).
     pub(crate) fn to_egui(gfx: &mut Gfx, costs: &mut Costs, event: &WindowEvent) {
         let egui_winit::EventResponse { repaint, .. } =
@@ -329,6 +377,7 @@ impl App {
             // Acted::Pointed moves the library cursor without generating an operation.
             Acted::Pointed => otherwise,
             Acted::AudioRequest => otherwise,
+            Acted::MidiRequest => otherwise,
             Acted::McpServer(_) => Repaint::Now,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {

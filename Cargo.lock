@@ -1631,6 +1631,7 @@ dependencies = [
  "karakuri-ir",
  "karakuri-layout",
  "karakuri-mcp",
+ "karakuri-midi",
  "karakuri-operation",
  "karakuri-operation-record",
  "karakuri-pattern",

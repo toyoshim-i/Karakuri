@@ -12,9 +12,34 @@ use crate::Message;
 /// Holds the connection alive: dropping this closes the port, which is why it
 /// is returned rather than leaked, even though nothing reads its fields.
 pub struct Port {
-    _connection: MidiInputConnection<Callback>,
+    _connection: Option<MidiInputConnection<Callback>>,
+    _handle: Option<Box<dyn std::any::Any + Send>>,
     messages: Receiver<Message>,
     name: String,
+}
+
+/// Feeder handle for pushing parsed messages or raw bytes into a `Port`.
+#[derive(Clone)]
+pub struct SenderPort {
+    tx: Sender<Message>,
+    wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+}
+
+impl SenderPort {
+    /// Pushes a parsed MIDI message into the port's queue, triggering `wake` if registered.
+    pub fn send(&self, message: Message) {
+        let _ = self.tx.send(message);
+        if let Some(wake) = &self.wake {
+            wake();
+        }
+    }
+
+    /// Parses raw wire bytes and pushes the parsed message into the port's queue.
+    pub fn send_bytes(&self, bytes: &[u8]) {
+        if let Some(message) = Message::parse(bytes) {
+            self.send(message);
+        }
+    }
 }
 
 /// Context passed to the MIDI input callback.
@@ -25,6 +50,33 @@ struct Callback {
 }
 
 impl Port {
+    /// Creates a custom `Port` paired with a `SenderPort` feeder
+    /// (e.g. for Web MIDI API or testing).
+    pub fn custom(
+        name: impl Into<String>,
+        wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+    ) -> (Port, SenderPort) {
+        Self::custom_with_handle(name, wake, ())
+    }
+
+    /// Creates a custom `Port` holding an arbitrary driver handle to keep underlying
+    /// connections (e.g. Web MIDI closures or native devices) alive until dropped.
+    pub fn custom_with_handle<H: 'static + Send>(
+        name: impl Into<String>,
+        wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+        handle: H,
+    ) -> (Port, SenderPort) {
+        let (tx, rx) = mpsc::channel();
+        let port = Port {
+            _connection: None,
+            _handle: Some(Box::new(handle)),
+            messages: rx,
+            name: name.into(),
+        };
+        let sender = SenderPort { tx, wake };
+        (port, sender)
+    }
+
     /// Opens the first input whose name contains `wanted` case-insensitively, or the first
     /// available input if `wanted` is empty.
     pub fn open(wanted: &str) -> Result<Port, String> {
@@ -89,7 +141,8 @@ impl Port {
             .map_err(|e| format!("could not open `{name}`: {e}"))?;
 
         Ok(Port {
-            _connection: connection,
+            _connection: Some(connection),
+            _handle: None,
             messages,
             name,
         })
@@ -114,9 +167,18 @@ impl Port {
 /// Open MIDI output device connection managed on a dedicated worker thread.
 ///
 /// Emits MIDI bytes asynchronously across a bounded channel to prevent blocking the render thread.
+/// Destination sink for outgoing MIDI wire bytes.
+enum OutSink {
+    SyncChannel(mpsc::SyncSender<[u8; 3]>),
+    Custom(Box<dyn Fn([u8; 3]) -> bool + Send>),
+}
+
+/// Open MIDI output device connection managed on a dedicated worker thread or custom sender.
+///
+/// Emits MIDI bytes asynchronously across a bounded channel to prevent blocking the render thread.
 /// If the channel fills, subsequent messages are dropped and counted in `dropped`.
 pub struct Out {
-    to: mpsc::SyncSender<[u8; 3]>,
+    sink: OutSink,
     name: String,
     dropped: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
@@ -125,6 +187,19 @@ pub struct Out {
 const QUEUE: usize = 256;
 
 impl Out {
+    /// Creates a custom `Out` instance routing messages through an arbitrary closure
+    /// (e.g. for Web MIDI API or testing).
+    pub fn custom(
+        name: impl Into<String>,
+        send_fn: impl Fn([u8; 3]) -> bool + Send + 'static,
+    ) -> Out {
+        Out {
+            sink: OutSink::Custom(Box::new(send_fn)),
+            name: name.into(),
+            dropped: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        }
+    }
+
     /// Opens the first output matching `wanted` case-insensitively.
     ///
     /// Accepts partial substrings because device input/output port names often differ.
@@ -153,7 +228,7 @@ impl Out {
             .recv()
             .map_err(|_| "the MIDI output thread stopped before it opened a port".to_string())??;
         Ok(Out {
-            to,
+            sink: OutSink::SyncChannel(to),
             name,
             dropped: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         })
@@ -198,14 +273,15 @@ impl Out {
 
     /// Queues one message without blocking. Returns true if queued, or false if dropped.
     pub fn send(&self, message: [u8; 3]) -> bool {
-        match self.to.try_send(message) {
-            Ok(()) => true,
-            Err(_) => {
-                self.dropped
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                false
-            }
+        let ok = match &self.sink {
+            OutSink::SyncChannel(to) => to.try_send(message).is_ok(),
+            OutSink::Custom(f) => f(message),
+        };
+        if !ok {
+            self.dropped
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        ok
     }
 
     /// How many messages have been dropped over the whole run.
@@ -222,13 +298,14 @@ impl Out {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     /// Verifies that a full queue drops excess messages without blocking.
     #[test]
     fn a_full_queue_drops_rather_than_blocking() {
         let (to, held) = mpsc::sync_channel::<[u8; 3]>(QUEUE);
         let out = Out {
-            to,
+            sink: OutSink::SyncChannel(to),
             name: "nothing is draining this".to_string(),
             dropped: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
@@ -249,5 +326,47 @@ mod tests {
         drop(held);
         assert!(!out.send([0xb0, 1, 0]));
         assert_eq!(out.dropped(), 9);
+    }
+
+    #[test]
+    fn custom_port_sender_and_out_pipeline() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let woken = Arc::new(AtomicBool::new(false));
+        let woken_clone = Arc::clone(&woken);
+
+        let (port, sender) = Port::custom(
+            "Virtual Port",
+            Some(Arc::new(move || {
+                woken_clone.store(true, Ordering::SeqCst);
+            })),
+        );
+        assert_eq!(port.name(), "Virtual Port");
+
+        // Send a CC message via bytes
+        sender.send_bytes(&[0xb0, 10, 64]);
+        assert!(woken.load(Ordering::SeqCst));
+
+        let mut drained = Vec::new();
+        port.drain(&mut drained);
+        assert_eq!(drained.len(), 1);
+        assert_eq!(
+            drained[0],
+            Message::ControlChange {
+                channel: 0,
+                controller: 10,
+                value: 64,
+            }
+        );
+
+        // Test Out::custom
+        let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recv_clone = Arc::clone(&received);
+        let out = Out::custom("Virtual Out", move |bytes| {
+            recv_clone.lock().unwrap().push(bytes);
+            true
+        });
+        assert_eq!(out.name(), "Virtual Out");
+        assert!(out.send([0x90, 60, 127]));
+        assert_eq!(*received.lock().unwrap(), vec![[0x90, 60, 127]]);
     }
 }

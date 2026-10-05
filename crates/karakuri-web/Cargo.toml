@@ -21,6 +21,7 @@ karakuri-signal.workspace = true
 karakuri-store.workspace = true
 karakuri-mcp = { version = "0.1.0", path = "../karakuri-mcp" }
 karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
+karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
 karakuri = { version = "0.1.0", path = "../karakuri" }
 serde.workspace = true
 serde_json.workspace = true
@@ -82,4 +83,13 @@ features = [
     "MediaStreamTrack",
     "AudioNode",
     "AudioParam",
+    "MidiAccess",
+    "MidiOptions",
+    "MidiPort",
+    "MidiPortType",
+    "MidiInputMap",
+    "MidiOutputMap",
+    "MidiInput",
+    "MidiOutput",
+    "MidiMessageEvent",
 ]

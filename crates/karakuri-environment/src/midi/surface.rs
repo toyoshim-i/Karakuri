@@ -57,30 +57,55 @@ impl Surface {
         Surface::assembled(Port::waking("", wake)?, map_path)
     }
 
-    /// Assembles a surface from an open port and optional map file path.
-    fn assembled(port: Port, map_path: Option<&Path>) -> Result<(Surface, Vec<String>), String> {
-        let (map, notes) = match map_path {
+    /// Creates a `Surface` from an existing open `Port` and optional `Out` port.
+    pub fn from_port(
+        port: Port,
+        out: Option<Out>,
+        map_path: Option<&Path>,
+    ) -> Result<(Surface, Vec<String>), String> {
+        let (text, name) = match map_path {
             Some(path) => {
                 let text = std::fs::read_to_string(path)
                     .map_err(|e| format!("reading MIDI map `{}`: {e}", path.display()))?;
-                Map::parse(&text)
+                let name = path
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned());
+                (Some(text), name)
             }
+            None => (None, None),
+        };
+        Ok(Self::custom(port, out, text.as_deref(), name))
+    }
+
+    /// Creates a `Surface` from open ports and explicit map definition text.
+    pub fn custom(
+        port: Port,
+        out: Option<Out>,
+        map_text: Option<&str>,
+        map_name: Option<String>,
+    ) -> (Surface, Vec<String>) {
+        let (map, notes) = match map_text {
+            Some(text) => Map::parse(text),
             None => (Map::default(), Vec::new()),
         };
-        Ok((
+        (
             Surface {
-                out: paired_out(port.name()),
+                out,
                 said_dropped: false,
                 outbox: Vec::with_capacity(INBOX),
                 port,
                 router: Router::new(map),
-                map_name: map_path
-                    .and_then(Path::file_stem)
-                    .map(|stem| stem.to_string_lossy().into_owned()),
+                map_name,
                 inbox: Vec::with_capacity(INBOX),
             },
             notes,
-        ))
+        )
+    }
+
+    /// Assembles a surface from an open port and optional map file path.
+    fn assembled(port: Port, map_path: Option<&Path>) -> Result<(Surface, Vec<String>), String> {
+        let out = paired_out(port.name());
+        Self::from_port(port, out, map_path)
     }
 
     /// The port that was opened, as the device named it.

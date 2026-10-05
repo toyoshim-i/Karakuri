@@ -231,6 +231,9 @@ impl App {
         if matches!(acted, Acted::AudioRequest) {
             self.on_audio_requested();
         }
+        if matches!(acted, Acted::MidiRequest) {
+            self.on_midi_requested();
+        }
         if let Acted::Emitted(Some(Operation::AttachBeatSource { .. })) = acted {
             self.on_audio_requested();
         }

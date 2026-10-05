@@ -410,6 +410,7 @@ number; new records continue from the end.
 | [ADR-0382](0382-ir-specification-decomposition-and-single-source-mcp-publishing.md) | IR specification decomposition and single-source MCP publishing | 2026-10-03 | accepted |
 | [ADR-0383](0383-prompt-bay-inline-ime-composition-and-cursor-area-anchoring.md) | Prompt bay inline IME composition and cursor area anchoring | 2026-10-03 | accepted |
 | [ADR-0384](0384-web-audio-api-microphone-input-via-unified-pcm-audio-core.md) | Web Audio API microphone input via unified PCM audio core | 2026-10-05 | accepted |
+| [ADR-0385](0385-web-midi-api-control-surface-integration-via-decoupled-port-feeder.md) | Web MIDI API control surface integration via decoupled Port feeder | 2026-10-05 | accepted |
 
 ## Retired numbers
 

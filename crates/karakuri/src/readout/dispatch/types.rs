@@ -37,6 +37,8 @@ pub(crate) enum Acted {
     McpServer(McpServerAct),
     /// User interaction requesting audio input activation or card open (e.g. for Web Audio permission).
     AudioRequest,
+    /// User interaction requesting MIDI surface connection or scanning (e.g. for Web MIDI permission).
+    MidiRequest,
 }
 
 /// Action to control the MCP server lifecycle and address binding from UI controls.

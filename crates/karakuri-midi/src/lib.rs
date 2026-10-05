@@ -6,6 +6,6 @@ mod device;
 mod map;
 mod message;
 
-pub use device::{Out, Port};
+pub use device::{Out, Port, SenderPort};
 pub use map::{Control, Echo, Half, Map, Parameter, Shown, Wide};
 pub use message::Message;
