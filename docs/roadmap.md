@@ -7,6 +7,9 @@ It tracks the milestone path required to deliver a rock-solid, production-grade 
 - Contributing guidelines & ADR lifecycle: [docs/contributing.md](contributing.md)
 - System architecture: [docs/architecture.md](architecture.md) & [docs/architecture/](architecture/)
 - Procedural shading DSL: [docs/ir-spec.md](ir-spec.md)
+- Set file format specification: [docs/set-format.md](set-format.md)
+- Session event stream specification: [docs/session-stream.md](session-stream.md)
+- System design notes & architectural reference: [docs/design-notes.md](design-notes.md)
 - Console manual & operation directory: [docs/manual/](manual/) and [docs/manual.md](manual.md)
 - Historical decision records: [docs/adr/](adr/)
 - Completed milestones archive: [docs/history/](history/)
@@ -139,6 +142,11 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
    - `Scope::MySets` unifies starred sets and procedures into a consolidated performer palette.
 6. **Authoring Corpus for the Exit Condition (`karakuri-mcp`)** *(In Progress)*:
    - A checked-in set of fixed prompts and the `.kir` an agent produced for each, run through `check_procedure`, asserting every file passes and stays within 30 lines.
+7. **Specification Realignment & Documented Gaps Resolution (`docs/ir-spec.md`, `docs/set-format.md`, `docs/session-stream.md`, `docs/design-notes.md`)** *(Active Milestone Task — [ADR-0382](adr/0382-ir-specification-decomposition-and-single-source-mcp-publishing.md))*:
+   - **`source` Slot Value Lowering and Masking** (`docs/design-notes.md` § *`source` is half built*): Lower `ast::SlotTy::Source` to populate runtime `source_slot_key` values so masking/filtering in shaders can branch on named sources.
+   - **First-Class Vector Parameters** (`docs/design-notes.md` § *A vector `param` is one such omission*): Support declared vector parameters (`vec2`, `vec3`, `vec4`) beyond scalar floats in `.kir` declarations and console faders.
+   - **Set Format Validation & Round-Trip Conformance** (`docs/set-format.md`): Ensure full JSON/binary round-trip parser conformance with strict schema diagnostics.
+   - **Session Stream Refusal & Replay Verification** (`docs/session-stream.md` § *What it does not yet do is refuse anything on its own*): Implement stream-level validation refusals and replay bit-exactness test coverage.
 
 **Exit Condition**:
 - `cargo test -p karakuri-mcp --test authoring_corpus` passes (the test is item 5's).
@@ -167,8 +175,9 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
    - **Depth from Fullscreen Fields**: a fullscreen L4 (raymarcher) writes `frag_depth` at its hit, so meshes and marched fields in one Set occlude each other. Writing depth disables early-Z for that pass, which a pass covering the frame once can afford. Follows M10 item 1's depth buffer.
    - **Group Lifecycle for Meshes** *(specified in M10 item 1)*: engine and codegen for k-element spawn/kill groups, so a spawning source can carry a shared-vertex topology — per-particle ribbon trails, faces that shatter as units.
    - **Index-Shift Mesh Mode**: a declared opt-in under which a shared-vertex topology stays indexed while its source compacts freely. Deaths pull faces onto neighbouring vertices — a net that tears and re-stitches. Reproducible, since compaction is order-preserving and bit-exact (P-0092). It must be declared because the same picture unasked-for is the silently wrong image P-0094 refuses; indices beyond the live range are clamped into it. Spec section in `docs/ir-spec.md` first, then the lowering.
-5. **Library Search & Caching**:
+5. **Library Search, Metadata Cards & Genealogy Indexing (`docs/design-notes.md` § *What is still missing is what the cards would let a library do*)**:
    - Interactive free-text search filtering across set names, procedure types, and metadata tags.
+   - Genealogy tracking and variant pool grouping across stored procedures and Sets.
    - Cached off-screen thumbnail previews for rapid visual identification in the library browser.
 6. **Session Last-State Recall & Slot Startup Initialization**:
    - Persist and recall each slot's last-played set/procedure across sessions so the performer re-opens into their exact live setup.
