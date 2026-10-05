@@ -92,6 +92,7 @@ pub struct ChainSwap {
     /// Requests to the worker. `None` once the worker has gone.
     jobs: Option<Sender<Job>>,
     done: Receiver<Done>,
+    #[allow(dead_code)]
     graveyard: Arc<Mutex<Vec<RetiredChain>>>,
     /// Chains retired by the render thread pending handover to the worker.
     retired: Vec<RetiredChain>,
@@ -108,6 +109,10 @@ pub struct ChainSwap {
     installs: u64,
     /// Builds the worker has finished, whether or not they were installed.
     built: Arc<AtomicU64>,
+    #[cfg(target_arch = "wasm32")]
+    jobs_rx: Option<mpsc::Receiver<Job>>,
+    #[cfg(target_arch = "wasm32")]
+    done_tx: mpsc::Sender<Done>,
 }
 
 impl ChainSwap {
@@ -137,10 +142,7 @@ impl ChainSwap {
             )
         };
         #[cfg(target_arch = "wasm32")]
-        let worker = {
-            drop((jobs_rx, done_tx));
-            None
-        };
+        let (worker, jobs_rx_field, done_tx_field) = { (None, Some(jobs_rx), done_tx) };
 
         ChainSwap {
             jobs: Some(jobs_tx),
@@ -155,6 +157,10 @@ impl ChainSwap {
             worker_lost: false,
             installs: 0,
             built,
+            #[cfg(target_arch = "wasm32")]
+            jobs_rx: jobs_rx_field,
+            #[cfg(target_arch = "wasm32")]
+            done_tx: done_tx_field,
         }
     }
 
@@ -235,6 +241,18 @@ impl ChainSwap {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(jobs_rx) = &self.jobs_rx {
+                while let Ok(job) = jobs_rx.try_recv() {
+                    let id = job.id;
+                    let result = build(device, &job);
+                    let _ = self.done_tx.send(Done { id, result });
+                    self.built.fetch_add(1, Ordering::Release);
+                }
+            }
+        }
+
         let mut newest: Option<Done> = None;
         loop {
             match self.done.try_recv() {
@@ -297,6 +315,9 @@ impl ChainSwap {
         if self.retired.is_empty() {
             return;
         }
+        #[cfg(target_arch = "wasm32")]
+        self.retired.clear();
+        #[cfg(not(target_arch = "wasm32"))]
         if let Ok(mut graveyard) = self.graveyard.try_lock() {
             graveyard.append(&mut self.retired);
         }
@@ -367,7 +388,6 @@ fn run_worker(
 }
 
 /// Compiles every slot of a job and allocates the targets they run through.
-#[cfg(not(target_arch = "wasm32"))]
 fn build(device: &wgpu::Device, job: &Job) -> Result<Chain, ChainRefusal> {
     let mut slots = Vec::with_capacity(job.slots.len());
     for (at, want) in job.slots.iter().enumerate() {

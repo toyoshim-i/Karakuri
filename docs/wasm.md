@@ -72,32 +72,43 @@ Instead of delegating to an external binary, the Web build embeds an in-process 
 
 ---
 
-### 3.2 In-Memory Tool Dispatching (Direct MCP Replacement)
+### 3.2 In-Memory Tool Dispatching & WebMCP Bridge
 
 #### The Problem on Web
 Desktop Karakuri runs a TCP listener on `127.0.0.1:3000` via `std::net::TcpListener`, exchanging JSON-RPC messages with external agents. Browsers cannot open raw TCP listener sockets.
 
-#### The Solution: In-Memory Dispatch
-- The 14-tool Karakuri MCP matrix (`read_slot`, `copy_slot`, `operate`, `get_permissions`, `check_set`, `build_procedure`, etc.) is declared as OpenAI-format tool definitions in the chat completion request:
-  ```json
-  {
-    "tools": [
-      {
-        "type": "function",
-        "function": {
-          "name": "operate",
-          "description": "Execute a Karakuri operation",
-          "parameters": { ... }
-        }
-      }
-    ]
-  }
-  ```
-- When the LLM emits a `tool_calls` response chunk:
-  1. The agent harness intercepts the function name and arguments.
-  2. The harness calls the internal Rust dispatch function (`Readout::operate`, `SessionManager`, or `karakuri-mcp` handlers) **in-memory**.
-  3. Execution is zero-latency, thread-safe, and atomic.
-  4. The result JSON is appended as a `tool` role message, and the LLM stream resumes.
+#### The Dual-Path Solution: In-Memory Dispatch & WebMCP Standard Bridge
+Instead of a TCP loopback socket, Karakuri Web uses a unified in-process dispatch engine (`karakuri_mcp::in_process`) that serves two concurrent pathways:
+
+```
+               ┌───────────────────────────────┐
+               │    14-tool Schema &           │
+               │  In-Process MCP Dispatcher    │
+               │   (karakuri-mcp::in_process)  │
+               └──────────────┬────────────────┘
+                              │
+             ┌────────────────┴────────────────┐
+             ▼                                 ▼
+   【Path 1: In-Process Bay】           【Path 2: WebMCP & Browser Bridge】
+ OpenAI format in-memory tools       document.modelContext.registerTool()
+ (Direct LLM streaming dispatch)     window.__karakuri_mcp.callTool()
+                                     (External AI, extensions, MCP-B)
+```
+
+1. **Path 1: In-Process Agent Harness (Internal CLI)**:
+   - The 14-tool Karakuri MCP matrix (`read_slot`, `copy_slot`, `operate`, `get_permissions`, `check_set`, `build_procedure`, etc.) is declared as OpenAI-format tool definitions in the chat completion request.
+   - When the LLM emits a `tool_calls` response chunk:
+     1. The agent harness intercepts the function name and arguments.
+     2. Calls `InProcessMcp::call_tool` directly in Rust memory.
+     3. Awaits completion asynchronously via `Pending::poll_settled` without blocking the main event loop.
+     4. The result JSON is appended as a `tool` role message, and streaming resumes.
+
+2. **Path 2: WebMCP (W3C `document.modelContext`) & `window.__karakuri_mcp`**:
+   - On startup, `karakuri-web` inspects the DOM for `document.modelContext` (or `navigator.modelContext`).
+   - If present (e.g. Chrome with WebMCP enabled or via polyfills), all 14 tools are registered via `modelContext.registerTool(...)`.
+   - External browser agents (Chrome built-in AI, side panel assistants, MCP-B bridges connecting Claude Desktop) can discover and call Karakuri tools directly over the web standard.
+   - Additionally, `window.__karakuri_mcp = { listTools, callTool }` is exposed on the global object for testing and extension consumption.
+   - Tool execution wakes up the `winit` event loop via `EventLoopProxy`, ensuring zero-latency frame processing and non-blocking Promise resolution.
 
 ---
 
@@ -178,11 +189,13 @@ External output is solved by launching a clean projector display window:
 │ - Verification of 8-band FFT reactivity and hardware MIDI control      │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 3: In-Process Agent Harness & OpenAI API Client (~1 week)        │
-│ - wasm-bindgen-futures async agent loop in Prompt bay                  │
-│ - Streaming fetch client for /v1/chat/completions                      │
-│ - In-terminal /config parser & localStorage persistence                │
-│ - Direct in-memory tool dispatcher (14-tool MCP matrix bridge)         │
+│ Phase 3: In-Process Agent Harness & OpenAI API Client (Completed)
+- wasm-bindgen-futures async agent loop in Prompt bay
+- Streaming fetch client for /v1/chat/completions with SSE token decoding
+- In-terminal /config parser & localStorage persistence
+- /model local LLM auto-detection probing localhost ports (Ollama, LM Studio, vLLM)
+- Interactive TUI menu selection with arrow keys and direct number selection
+- Direct in-process tool dispatcher (14-tool MCP matrix bridge) and WebMCP standard bridge
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
 │ Phase 4: Multi-Window Projector & Storage Persistence (~3-5 days)      │

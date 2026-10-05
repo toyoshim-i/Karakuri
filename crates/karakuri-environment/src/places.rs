@@ -105,7 +105,7 @@ fn searched(exe_dir: Option<&Path>, workspace: &Path) -> Option<Presets> {
 
 /// Returns true if `dir` contains at least one non-directory `.kset` file.
 fn is_a_library(dir: &Path) -> bool {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = karakuri_store::fs::read_dir(dir) else {
         return false;
     };
     entries.flatten().any(|entry| {

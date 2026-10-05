@@ -580,4 +580,20 @@ impl App {
         self.readout.view.mcp_server.running = false;
         self.served = None;
     }
+
+    /// Returns a mutable reference to the Prompt bay state.
+    pub fn prompt_state(&mut self) -> &mut karakuri_console::view::prompt::PromptState {
+        &mut self.readout.view.prompt
+    }
+
+    /// Sets a custom session spawner on the Prompt bay session manager.
+    pub fn set_prompt_spawner<F>(&self, spawner: F)
+    where
+        F: Fn(&str, &[&str]) -> karakuri_console::view::prompt::TerminalSession
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.readout.view.prompt.sessions.set_spawner(spawner);
+    }
 }

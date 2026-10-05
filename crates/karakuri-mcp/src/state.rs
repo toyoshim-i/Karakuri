@@ -24,6 +24,7 @@ pub struct SaveRequest {
 }
 
 /// Channel sender used by the render loop to reply to a request.
+#[derive(Clone)]
 pub struct Reply(pub(crate) mpsc::Sender<News>);
 
 impl Reply {
@@ -52,7 +53,7 @@ pub struct WireRequest {
 }
 
 /// Internal notification items delivered over a `Reply` channel.
-pub(crate) enum News {
+pub enum News {
     Accepted(String),
     Settled(Result<String, String>),
 }

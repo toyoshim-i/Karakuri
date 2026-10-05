@@ -571,25 +571,25 @@ impl App {
 
         // Poll GPU queue timing between submit and present to measure shader duration without idling (P-0095).
         if let Some(frame) = frame {
-            cost.drained = self
-                .costs
-                .audit()
-                .then(|| {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
+            let audit = self.costs.audit();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                cost.drained = audit
+                    .then(|| {
                         let owed = Instant::now();
                         gfx.gpu
                             .device
                             .poll(wgpu::PollType::wait_indefinitely())
                             .is_ok()
                             .then(|| owed.elapsed())
-                    }
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        None
-                    }
-                })
-                .flatten();
+                    })
+                    .flatten();
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let _ = audit;
+                cost.drained = None;
+            }
 
             gfx.gpu.queue.present(frame);
         }

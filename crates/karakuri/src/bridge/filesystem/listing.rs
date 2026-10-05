@@ -81,7 +81,7 @@ fn chain_offers(
         .iter()
         .filter(|entry| l5(entry.kind.and_then(kind_of)))
     {
-        let Ok(source) = std::fs::read_to_string(&entry.file) else {
+        let Ok(source) = karakuri_store::fs::read_to_string(&entry.file) else {
             continue;
         };
         if let Some((procedure, retains)) = karakuri_environment::mix::l5_offer(&source) {

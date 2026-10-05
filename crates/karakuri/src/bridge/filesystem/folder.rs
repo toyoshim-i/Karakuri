@@ -158,7 +158,7 @@ pub(crate) fn folder_dropped(
         }
     };
     // Query path metadata once to distinguish non-directory files from access errors.
-    match std::fs::metadata(one) {
+    match karakuri_store::fs::metadata(one) {
         Err(why) => Some(format!(
             "  folder: `{}` could not be examined ({why}), so whether it is a folder is not \
              known and nothing was taken. {kept}",

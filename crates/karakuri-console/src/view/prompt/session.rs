@@ -219,6 +219,24 @@ impl TerminalSession {
         }
     }
 
+    /// Creates an interactive terminal session backed by a custom writer.
+    pub fn with_writer(
+        id: String,
+        scrollback: Arc<Mutex<Scrollback>>,
+        writer: Box<dyn Write + Send>,
+    ) -> Self {
+        Self {
+            id,
+            status: Arc::new(Mutex::new(SessionStatus::Running)),
+            scrollback,
+            writer: Arc::new(Mutex::new(Some(writer))),
+            #[cfg(not(target_arch = "wasm32"))]
+            master: Arc::new(Mutex::new(None)),
+            #[cfg(not(target_arch = "wasm32"))]
+            child: Arc::new(Mutex::new(None)),
+        }
+    }
+
     /// Sends raw bytes directly to the PTY stdin.
     pub fn send_bytes(&self, bytes: &[u8]) -> std::io::Result<()> {
         let mut writer_lock = self
@@ -393,10 +411,21 @@ impl TerminalSession {
     }
 }
 
+pub type SessionSpawner = Arc<dyn Fn(&str, &[&str]) -> TerminalSession + Send + Sync>;
+
 /// Manager maintaining active background CLI terminal sessions.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<String, Arc<TerminalSession>>>>,
+    spawner: Arc<Mutex<Option<SessionSpawner>>>,
+}
+
+impl std::fmt::Debug for SessionManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionManager")
+            .field("sessions", &self.sessions)
+            .finish()
+    }
 }
 
 impl PartialEq for SessionManager {
@@ -421,6 +450,16 @@ impl SessionManager {
     /// Creates an empty session manager.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Sets a custom session spawner for this manager.
+    pub fn set_spawner<F>(&self, spawner: F)
+    where
+        F: Fn(&str, &[&str]) -> TerminalSession + Send + Sync + 'static,
+    {
+        if let Ok(mut lock) = self.spawner.lock() {
+            *lock = Some(Arc::new(spawner));
+        }
     }
 
     /// Gets or spawns a session for the specified CLI selection.
@@ -451,7 +490,12 @@ impl SessionManager {
         }
 
         let arg_slices: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-        let session = Arc::new(TerminalSession::spawn(id.clone(), &program, &arg_slices));
+        let spawner = self.spawner.lock().ok().and_then(|s| s.clone());
+        let session = if let Some(spawner) = spawner {
+            Arc::new(spawner(&program, &arg_slices))
+        } else {
+            Arc::new(TerminalSession::spawn(id.clone(), &program, &arg_slices))
+        };
         lock.insert(id, Arc::clone(&session));
         Some(session)
     }

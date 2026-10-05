@@ -10,10 +10,12 @@ use std::time::Duration;
 
 use karakuri_engine::swap::{Polled, Refusal};
 use karakuri_engine::{Binding, Request, Source};
+use karakuri_store::fs;
 
 use crate::compile;
 
 /// Polling interval for filesystem change detection.
+#[allow(dead_code)]
 const INTERVAL: Duration = Duration::from_millis(100);
 
 /// Built slot metadata and artifact content hashes for session recording.
@@ -139,7 +141,7 @@ impl Watch {
 
     fn stamp(&self) -> Vec<Option<u64>> {
         let digest = |path: &PathBuf| {
-            std::fs::read(path).ok().map(|bytes| {
+            fs::read(path).ok().map(|bytes| {
                 let mut h = DefaultHasher::new();
                 bytes.hash(&mut h);
                 h.finish()
@@ -181,6 +183,7 @@ impl Watch {
 
 impl Source for Watch {
     fn poll(&mut self) -> Option<Polled> {
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::sleep(INTERVAL);
 
         // Immediate rebuild upon re-aim without debounce delay.
@@ -263,7 +266,7 @@ impl Watch {
         let paths: Vec<&std::path::Path> = named.iter().map(|n| n.path.as_path()).collect();
         let mut srcs = Vec::with_capacity(paths.len());
         for path in &paths {
-            match std::fs::read_to_string(path) {
+            match fs::read_to_string(path) {
                 Ok(src) => srcs.push(src),
                 Err(e) => {
                     eprintln!("{}: {e}\nslot {slot} unchanged", path.display());

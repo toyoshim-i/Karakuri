@@ -50,6 +50,7 @@ fn section<'a>(rendered: &'a str, heading: &str) -> &'a str {
     }
 }
 
+mod in_process;
 mod operations;
 mod routes;
 mod save;
