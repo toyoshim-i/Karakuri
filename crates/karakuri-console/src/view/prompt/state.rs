@@ -33,6 +33,8 @@ pub struct PromptState {
     pub selection_range: Arc<Mutex<Option<SelectionRange>>>,
     /// Mouse drag anchor position when selecting text: `Some((row, col))`.
     pub selection_anchor: Arc<Mutex<Option<CellPos>>>,
+    /// Active IME preedit (composition / uncommitted) text.
+    pub preedit: Arc<Mutex<Option<String>>>,
 }
 
 impl PartialEq for PromptState {
@@ -47,6 +49,8 @@ impl PartialEq for PromptState {
             .lock()
             .map(|s| s.clone())
             .unwrap_or_default();
+        let p1 = self.preedit();
+        let p2 = other.preedit();
         self.selection == other.selection
             && self.menu_open == other.menu_open
             && self.custom_input == other.custom_input
@@ -54,6 +58,7 @@ impl PartialEq for PromptState {
             && self.sessions == other.sessions
             && self.is_captured() == other.is_captured()
             && b1 == b2
+            && p1 == p2
     }
 }
 
@@ -195,5 +200,22 @@ impl PromptState {
             session.send_line(&input)?;
         }
         Ok(())
+    }
+
+    /// Returns the active IME preedit (composition) text if composing.
+    pub fn preedit(&self) -> Option<String> {
+        self.preedit.lock().ok().and_then(|p| p.clone())
+    }
+
+    /// Sets or clears the active IME preedit (composition) text.
+    pub fn set_preedit(&self, text: Option<String>) {
+        if let Ok(mut lock) = self.preedit.lock() {
+            *lock = text;
+        }
+    }
+
+    /// Clears the active IME preedit text.
+    pub fn clear_preedit(&self) {
+        self.set_preedit(None);
     }
 }
