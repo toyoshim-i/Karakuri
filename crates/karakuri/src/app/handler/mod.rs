@@ -198,7 +198,11 @@ impl App {
         surface.configure(&gpu.device, &config);
 
         let ctx = egui::Context::default();
-        karakuri_console::room::configure_fonts(&ctx);
+        if let Some(ref bytes) = self.cjk_font_bytes {
+            karakuri_console::room::add_cjk_font(&ctx, bytes.clone());
+        } else {
+            karakuri_console::room::configure_fonts(&ctx);
+        }
         let egui = egui_winit::State::new(
             ctx,
             egui::ViewportId::ROOT,

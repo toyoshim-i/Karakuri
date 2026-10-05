@@ -46,6 +46,9 @@ egui-winit = { version = "0.36", default-features = false, features = ["links"] 
 egui-winit = { version = "0.36", features = ["clipboard"] }
 portable-pty = "0.9.0"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["Window", "Navigator", "Clipboard"] }
+
 [dev-dependencies]
 # Only the round-trip test needs a concrete format; the arrangement itself is
 # format-agnostic, exactly as `karakuri-layout` is.

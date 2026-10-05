@@ -23,6 +23,16 @@ impl InProcessMcp {
         resources()
     }
 
+    /// Reads a resource by URI directly.
+    pub fn read_resource(&self, uri: &str) -> Result<Value, String> {
+        let request = json!({
+            "params": {
+                "uri": uri,
+            }
+        });
+        read_resource(&request)
+    }
+
     /// Dispatches a JSON-RPC request in-memory, returning a `Pending` result handle.
     pub fn dispatch(&self, request: &Value) -> Result<Pending, String> {
         let mut state = self

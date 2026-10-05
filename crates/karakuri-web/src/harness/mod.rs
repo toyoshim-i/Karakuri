@@ -1,5 +1,6 @@
 //! In-Process Agent Harness orchestrator for WebAssembly.
-//! Provides terminal prompt interaction, localhost model detection, and streaming MCP tool calling.
+//! Provides terminal prompt interaction, localhost model detection,
+//! slash command autocompletion, clipboard export, and streaming MCP tool calling.
 
 pub mod client;
 pub mod config;
@@ -21,13 +22,54 @@ use winit::event_loop::EventLoopProxy;
 use self::config::HarnessConfig;
 use self::menu::{MenuAction, ModelMenu};
 
-const PROMPT_LABEL: &str = "\x1b[1;35mkarakuri\x1b[0m> ";
+const PROMPT_LABEL: &str = "\x1b[1;36mYou\x1b[0m > ";
+const AGENT_LABEL: &str = "\x1b[1;35mKarakuri\x1b[0m > ";
 
 const SYSTEM_PROMPT: &str = r#"You are the Karakuri AI VJ Assistant running directly inside the browser.
 You control a real-time procedural WebGPU visual performance engine with 14 in-process MCP tools.
 You can read slots, wire parameters, transition decks, inspect performance costs, and execute operations.
 When the user asks you to operate the mixer, change BPM, swap procedures, or alter visuals, call the appropriate Karakuri tool.
 Respond concisely and helpfully in the user's language."#;
+
+#[derive(Debug, Clone, Copy)]
+pub struct CommandDef {
+    pub name: &'static str,
+    pub args_hint: &'static str,
+    pub description: &'static str,
+}
+
+pub const COMMANDS: &[CommandDef] = &[
+    CommandDef {
+        name: "/model",
+        args_hint: "",
+        description: "Probe localhost and select a local LLM",
+    },
+    CommandDef {
+        name: "/config",
+        args_hint: "[endpoint|model|key]",
+        description: "View or configure LLM endpoint & model",
+    },
+    CommandDef {
+        name: "/copy",
+        args_hint: "",
+        description: "Copy all terminal text to clipboard",
+    },
+    CommandDef {
+        name: "/clear",
+        args_hint: "",
+        description: "Clear terminal scrollback",
+    },
+    CommandDef {
+        name: "/help",
+        args_hint: "",
+        description: "Show available commands help",
+    },
+    CommandDef {
+        name: "/reset",
+        args_hint: "",
+        description: "Reset conversation history",
+    },
+];
 
 pub struct Harness {
     config: Arc<Mutex<HarnessConfig>>,
@@ -38,6 +80,21 @@ pub struct Harness {
     input_buffer: Arc<Mutex<String>>,
     active_menu: Arc<Mutex<Option<ModelMenu>>>,
     is_busy: Arc<Mutex<bool>>,
+    completion_index: Arc<Mutex<Option<usize>>>,
+}
+
+/// Normalizes all standalone `\n` into `\r\n` to prevent staircase cursor indentation.
+pub fn normalize_crlf(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 16);
+    let mut prev = '\0';
+    for ch in s.chars() {
+        if ch == '\n' && prev != '\r' {
+            out.push('\r');
+        }
+        out.push(ch);
+        prev = ch;
+    }
+    out
 }
 
 impl Harness {
@@ -61,31 +118,26 @@ impl Harness {
             input_buffer: Arc::new(Mutex::new(String::new())),
             active_menu: Arc::new(Mutex::new(None)),
             is_busy: Arc::new(Mutex::new(false)),
+            completion_index: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// Prints the initial welcome banner and prompt to the terminal.
+    /// Prints the compact, responsive welcome banner and initial prompt.
     pub fn init_banner(&self) {
         let cfg = self.config.lock().unwrap().clone();
         let mut out = String::new();
-        out.push_str(
-            "\r\n\x1b[1;36m┌────────────────────────────────────────────────────────┐\x1b[0m\r\n",
-        );
-        out.push_str(
-            "\x1b[1;36m│   Karakuri Web Agent Harness (In-Process Client)       │\x1b[0m\r\n",
-        );
-        out.push_str(
-            "\x1b[1;36m└────────────────────────────────────────────────────────┘\x1b[0m\r\n",
-        );
+        out.push_str("\r\n\x1b[1;36mKarakuri Web Agent Harness\x1b[0m\r\n");
         out.push_str(&format!(
-            "  Endpoint: \x1b[33m{}\x1b[0m | Model: \x1b[1;32m{}\x1b[0m\r\n",
-            cfg.endpoint, cfg.model
+            "  \x1b[2mModel:\x1b[0m \x1b[1;32m{}\x1b[0m \x1b[2m({})\x1b[0m\r\n",
+            cfg.model, cfg.endpoint
         ));
-        out.push_str("  Commands: \x1b[1;32m/model\x1b[0m (auto-detect local LLMs) · \x1b[1;32m/help\x1b[0m · \x1b[1;32m/clear\x1b[0m\r\n\r\n");
+        out.push_str(
+            "  \x1b[2mType \x1b[1;32m/\x1b[0;2m for commands (/model, /help, etc.)\x1b[0m\r\n\r\n",
+        );
         out.push_str(PROMPT_LABEL);
 
         if let Ok(mut sb) = self.scrollback.lock() {
-            sb.push_str(&out);
+            sb.push_str(&normalize_crlf(&out));
         }
     }
 
@@ -147,8 +199,15 @@ impl Harness {
         }
         drop(menu_opt);
 
-        // 3. Normal line editing
+        // 3. Tab: Slash command autocompletion
+        if bytes == b"\t" {
+            self.handle_tab_completion();
+            return;
+        }
+
+        // 4. Enter: Execute command or prompt
         if bytes == b"\r" || bytes == b"\n" {
+            *self.completion_index.lock().unwrap() = None;
             let line = {
                 let mut buf = self.input_buffer.lock().unwrap();
                 let taken = buf.clone();
@@ -159,8 +218,12 @@ impl Harness {
                 sb.push_str("\r\n");
             }
             self.execute_line(&line);
-        } else if bytes == b"\x7f" || bytes == b"\x08" {
-            // Backspace
+            return;
+        }
+
+        // 5. Backspace
+        if bytes == b"\x7f" || bytes == b"\x08" {
+            *self.completion_index.lock().unwrap() = None;
             let mut buf = self.input_buffer.lock().unwrap();
             if !buf.is_empty() {
                 buf.pop();
@@ -168,29 +231,106 @@ impl Harness {
                     sb.push_str("\x08 \x08");
                 }
             }
-        } else if bytes == b"\x03" {
-            // Ctrl+C
+            return;
+        }
+
+        // 6. Ctrl+C
+        if bytes == b"\x03" {
+            *self.completion_index.lock().unwrap() = None;
             self.input_buffer.lock().unwrap().clear();
             if let Ok(mut sb) = self.scrollback.lock() {
                 sb.push_str("^C\r\n");
                 sb.push_str(PROMPT_LABEL);
             }
-        } else if bytes == b"\x0c" {
-            // Ctrl+L (Clear screen)
+            return;
+        }
+
+        // 7. Ctrl+L (Clear screen)
+        if bytes == b"\x0c" {
+            *self.completion_index.lock().unwrap() = None;
             if let Ok(mut sb) = self.scrollback.lock() {
                 sb.push_str("\x1b[2J\x1b[H");
                 sb.push_str(PROMPT_LABEL);
                 let buf = self.input_buffer.lock().unwrap();
                 sb.push_str(&buf);
             }
-        } else if let Ok(s) = std::str::from_utf8(bytes) {
-            // Printable text
+            return;
+        }
+
+        // 8. Normal text input (including multibyte Japanese IME text)
+        if let Ok(s) = std::str::from_utf8(bytes) {
             if !s.chars().any(|c| c.is_control()) {
+                *self.completion_index.lock().unwrap() = None;
                 self.input_buffer.lock().unwrap().push_str(s);
                 if let Ok(mut sb) = self.scrollback.lock() {
                     sb.push_str(s);
                 }
+
+                // If user just typed '/', hint available commands inline
+                if self.input_buffer.lock().unwrap().as_str() == "/" {
+                    self.show_command_hints();
+                }
             }
+        }
+    }
+
+    /// Handles Tab key pressing for cycling / completing slash commands.
+    fn handle_tab_completion(&self) {
+        let current = self.input_buffer.lock().unwrap().clone();
+        if !current.starts_with('/') {
+            return;
+        }
+
+        let matches: Vec<&CommandDef> = COMMANDS
+            .iter()
+            .filter(|cmd| cmd.name.starts_with(&current))
+            .collect();
+
+        if matches.is_empty() {
+            return;
+        }
+
+        let mut idx_lock = self.completion_index.lock().unwrap();
+        let next_idx = match *idx_lock {
+            Some(i) => (i + 1) % matches.len(),
+            None => 0,
+        };
+        *idx_lock = Some(next_idx);
+
+        let chosen = matches[next_idx];
+        let replacement = format!("{} ", chosen.name);
+
+        // Erase old input from terminal line
+        let old_len = current.len();
+        let mut erase_seq = String::new();
+        for _ in 0..old_len {
+            erase_seq.push_str("\x08 \x08");
+        }
+        erase_seq.push_str(&replacement);
+
+        *self.input_buffer.lock().unwrap() = replacement;
+
+        if let Ok(mut sb) = self.scrollback.lock() {
+            sb.push_str(&erase_seq);
+        }
+    }
+
+    /// Shows an informative hint list when user enters `/`.
+    fn show_command_hints(&self) {
+        let mut hint = String::new();
+        hint.push_str("\r\n\x1b[2m[Commands: ");
+        for (i, cmd) in COMMANDS.iter().enumerate() {
+            if i > 0 {
+                hint.push_str(" · ");
+            }
+            hint.push_str(cmd.name);
+        }
+        hint.push_str(" (Tab to complete)]\x1b[0m\r\n");
+        hint.push_str(PROMPT_LABEL);
+        hint.push('/');
+
+        if let Ok(mut sb) = self.scrollback.lock() {
+            sb.push_str(&normalize_crlf(&hint));
         }
     }
 
@@ -205,18 +345,26 @@ impl Harness {
 
         if line == "/model" {
             self.run_model_detection();
+        } else if line == "/copy" {
+            self.copy_output_to_clipboard();
         } else if line == "/help" {
             if let Ok(mut sb) = self.scrollback.lock() {
-                sb.push_str("\x1b[1;36mAvailable Commands:\x1b[0m\r\n");
-                sb.push_str("  \x1b[1;32m/model\x1b[0m                    Probe localhost ports and select a local LLM\r\n");
-                sb.push_str("  \x1b[1;32m/config endpoint <url>\x1b[0m    Set custom LLM API endpoint URL\r\n");
-                sb.push_str(
-                    "  \x1b[1;32m/config model <name>\x1b[0m      Set custom model name\r\n",
-                );
-                sb.push_str("  \x1b[1;32m/config key <api-key>\x1b[0m     Set API key for cloud providers\r\n");
-                sb.push_str("  \x1b[1;32m/clear\x1b[0m                    Clear the terminal scrollback\r\n");
-                sb.push_str("  \x1b[1;32m/reset\x1b[0m                    Reset conversation message history\r\n\r\n");
-                sb.push_str(PROMPT_LABEL);
+                let mut out = String::new();
+                out.push_str("\x1b[1;36mAvailable Commands:\x1b[0m\r\n");
+                for cmd in COMMANDS {
+                    let hint = if cmd.args_hint.is_empty() {
+                        cmd.name.to_string()
+                    } else {
+                        format!("{} {}", cmd.name, cmd.args_hint)
+                    };
+                    out.push_str(&format!(
+                        "  \x1b[1;32m{:<24}\x1b[0m {}\r\n",
+                        hint, cmd.description
+                    ));
+                }
+                out.push_str("\r\n");
+                out.push_str(PROMPT_LABEL);
+                sb.push_str(&normalize_crlf(&out));
             }
         } else if line.starts_with("/config") {
             self.handle_config_command(line);
@@ -242,19 +390,61 @@ impl Harness {
         }
     }
 
+    /// Copies the current scrollback text to the browser clipboard via Navigator API.
+    fn copy_output_to_clipboard(&self) {
+        let lines = if let Ok(sb) = self.scrollback.lock() {
+            sb.lines()
+        } else {
+            Vec::new()
+        };
+
+        let full_text = lines.join("\n");
+        let line_count = lines.len();
+
+        let scrollback = self.scrollback.clone();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let res = if let Some(win) = web_sys::window() {
+                let clip = win.navigator().clipboard();
+                let promise = clip.write_text(&full_text);
+                wasm_bindgen_futures::JsFuture::from(promise).await
+            } else {
+                Err(wasm_bindgen::JsValue::from_str("no window object"))
+            };
+
+            if let Ok(mut sb) = scrollback.lock() {
+                match res {
+                    Ok(_) => {
+                        sb.push_str(&format!(
+                            "✔ Copied terminal output ({} lines) to clipboard.\r\n\r\n{}",
+                            line_count, PROMPT_LABEL
+                        ));
+                    }
+                    Err(e) => {
+                        sb.push_str(&format!(
+                            "\x1b[31m✖ Failed to copy to clipboard: {:?}\x1b[0m\r\n\r\n{}",
+                            e, PROMPT_LABEL
+                        ));
+                    }
+                }
+            }
+        });
+    }
+
     fn handle_config_command(&self, line: &str) {
         let parts: Vec<&str> = line.split_whitespace().collect();
         let mut cfg = self.config.lock().unwrap();
 
         if parts.len() == 1 {
             if let Ok(mut sb) = self.scrollback.lock() {
-                sb.push_str(&format!(
+                let msg = format!(
                     "Current Configuration:\r\n  Endpoint: \x1b[33m{}\x1b[0m\r\n  Model:    \x1b[1;32m{}\x1b[0m\r\n  Key:      \x1b[2m{}\x1b[0m\r\n\r\n{}",
                     cfg.endpoint,
                     cfg.model,
                     if cfg.api_key.is_some() { "[set]" } else { "[none]" },
                     PROMPT_LABEL
-                ));
+                );
+                sb.push_str(&normalize_crlf(&msg));
             }
             return;
         }
@@ -318,17 +508,19 @@ impl Harness {
         wasm_bindgen_futures::spawn_local(async move {
             let discovered = probe::discover_local_models(|msg| {
                 if let Ok(mut sb) = scrollback.lock() {
-                    sb.push_str(msg);
+                    sb.push_str(&normalize_crlf(msg));
                 }
             })
             .await;
 
             if discovered.is_empty() {
                 if let Ok(mut sb) = scrollback.lock() {
-                    sb.push_str("\r\n\x1b[33m⚠ No local LLM servers responded on localhost:11434, 1234, 8000, 8080.\x1b[0m\r\n");
-                    sb.push_str("  \x1b[2mMake sure Ollama (with OLLAMA_ORIGINS=\"*\") or LM Studio (with CORS enabled) is running.\x1b[0m\r\n");
-                    sb.push_str("  \x1b[2mOr configure an endpoint manually via `/config endpoint <url>`.\x1b[0m\r\n\r\n");
-                    sb.push_str(PROMPT_LABEL);
+                    let mut out = String::new();
+                    out.push_str("\r\n\x1b[33m⚠ No local LLM servers responded on localhost:11434, 1234, 8000, 8080.\x1b[0m\r\n");
+                    out.push_str("  \x1b[2mMake sure Ollama (with OLLAMA_ORIGINS=\"*\") or LM Studio (with CORS enabled) is running.\x1b[0m\r\n");
+                    out.push_str("  \x1b[2mOr configure an endpoint manually via `/config endpoint <url>`.\x1b[0m\r\n\r\n");
+                    out.push_str(PROMPT_LABEL);
+                    sb.push_str(&normalize_crlf(&out));
                 }
             } else {
                 let mut menu = ModelMenu::new(discovered, &config);
@@ -364,9 +556,17 @@ impl Harness {
             let mut msgs = messages_holder.lock().unwrap().clone();
 
             let sb_cb = scrollback.clone();
+            let agent_started = Arc::new(Mutex::new(false));
+            let agent_started_cb = agent_started.clone();
+
             let on_output = move |token: &str| {
                 if let Ok(mut sb) = sb_cb.lock() {
-                    sb.push_str(token);
+                    let mut started = agent_started_cb.lock().unwrap();
+                    if !*started {
+                        sb.push_str(AGENT_LABEL);
+                        *started = true;
+                    }
+                    sb.push_str(&normalize_crlf(token));
                 }
             };
 
@@ -377,9 +577,11 @@ impl Harness {
 
             if let Ok(mut sb) = scrollback.lock() {
                 if let Err(err) = res {
-                    sb.push_str(&format!("\r\n\x1b[31m[Error: {err}]\x1b[0m\r\n"));
+                    sb.push_str(&normalize_crlf(&format!(
+                        "\r\n\x1b[31m[Error: {err}]\x1b[0m\r\n"
+                    )));
                 }
-                sb.push_str(&format!("\r\n{}", PROMPT_LABEL));
+                sb.push_str(&format!("\r\n\r\n{}", PROMPT_LABEL));
             }
         });
     }

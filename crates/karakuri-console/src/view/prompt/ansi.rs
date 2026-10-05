@@ -427,6 +427,7 @@ impl Scrollback {
             }
             AnsiEvent::Newline => {
                 self.cursor.0 += 1;
+                self.cursor.1 = 0;
                 while self.rows.len() <= self.cursor.0 {
                     self.rows.push(Vec::new());
                 }

@@ -54,7 +54,7 @@ pub(crate) fn read_procedure(deck: u8, node: NodeAddress, state: &State) -> Resu
     let path = state
         .slots
         .path(usize::from(deck), kind_of(node.layer), node.index as usize)?;
-    std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
+    karakuri_store::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Validates and atomically writes a new procedure source to the slot node's backing file.

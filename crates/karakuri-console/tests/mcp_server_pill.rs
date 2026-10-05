@@ -166,3 +166,43 @@ fn mcp_server_pill_hit_testing_and_dropdown() {
         );
     }
 }
+
+#[test]
+fn webmcp_server_pill_behavior() {
+    let mut mcp = McpServer::web();
+    assert_eq!(mcp.addr, "WebMCP");
+    assert!(mcp.running);
+    assert!(mcp.is_webmcp);
+    assert!(!mcp.open());
+    assert_eq!(mcp.rows(), 0);
+
+    mcp.opened();
+    assert!(mcp.open());
+    assert_eq!(mcp.rows(), karakuri_console::view::WEBMCP_MENU_ROWS);
+
+    let (panel, ctx) = common::console(common::PLAUSIBLE);
+    let transport = Some(mock_transport());
+    let mut view = View::new(Room::Day);
+    view.mcp_server = mcp;
+
+    let pill = mcp_server_pill(
+        &ctx,
+        panel.layout(),
+        transport,
+        view.audio.as_ref(),
+        view.tracker,
+        view.map.as_ref(),
+        &view.arrangement,
+        &view.mcp_server,
+        view.theme_mode,
+        false,
+    )
+    .expect("webmcp pill open");
+
+    assert_eq!(pill.rows, karakuri_console::view::WEBMCP_MENU_ROWS);
+
+    // Clicking anywhere in open webmcp card dismisses/shuts without toggling TCP server
+    let row0 = pill.row(0).expect("row 0");
+    let p0 = Point::new(row0.center().x, row0.center().y);
+    assert_eq!(pill.ask(&view.mcp_server, p0), Some(McpAsk::Shut));
+}

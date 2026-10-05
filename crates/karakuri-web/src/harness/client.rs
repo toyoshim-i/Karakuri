@@ -42,8 +42,75 @@ pub fn mcp_tools_to_openai(mcp_tools: &serde_json::Value) -> serde_json::Value {
     json!(openai_tools)
 }
 
+/// Formats messages for the LLM. If `merge_system` is true (e.g. for Gemma or models without system role),
+/// any system prompt is prepended to the first user message instead of being an independent role.
+pub fn prepare_messages(
+    messages: &[serde_json::Value],
+    merge_system: bool,
+) -> Vec<serde_json::Value> {
+    if !merge_system {
+        return messages.to_vec();
+    }
+
+    let mut system_text = String::new();
+    let mut other_messages = Vec::new();
+
+    for m in messages {
+        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or_default();
+        if role == "system" {
+            if let Some(content) = m.get("content").and_then(|c| c.as_str()) {
+                if !system_text.is_empty() {
+                    system_text.push('\n');
+                }
+                system_text.push_str(content);
+            }
+        } else {
+            other_messages.push(m.clone());
+        }
+    }
+
+    if system_text.is_empty() {
+        return other_messages;
+    }
+
+    let mut merged = Vec::new();
+    let mut system_prepended = false;
+
+    for mut m in other_messages {
+        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or_default();
+        if role == "user" && !system_prepended {
+            let current_content = m
+                .get("content")
+                .and_then(|c| c.as_str())
+                .unwrap_or_default();
+            let new_content = format!(
+                "[System Instructions]\n{}\n\n[User Query]\n{}",
+                system_text, current_content
+            );
+            if let Some(obj) = m.as_object_mut() {
+                obj.insert("content".to_string(), json!(new_content));
+            }
+            system_prepended = true;
+        }
+        merged.push(m);
+    }
+
+    if !system_prepended {
+        merged.insert(
+            0,
+            json!({
+                "role": "user",
+                "content": format!("[System Instructions]\n{}", system_text),
+            }),
+        );
+    }
+
+    merged
+}
+
 /// Executes a chat completion query against the configured LLM endpoint, streaming tokens
-/// and dispatching any emitted `tool_calls` in-process.
+/// and dispatching any emitted `tool_calls` in-process. Automatically falls back to chat-only
+/// mode if the model does not support tools schema or system prompt roles (e.g. Gemma).
 pub async fn run_agent_loop<F>(
     config: HarnessConfig,
     mcp: InProcessMcp,
@@ -58,15 +125,28 @@ where
     let mut round = 0;
     const MAX_ROUNDS: usize = 5;
 
+    // Detect if model is Gemma or known tools-unsupported model by name
+    let model_lower = config.model.to_lowercase();
+    let is_likely_gemma = model_lower.contains("gemma") || model_lower.contains("phi");
+    let mut enable_tools = !is_likely_gemma;
+    let mut merge_system = is_likely_gemma;
+
     while round < MAX_ROUNDS {
         round += 1;
 
-        let request_body = json!({
+        let outgoing_messages = prepare_messages(messages, merge_system);
+
+        let mut request_body = json!({
             "model": config.model,
-            "messages": messages,
-            "tools": tools_schema,
+            "messages": outgoing_messages,
             "stream": true,
         });
+
+        if enable_tools {
+            if let Some(obj) = request_body.as_object_mut() {
+                obj.insert("tools".to_string(), tools_schema.clone());
+            }
+        }
 
         let endpoint_url = format!(
             "{}/v1/chat/completions",
@@ -110,6 +190,25 @@ where
                 .ok()
                 .and_then(|v| v.as_string())
                 .unwrap_or_default();
+
+            let lower_body = body.to_lowercase();
+            // If the failure was due to tools/function calling or system prompt, retry in fallback mode
+            if enable_tools
+                && (status == 400
+                    || lower_body.contains("tool")
+                    || lower_body.contains("function")
+                    || lower_body.contains("support")
+                    || lower_body.contains("system")
+                    || lower_body.contains("schema"))
+            {
+                enable_tools = false;
+                merge_system = true;
+                on_output(
+                    "\r\n\x1b[2;33m[Notice: Model does not support function calling tools; falling back to direct chat mode]\x1b[0m\r\n",
+                );
+                continue;
+            }
+
             return Err(format!("LLM HTTP error {status}: {body}"));
         }
 

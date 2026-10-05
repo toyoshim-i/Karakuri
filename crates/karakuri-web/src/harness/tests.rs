@@ -101,3 +101,43 @@ fn test_mcp_tools_to_openai_schema() {
         "string"
     );
 }
+
+#[test]
+fn test_normalize_crlf() {
+    use crate::harness::normalize_crlf;
+
+    assert_eq!(normalize_crlf("hello\nworld\n"), "hello\r\nworld\r\n");
+    assert_eq!(normalize_crlf("hello\r\nworld\r\n"), "hello\r\nworld\r\n");
+    assert_eq!(normalize_crlf("a\nb\r\nc\n"), "a\r\nb\r\nc\r\n");
+}
+
+#[test]
+fn test_prepare_messages_merge_system() {
+    use crate::harness::client::prepare_messages;
+
+    let msgs = vec![
+        json!({
+            "role": "system",
+            "content": "You are a helpful assistant.",
+        }),
+        json!({
+            "role": "user",
+            "content": "Hello",
+        }),
+    ];
+
+    // Standard mode (merge_system = false): preserved
+    let regular = prepare_messages(&msgs, false);
+    assert_eq!(regular.len(), 2);
+    assert_eq!(regular[0]["role"], "system");
+
+    // Gemma/fallback mode (merge_system = true): system merged into user
+    let merged = prepare_messages(&msgs, true);
+    assert_eq!(merged.len(), 1);
+    assert_eq!(merged[0]["role"], "user");
+    let content = merged[0]["content"].as_str().unwrap();
+    assert!(content.contains("[System Instructions]"));
+    assert!(content.contains("You are a helpful assistant."));
+    assert!(content.contains("[User Query]"));
+    assert!(content.contains("Hello"));
+}

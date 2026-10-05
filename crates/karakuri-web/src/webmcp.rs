@@ -107,6 +107,35 @@ pub fn setup_webmcp(mcp: InProcessMcp, waker: EventLoopProxy<()>) -> Result<(), 
     )?;
     call_tool_closure.forget();
 
+    let mcp_for_resources = mcp.clone();
+    let list_resources_closure = Closure::wrap(Box::new(move || -> JsValue {
+        let json_str = mcp_for_resources.resources().to_string();
+        js_sys::JSON::parse(&json_str).unwrap_or(JsValue::NULL)
+    }) as Box<dyn FnMut() -> JsValue>);
+    js_sys::Reflect::set(
+        &karakuri_mcp_obj,
+        &"listResources".into(),
+        list_resources_closure.as_ref(),
+    )?;
+    list_resources_closure.forget();
+
+    let mcp_for_read_resource = mcp.clone();
+    let read_resource_closure = Closure::wrap(Box::new(move |uri: String| -> JsValue {
+        match mcp_for_read_resource.read_resource(&uri) {
+            Ok(val) => {
+                let json_str = val.to_string();
+                js_sys::JSON::parse(&json_str).unwrap_or_else(|_| JsValue::from_str(&json_str))
+            }
+            Err(err) => JsValue::from_str(&err),
+        }
+    }) as Box<dyn FnMut(String) -> JsValue>);
+    js_sys::Reflect::set(
+        &karakuri_mcp_obj,
+        &"readResource".into(),
+        read_resource_closure.as_ref(),
+    )?;
+    read_resource_closure.forget();
+
     js_sys::Reflect::set(&dom_window, &"__karakuri_mcp".into(), &karakuri_mcp_obj)?;
     log::info!("WebMCP: window.__karakuri_mcp registered successfully");
 
