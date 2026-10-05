@@ -509,6 +509,7 @@ pub(crate) struct PluginSink {
     surface: windows::WindowsSurface,
     #[cfg(target_os = "windows")]
     child_surface_id: u64,
+    #[allow(dead_code)]
     frame_index: u64,
     width: u32,
     height: u32,

@@ -1,9 +1,12 @@
 //! Background PTY terminal session execution and management for the Prompt bay.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::Read;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
+#[cfg(not(target_arch = "wasm32"))]
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 use super::cli::CliSelection;
@@ -30,7 +33,9 @@ pub struct TerminalSession {
     /// Scrollback line buffer.
     pub scrollback: Arc<Mutex<Scrollback>>,
     writer: Arc<Mutex<Option<Box<dyn Write + Send>>>>,
+    #[cfg(not(target_arch = "wasm32"))]
     master: Arc<Mutex<Option<Box<dyn portable_pty::MasterPty + Send>>>>,
+    #[cfg(not(target_arch = "wasm32"))]
     child: Arc<Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>>,
 }
 
@@ -45,6 +50,7 @@ impl std::fmt::Debug for TerminalSession {
 
 impl TerminalSession {
     /// Spawns a new interactive CLI session with a native PTY.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn spawn(id: String, program: &str, args: &[&str]) -> Self {
         let status = Arc::new(Mutex::new(SessionStatus::Running));
         let scrollback = Arc::new(Mutex::new(Scrollback::default()));
@@ -194,6 +200,25 @@ impl TerminalSession {
         }
     }
 
+    /// Spawns an agent CLI session (stubbed on Web / WASM target).
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn(id: String, program: &str, _args: &[&str]) -> Self {
+        let status = Arc::new(Mutex::new(SessionStatus::Running));
+        let scrollback = Arc::new(Mutex::new(Scrollback::default()));
+        if let Ok(mut sb) = scrollback.lock() {
+            sb.push_str(&format!(
+                "[Karakuri Web: `{program}` terminal not supported]\r\n"
+            ));
+        }
+        let writer = Arc::new(Mutex::new(None));
+        Self {
+            id,
+            status,
+            scrollback,
+            writer,
+        }
+    }
+
     /// Sends raw bytes directly to the PTY stdin.
     pub fn send_bytes(&self, bytes: &[u8]) -> std::io::Result<()> {
         let mut writer_lock = self
@@ -250,6 +275,7 @@ impl TerminalSession {
     }
 
     /// Returns the current lifecycle status of this session, actively polling child exit status.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn status(&self) -> SessionStatus {
         let is_running = self
             .status
@@ -284,6 +310,15 @@ impl TerminalSession {
             }
         }
 
+        self.status
+            .lock()
+            .map(|st| st.clone())
+            .unwrap_or(SessionStatus::Exited(None))
+    }
+
+    /// Returns the current lifecycle status of this session on Web / WASM.
+    #[cfg(target_arch = "wasm32")]
+    pub fn status(&self) -> SessionStatus {
         self.status
             .lock()
             .map(|st| st.clone())
@@ -328,12 +363,13 @@ impl TerminalSession {
     }
 
     /// Resizes the PTY terminal window dimensions.
-    pub fn resize(&self, rows: u16, cols: u16) {
+    pub fn resize(&self, _rows: u16, _cols: u16) {
+        #[cfg(not(target_arch = "wasm32"))]
         if let Ok(mut m_lock) = self.master.lock() {
             if let Some(ref mut m) = *m_lock {
                 let _ = m.resize(PtySize {
-                    rows,
-                    cols,
+                    rows: _rows,
+                    cols: _cols,
                     pixel_width: 0,
                     pixel_height: 0,
                 });
@@ -343,10 +379,17 @@ impl TerminalSession {
 
     /// Returns the OS process ID if the child is still running.
     pub fn process_id(&self) -> Option<u32> {
-        self.child
-            .lock()
-            .ok()
-            .and_then(|c| c.as_ref().and_then(|child| child.process_id()))
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.child
+                .lock()
+                .ok()
+                .and_then(|c| c.as_ref().and_then(|child| child.process_id()))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            None
+        }
     }
 }
 

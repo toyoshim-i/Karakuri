@@ -45,7 +45,7 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
         // directory, and so are its parts.
         _ => Path::new("."),
     };
-    let root = std::fs::canonicalize(dir).map_err(|e| {
+    let root = karakuri_store::fs::canonicalize(dir).map_err(|e| {
         format!(
             "`{}`: its own directory `{}` cannot be resolved ({e}), and a part is named \
              relative to it",
@@ -87,7 +87,7 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
                     .next()
                     .expect("one checked path per part, in the order the parts were met");
                 let called = part_at(*layer, *index, name.as_deref(), include);
-                let source = std::fs::read(&file).map_err(|e| {
+                let source = karakuri_store::fs::read(&file).map_err(|e| {
                     format!(
                         "`{}`: {called} names `{include}` and it cannot be read ({e})",
                         path.display()
@@ -175,7 +175,7 @@ fn contained(file: &Path, root: &Path, include: &str, called: &str) -> Result<Pa
         }
     }
     // Sequential verification: lexical path check followed by symlink canonicalization.
-    let real = std::fs::canonicalize(root.join(spelled)).map_err(|e| {
+    let real = karakuri_store::fs::canonicalize(root.join(spelled)).map_err(|e| {
         format!(
             "`{}`: {called} names `{include}` and there is no such file beside the Set file \
              ({e}) — an authoring Set file lives beside the parts it names",

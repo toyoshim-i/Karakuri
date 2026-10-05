@@ -1,6 +1,6 @@
 //! Derives simulation step counts from real-time intervals (P-0092, ADR-0006).
 
-use std::time::Instant;
+use web_time::Instant;
 
 use karakuri_engine::set::DT;
 use karakuri_store::record::MAX_STEPS;

@@ -1,8 +1,8 @@
 //! On-disk artifact store managing content-addressed `.kir` sources, sets, and session logs.
 //! Content addresses are stored as 64-character lowercase hex without `sha256:` prefix.
 
+use crate::fs;
 use std::collections::BTreeSet;
-use std::fs;
 use std::path::PathBuf;
 
 use crate::hash::Hash;

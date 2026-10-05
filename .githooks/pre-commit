@@ -13,7 +13,7 @@
 # fail this hook, and where the tests went, is at the bottom of this file.
 set -e
 
-files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' ':(exclude)patches/**')
 [ -n "$files" ] || exit 0
 
 # **A hook's PATH is not the login shell's.** A GUI client, a scheduled build or

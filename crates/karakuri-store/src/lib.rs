@@ -1,6 +1,7 @@
 //! Content-addressed artifact store and ndjson record formats.
 //! Artifacts are immutable and metadata is reproducible from `.kir` source.
 
+pub mod fs;
 pub mod hash;
 pub mod ndjson;
 pub mod project;
@@ -8,6 +9,7 @@ pub mod record;
 pub mod schema;
 pub mod store;
 pub mod stream;
+pub mod vfs;
 
 pub use hash::{Hash, HashParseError};
 pub use ndjson::Line;

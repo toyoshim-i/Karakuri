@@ -4,14 +4,14 @@ use crate::deck_letter;
 use karakuri_environment::history;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Sources {
-    pub(crate) l1: std::path::PathBuf,
-    pub(crate) l4: std::path::PathBuf,
+pub struct Sources {
+    pub l1: std::path::PathBuf,
+    pub l4: std::path::PathBuf,
 }
 
 impl Sources {
     /// Returns default launch sources (`coil_vortex.kir` + `star_flares.kir`) located in the specified preset directory.
-    pub(crate) fn under(presets: &std::path::Path) -> Sources {
+    pub fn under(presets: &std::path::Path) -> Sources {
         Sources {
             l1: presets.join("coil_vortex.kir"),
             l4: presets.join("star_flares.kir"),
@@ -19,7 +19,7 @@ impl Sources {
     }
 
     /// Returns the human-readable material label string for the pair (e.g. `l1 + l4`).
-    pub(crate) fn material(&self) -> String {
+    pub fn material(&self) -> String {
         let stem = |path: &std::path::Path| {
             path.file_stem()
                 .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned())
@@ -31,7 +31,7 @@ impl Sources {
 /// Materialises per-slot working copies in scratch storage to isolate runtime edits (P-0096).
 ///
 /// Returns the scratch directory path and per-slot source copies, or an error if copying fails.
-pub(crate) fn working_copies(
+pub fn working_copies(
     store: &std::path::Path,
     sources: &Sources,
     slots: usize,
@@ -45,7 +45,7 @@ pub(crate) fn working_copies(
 }
 
 /// Formats a startup diagnostic summary displaying the scratch directory and per-deck source files.
-pub(crate) fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
+pub fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
     let mut said = format!("scratch: {} (source paths not written to)", dir.display());
     for (slot, pair) in copies.iter().enumerate() {
         let name = |path: &std::path::Path| {
@@ -66,7 +66,7 @@ pub(crate) fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String 
 /// Seeds initial snapshot history in the store for each running deck before the window opens (ADR-0089).
 ///
 /// Sharing the snapshot instance avoids duplicate entries on initial rebuilds.
-pub(crate) fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Shared {
+pub fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Shared {
     let shared = history::Snapshots::shared(store);
     history::seed(
         &shared,
@@ -79,7 +79,7 @@ pub(crate) fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Sh
 }
 
 /// CLI usage help text displayed for `-h`, `--help`, or syntax errors.
-pub(crate) const USAGE: &str = "\
+pub const USAGE: &str = "\
 usage: karakuri [--presets DIR] [--plugins DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERER.kir]
 
   The console, with a deck behind it. Both paths or neither: a Set is an L1 and
@@ -113,23 +113,23 @@ usage: karakuri [--presets DIR] [--plugins DIR] [--store DIR] [--mcp PORT] [GEOM
 
 /// Parsed command-line configuration for starting the console.
 #[derive(Debug)]
-pub(crate) struct Launch {
-    pub(crate) sources: Sources,
+pub struct Launch {
+    pub sources: Sources,
     /// Root directory of the artifact store (`--store` or default `.karakuri`).
-    pub(crate) store: std::path::PathBuf,
+    pub store: std::path::PathBuf,
     /// Discovered preset library root directory, if available.
-    pub(crate) presets: Option<karakuri_environment::places::Presets>,
+    pub presets: Option<karakuri_environment::places::Presets>,
     /// Discovered plugin directory root, if available.
-    pub(crate) plugins: Option<karakuri_environment::places::Plugins>,
+    pub plugins: Option<karakuri_environment::places::Plugins>,
     /// Optional MCP server port specified via `--mcp PORT`.
-    pub(crate) mcp: Option<u16>,
+    pub mcp: Option<u16>,
 }
 
 /// Parses command-line arguments into a [`Launch`] configuration.
 ///
 /// Accepts up to two KIR file paths (geometry L1 and renderer L4) or falls back to shipped presets.
 /// Also parses `--presets`, `--plugins`, `--store`, and `--mcp` options in any argument order.
-pub(crate) fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, String> {
+pub fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, String> {
     let args: Vec<String> = args.into_iter().collect();
     if args.iter().any(|a| a == "-h" || a == "--help") {
         return Err(String::new());

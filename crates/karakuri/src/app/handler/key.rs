@@ -58,13 +58,22 @@ impl App {
                 return;
             }
 
+            // Dismiss tooltip / key learn on Escape.
+            if key.logical_key == Key::Named(NamedKey::Escape)
+                && (self.hover.learning_key().is_some() || self.hover.is_up())
+            {
+                let tip = self.hover.dismiss();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Tip(tip).repaint(),
+                );
+                return;
+            }
+
             // Interactive Tooltip Key Learn Mode: capture next key to bind to the active control.
             if let Some(on) = self.hover.learning_key() {
-                if key.logical_key == Key::Named(NamedKey::Escape) {
-                    self.hover.set_learning_key(None);
-                    App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
-                    return;
-                }
                 let key_str = match &key.logical_key {
                     Key::Character(s) => Some(s.as_str()),
                     Key::Named(NamedKey::Space) => Some("space"),
@@ -116,6 +125,18 @@ impl App {
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
                 return;
             }
+
+            // Dismiss any active hover tooltip on other keyboard actions.
+            if self.hover.is_up() {
+                let tip = self.hover.dismiss();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Tip(tip).repaint(),
+                );
+            }
+
             // Inline text input session (Arrangement save or Inspector deck rename) claims
             // all keystrokes symmetrically through [`TextInputSession`] (P42, P46) until committed or cancelled.
             if let Some(session) = self.readout.view.active_text_input() {

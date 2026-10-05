@@ -3,7 +3,7 @@
 //! Measures candidate execution timing using GPU timestamp queries when available and calibrated,
 //! falling back to host wall-clock timing if timestamp queries are unsupported or unreliable.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use crate::present::Present;
 use crate::video_source::VideoSource;
@@ -330,7 +330,7 @@ impl Probe {
         });
         let target_view = target.create_view(&Default::default());
 
-        let gpu = if timestamps {
+        let gpu = if timestamps && !cfg!(target_arch = "wasm32") {
             Some(Self::make_gpu_query(device, queue))
         } else {
             None

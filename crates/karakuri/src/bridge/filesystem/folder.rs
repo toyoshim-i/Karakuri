@@ -40,7 +40,7 @@ pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
     let Some(dir) = dir else {
         return Vec::new();
     };
-    let entries = match std::fs::read_dir(dir) {
+    let entries = match karakuri_store::fs::read_dir(dir) {
         Ok(entries) => entries,
         // Log folder read failure and return empty listing.
         Err(why) => {

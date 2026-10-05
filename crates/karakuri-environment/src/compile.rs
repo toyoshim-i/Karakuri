@@ -50,7 +50,8 @@ impl Names {
 
 /// Loads and compiles a `.kir` source file, returning both the checked IR and source text.
 pub fn load(path: &Path) -> Result<(Checked, String), String> {
-    let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let src =
+        karakuri_store::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let checked = compile(&src).map_err(|report| format!("{}:\n{report}", path.display()))?;
     Ok((checked, src))
 }

@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::Instant;
+use web_time::Instant;
 
 use crate::estimate::{estimate, Estimate};
 use crate::governor::{self, Basis, Estimated};
@@ -53,8 +53,8 @@ pub struct HotSwap {
 impl HotSwap {
     /// Creates a new `HotSwap` coordinator backed by a background worker thread.
     pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
         live: Set,
         budget_ms: f32,
         source: Box<dyn Source>,
@@ -73,15 +73,25 @@ impl HotSwap {
             estimate_at: Arc::clone(&estimate_at),
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
         let worker = {
-            let device = device.clone();
-            let queue = queue.clone();
+            let device = _device.clone();
+            let queue = _queue.clone();
             let graveyard = Arc::clone(&graveyard);
             let stop = Arc::clone(&stop);
-            std::thread::Builder::new()
-                .name("karakuri-build".into())
-                .spawn(move || run_worker(device, queue, source, done_tx, graveyard, stop, sizes))
-                .expect("spawn build worker")
+            Some(
+                std::thread::Builder::new()
+                    .name("karakuri-build".into())
+                    .spawn(move || {
+                        run_worker(device, queue, source, done_tx, graveyard, stop, sizes)
+                    })
+                    .expect("spawn build worker"),
+            )
+        };
+        #[cfg(target_arch = "wasm32")]
+        let worker = {
+            drop((source, done_tx, sizes));
+            None
         };
 
         HotSwap {
@@ -100,7 +110,7 @@ impl HotSwap {
             graveyard,
             retired: Vec::with_capacity(GRAVEYARD_CAPACITY),
             stop,
-            worker: Some(worker),
+            worker,
             worker_lost: false,
         }
     }
@@ -416,6 +426,7 @@ impl Drop for HotSwap {
 }
 
 // Static assertion ensuring Set and Request remain Send across thread boundaries.
+#[cfg(not(target_arch = "wasm32"))]
 const _: fn() = || {
     fn assert_send<T: Send>() {}
     assert_send::<Set>();

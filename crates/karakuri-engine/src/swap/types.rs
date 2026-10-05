@@ -1,7 +1,7 @@
 use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
@@ -256,6 +256,7 @@ pub fn said(basis: Basis) -> &'static str {
 
 /// Measurement and estimation resolutions shared between the worker and render threads.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct Sizes {
     pub(crate) measure_at: Arc<AtomicU64>,
     pub(crate) estimate_at: Arc<AtomicU64>,
@@ -263,12 +264,14 @@ pub(crate) struct Sizes {
 
 /// Worker response containing either a finished build or a pre-build refusal.
 #[allow(clippy::large_enum_variant)]
+#[allow(dead_code)]
 pub(crate) enum Done {
     Built(Built),
     Refused(Refusal),
 }
 
 /// Finished build result ready for installation on the render thread.
+#[allow(dead_code)]
 pub(crate) struct Built {
     pub(crate) id: u64,
     pub(crate) label: Arc<str>,

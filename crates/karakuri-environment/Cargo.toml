@@ -47,6 +47,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 # The tempo-source wire format is read at run time, not only in tests.
 serde.workspace = true
 serde_json.workspace = true
+web-time = "1.1"
 
 [dev-dependencies]
 # The scratch, the history, a session stream and a Set file are directories on

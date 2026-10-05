@@ -32,7 +32,7 @@ const TILES: u32 = {{WG}}u;
 // rejects one — and a peak floored at zero would report that frame as having a
 // peak it does not have. It is also the sentinel `reduce_total` tests for, in
 // the one case where no texel was light at all.
-const LOWEST: f32 = -3.4028235e38;
+const LOWEST: f32 = -3.4e38;
 
 // Whether a luminance is a number the meter can add up — decided **on the
 // bits** rather than by comparison.

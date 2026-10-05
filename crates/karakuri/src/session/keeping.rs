@@ -1,4 +1,4 @@
-use std::time::Instant;
+use web_time::Instant;
 
 use crate::{
     built_nodes, copied, deck_letter, ir_layer, node_addr, playing_values, refused, slot_in_range,

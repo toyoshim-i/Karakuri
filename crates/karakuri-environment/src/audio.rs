@@ -3,7 +3,7 @@
 //! Emits audio and tempo records into the session stream and applies measured signals
 //! and beat lock adjustments to the engine oscillator.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use karakuri_audio::lock::BeatLock;
 

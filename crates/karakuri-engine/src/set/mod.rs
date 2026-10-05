@@ -61,11 +61,15 @@ impl Set {
         salts: &[Option<u32>],
         wiring: Wiring<'_>,
     ) -> Result<Set, SetError> {
+        #[cfg(not(target_arch = "wasm32"))]
         let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
             device, queue, l1s, l2s, l3s, fields, l4s, l5s, layering, seed_salt, salts, wiring,
         );
+        #[cfg(not(target_arch = "wasm32"))]
         let captured = pollster::block_on(scope.pop());
+        #[cfg(target_arch = "wasm32")]
+        let captured: Option<wgpu::Error> = None;
 
         match (built, captured) {
             (Err(e), _) => Err(e),

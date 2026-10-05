@@ -1,6 +1,7 @@
 //! Working copy management for live editable sessions.
 //! Materializes editable shaders into `<store>/scratch/` per slot, ensuring each slot
 //! owns an isolated copy of its files (`<letter><node_index>-<name>.kir`) (P-0096, ADR-0228).
+use karakuri_store::fs;
 use std::path::{Path, PathBuf};
 
 /// The subdirectory of the store this lives in.
@@ -13,7 +14,7 @@ where
     N: IntoIterator<Item = &'a mut PathBuf>,
 {
     let dir = store_root.join(DIR);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
 
     for (slot, nodes) in slots.into_iter().enumerate() {
         for (at, path) in nodes.into_iter().enumerate() {
@@ -22,7 +23,7 @@ where
             }
             let target = dir.join(format!("{}.kir", node_name(slot, at, &stem_of(path))));
             let source =
-                std::fs::read(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
+                fs::read(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
             write_atomic(&target, &source)?;
             *path = target;
         }
@@ -58,7 +59,7 @@ fn stem_of(source: &Path) -> String {
 /// Writes procedure source into the scratch directory and returns its target path.
 pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, String> {
     let dir = store_root.join(DIR);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = dir.join(format!("{}.kir", sanitize(name)));
     write_atomic(&path, source.as_bytes())?;
     Ok(path)
@@ -67,13 +68,13 @@ pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, Str
 /// Writes `bytes` to `path` atomically via a temporary file rename.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
     let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
     tmp_name.push(".tmp");
     let tmp_path = path.with_file_name(tmp_name);
-    std::fs::write(&tmp_path, bytes).map_err(|e| format!("{}: {e}", tmp_path.display()))?;
-    std::fs::rename(&tmp_path, path).map_err(|e| format!("{}: {e}", path.display()))?;
+    fs::write(&tmp_path, bytes).map_err(|e| format!("{}: {e}", tmp_path.display()))?;
+    fs::rename(&tmp_path, path).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(())
 }
 

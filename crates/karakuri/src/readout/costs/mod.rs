@@ -1,6 +1,7 @@
 //! Cost tracking, still-panel budget measurement, allocator counting, and drift checking.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use karakuri_engine::probe::MeasurementMethod;
 
@@ -149,18 +150,23 @@ impl Costs {
 /// Prints a GPU initialization failure message and terminates the process with exit code 1.
 pub(crate) fn no_gpu(what: &str) -> ! {
     eprintln!("{what}");
-    match std::env::var("WGPU_BACKEND") {
-        Ok(want) => eprintln!(
-            "WGPU_BACKEND is set to `{want}`, and this codebase honours it — so the most likely \
-             reason is that this machine has no {want}. Unset it to take whatever the machine \
-             offers."
-        ),
-        Err(_) => eprintln!(
-            "WGPU_BACKEND is not set, so this is the machine's own default backend failing \
-             rather than an override."
-        ),
+    #[cfg(target_arch = "wasm32")]
+    panic!("{what}");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        match std::env::var("WGPU_BACKEND") {
+            Ok(want) => eprintln!(
+                "WGPU_BACKEND is set to `{want}`, and this codebase honours it — so the most likely \
+                 reason is that this machine has no {want}. Unset it to take whatever the machine \
+                 offers."
+            ),
+            Err(_) => eprintln!(
+                "WGPU_BACKEND is not set, so this is the machine's own default backend failing \
+                 rather than an override."
+            ),
+        }
+        std::process::exit(1)
     }
-    std::process::exit(1)
 }
 
 pub(crate) fn ms(d: Duration) -> f64 {
