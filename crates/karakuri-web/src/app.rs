@@ -287,21 +287,6 @@ impl WebApp {
             })
         };
 
-        // Attach native click listener to dedicated DOM VR button for direct User Activation
-        if let Some(dom_window) = web_sys::window() {
-            if let Some(document) = dom_window.document() {
-                if let Some(vr_btn) = document.get_element_by_id("karakuri-vr-btn") {
-                    let vr_flow_for_btn = Rc::clone(&start_vr_flow);
-                    let btn_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
-                        vr_flow_for_btn();
-                    });
-                    let _ = vr_btn
-                        .add_event_listener_with_callback("click", btn_cb.as_ref().unchecked_ref());
-                    btn_cb.forget();
-                }
-            }
-        }
-
         // Set up WebXR session request hook when operator clicks WebXR plugin chip
         let vr_flow_for_hook = Rc::clone(&start_vr_flow);
         app.set_plugin_route_hook(move |_n, _on| {
@@ -454,15 +439,6 @@ impl ApplicationHandler<()> for WebApp {
         if let Some(supported) = self.pending_webxr_support.borrow_mut().take() {
             if supported {
                 self.app.set_plugin_override(true, Some("WebXR"), false);
-                if let Some(dom_window) = web_sys::window() {
-                    if let Some(document) = dom_window.document() {
-                        if let Some(btn) = document.get_element_by_id("karakuri-vr-btn") {
-                            let _ = btn
-                                .dyn_into::<web_sys::HtmlElement>()
-                                .map(|el| el.style().set_property("display", "block"));
-                        }
-                    }
-                }
             }
             if let Some(ref window) = self.window {
                 window.request_redraw();
@@ -470,16 +446,6 @@ impl ApplicationHandler<()> for WebApp {
         }
         if let Some(active) = self.pending_webxr_active.borrow_mut().take() {
             self.app.set_plugin_override(true, Some("WebXR"), active);
-            if let Some(dom_window) = web_sys::window() {
-                if let Some(document) = dom_window.document() {
-                    if let Some(btn) = document.get_element_by_id("karakuri-vr-btn") {
-                        let _ = btn.dyn_into::<web_sys::HtmlElement>().map(|el| {
-                            el.style()
-                                .set_property("display", if active { "none" } else { "block" })
-                        });
-                    }
-                }
-            }
             if let Some(ref window) = self.window {
                 let dom_window = web_sys::window().expect("window");
                 let target_size = if active {
@@ -650,13 +616,18 @@ impl ApplicationHandler<()> for WebApp {
 
         // Sync active WebXR stereo camera matrices into App for Tier 2 world rendering
         if let Some(pose) = self.webxr_state.borrow().stereo_pose() {
+            // Place Set at eye-level floating distance in front of viewer in room scale.
+            // Model translation in WebXR space: tx = 0.0, ty = 1.0m (chest level), tz = -5.0m (in front of HUD)
+            // Effective View matrix = V_xr * T_model
             let make_matrices = |view_slice: &[f32; 16], proj_slice: &[f32; 16], eye: [f32; 3]| {
                 let mut v = *view_slice;
-                // Offset scene origin to sit comfortably in front of the viewer (Z = -3.2m, Y = -0.2m)
-                // so the active Set floats elegantly behind the hand HUD quad without extreme near-field disparity
-                v[13] -= 0.2;
-                v[14] -= 3.2;
-                karakuri_engine::StereoMatrices::from_slices(&v, proj_slice, eye)
+                let (tx, ty, tz) = (0.0f32, 1.0f32, -5.0f32);
+                v[12] += tx * v[0] + ty * v[4] + tz * v[8];
+                v[13] += tx * v[1] + ty * v[5] + tz * v[9];
+                v[14] += tx * v[2] + ty * v[6] + tz * v[10];
+
+                let local_eye = [eye[0] - tx, eye[1] - ty, eye[2] - tz];
+                karakuri_engine::StereoMatrices::from_slices(&v, proj_slice, local_eye)
             };
             let left = make_matrices(&pose.left.view, &pose.left.proj, pose.left.eye);
             let right = make_matrices(&pose.right.view, &pose.right.proj, pose.right.eye);

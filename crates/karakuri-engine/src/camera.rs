@@ -315,9 +315,24 @@ impl StereoMatrices {
         let proj = to_mat4(proj_slice);
         let view_proj = mul(proj, view);
 
-        let right = normalize([view[0][0], view[1][0], view[2][0]]);
-        let up = normalize([view[0][1], view[1][1], view[2][1]]);
+        let s = normalize([view[0][0], view[1][0], view[2][0]]);
+        let u = normalize([view[0][1], view[1][1], view[2][1]]);
         let fwd = normalize([-view[0][2], -view[1][2], -view[2][2]]);
+
+        // In wgpu projection, proj[0][0] = 1 / (tan(fov_y/2) * aspect) and proj[1][1] = 1 / tan(fov_y/2).
+        // Karakuri billboard shaders require right and up pre-scaled by (half * aspect) and (half) respectively.
+        let inv_proj_x = if proj[0][0].abs() > 1e-4 {
+            1.0 / proj[0][0].abs()
+        } else {
+            1.0
+        };
+        let inv_proj_y = if proj[1][1].abs() > 1e-4 {
+            1.0 / proj[1][1].abs()
+        } else {
+            1.0
+        };
+        let right = scale(s, inv_proj_x);
+        let up = scale(u, inv_proj_y);
 
         Self {
             view_proj,

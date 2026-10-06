@@ -625,68 +625,101 @@ impl App {
             gfx.gpu.queue.present(frame);
 
             #[cfg(target_arch = "wasm32")]
-            if let (Some(xr_surface), Some(stereo_target), Some((ref left, ref right))) =
-                (&gfx.xr_surface, &gfx.stereo_target, &self.stereo_matrices)
             {
-                let acquired_xr = xr_surface.get_current_texture();
-                let xr_frame = match acquired_xr {
-                    wgpu::CurrentSurfaceTexture::Success(f)
-                    | wgpu::CurrentSurfaceTexture::Suboptimal(f) => Some(f),
-                    _ => None,
-                };
-                if let Some(xr_frame) = xr_frame {
-                    let xr_view = xr_frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-                    let target_slot = Some(karakuri_engine::DeckSlot(
-                        self.readout.view.target_deck() as u8,
-                    ));
-                    let (w, h) = (1920.0f32, 1080.0f32);
-                    let half_w = w * 0.5;
-                    let left_vp = (0.0, 0.0, half_w, h);
-                    let right_vp = (half_w, 0.0, half_w, h);
+                static XR_DRAW_COUNT: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(0);
 
-                    let mut encoder =
-                        gfx.gpu
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("WebXR Stereo Composite"),
-                            });
+                if let (Some(xr_surface), Some(stereo_target), Some((ref left, ref right))) =
+                    (&gfx.xr_surface, &gfx.stereo_target, &self.stereo_matrices)
+                {
+                    let acquired_xr = xr_surface.get_current_texture();
+                    match acquired_xr {
+                        wgpu::CurrentSurfaceTexture::Success(ref xr_frame)
+                        | wgpu::CurrentSurfaceTexture::Suboptimal(ref xr_frame) => {
+                            let xr_view = xr_frame
+                                .texture
+                                .create_view(&wgpu::TextureViewDescriptor::default());
+                            let target_slot = Some(karakuri_engine::DeckSlot(
+                                self.readout.view.target_deck() as u8,
+                            ));
+                            let (w, h) = (1920.0f32, 1080.0f32);
+                            let half_w = w * 0.5;
+                            let left_vp = (0.0, 0.0, half_w, h);
+                            let right_vp = (half_w, 0.0, half_w, h);
 
-                    // Left eye pass into 1920x1080 HDR stereo target (clears color and depth)
-                    gfx.engine.deck.draw_stereo_eye(
-                        &gfx.gpu.queue,
-                        &mut encoder,
-                        &stereo_target.hdr_view,
-                        Some(&stereo_target.depth_view),
-                        target_slot,
-                        left,
-                        true,
-                        left_vp,
-                    );
+                            let mut encoder = gfx.gpu.device.create_command_encoder(
+                                &wgpu::CommandEncoderDescriptor {
+                                    label: Some("WebXR Stereo Composite"),
+                                },
+                            );
 
-                    // Right eye pass into 1920x1080 HDR stereo target (preserves left eye viewport)
-                    gfx.engine.deck.draw_stereo_eye(
-                        &gfx.gpu.queue,
-                        &mut encoder,
-                        &stereo_target.hdr_view,
-                        Some(&stereo_target.depth_view),
-                        target_slot,
-                        right,
-                        false,
-                        right_vp,
-                    );
+                            // Left eye pass into 1920x1080 HDR stereo target (clears color and depth)
+                            gfx.engine.deck.draw_stereo_eye(
+                                &gfx.gpu.queue,
+                                &mut encoder,
+                                &stereo_target.hdr_view,
+                                Some(&stereo_target.depth_view),
+                                target_slot,
+                                left,
+                                true,
+                                left_vp,
+                            );
 
-                    // Tone-map and blit HDR stereo target into xr_view (canvas surface format)
-                    gfx.engine.present.draw_with_bind_group(
-                        &mut encoder,
-                        &stereo_target.bind_group,
-                        &xr_view,
-                        (1920, 1080),
-                    );
+                            // Right eye pass into 1920x1080 HDR stereo target (preserves left eye viewport)
+                            gfx.engine.deck.draw_stereo_eye(
+                                &gfx.gpu.queue,
+                                &mut encoder,
+                                &stereo_target.hdr_view,
+                                Some(&stereo_target.depth_view),
+                                target_slot,
+                                right,
+                                false,
+                                right_vp,
+                            );
 
-                    gfx.gpu.queue.submit(std::iter::once(encoder.finish()));
-                    gfx.gpu.queue.present(xr_frame);
+                            // Tone-map and blit HDR stereo target into xr_view (canvas surface format)
+                            gfx.engine.present.draw_with_bind_group(
+                                &mut encoder,
+                                &stereo_target.bind_group,
+                                &xr_view,
+                                (1920, 1080),
+                            );
+
+                            gfx.gpu.queue.submit(std::iter::once(encoder.finish()));
+
+                            let count =
+                                XR_DRAW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            if count % 120 == 1 {
+                                println!("WebXR WebGPU stereo pass drawn frame {count} (target_slot={target_slot:?})");
+                            }
+
+                            // present consumes the SurfaceTexture; reconstruct from acquired_xr
+                            if let wgpu::CurrentSurfaceTexture::Success(frame)
+                            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = acquired_xr
+                            {
+                                gfx.gpu.queue.present(frame);
+                            }
+                        }
+                        ref err => {
+                            static WARNED_ACQ: std::sync::atomic::AtomicBool =
+                                std::sync::atomic::AtomicBool::new(false);
+                            if !WARNED_ACQ.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                                eprintln!("WebXR xr_surface.get_current_texture error: {err:?}");
+                            }
+                        }
+                    }
+                } else if self.readout.view.plugin {
+                    static WARNED_MISSING: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
+                    let m = WARNED_MISSING.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if m % 120 == 1 {
+                        eprintln!(
+                            "WebXR stereo render skipped: surf={}, target={}, matrices={}",
+                            gfx.xr_surface.is_some(),
+                            gfx.stereo_target.is_some(),
+                            self.stereo_matrices.is_some()
+                        );
+                    }
                 }
             }
         }
