@@ -170,6 +170,10 @@ impl XrQuadRenderer {
     }
 
     pub fn update_texture(&self, gl: &WebGl2RenderingContext, canvas: &HtmlCanvasElement) {
+        if canvas.width() == 0 || canvas.height() == 0 {
+            return;
+        }
+
         let t2d = WebGl2RenderingContext::TEXTURE_2D;
         gl.bind_texture(t2d, Some(&self.texture));
         let res = gl.tex_image_2d_with_u32_and_u32_and_html_canvas_element(
@@ -180,14 +184,19 @@ impl XrQuadRenderer {
             WebGl2RenderingContext::UNSIGNED_BYTE,
             canvas,
         );
+
         let err = gl.get_error();
         if err != WebGl2RenderingContext::NO_ERROR {
-            web_sys::console::warn_1(
-                &format!("WebXR gl.get_error after tex_image_2d: 0x{err:x}").into(),
-            );
+            static WARNED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                web_sys::console::warn_1(
+                    &format!("WebXR gl.get_error after update_texture: 0x{err:x}").into(),
+                );
+            }
         }
         if let Err(e) = res {
-            web_sys::console::warn_2(&"Karakuri WebXR tex_image_2d failed:".into(), &e);
+            web_sys::console::warn_2(&"Karakuri WebXR update_texture failed:".into(), &e);
         }
     }
 }
