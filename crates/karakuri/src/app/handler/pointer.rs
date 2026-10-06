@@ -302,6 +302,9 @@ impl App {
             self.on_audio_requested();
         }
         if let Acted::Emitted(Some(Operation::RouteFrame { output, on })) = acted {
+            if let karakuri_operation::Output::Plugin(n) = output {
+                Self::trigger_plugin_route(&mut self.plugin_route_hook, n, on);
+            }
             if let Some(line) = routed(gfx, event_loop, output, on) {
                 println!("{line}");
             }

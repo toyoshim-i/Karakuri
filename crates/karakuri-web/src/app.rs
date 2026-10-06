@@ -11,7 +11,8 @@ use karakuri_environment::{Opening, SlotPolicies};
 use karakuri_store::store::Store;
 use wasm_bindgen::JsCast;
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::dpi::PhysicalPosition;
+use winit::event::{MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::platform::web::WindowAttributesExtWebSys;
 use winit::window::{Window, WindowId};
@@ -54,6 +55,9 @@ pub struct WebApp {
     _audio_session: Rc<RefCell<Option<crate::audio::WebAudioSession>>>,
     pending_midi: Rc<RefCell<Option<karakuri_environment::midi::Surface>>>,
     _midi_session: Rc<RefCell<Option<crate::midi::WebMidiSession>>>,
+    webxr_state: Rc<RefCell<crate::webxr::WebXrState>>,
+    pending_webxr_support: Rc<RefCell<Option<bool>>>,
+    pending_webxr_active: Rc<RefCell<Option<bool>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
 }
@@ -199,6 +203,65 @@ impl WebApp {
             );
         });
 
+        let webxr_state = Rc::new(RefCell::new(crate::webxr::WebXrState::new()));
+        let pending_webxr_support = Rc::new(RefCell::new(None));
+        let pending_webxr_active = Rc::new(RefCell::new(None));
+
+        // Auto-detect WebXR immersive-vr capability on startup
+        let xr_proxy = proxy.clone();
+        let pending_support_clone = Rc::clone(&pending_webxr_support);
+        let xr_state_clone = Rc::clone(&webxr_state);
+        wasm_bindgen_futures::spawn_local(async move {
+            let supported = crate::webxr::check_webxr_support().await;
+            xr_state_clone.borrow_mut().is_supported = supported;
+            *pending_support_clone.borrow_mut() = Some(supported);
+            let _ = xr_proxy.send_event(());
+        });
+
+        // Set up WebXR session request hook when operator clicks WebXR plugin chip
+        let xr_state_for_hook = Rc::clone(&webxr_state);
+        let xr_proxy_for_hook = proxy.clone();
+        let pending_active_clone = Rc::clone(&pending_webxr_active);
+        app.set_plugin_route_hook(move |_n, on| {
+            let xr_state = Rc::clone(&xr_state_for_hook);
+            let proxy = xr_proxy_for_hook.clone();
+            let pending_active = Rc::clone(&pending_active_clone);
+
+            if on {
+                let dom_window = web_sys::window().expect("window");
+                let document = dom_window.document().expect("document");
+                let canvas = document
+                    .get_element_by_id("karakuri-canvas")
+                    .expect("canvas with id karakuri-canvas")
+                    .dyn_into::<web_sys::HtmlCanvasElement>()
+                    .expect("HtmlCanvasElement");
+
+                let pointer_sink = xr_state.borrow().pending_pointer_events.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    match crate::webxr::start_webxr_session(canvas, pointer_sink, proxy.clone())
+                        .await
+                    {
+                        Ok(_session) => {
+                            log::info!("Karakuri Web: WebXR immersive-vr session started");
+                            xr_state.borrow_mut().is_active = true;
+                            *pending_active.borrow_mut() = Some(true);
+                            let _ = proxy.send_event(());
+                        }
+                        Err(e) => {
+                            log::warn!("Karakuri Web: Failed to start WebXR session: {e}");
+                            xr_state.borrow_mut().is_active = false;
+                            *pending_active.borrow_mut() = Some(false);
+                            let _ = proxy.send_event(());
+                        }
+                    }
+                });
+            } else {
+                xr_state.borrow_mut().is_active = false;
+                *pending_active.borrow_mut() = Some(false);
+                let _ = proxy.send_event(());
+            }
+        });
+
         Self {
             app,
             proxy,
@@ -209,6 +272,9 @@ impl WebApp {
             _audio_session: audio_session,
             pending_midi,
             _midi_session: midi_session,
+            webxr_state,
+            pending_webxr_support,
+            pending_webxr_active,
             initialized: false,
             ime_overlay: None,
         }
@@ -340,6 +406,20 @@ impl ApplicationHandler<()> for WebApp {
                 window.request_redraw();
             }
         }
+        if let Some(supported) = self.pending_webxr_support.borrow_mut().take() {
+            if supported {
+                self.app.set_plugin_override(true, Some("WebXR"), false);
+            }
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+        if let Some(active) = self.pending_webxr_active.borrow_mut().take() {
+            self.app.set_plugin_override(true, Some("WebXR"), active);
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -356,6 +436,52 @@ impl ApplicationHandler<()> for WebApp {
                 .unwrap_or(1.0);
             overlay.sync(rect, scale);
         }
+
+        // Drain controller pointer actions from WebXR spatial HUD session and inject into App
+        let pointer_events = self.webxr_state.borrow().drain_pointer_events();
+        if !pointer_events.is_empty() {
+            if let Some(ref window) = self.window {
+                let win_id = window.id();
+                for action in pointer_events {
+                    match action {
+                        crate::webxr::WebXrPointerAction::CursorMoved { x, y } => {
+                            self.app.on_window_event(
+                                event_loop,
+                                win_id,
+                                WindowEvent::CursorMoved {
+                                    device_id: winit::event::DeviceId::dummy(),
+                                    position: PhysicalPosition::new(x, y),
+                                },
+                            );
+                        }
+                        crate::webxr::WebXrPointerAction::MouseInput { state, button } => {
+                            self.app.on_window_event(
+                                event_loop,
+                                win_id,
+                                WindowEvent::MouseInput {
+                                    device_id: winit::event::DeviceId::dummy(),
+                                    state,
+                                    button,
+                                },
+                            );
+                        }
+                        crate::webxr::WebXrPointerAction::MouseWheel { delta_y } => {
+                            self.app.on_window_event(
+                                event_loop,
+                                win_id,
+                                WindowEvent::MouseWheel {
+                                    device_id: winit::event::DeviceId::dummy(),
+                                    delta: MouseScrollDelta::LineDelta(0.0, delta_y),
+                                    phase: winit::event::TouchPhase::Moved,
+                                },
+                            );
+                        }
+                    }
+                }
+                window.request_redraw();
+            }
+        }
+
         self.app.on_about_to_wait(event_loop);
         if matches!(
             event_loop.control_flow(),

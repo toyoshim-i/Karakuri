@@ -102,6 +102,10 @@ pub struct App {
     pub(crate) audio_request_hook: Option<Box<dyn FnMut()>>,
     /// Optional callback invoked when the user interacts with MIDI controls (ADR-0385).
     pub(crate) midi_request_hook: Option<Box<dyn FnMut()>>,
+    /// Optional custom output plugin override: (available, name, on).
+    pub(crate) custom_plugin: Option<(bool, Option<&'static str>, bool)>,
+    /// Optional callback invoked when an output plugin sink is toggled.
+    pub(crate) plugin_route_hook: Option<Box<dyn FnMut(u8, bool)>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -263,6 +267,35 @@ impl App {
             cjk_font_bytes: None,
             audio_request_hook: None,
             midi_request_hook: None,
+            custom_plugin: None,
+            plugin_route_hook: None,
+        }
+    }
+
+    /// Sets custom output plugin override state (available, display name, and active toggle).
+    pub fn set_plugin_override(&mut self, available: bool, name: Option<&'static str>, on: bool) {
+        self.custom_plugin = Some((available, name, on));
+        self.readout.view.plugin_available = available;
+        self.readout.view.plugin_name = name;
+        self.readout.view.plugin = on;
+        if let Some(ref gfx) = self.gfx {
+            gfx.window.request_redraw();
+        }
+    }
+
+    /// Registers a callback invoked when an output plugin sink is toggled (e.g. WebXR session).
+    pub fn set_plugin_route_hook<F: FnMut(u8, bool) + 'static>(&mut self, hook: F) {
+        self.plugin_route_hook = Some(Box::new(hook));
+    }
+
+    /// Triggers plugin route hook directly using disjoint field borrow.
+    pub(crate) fn trigger_plugin_route(
+        hook: &mut Option<Box<dyn FnMut(u8, bool)>>,
+        n: u8,
+        on: bool,
+    ) {
+        if let Some(ref mut h) = hook {
+            h(n, on);
         }
     }
 

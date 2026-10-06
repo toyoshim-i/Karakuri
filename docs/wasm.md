@@ -40,7 +40,7 @@ Unlike native desktop Karakuri, which relies on host operating system facilities
 │   ┌──────────────┐ ┌──────────────┐    ┌───────────────────────────┐   │
 │   │ Projector    │ │ Plugin Sinks │    │ OpenAI-Compatible API     │   │
 │   │ Secondary Win│ │ ├─ WebRTC    │    │ (Ollama, LMStudio, Cloud) │   │
-│   │ (State Sync) │ │ └─ WebVR XR  │    │                           │   │
+│   │ (State Sync) │ │ └─ WebXR XR  │    │                           │   │
 │   └──────────────┘ └──────────────┘    └───────────────────────────┘   │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
@@ -141,7 +141,7 @@ Instead of a TCP loopback socket, Karakuri Web uses a unified in-process dispatc
 
 ---
 
-### 3.5 External Outputs: Projector, WebRTC Streaming, and Immersive WebVR
+### 3.5 External Outputs: Projector, WebRTC Streaming, and Immersive WebXR
 
 #### The Challenge on Web
 Desktop Karakuri manages external video distribution via OS-level facilities:
@@ -181,14 +181,14 @@ Corresponding to native desktop Syphon/Spout plugin sinks (ADR-0369), Web Karaku
 
 ---
 
-#### 3.5.3 Plugin Sink 2: WebVR Immersive Spatial Mode (WebXR Virtual Cockpit)
+#### 3.5.3 Plugin Sink 2: WebXR Immersive Spatial Mode (Virtual Cockpit)
 Corresponding to spatial XR headsets (Meta Quest, Apple Vision Pro, PCVR), Karakuri Web integrates a dedicated spatial performance mode:
 
 ```
-Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebVR ]
+Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebXR ]
 ```
 
-When `WebVR` is toggled:
+When `WebXR` is toggled:
 1. **Three-Tier Spatial Topology**:
    - **Tier 1 (Personal Deck HUD)**: A floating 30-inch virtual control desk positioned 70 cm in front of the performer at a 35° incline, rendering the full egui 2D console with controller raycast pointer interaction.
    - **Tier 2 (3D World Geometry)**: Karakuri's procedural 3D vertex pipelines (`topology triangles`, `grid`, `ribbon`) are rendered directly into the 6DoF stereo eye buffers, surrounding the performer.
@@ -244,10 +244,10 @@ When `WebVR` is toggled:
 - Full persistence across browser sessions for sets, procedures, and MIDI/key mappings
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebVR (~1-2 weeks)  │
+│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (~1-2 weeks)  │
 │ - Projector popout with BroadcastChannel / Presentation API sync       │
 │ - WebRTC low-latency streaming sink (canvas.captureStream / WHIP)      │
-│ - WebVR Immersive mode: 30" Deck HUD + 3D World Geometry + Sky Dome   │
+│ - WebXR Immersive mode: 30" Deck HUD + 3D World Geometry + Sky Dome   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -267,4 +267,4 @@ When `WebVR` is toggled:
 | **MIDI Input** | midir (CoreMIDI / WinMM / ALSA) | midir (Web MIDI API) | Native browser USB MIDI device support |
 | **File Storage** | `std::fs` under `~/.karakuri/store` | `karakuri_store::fs` + IndexedDB write-through | Sandboxed persistent VFS (ADR-0386) |
 | **Projector Output**| `winit` secondary fullscreen window  | Popout Window / Presentation API state sync    | Full 4K GPU rendering without frame copies|
-| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows)     | WebRTC (WHIP) & WebVR Immersive (WebXR)        | Browser-native broadcasting & spatial 6DoF|
+| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows)     | WebRTC (WHIP) & WebXR Immersive (Spatial HUD)  | Browser-native broadcasting & spatial 6DoF|
