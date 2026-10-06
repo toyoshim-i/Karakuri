@@ -14,6 +14,8 @@ pub mod ime_overlay;
 pub mod midi;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod webmcp;
+#[cfg(target_arch = "wasm32")]
+pub mod webxr;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;

@@ -1,4 +1,4 @@
-# Karakuri Immersive — WebVR & Spatial VJ Output Specification
+# Karakuri Immersive — WebXR & Spatial VJ Output Specification
 
 ---
 
@@ -87,7 +87,7 @@ Rather than forcing a flat 2D "fullscreen" concept onto 3D reality, Karakuri Imm
 In alignment with **ADR-0369** (Output plugins sit behind decoupled sink boundaries), Immersive mode is exposed as an output sink:
 
 ```
-Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebVR / Immersive ]
+Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebXR / Immersive ]
 ```
 
 ### Decoupled Immersive Sink Architecture
@@ -136,7 +136,7 @@ pub trait ImmersiveBackend: Send + Sync {
 ## 4. Web Implementation Details (WebXR + WebGPU)
 
 ### 4.1 Session Lifecycle
-1. User clicks the `[ WebVR ]` pill in the `Outputs` bay.
+1. User clicks the `[ WebXR ]` pill in the `Outputs` bay.
 2. Under the user gesture context, `karakuri-web` calls:
    ```javascript
    navigator.xr.requestSession('immersive-vr', {

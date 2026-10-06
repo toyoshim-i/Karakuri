@@ -154,9 +154,16 @@ impl App {
         );
         // Update projector chip readout state for current frame.
         self.readout.view.projector = projector.is_some();
-        self.readout.view.plugin = gfx.plugin.is_some();
-        self.readout.view.plugin_available = crate::app::operations::is_plugin_available(gfx, 0);
-        self.readout.view.plugin_name = gfx.plugin_name;
+        if let Some((available, name, on)) = self.custom_plugin {
+            self.readout.view.plugin_available = available;
+            self.readout.view.plugin_name = name;
+            self.readout.view.plugin = on;
+        } else {
+            self.readout.view.plugin = gfx.plugin.is_some();
+            self.readout.view.plugin_available =
+                crate::app::operations::is_plugin_available(gfx, 0);
+            self.readout.view.plugin_name = gfx.plugin_name;
+        }
         self.readout.view.picture = picture;
         self.readout.view.previews = previews;
         // Determine whether each deck displays live or held material following watchdog stops (ADR-0269, ADR-0316).
