@@ -59,11 +59,8 @@ void main() {
         float u_min = (u_eye == 0) ? 0.0 : 0.5;
         vec2 eye_uv = vec2(u_min + v_uv.x * 0.5, 1.0 - v_uv.y);
         vec4 tex = texture(u_texture, eye_uv);
-        float lum = max(tex.r, max(tex.g, tex.b));
-        if (tex.a > 0.01 || lum > 0.01) {
-            float alpha = max(tex.a, clamp(lum * 1.5, 0.0, 1.0));
-            scene_color = mix(scene_color, tex.rgb, alpha);
-        }
+        // Additive luminance composite so Set illuminates the cosmic backdrop
+        scene_color += tex.rgb;
     }
 
     fragColor = vec4(scene_color, 1.0);
@@ -171,6 +168,14 @@ void main() {
                 );
                 if r.is_ok() {
                     self.has_texture = true;
+                    web_sys::console::log_1(
+                        &format!(
+                            "Karakuri XR world texture allocated: {}x{}",
+                            canvas.width(),
+                            canvas.height()
+                        )
+                        .into(),
+                    );
                 }
                 r
             } else {
@@ -184,6 +189,21 @@ void main() {
                     canvas,
                 )
             };
+
+            static UPLOAD_COUNT: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(0);
+            let u = UPLOAD_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if u % 144 == 1 {
+                web_sys::console::log_1(
+                    &format!(
+                        "Karakuri XR world texture updated frame {u}: {}x{}, has_texture={}",
+                        canvas.width(),
+                        canvas.height(),
+                        self.has_texture
+                    )
+                    .into(),
+                );
+            }
 
             let err = gl.get_error();
             if err != WebGl2RenderingContext::NO_ERROR {

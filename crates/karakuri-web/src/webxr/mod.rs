@@ -128,6 +128,15 @@ pub async fn start_webxr_session(
     let world_canvas: Option<HtmlCanvasElement> = document
         .get_element_by_id("karakuri-xr-canvas")
         .and_then(|el| el.dyn_into::<HtmlCanvasElement>().ok());
+    web_sys::console::log_1(
+        &format!(
+            "WebXR session init: karakuri-xr-canvas found = {}, main_canvas = {}x{}",
+            world_canvas.is_some(),
+            main_canvas.width(),
+            main_canvas.height()
+        )
+        .into(),
+    );
 
     setup_xr_render_loop(
         session.clone(),
