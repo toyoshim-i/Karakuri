@@ -625,8 +625,8 @@ impl App {
             gfx.gpu.queue.present(frame);
 
             #[cfg(target_arch = "wasm32")]
-            if let (Some(xr_surface), Some((ref left, ref right))) =
-                (&gfx.xr_surface, &self.stereo_matrices)
+            if let (Some(xr_surface), Some(stereo_target), Some((ref left, ref right))) =
+                (&gfx.xr_surface, &gfx.stereo_target, &self.stereo_matrices)
             {
                 let acquired_xr = xr_surface.get_current_texture();
                 let xr_frame = match acquired_xr {
@@ -646,44 +646,46 @@ impl App {
                     let left_vp = (0.0, 0.0, half_w, h);
                     let right_vp = (half_w, 0.0, half_w, h);
 
-                    // Left eye pass (clears canvas target)
-                    let mut left_encoder =
+                    let mut encoder =
                         gfx.gpu
                             .device
                             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("WebXR Left Eye"),
+                                label: Some("WebXR Stereo Composite"),
                             });
+
+                    // Left eye pass into 1920x1080 HDR stereo target (clears color and depth)
                     gfx.engine.deck.draw_stereo_eye(
                         &gfx.gpu.queue,
-                        &mut left_encoder,
-                        &xr_view,
+                        &mut encoder,
+                        &stereo_target.hdr_view,
+                        Some(&stereo_target.depth_view),
                         target_slot,
                         left,
                         true,
                         left_vp,
                     );
-                    gfx.gpu.queue.submit(std::iter::once(left_encoder.finish()));
 
-                    // Right eye pass (preserves left viewport)
-                    let mut right_encoder =
-                        gfx.gpu
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("WebXR Right Eye"),
-                            });
+                    // Right eye pass into 1920x1080 HDR stereo target (preserves left eye viewport)
                     gfx.engine.deck.draw_stereo_eye(
                         &gfx.gpu.queue,
-                        &mut right_encoder,
-                        &xr_view,
+                        &mut encoder,
+                        &stereo_target.hdr_view,
+                        Some(&stereo_target.depth_view),
                         target_slot,
                         right,
                         false,
                         right_vp,
                     );
-                    gfx.gpu
-                        .queue
-                        .submit(std::iter::once(right_encoder.finish()));
 
+                    // Tone-map and blit HDR stereo target into xr_view (canvas surface format)
+                    gfx.engine.present.draw_with_bind_group(
+                        &mut encoder,
+                        &stereo_target.bind_group,
+                        &xr_view,
+                        (1920, 1080),
+                    );
+
+                    gfx.gpu.queue.submit(std::iter::once(encoder.finish()));
                     gfx.gpu.queue.present(xr_frame);
                 }
             }

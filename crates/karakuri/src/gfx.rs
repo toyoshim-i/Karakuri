@@ -61,6 +61,17 @@ pub(crate) struct Projector {
     pub(crate) size: (u32, u32),
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) struct StereoTarget {
+    #[allow(dead_code)]
+    pub(crate) hdr: wgpu::Texture,
+    pub(crate) hdr_view: wgpu::TextureView,
+    #[allow(dead_code)]
+    pub(crate) depth: wgpu::Texture,
+    pub(crate) depth_view: wgpu::TextureView,
+    pub(crate) bind_group: wgpu::BindGroup,
+}
+
 pub(crate) struct Gfx {
     pub(crate) window: Arc<Window>,
     /// The projector window, while it is open. `None` is the ordinary state — a run
@@ -74,6 +85,8 @@ pub(crate) struct Gfx {
     pub(crate) config: wgpu::SurfaceConfiguration,
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) xr_surface: Option<wgpu::Surface<'static>>,
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) stereo_target: Option<StereoTarget>,
     /// Target texture format for rendering pictures, selected as the first supported sRGB format on the surface (P-0064, ADR-0162).
     pub(crate) picture_format: wgpu::TextureFormat,
     pub(crate) egui: egui_winit::State,

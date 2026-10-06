@@ -147,13 +147,16 @@ impl Deck {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        depth_view: Option<&wgpu::TextureView>,
         target_slot: Option<DeckSlot>,
         matrices: &crate::camera::StereoMatrices,
         first: bool,
         viewport: (f32, f32, f32, f32),
     ) {
         if let Some(set) = self.active_stereo_set_mut(target_slot) {
-            set.draw_stereo_eye(queue, encoder, target, matrices, first, viewport);
+            set.draw_stereo_eye(
+                queue, encoder, target, depth_view, matrices, first, viewport,
+            );
         }
     }
 

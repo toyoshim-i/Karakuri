@@ -393,11 +393,13 @@ impl Set {
     }
 
     /// Records rasterization pass for a single stereo eye into a specified viewport.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_stereo_eye(
         &mut self,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        depth_view: Option<&wgpu::TextureView>,
         matrices: &crate::camera::StereoMatrices,
         first: bool,
         viewport: (f32, f32, f32, f32),
@@ -406,7 +408,7 @@ impl Set {
             camera.write_derived_matrices(queue, matrices);
         }
         let merge = self.merge.as_ref();
-        let depth_view = self.depth_view.as_ref();
+        let depth_view = depth_view.or(self.depth_view.as_ref());
 
         for (source_at, source) in self.sources.iter().enumerate() {
             let (parity, counts) = (source.sim.parity(), self.output_counts(source));
@@ -455,8 +457,8 @@ impl Set {
         let left_vp = (0.0, 0.0, half_w, h);
         let right_vp = (half_w, 0.0, half_w, h);
 
-        self.draw_stereo_eye(queue, encoder, target, left, true, left_vp);
-        self.draw_stereo_eye(queue, encoder, target, right, false, right_vp);
+        self.draw_stereo_eye(queue, encoder, target, None, left, true, left_vp);
+        self.draw_stereo_eye(queue, encoder, target, None, right, false, right_vp);
     }
 }
 
