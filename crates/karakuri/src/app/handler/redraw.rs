@@ -623,6 +623,44 @@ impl App {
             }
 
             gfx.gpu.queue.present(frame);
+
+            #[cfg(target_arch = "wasm32")]
+            if let (Some(xr_surface), Some((ref left, ref right))) =
+                (&gfx.xr_surface, &self.stereo_matrices)
+            {
+                let acquired_xr = xr_surface.get_current_texture();
+                let xr_frame = match acquired_xr {
+                    wgpu::CurrentSurfaceTexture::Success(f)
+                    | wgpu::CurrentSurfaceTexture::Suboptimal(f) => Some(f),
+                    _ => None,
+                };
+                if let Some(xr_frame) = xr_frame {
+                    let xr_view = xr_frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
+                    let mut xr_encoder =
+                        gfx.gpu
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("WebXR Stereo World"),
+                            });
+                    let target_slot = Some(karakuri_engine::DeckSlot(
+                        self.readout.view.target_deck() as u8,
+                    ));
+                    gfx.engine.deck.draw_stereo(
+                        &gfx.gpu.queue,
+                        &mut xr_encoder,
+                        &xr_view,
+                        target_slot,
+                        left,
+                        right,
+                        gfx.config.width,
+                        gfx.config.height,
+                    );
+                    gfx.gpu.queue.submit(std::iter::once(xr_encoder.finish()));
+                    gfx.gpu.queue.present(xr_frame);
+                }
+            }
         }
 
         // Record closing tick with real-time measured step count for the session stream (ADR-0297, P-0092, P-0095).

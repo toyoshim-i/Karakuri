@@ -50,6 +50,7 @@ pub struct WebApp {
     proxy: EventLoopProxy<()>,
     window: Option<Arc<Window>>,
     pending_gpu: Rc<RefCell<PendingGpu>>,
+    pending_xr_surface: Rc<RefCell<Option<wgpu::Surface<'static>>>>,
     pending_font: Rc<RefCell<Option<Vec<u8>>>>,
     pending_audio: Rc<RefCell<Option<karakuri_environment::audio::Audio>>>,
     _audio_session: Rc<RefCell<Option<crate::audio::WebAudioSession>>>,
@@ -291,6 +292,7 @@ impl WebApp {
             proxy,
             window: None,
             pending_gpu: Rc::new(RefCell::new(None)),
+            pending_xr_surface: Rc::new(RefCell::new(None)),
             pending_font,
             pending_audio,
             _audio_session: audio_session,
@@ -377,6 +379,23 @@ impl ApplicationHandler<()> for WebApp {
             .create_surface(window.clone())
             .expect("create WebGPU surface");
 
+        // Initialize secondary WebGPU surface for WebXR stereo world rendering if available
+        let xr_canvas_elem: Option<web_sys::HtmlCanvasElement> = document
+            .get_element_by_id("karakuri-xr-canvas")
+            .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok());
+        if let Some(xr_c) = xr_canvas_elem {
+            xr_c.set_width(1920);
+            xr_c.set_height(1080);
+            let xr_attrs = Window::default_attributes()
+                .with_title("Karakuri XR World")
+                .with_canvas(Some(xr_c));
+            if let Ok(xr_win) = event_loop.create_window(xr_attrs) {
+                if let Ok(xr_surf) = instance.create_surface(Arc::new(xr_win)) {
+                    *self.pending_xr_surface.borrow_mut() = Some(xr_surf);
+                }
+            }
+        }
+
         let pending = Rc::clone(&self.pending_gpu);
         let proxy = self.proxy.clone();
         let win = window.clone();
@@ -410,6 +429,10 @@ impl ApplicationHandler<()> for WebApp {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
         if let Some((window, surface, gpu)) = self.pending_gpu.borrow_mut().take() {
             self.app.attach_gfx(window.clone(), surface, gpu);
+            if let Some(xr_surf) = self.pending_xr_surface.borrow_mut().take() {
+                self.app.attach_xr_surface(xr_surf);
+                log::info!("Karakuri Web: Attached secondary WebXR surface successfully");
+            }
             window.request_redraw();
         }
         if let Some(font_bytes) = self.pending_font.borrow_mut().take() {
@@ -548,6 +571,23 @@ impl ApplicationHandler<()> for WebApp {
                 }
                 window.request_redraw();
             }
+        }
+
+        // Sync active WebXR stereo camera matrices into App for Tier 2 world rendering
+        if let Some(pose) = self.webxr_state.borrow().stereo_pose() {
+            let left = karakuri_engine::StereoMatrices::from_slices(
+                &pose.left.view,
+                &pose.left.proj,
+                pose.left.eye,
+            );
+            let right = karakuri_engine::StereoMatrices::from_slices(
+                &pose.right.view,
+                &pose.right.proj,
+                pose.right.eye,
+            );
+            self.app.set_stereo_matrices(Some((left, right)));
+        } else {
+            self.app.set_stereo_matrices(None);
         }
 
         self.app.on_about_to_wait(event_loop);
