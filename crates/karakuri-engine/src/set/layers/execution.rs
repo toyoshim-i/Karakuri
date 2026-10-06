@@ -391,6 +391,65 @@ impl Set {
             }
         }
     }
+
+    /// Records Side-by-Side (SBS) stereo rasterization passes for WebXR into `target`.
+    /// Left eye draws to left viewport (0..w/2), Right eye draws to right viewport (w/2..w).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_stereo(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        left: &crate::camera::StereoMatrices,
+        right: &crate::camera::StereoMatrices,
+        width: u32,
+        height: u32,
+    ) {
+        let half_w = (width / 2) as f32;
+        let h = height as f32;
+        let left_vp = (0.0, 0.0, half_w, h);
+        let right_vp = (half_w, 0.0, half_w, h);
+
+        let depth_view = self.depth_view.as_ref();
+
+        // Left eye pass (clears whole target at start)
+        for camera in &self.cameras {
+            camera.write_derived_matrices(queue, left);
+        }
+        for (source_at, source) in self.sources.iter().enumerate() {
+            let (parity, counts) = (source.sim.parity(), self.output_counts(source));
+            for (i, renderer) in source.renderers.iter().enumerate() {
+                renderer.draw_viewport(
+                    encoder,
+                    target,
+                    depth_view,
+                    parity,
+                    counts,
+                    source_at == 0 && i == 0,
+                    Some(left_vp),
+                );
+            }
+        }
+
+        // Right eye pass (keeps left viewport intact)
+        for camera in &self.cameras {
+            camera.write_derived_matrices(queue, right);
+        }
+        for source in &self.sources {
+            let (parity, counts) = (source.sim.parity(), self.output_counts(source));
+            for renderer in &source.renderers {
+                renderer.draw_viewport(
+                    encoder,
+                    target,
+                    depth_view,
+                    parity,
+                    counts,
+                    false,
+                    Some(right_vp),
+                );
+            }
+        }
+    }
 }
 
 impl VideoSource for Set {

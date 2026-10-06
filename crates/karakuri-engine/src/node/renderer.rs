@@ -301,6 +301,7 @@ impl Renderer {
     ///
     /// Under weighted blending, renders to OIT accumulation targets and resolves
     /// into `target`. `first` indicates whether `target` should be cleared to transparent.
+    /// Renders geometry into `target`.
     pub(crate) fn draw(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -309,6 +310,21 @@ impl Renderer {
         parity: usize,
         counts_buf: &wgpu::Buffer,
         first: bool,
+    ) {
+        self.draw_viewport(encoder, target, depth_view, parity, counts_buf, first, None);
+    }
+
+    /// Renders geometry into `target` constrained to an optional viewport rectangle `(x, y, width, height)`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn draw_viewport(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        depth_view: Option<&wgpu::TextureView>,
+        parity: usize,
+        counts_buf: &wgpu::Buffer,
+        first: bool,
+        viewport: Option<(f32, f32, f32, f32)>,
     ) {
         let depth_stencil_attachment = if self.has_depth_stencil {
             let view = depth_view.expect("depth view required when renderer has depth stencil");
@@ -351,9 +367,12 @@ impl Renderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
+                if let Some((x, y, w, h)) = viewport {
+                    pass.set_viewport(x, y, w, h, 0.0, 1.0);
+                }
                 self.record(&mut pass, parity, counts_buf);
             }
-            oit.resolve_into(encoder, target, first);
+            oit.resolve_into(encoder, target, first, viewport);
             return;
         }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -376,6 +395,9 @@ impl Renderer {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some((x, y, w, h)) = viewport {
+            pass.set_viewport(x, y, w, h, 0.0, 1.0);
+        }
         self.record(&mut pass, parity, counts_buf);
     }
 

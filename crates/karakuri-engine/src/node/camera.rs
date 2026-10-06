@@ -292,6 +292,36 @@ impl Camera {
         queue.write_buffer(&self.canvas, 0, &bytes);
     }
 
+    /// Writes precomputed derived camera parameters directly to the derived uniform buffer.
+    /// Used for WebXR stereo rendering where view and projection matrices are supplied externally.
+    pub(crate) fn write_derived_matrices(
+        &self,
+        queue: &wgpu::Queue,
+        m: &crate::camera::StereoMatrices,
+    ) {
+        let mut bytes = [0u8; wire::SIZE as usize];
+        for (c, col) in m.view_proj.iter().enumerate() {
+            for (r, &val) in col.iter().enumerate() {
+                let offset = (c * 4 + r) * 4;
+                bytes[offset..offset + 4].copy_from_slice(&val.to_le_bytes());
+            }
+        }
+        let put_vec3 = |bytes: &mut [u8], offset: usize, v: [f32; 3]| {
+            for (i, &val) in v.iter().enumerate() {
+                bytes[offset + i * 4..offset + (i + 1) * 4].copy_from_slice(&val.to_le_bytes());
+            }
+        };
+        put_vec3(&mut bytes, 64, m.eye);
+        put_vec3(&mut bytes, 80, m.fwd);
+        put_vec3(&mut bytes, 96, m.right);
+        put_vec3(&mut bytes, 112, m.up);
+        let depth_scale = 1.0 / (m.far - m.near).max(f32::MIN_POSITIVE);
+        bytes[128..132].copy_from_slice(&m.near.to_le_bytes());
+        bytes[132..136].copy_from_slice(&depth_scale.to_le_bytes());
+
+        queue.write_buffer(&self.derived, 0, &bytes);
+    }
+
     /// Records camera compute passes (reduction and procedure passes if
     /// present, followed by derivation). `parity` is the current parity of the
     /// source at [`Camera::subject_head`], and is ignored when there is none.

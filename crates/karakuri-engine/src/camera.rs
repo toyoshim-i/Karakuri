@@ -280,7 +280,55 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 fn normalize(v: [f32; 3]) -> [f32; 3] {
     let len = dot(v, v).sqrt();
-    [v[0] / len, v[1] / len, v[2] / len]
+    if len > 1e-6 {
+        [v[0] / len, v[1] / len, v[2] / len]
+    } else {
+        [0.0, 0.0, 1.0]
+    }
+}
+
+/// Precomputed camera matrices and basis vectors for external stereo XR views.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StereoMatrices {
+    pub view_proj: Mat4,
+    pub eye: [f32; 3],
+    pub fwd: [f32; 3],
+    pub right: [f32; 3],
+    pub up: [f32; 3],
+    pub near: f32,
+    pub far: f32,
+}
+
+impl StereoMatrices {
+    /// Constructs stereo camera matrices from WebXR 4x4 view and projection column-major slices.
+    pub fn from_slices(view_slice: &[f32; 16], proj_slice: &[f32; 16], eye: [f32; 3]) -> Self {
+        let to_mat4 = |s: &[f32; 16]| -> Mat4 {
+            let mut m = [[0.0; 4]; 4];
+            for c in 0..4 {
+                for r in 0..4 {
+                    m[c][r] = s[c * 4 + r];
+                }
+            }
+            m
+        };
+        let view = to_mat4(view_slice);
+        let proj = to_mat4(proj_slice);
+        let view_proj = mul(proj, view);
+
+        let right = normalize([view[0][0], view[1][0], view[2][0]]);
+        let up = normalize([view[0][1], view[1][1], view[2][1]]);
+        let fwd = normalize([-view[0][2], -view[1][2], -view[2][2]]);
+
+        Self {
+            view_proj,
+            eye,
+            fwd,
+            right,
+            up,
+            near: 0.05,
+            far: 100.0,
+        }
+    }
 }
 
 #[cfg(test)]
