@@ -41,38 +41,21 @@ impl XrQuadRenderer {
         out vec4 frag_color;
 
         void main() {
-            // Bezel frame styling
-            vec2 b_dist = min(v_uv, 1.0 - v_uv);
-            float border_w = 0.008;
-            float is_border = 1.0 - step(border_w, min(b_dist.x, b_dist.y));
-
             // Sample console texture (flip Y so canvas top matches quad top)
             vec2 tex_uv = vec2(v_uv.x, 1.0 - v_uv.y);
             vec4 tex_sample = texture(u_texture, tex_uv);
 
-            // Dark slate console base with subtle cyber grid background
-            vec3 panel_base = vec3(0.06, 0.07, 0.10);
-            vec2 g = abs(fract(tex_uv * vec2(16.0, 9.0) - 0.5) - 0.5) / fwidth(tex_uv * vec2(16.0, 9.0));
-            float g_line = 1.0 - min(min(g.x, g.y), 1.0);
-            vec3 bg_pattern = mix(panel_base, vec3(0.10, 0.12, 0.18), g_line * 0.35);
-
-            // Robust content calculation: blend console UI over cyber grid
-            vec3 content_rgb = bg_pattern;
-            float lum = dot(tex_sample.rgb, vec3(0.299, 0.587, 0.114));
-            if (tex_sample.a > 0.05) {
-                content_rgb = mix(bg_pattern, tex_sample.rgb, tex_sample.a);
-            } else if (lum > 0.01) {
-                content_rgb = mix(bg_pattern, tex_sample.rgb, clamp(lum * 2.0, 0.0, 1.0));
+            // Clean direct console presentation: full fidelity UI without obstructing inner borders
+            vec3 final_rgb = tex_sample.rgb;
+            if (tex_sample.a < 0.05) {
+                // Subtle dark background fallback only if console pixel is transparent
+                final_rgb = vec3(0.04, 0.05, 0.07);
             }
-
-            // Glowing cyan/mint cyberpunk bezel
-            vec3 bezel_color = vec3(0.0, 0.94, 0.82);
-            vec3 final_rgb = mix(content_rgb, bezel_color, is_border);
 
             // Controller laser hit reticle
             if (u_cursor_active == 1) {
                 vec2 diff = v_uv - u_cursor;
-                diff.x *= (0.72 / 0.42); // Aspect correction
+                diff.x *= (0.72 / 0.405); // Aspect correction matching QUAD_WIDTH / QUAD_HEIGHT
                 float dist = length(diff);
                 float ring = smoothstep(0.015, 0.012, dist) * smoothstep(0.008, 0.011, dist);
                 float dot = smoothstep(0.005, 0.003, dist);
