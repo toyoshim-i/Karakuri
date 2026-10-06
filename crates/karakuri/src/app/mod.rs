@@ -298,6 +298,53 @@ impl App {
             xr_config.height = 1080;
             surface.configure(&gfx.gpu.device, &xr_config);
             gfx.xr_surface = Some(surface);
+
+            let hdr = gfx.gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("WebXR Stereo HDR Target"),
+                size: wgpu::Extent3d {
+                    width: 1920,
+                    height: 1080,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: karakuri_engine::Present::HDR_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let hdr_view = hdr.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let depth = gfx.gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("WebXR Stereo Depth Target"),
+                size: wgpu::Extent3d {
+                    width: 1920,
+                    height: 1080,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let depth_view = depth.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let bind_group = gfx
+                .engine
+                .present
+                .create_bind_group_for(&gfx.gpu.device, &hdr_view);
+
+            gfx.stereo_target = Some(crate::gfx::StereoTarget {
+                hdr,
+                hdr_view,
+                depth,
+                depth_view,
+                bind_group,
+            });
         }
     }
 

@@ -219,28 +219,20 @@ impl WebApp {
             let _ = xr_proxy.send_event(());
         });
 
-        // Set up WebXR session request hook when operator clicks WebXR plugin chip
-        let xr_state_for_hook = Rc::clone(&webxr_state);
-        let xr_proxy_for_hook = proxy.clone();
-        let pending_active_clone = Rc::clone(&pending_webxr_active);
-        app.set_plugin_route_hook(move |_n, on| {
-            let xr_state = Rc::clone(&xr_state_for_hook);
-            let proxy = xr_proxy_for_hook.clone();
-            let pending_active = Rc::clone(&pending_active_clone);
+        // Shared helper for initiating or ending WebXR immersive-vr session
+        let start_vr_flow = {
+            let xr_state = Rc::clone(&webxr_state);
+            let pending_active = Rc::clone(&pending_webxr_active);
+            let proxy = proxy.clone();
+            Rc::new(move || {
+                if xr_state.borrow().is_active {
+                    log::info!("Karakuri Web: User requested exit VR - ending session");
+                    xr_state.borrow_mut().end_session();
+                    *pending_active.borrow_mut() = Some(false);
+                    let _ = proxy.send_event(());
+                    return;
+                }
 
-            // If session is already active and WebXR button is clicked again, exit VR
-            if xr_state.borrow().is_active {
-                log::info!(
-                    "Karakuri Web: Operator clicked WebXR button while in VR - ending session"
-                );
-                xr_state.borrow_mut().end_session();
-                *pending_active.borrow_mut() = Some(false);
-                let _ = proxy.send_event(());
-                return;
-            }
-
-            if on {
-                // Synchronously initiate WebXR request in user gesture handler to preserve transient activation
                 let session_promise = match crate::webxr::request_immersive_vr_session() {
                     Ok(p) => p,
                     Err(e) => {
@@ -261,19 +253,19 @@ impl WebApp {
 
                 let xr_state_for_start = xr_state.clone();
                 let pending_active_for_start = pending_active.clone();
+                let proxy_for_start = proxy.clone();
                 wasm_bindgen_futures::spawn_local(async move {
                     match crate::webxr::start_webxr_session(
                         session_promise,
                         canvas.clone(),
                         xr_state_for_start.clone(),
                         pending_active_for_start.clone(),
-                        proxy.clone(),
+                        proxy_for_start.clone(),
                     )
                     .await
                     {
                         Ok(session) => {
                             log::info!("Karakuri Web: WebXR immersive-vr session started");
-                            // Expand console canvas to FHD (1920x1080) for roomy hand HUD
                             canvas.set_width(1920);
                             canvas.set_height(1080);
                             let _ = canvas.style().set_property("width", "1920px");
@@ -281,22 +273,39 @@ impl WebApp {
                             xr_state_for_start.borrow_mut().session = Some(session);
                             xr_state_for_start.borrow_mut().is_active = true;
                             *pending_active_for_start.borrow_mut() = Some(true);
-                            let _ = proxy.send_event(());
+                            let _ = proxy_for_start.send_event(());
                         }
                         Err(e) => {
                             log::warn!("Karakuri Web: Failed to start WebXR session: {e}");
                             xr_state_for_start.borrow_mut().is_active = false;
                             xr_state_for_start.borrow_mut().session = None;
                             *pending_active_for_start.borrow_mut() = Some(false);
-                            let _ = proxy.send_event(());
+                            let _ = proxy_for_start.send_event(());
                         }
                     }
                 });
-            } else {
-                xr_state.borrow_mut().end_session();
-                *pending_active.borrow_mut() = Some(false);
-                let _ = proxy.send_event(());
+            })
+        };
+
+        // Attach native click listener to dedicated DOM VR button for direct User Activation
+        if let Some(dom_window) = web_sys::window() {
+            if let Some(document) = dom_window.document() {
+                if let Some(vr_btn) = document.get_element_by_id("karakuri-vr-btn") {
+                    let vr_flow_for_btn = Rc::clone(&start_vr_flow);
+                    let btn_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+                        vr_flow_for_btn();
+                    });
+                    let _ = vr_btn
+                        .add_event_listener_with_callback("click", btn_cb.as_ref().unchecked_ref());
+                    btn_cb.forget();
+                }
             }
+        }
+
+        // Set up WebXR session request hook when operator clicks WebXR plugin chip
+        let vr_flow_for_hook = Rc::clone(&start_vr_flow);
+        app.set_plugin_route_hook(move |_n, _on| {
+            vr_flow_for_hook();
         });
 
         Self {
@@ -358,28 +367,9 @@ impl ApplicationHandler<()> for WebApp {
         window.set_ime_allowed(true);
         self.window = Some(window.clone());
 
-        let canvas_clone = canvas;
-        let win_clone = window.clone();
+        let resize_proxy = self.proxy.clone();
         let resize_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
-            if let Some(win) = web_sys::window() {
-                let dpr = win.device_pixel_ratio();
-                let lw = win
-                    .inner_width()
-                    .ok()
-                    .and_then(|w| w.as_f64())
-                    .unwrap_or(1440.0);
-                let lh = win
-                    .inner_height()
-                    .ok()
-                    .and_then(|h| h.as_f64())
-                    .unwrap_or(900.0);
-                let pw = (lw * dpr).max(1.0) as u32;
-                let ph = (lh * dpr).max(1.0) as u32;
-                canvas_clone.set_width(pw);
-                canvas_clone.set_height(ph);
-                let _ = win_clone.request_inner_size(winit::dpi::PhysicalSize::new(pw, ph));
-                win_clone.request_redraw();
-            }
+            let _ = resize_proxy.send_event(());
         });
         dom_window
             .add_event_listener_with_callback("resize", resize_cb.as_ref().unchecked_ref())
@@ -464,6 +454,15 @@ impl ApplicationHandler<()> for WebApp {
         if let Some(supported) = self.pending_webxr_support.borrow_mut().take() {
             if supported {
                 self.app.set_plugin_override(true, Some("WebXR"), false);
+                if let Some(dom_window) = web_sys::window() {
+                    if let Some(document) = dom_window.document() {
+                        if let Some(btn) = document.get_element_by_id("karakuri-vr-btn") {
+                            let _ = btn
+                                .dyn_into::<web_sys::HtmlElement>()
+                                .map(|el| el.style().set_property("display", "block"));
+                        }
+                    }
+                }
             }
             if let Some(ref window) = self.window {
                 window.request_redraw();
@@ -471,6 +470,16 @@ impl ApplicationHandler<()> for WebApp {
         }
         if let Some(active) = self.pending_webxr_active.borrow_mut().take() {
             self.app.set_plugin_override(true, Some("WebXR"), active);
+            if let Some(dom_window) = web_sys::window() {
+                if let Some(document) = dom_window.document() {
+                    if let Some(btn) = document.get_element_by_id("karakuri-vr-btn") {
+                        let _ = btn.dyn_into::<web_sys::HtmlElement>().map(|el| {
+                            el.style()
+                                .set_property("display", if active { "none" } else { "block" })
+                        });
+                    }
+                }
+            }
             if let Some(ref window) = self.window {
                 let dom_window = web_sys::window().expect("window");
                 let target_size = if active {
@@ -492,14 +501,30 @@ impl ApplicationHandler<()> for WebApp {
                         .get_element_by_id("karakuri-canvas")
                         .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok())
                     {
-                        canvas.set_width((logical_w * dpr) as u32);
-                        canvas.set_height((logical_h * dpr) as u32);
-                        let _ = canvas.style().set_property("width", "100%");
-                        let _ = canvas.style().set_property("height", "100%");
+                        let _ = canvas.style().remove_property("width");
+                        let _ = canvas.style().remove_property("height");
+                        let pw = (logical_w * dpr).max(1.0) as u32;
+                        let ph = (logical_h * dpr).max(1.0) as u32;
+                        canvas.set_width(pw);
+                        canvas.set_height(ph);
                     }
+                    // Schedule delayed resize syncs to catch browser window restore animations
+                    let delayed_proxy = self.proxy.clone();
+                    if let Ok(cb) = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+                        let _ = delayed_proxy.send_event(());
+                    })
+                    .into_js_value()
+                    .dyn_into::<js_sys::Function>()
+                    {
+                        let _ = dom_window
+                            .set_timeout_with_callback_and_timeout_and_arguments_0(&cb, 120);
+                        let _ = dom_window
+                            .set_timeout_with_callback_and_timeout_and_arguments_0(&cb, 320);
+                    }
+
                     winit::dpi::PhysicalSize::new(
-                        (logical_w * dpr) as u32,
-                        (logical_h * dpr) as u32,
+                        (logical_w * dpr).max(1.0) as u32,
+                        (logical_h * dpr).max(1.0) as u32,
                     )
                 };
                 let _ = window.request_inner_size(target_size);
@@ -509,6 +534,48 @@ impl ApplicationHandler<()> for WebApp {
                     WindowEvent::Resized(target_size),
                 );
                 window.request_redraw();
+            }
+        }
+
+        // On window resize or delayed sync while XR is not active, ensure canvas and viewport match DOM window
+        if !self.webxr_state.borrow().is_active {
+            if let Some(ref window) = self.window {
+                if let Some(dom_window) = web_sys::window() {
+                    let dpr = dom_window.device_pixel_ratio();
+                    let logical_w = dom_window
+                        .inner_width()
+                        .ok()
+                        .and_then(|w| w.as_f64())
+                        .unwrap_or(1440.0);
+                    let logical_h = dom_window
+                        .inner_height()
+                        .ok()
+                        .and_then(|h| h.as_f64())
+                        .unwrap_or(900.0);
+                    let pw = (logical_w * dpr).max(1.0) as u32;
+                    let ph = (logical_h * dpr).max(1.0) as u32;
+
+                    let document = dom_window.document().expect("document");
+                    if let Some(canvas) = document
+                        .get_element_by_id("karakuri-canvas")
+                        .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+                    {
+                        if canvas.width() != pw || canvas.height() != ph {
+                            let _ = canvas.style().remove_property("width");
+                            let _ = canvas.style().remove_property("height");
+                            canvas.set_width(pw);
+                            canvas.set_height(ph);
+                            let target_size = winit::dpi::PhysicalSize::new(pw, ph);
+                            let _ = window.request_inner_size(target_size);
+                            self.app.on_window_event(
+                                _event_loop,
+                                window.id(),
+                                WindowEvent::Resized(target_size),
+                            );
+                            window.request_redraw();
+                        }
+                    }
+                }
             }
         }
 

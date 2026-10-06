@@ -367,6 +367,7 @@ impl App {
             surface,
             config,
             xr_surface: None,
+            stereo_target: None,
             picture_format,
             egui,
             renderer,
