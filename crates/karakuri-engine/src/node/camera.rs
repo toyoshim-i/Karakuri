@@ -92,9 +92,12 @@ impl Camera {
             // arithmetic for the debug overlay, and two derivations of one
             // camera agree until one of them is edited. Reading it back is how
             // that stops being a hope.
+            // `COPY_DST` for WebXR: each stereo eye's matrices are written here
+            // from the host (`write_derived_matrices`) in place of the derive pass.
             usage: wgpu::BufferUsages::UNIFORM
                 | wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC,
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             size: wire::SIZE,
             mapped_at_creation: false,
         });
