@@ -111,6 +111,8 @@ pub struct App {
         karakuri_engine::StereoMatrices,
         karakuri_engine::StereoMatrices,
     )>,
+    /// Set when a redraw drew the stereo world; see [`App::take_stereo_drawn`].
+    pub(crate) stereo_drawn: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,7 +277,15 @@ impl App {
             custom_plugin: None,
             plugin_route_hook: None,
             stereo_matrices: None,
+            stereo_drawn: false,
         }
+    }
+
+    /// Whether the stereo world was drawn into the XR canvas since the last
+    /// call, i.e. whether the canvas now shows the matrices last set; the XR
+    /// layer needs to know which head pose its picture was drawn for.
+    pub fn take_stereo_drawn(&mut self) -> bool {
+        std::mem::take(&mut self.stereo_drawn)
     }
 
     /// Sets active WebXR stereo camera matrices for Side-by-Side spatial world rendering.

@@ -629,7 +629,7 @@ impl App {
             #[cfg(target_arch = "wasm32")]
             if let Some(eyes) = self.stereo_matrices {
                 let slot = karakuri_engine::DeckSlot(self.readout.view.target_deck());
-                super::stereo::draw_world(gfx, slot, &eyes);
+                self.stereo_drawn |= super::stereo::draw_world(gfx, slot, &eyes);
             }
         }
 

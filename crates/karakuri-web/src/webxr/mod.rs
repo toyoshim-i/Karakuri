@@ -107,6 +107,7 @@ pub async fn start_webxr_session(
 
     let pointer_sink = xr_state.borrow().pending_pointer_events.clone();
     let current_stereo_pose = xr_state.borrow().current_stereo_pose.clone();
+    let rendered_stereo_pose = xr_state.borrow().rendered_stereo_pose.clone();
 
     // Register 'end' event listener on session so if the user exits via Quest system menu or session.end(),
     // the application cleans up gracefully.
@@ -117,6 +118,10 @@ pub async fn start_webxr_session(
         log::info!("Karakuri Web: WebXR session ended callback fired");
         end_state.borrow_mut().is_active = false;
         end_state.borrow_mut().session = None;
+        // A stale pose would keep the stereo world drawing after the session
+        // and carry its rig origin into the next one.
+        *end_state.borrow().current_stereo_pose.borrow_mut() = None;
+        end_state.borrow().set_rendered_stereo_pose(None);
         *end_pending.borrow_mut() = Some(false);
         let _ = end_proxy.send_event(());
     }) as Box<dyn FnMut(web_sys::Event)>);
@@ -149,6 +154,7 @@ pub async fn start_webxr_session(
         world_canvas,
         pointer_sink,
         current_stereo_pose,
+        rendered_stereo_pose,
         proxy,
     );
 
@@ -169,6 +175,7 @@ fn setup_xr_render_loop(
     world_canvas: Option<HtmlCanvasElement>,
     pointer_sink: Rc<RefCell<Vec<WebXrPointerAction>>>,
     current_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
+    rendered_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     proxy: EventLoopProxy<()>,
 ) {
     let f: XrFrameClosure = Rc::new(RefCell::new(None));
@@ -419,6 +426,10 @@ fn setup_xr_render_loop(
                     .borrow_mut()
                     .update_texture_from_canvas(&gl, xr_c);
             }
+            // The picture just uploaded was drawn for an older head pose than
+            // this frame's; each eye reprojects from that pose to its own.
+            let shown = *current_stereo_pose.borrow();
+            let drawn_for = (*rendered_stereo_pose.borrow()).or(shown);
 
             gl.bind_framebuffer(
                 WebGl2RenderingContext::FRAMEBUFFER,
@@ -441,9 +452,13 @@ fn setup_xr_render_loop(
                     viewport.height(),
                 );
 
-                world_renderer
-                    .borrow()
-                    .draw_eye(&gl, v as i32, (_time * 0.001) as f32);
+                let pick = |p: Option<StereoPose>| p.map(|p| if v == 0 { p.left } else { p.right });
+                world_renderer.borrow().draw_eye(
+                    &gl,
+                    v as i32,
+                    (_time * 0.001) as f32,
+                    pick(shown).zip(pick(drawn_for)),
+                );
                 draw_hud_quad(&gl, &renderer.borrow(), &view, &anchor.model, hit_cursor);
             }
         }
