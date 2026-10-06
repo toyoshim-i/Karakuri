@@ -7,6 +7,7 @@ pub mod config;
 pub mod editor;
 pub mod menu;
 pub mod probe;
+pub mod tools;
 
 #[cfg(test)]
 mod tests;
@@ -44,6 +45,16 @@ pub struct CommandDef {
 }
 
 pub const COMMANDS: &[CommandDef] = &[
+    CommandDef {
+        name: "/tools",
+        args_hint: "[tool_name]",
+        description: "List available WebMCP tools or inspect schema",
+    },
+    CommandDef {
+        name: "/call",
+        args_hint: "<tool_name> [args]",
+        description: "Directly execute an MCP tool with JSON or key=val args",
+    },
     CommandDef {
         name: "/model",
         args_hint: "",
@@ -141,7 +152,7 @@ impl Harness {
             cfg.model, cfg.endpoint
         ));
         out.push_str(
-            "  \x1b[2mType \x1b[1;32m/\x1b[0;2m for commands (/model, /help, etc.)\x1b[0m\r\n\r\n",
+            "  \x1b[2mType \x1b[1;32m/\x1b[0;2m for commands (/tools, /call, /model, /help)\x1b[0m\r\n\r\n",
         );
         out.push_str(PROMPT_LABEL);
 
@@ -450,11 +461,54 @@ impl Harness {
         }
     }
 
-    /// Handles Tab key pressing for cycling / completing slash commands.
+    /// Handles Tab key pressing for cycling / completing slash commands and tool names.
     fn handle_tab_completion(&self) {
         let current = self.input_buffer.lock().unwrap().clone();
         if !current.starts_with('/') {
             return;
+        }
+
+        // Sub-command / tool name completion for /call and /tools
+        let tool_subcmd = if let Some(query) = current.strip_prefix("/call ") {
+            Some(("/call ", query))
+        } else {
+            current
+                .strip_prefix("/tools ")
+                .map(|query| ("/tools ", query))
+        };
+
+        if let Some((cmd_prefix, query)) = tool_subcmd {
+            // Only complete if completing the tool name itself (no subsequent space)
+            if !query.contains(' ') {
+                let mcp_tools = self.mcp.tools();
+                let tool_names = tools::get_tool_names(&mcp_tools);
+                let matches: Vec<&String> = tool_names
+                    .iter()
+                    .filter(|name| name.starts_with(query))
+                    .collect();
+
+                if matches.is_empty() {
+                    return;
+                }
+
+                let mut idx_lock = self.completion_index.lock().unwrap();
+                let next_idx = match *idx_lock {
+                    Some(i) => (i + 1) % matches.len(),
+                    None => 0,
+                };
+                *idx_lock = Some(next_idx);
+
+                let chosen = matches[next_idx];
+                let replacement = format!("{cmd_prefix}{chosen} ");
+
+                *self.input_buffer.lock().unwrap() = replacement.clone();
+                *self.cursor_pos.lock().unwrap() = replacement.chars().count();
+
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    redraw_prompt_line(&mut sb, &replacement, replacement.chars().count());
+                }
+                return;
+            }
         }
 
         let matches: Vec<&CommandDef> = COMMANDS
@@ -512,7 +566,11 @@ impl Harness {
             return;
         }
 
-        if line == "/model" {
+        if line == "/tools" || line.starts_with("/tools ") {
+            self.handle_tools_command(line);
+        } else if line == "/call" || line.starts_with("/call ") {
+            self.handle_call_command(line);
+        } else if line == "/model" {
             self.run_model_detection();
         } else if line == "/copy" {
             self.copy_output_to_clipboard();
@@ -557,6 +615,92 @@ impl Harness {
             // Normal prompt execution
             self.run_query(line.to_string());
         }
+    }
+
+    /// Handles the `/tools` command to list tools or inspect a specific tool.
+    fn handle_tools_command(&self, line: &str) {
+        let remainder = line.strip_prefix("/tools").unwrap_or("").trim();
+        let mcp_tools = self.mcp.tools();
+
+        if let Ok(mut sb) = self.scrollback.lock() {
+            let output = if remainder.is_empty() {
+                tools::format_tools_overview(&mcp_tools)
+            } else {
+                tools::format_tool_detail(&mcp_tools, remainder)
+            };
+            sb.push_str(&normalize_crlf(&output));
+            sb.push_str("\r\n");
+            sb.push_str(PROMPT_LABEL);
+        }
+    }
+
+    /// Handles the `/call` command to directly invoke an MCP tool.
+    fn handle_call_command(&self, line: &str) {
+        let remainder = line.strip_prefix("/call").unwrap_or("").trim();
+        if remainder.is_empty() {
+            if let Ok(mut sb) = self.scrollback.lock() {
+                let usage = tools::call_usage_help();
+                sb.push_str(&normalize_crlf(&usage));
+                sb.push_str("\r\n");
+                sb.push_str(PROMPT_LABEL);
+            }
+            return;
+        }
+
+        let mut parts = remainder.splitn(2, char::is_whitespace);
+        let tool_name = parts.next().unwrap_or("").trim();
+        let args_str = parts.next().unwrap_or("").trim();
+
+        let mcp_tools = self.mcp.tools();
+        let tool_schema = tools::find_tool_schema(&mcp_tools, tool_name);
+
+        match tools::parse_call_args(args_str, tool_schema) {
+            Ok(args) => {
+                self.run_mcp_call(tool_name.to_string(), args);
+            }
+            Err(err) => {
+                if let Ok(mut sb) = self.scrollback.lock() {
+                    sb.push_str(&normalize_crlf(&format!(
+                        "\x1b[31m✖ Argument error:\x1b[0m {err}\r\n\r\n"
+                    )));
+                    sb.push_str(PROMPT_LABEL);
+                }
+            }
+        }
+    }
+
+    /// Executes an MCP tool asynchronously against the engine and prints formatted output.
+    fn run_mcp_call(&self, tool_name: String, args: serde_json::Value) {
+        *self.is_busy.lock().unwrap() = true;
+
+        if let Ok(mut sb) = self.scrollback.lock() {
+            let pretty_args = if args.is_object() && args.as_object().is_some_and(|o| !o.is_empty())
+            {
+                format!(" with {args}")
+            } else {
+                String::new()
+            };
+            sb.push_str(&format!(
+                "\x1b[36m⚡ Calling \x1b[1;36m{}\x1b[0;36m{}...\x1b[0m\r\n",
+                tool_name, pretty_args
+            ));
+        }
+
+        let mcp = self.mcp.clone();
+        let waker = self.waker.clone();
+        let scrollback = self.scrollback.clone();
+        let is_busy = self.is_busy.clone();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let res = crate::webmcp::execute_tool_async(mcp, waker, tool_name.clone(), args).await;
+            *is_busy.lock().unwrap() = false;
+
+            if let Ok(mut sb) = scrollback.lock() {
+                let formatted = tools::format_call_result(&tool_name, res);
+                sb.push_str(&normalize_crlf(&formatted));
+                sb.push_str(&format!("\r\n\r\n{}", PROMPT_LABEL));
+            }
+        });
     }
 
     /// Copies the current scrollback text to the browser clipboard via Navigator API.

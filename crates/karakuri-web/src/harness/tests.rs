@@ -257,3 +257,189 @@ fn test_line_editing_primitives() {
     remove_char_range(&mut jp, 5, 11);
     assert_eq!(jp, "こんにちは 世界");
 }
+
+#[test]
+fn test_tools_overview_and_detail_formatting() {
+    use crate::harness::tools::{format_tool_detail, format_tools_overview};
+
+    let schema = json!([
+        {
+            "name": "read_procedure",
+            "description": "The source of one node of one deck slot.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "slot": { "type": "integer", "description": "deck slot, from 0" },
+                    "layer": { "type": "string", "enum": ["L1", "L2", "L3", "L4", "Field"] },
+                    "index": { "type": "integer", "description": "node index" }
+                },
+                "required": ["slot", "layer"]
+            }
+        },
+        {
+            "name": "list_sets",
+            "description": "Lists Sets stored in the library.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "holds": { "type": "string" }
+                }
+            }
+        }
+    ]);
+
+    let overview = format_tools_overview(&schema);
+    assert!(overview.contains("Available MCP Tools (2)"));
+    assert!(overview.contains("read_procedure"));
+    assert!(overview.contains("<slot> <layer> [index]"));
+    assert!(overview.contains("list_sets"));
+
+    let detail = format_tool_detail(&schema, "read_procedure");
+    assert!(detail.contains("MCP Tool:"));
+    assert!(detail.contains("read_procedure"));
+    assert!(detail.contains("required"));
+    assert!(detail.contains("optional"));
+    assert!(detail.contains("/call read_procedure slot=0 layer=L1"));
+
+    let not_found = format_tool_detail(&schema, "unknown_tool");
+    assert!(not_found.contains("Tool 'unknown_tool' not found"));
+}
+
+#[test]
+fn test_parse_call_args_json_and_kv_and_positional() {
+    use crate::harness::tools::parse_call_args;
+
+    let tool_schema = json!({
+        "name": "read_procedure",
+        "description": "The source of one node of one deck slot.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slot": { "type": "integer" },
+                "layer": { "type": "string" },
+                "index": { "type": "integer" }
+            },
+            "required": ["slot", "layer"]
+        }
+    });
+
+    // 1. Raw JSON
+    let val_json = parse_call_args("{\"slot\": 0, \"layer\": \"L1\"}", Some(&tool_schema)).unwrap();
+    assert_eq!(val_json["slot"], 0);
+    assert_eq!(val_json["layer"], "L1");
+
+    // 2. Key=Value format
+    let val_kv = parse_call_args("slot=1 layer=\"L2\" index=3", Some(&tool_schema)).unwrap();
+    assert_eq!(val_kv["slot"], 1);
+    assert_eq!(val_kv["layer"], "L2");
+    assert_eq!(val_kv["index"], 3);
+
+    // 3. Positional format
+    let val_pos = parse_call_args("2 L3", Some(&tool_schema)).unwrap();
+    assert_eq!(val_pos["slot"], 2);
+    assert_eq!(val_pos["layer"], "L3");
+
+    // 4. Missing required parameter error
+    let err_missing = parse_call_args("slot=0", Some(&tool_schema));
+    assert!(err_missing.is_err());
+    assert!(err_missing
+        .unwrap_err()
+        .contains("Missing required parameter 'layer'"));
+
+    // 5. Tool without required params
+    let no_req_schema = json!({
+        "name": "list_sets",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "holds": { "type": "string" }
+            }
+        }
+    });
+    let val_empty = parse_call_args("", Some(&no_req_schema)).unwrap();
+    assert_eq!(val_empty, json!({}));
+
+    let val_holds = parse_call_args("holds=ambient", Some(&no_req_schema)).unwrap();
+    assert_eq!(val_holds["holds"], "ambient");
+}
+
+#[test]
+fn test_format_call_result_rendering() {
+    use crate::harness::tools::format_call_result;
+
+    // Success with JSON string payload (should be pretty-printed)
+    let ok_val = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "{\"status\":\"ok\",\"count\":2}"
+                }
+            ],
+            "isError": false
+        }
+    });
+    let rendered = format_call_result("test_tool", Ok(ok_val));
+    assert!(rendered.contains("✔ Result:"));
+    assert!(rendered.contains("\"status\": \"ok\""));
+
+    // Tool refusal / error
+    let err_val = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "deck 0 is not active"
+                }
+            ],
+            "isError": true
+        }
+    });
+    let err_rendered = format_call_result("operate", Ok(err_val));
+    assert!(err_rendered.contains("✖ Error from operate:"));
+    assert!(err_rendered.contains("deck 0 is not active"));
+
+    // Dispatch error
+    let dispatch_err = format_call_result("operate", Err("Render loop timeout".into()));
+    assert!(dispatch_err.contains("✖ Failed to execute operate: Render loop timeout"));
+}
+
+#[test]
+fn test_tool_names_and_param_hints() {
+    use crate::harness::tools::{build_param_hint, get_tool_names};
+
+    let schema = json!([
+        {
+            "name": "wire_input",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "slot": { "type": "integer" },
+                    "from": { "type": "string" },
+                    "to": { "type": "string" }
+                },
+                "required": ["slot", "from", "to"]
+            }
+        },
+        {
+            "name": "swap_outcome",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    ]);
+
+    let names = get_tool_names(&schema);
+    assert_eq!(names, vec!["wire_input", "swap_outcome"]);
+
+    let wire_hint = build_param_hint(&schema[0]);
+    assert_eq!(wire_hint, "<slot> <from> <to>");
+
+    let swap_hint = build_param_hint(&schema[1]);
+    assert_eq!(swap_hint, "");
+}
