@@ -179,7 +179,7 @@ impl Oit {
         ]
     }
 
-    /// Resolves accumulated OIT buffers into the destination render target.
+    /// Resolves accumulated OIT buffers into the destination render target constrained to an optional viewport.
     ///
     /// When `first` is true, the destination target is cleared before composite.
     pub(crate) fn resolve_into(
@@ -187,6 +187,7 @@ impl Oit {
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         first: bool,
+        viewport: Option<(f32, f32, f32, f32)>,
     ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("oit resolve"),
@@ -209,6 +210,9 @@ impl Oit {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some((x, y, w, h)) = viewport {
+            pass.set_viewport(x, y, w, h, 0.0, 1.0);
+        }
         pass.set_pipeline(&self.resolve);
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.draw(0..3, 0..1);
