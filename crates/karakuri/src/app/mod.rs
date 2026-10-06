@@ -106,6 +106,11 @@ pub struct App {
     pub(crate) custom_plugin: Option<(bool, Option<&'static str>, bool)>,
     /// Optional callback invoked when an output plugin sink is toggled.
     pub(crate) plugin_route_hook: Option<Box<dyn FnMut(u8, bool)>>,
+    /// Active WebXR stereo camera matrices for Side-by-Side spatial world rendering.
+    pub(crate) stereo_matrices: Option<(
+        karakuri_engine::StereoMatrices,
+        karakuri_engine::StereoMatrices,
+    )>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -269,6 +274,30 @@ impl App {
             midi_request_hook: None,
             custom_plugin: None,
             plugin_route_hook: None,
+            stereo_matrices: None,
+        }
+    }
+
+    /// Sets active WebXR stereo camera matrices for Side-by-Side spatial world rendering.
+    pub fn set_stereo_matrices(
+        &mut self,
+        matrices: Option<(
+            karakuri_engine::StereoMatrices,
+            karakuri_engine::StereoMatrices,
+        )>,
+    ) {
+        self.stereo_matrices = matrices;
+    }
+
+    /// Configures and attaches secondary WebXR canvas surface for SBS spatial world rendering.
+    #[cfg(target_arch = "wasm32")]
+    pub fn attach_xr_surface(&mut self, surface: wgpu::Surface<'static>) {
+        if let Some(ref mut gfx) = self.gfx {
+            let mut xr_config = gfx.config.clone();
+            xr_config.width = 1920;
+            xr_config.height = 1080;
+            surface.configure(&gfx.gpu.device, &xr_config);
+            gfx.xr_surface = Some(surface);
         }
     }
 

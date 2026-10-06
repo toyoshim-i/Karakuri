@@ -72,6 +72,8 @@ pub(crate) struct Gfx {
     pub(crate) gpu: Gpu,
     pub(crate) surface: wgpu::Surface<'static>,
     pub(crate) config: wgpu::SurfaceConfiguration,
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) xr_surface: Option<wgpu::Surface<'static>>,
     /// Target texture format for rendering pictures, selected as the first supported sRGB format on the surface (P-0064, ADR-0162).
     pub(crate) picture_format: wgpu::TextureFormat,
     pub(crate) egui: egui_winit::State,

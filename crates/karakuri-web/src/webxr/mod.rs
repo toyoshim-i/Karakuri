@@ -125,6 +125,9 @@ pub async fn start_webxr_session(
 
     let renderer = Rc::new(RefCell::new(XrQuadRenderer::new(&gl)?));
     let world_renderer = Rc::new(RefCell::new(XrWorldRenderer::new(&gl)?));
+    let world_canvas: Option<HtmlCanvasElement> = document
+        .get_element_by_id("karakuri-xr-canvas")
+        .and_then(|el| el.dyn_into::<HtmlCanvasElement>().ok());
 
     setup_xr_render_loop(
         session.clone(),
@@ -134,6 +137,7 @@ pub async fn start_webxr_session(
         renderer,
         world_renderer,
         main_canvas,
+        world_canvas,
         pointer_sink,
         current_stereo_pose,
         proxy,
@@ -153,6 +157,7 @@ fn setup_xr_render_loop(
     renderer: Rc<RefCell<XrQuadRenderer>>,
     world_renderer: Rc<RefCell<XrWorldRenderer>>,
     canvas: HtmlCanvasElement,
+    world_canvas: Option<HtmlCanvasElement>,
     pointer_sink: Rc<RefCell<Vec<WebXrPointerAction>>>,
     current_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     proxy: EventLoopProxy<()>,
@@ -399,6 +404,12 @@ fn setup_xr_render_loop(
         if let (Some(pose), Some(anchor)) = (pose, hud_anchor) {
             let views = pose.views();
             let num_views = views.length();
+
+            if let Some(ref xr_c) = world_canvas {
+                world_renderer
+                    .borrow_mut()
+                    .update_texture_from_canvas(&gl, xr_c);
+            }
 
             gl.bind_framebuffer(
                 WebGl2RenderingContext::FRAMEBUFFER,

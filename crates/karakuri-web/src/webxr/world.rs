@@ -4,8 +4,8 @@
 //! with full 6DoF parallax (Left eye gets left half U:0.0..0.5, Right eye gets right half U:0.5..1.0).
 
 use web_sys::{
-    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlTexture,
-    WebGlUniformLocation, WebGlVertexArrayObject,
+    HtmlCanvasElement, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader,
+    WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject,
 };
 
 /// WebGL2 renderer for drawing stereo 3D world background into WebXR eye viewports.
@@ -148,6 +148,65 @@ void main() {
             u_time_loc,
             has_texture: false,
         })
+    }
+
+    /// Uploads stereo SBS image from offscreen canvas into WebGL2 texture.
+    pub fn update_texture_from_canvas(
+        &mut self,
+        gl: &WebGl2RenderingContext,
+        canvas: &HtmlCanvasElement,
+    ) {
+        if canvas.width() > 0 && canvas.height() > 0 {
+            let t2d = WebGl2RenderingContext::TEXTURE_2D;
+            gl.bind_texture(t2d, Some(&self.texture));
+
+            let res = if !self.has_texture {
+                let r = gl.tex_image_2d_with_u32_and_u32_and_html_canvas_element(
+                    t2d,
+                    0,
+                    WebGl2RenderingContext::RGBA as i32,
+                    WebGl2RenderingContext::RGBA,
+                    WebGl2RenderingContext::UNSIGNED_BYTE,
+                    canvas,
+                );
+                if r.is_ok() {
+                    self.has_texture = true;
+                }
+                r
+            } else {
+                gl.tex_sub_image_2d_with_u32_and_u32_and_html_canvas_element(
+                    t2d,
+                    0,
+                    0,
+                    0,
+                    WebGl2RenderingContext::RGBA,
+                    WebGl2RenderingContext::UNSIGNED_BYTE,
+                    canvas,
+                )
+            };
+
+            let err = gl.get_error();
+            if err != WebGl2RenderingContext::NO_ERROR {
+                static WARNED: std::sync::atomic::AtomicBool =
+                    std::sync::atomic::AtomicBool::new(false);
+                if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    web_sys::console::warn_1(
+                        &format!("Karakuri XR world gl.get_error after update_texture: 0x{err:x}")
+                            .into(),
+                    );
+                }
+            }
+            if let Err(e) = res {
+                static WARNED: std::sync::atomic::AtomicBool =
+                    std::sync::atomic::AtomicBool::new(false);
+                if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    web_sys::console::warn_2(
+                        &"Karakuri XR world update_texture failed:".into(),
+                        &e,
+                    );
+                }
+            }
+        }
     }
 
     /// Draws the stereo background for one eye view.
