@@ -69,17 +69,17 @@ impl WebXrState {
 
 /// Checks whether `immersive-vr` is supported on the current browser.
 pub async fn check_webxr_support() -> bool {
-    let window = match web_sys::window() {
-        Some(w) => w,
-        None => return false,
+    let Some(window) = web_sys::window() else {
+        return false;
     };
-    let navigator = window.navigator();
-    let xr = navigator.xr();
-    let promise = xr.is_session_supported(XrSessionMode::ImmersiveVr);
-    match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => val.as_bool().unwrap_or(false),
-        Err(_) => false,
-    }
+    let promise = window
+        .navigator()
+        .xr()
+        .is_session_supported(XrSessionMode::ImmersiveVr);
+    wasm_bindgen_futures::JsFuture::from(promise)
+        .await
+        .map(|v| v.as_bool().unwrap_or(false))
+        .unwrap_or(false)
 }
 
 /// Requests and initializes a WebXR `immersive-vr` session.
@@ -92,9 +92,7 @@ pub async fn start_webxr_session(
     let xr = window.navigator().xr();
 
     let session_init = XrSessionInit::new();
-    let local_floor = JsValue::from_str("local-floor");
-    let features = [local_floor];
-    session_init.set_required_features(&features);
+    session_init.set_required_features(&[JsValue::from_str("local-floor")]);
 
     let session_promise =
         xr.request_session_with_options(XrSessionMode::ImmersiveVr, &session_init);
@@ -151,19 +149,13 @@ pub async fn start_webxr_session(
     let renderer = Rc::new(RefCell::new(XrQuadRenderer::new(&gl)?));
 
     // Launch RAF render loop
-    let session_clone = session.clone();
-    let ref_space_clone = ref_space;
-    let main_canvas_clone = main_canvas;
-    let gl_clone = gl;
-    let layer_clone = xr_gl_layer;
-
     setup_xr_render_loop(
-        session_clone,
-        ref_space_clone,
-        gl_clone,
-        layer_clone,
+        session.clone(),
+        ref_space,
+        gl,
+        xr_gl_layer,
         renderer,
-        main_canvas_clone,
+        main_canvas,
         pointer_sink,
         proxy,
     );
@@ -293,14 +285,31 @@ impl XrQuadRenderer {
             WebGl2RenderingContext::CLAMP_TO_EDGE as i32,
         );
 
+        // Seed initial texture with high-contrast test pattern
+        let test_pattern: [u8; 16] = [
+            255, 30, 140, 255, // neon magenta
+            0, 240, 200, 255, // cyan
+            0, 240, 200, 255, // cyan
+            255, 30, 140, 255, // neon magenta
+        ];
+        let _ = gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+            WebGl2RenderingContext::TEXTURE_2D,
+            0,
+            WebGl2RenderingContext::RGBA as i32,
+            2,
+            2,
+            0,
+            WebGl2RenderingContext::RGBA,
+            WebGl2RenderingContext::UNSIGNED_BYTE,
+            Some(&test_pattern),
+        );
+
         // Preallocate static geometry VAO, VBO, IBO once
         let hw = QUAD_WIDTH * 0.5;
         let hh = QUAD_HEIGHT * 0.5;
         let vertices: [f32; 20] = [
-            -hw, -hh, 0.0, 0.0, 0.0, // bottom-left
-            hw, -hh, 0.0, 1.0, 0.0, // bottom-right
-            hw, hh, 0.0, 1.0, 1.0, // top-right
-            -hw, hh, 0.0, 0.0, 1.0, // top-left
+            -hw, -hh, 0.0, 0.0, 0.0, hw, -hh, 0.0, 1.0, 0.0, hw, hh, 0.0, 1.0, 1.0, -hw, hh, 0.0,
+            0.0, 1.0,
         ];
         let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
 
@@ -382,11 +391,11 @@ fn compile_shader(
         .ok_or("Failed to create shader")?;
     gl.shader_source(&shader, source);
     gl.compile_shader(&shader);
-    if gl
+    let ok = gl
         .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
         .as_bool()
-        .unwrap_or(false)
-    {
+        .unwrap_or(false);
+    if ok {
         Ok(shader)
     } else {
         Err(gl
@@ -446,9 +455,11 @@ impl HudAnchor {
         let cos_t = tilt.cos();
         let sin_t = tilt.sin();
 
-        let up = [-fwd.0 * sin_t, cos_t, -fwd.2 * sin_t];
+        // Up vector: tilted backwards (+fwd) into the scene
+        let up = [fwd.0 * sin_t, cos_t, fwd.2 * sin_t];
 
-        let normal = [fwd.0 * cos_t, sin_t, fwd.2 * cos_t];
+        // Normal vector: points upwards (+Y) and towards user (-fwd)
+        let normal = [-fwd.0 * cos_t, sin_t, -fwd.2 * cos_t];
 
         // Column-major affine matrix [right, up, normal, center]
         let model = [
@@ -464,6 +475,13 @@ impl HudAnchor {
             model,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct GrabState {
+    source_index: u32,
+    initial_ctrl_pos: [f32; 3],
+    initial_anchor_center: [f32; 3],
 }
 
 type XrFrameClosure = Rc<RefCell<Option<Closure<dyn FnMut(f64, XrFrame)>>>>;
@@ -484,9 +502,12 @@ fn setup_xr_render_loop(
 
     let mut last_trigger_pressed = false;
     let mut hud_anchor: Option<HudAnchor> = None;
+    let mut grab_state: Option<GrabState> = None;
+    let mut frame_count: u64 = 0;
     let session_loop = session.clone();
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |_time: f64, frame: XrFrame| {
+        frame_count = frame_count.wrapping_add(1);
         let pose: Option<XrViewerPose> = frame.get_viewer_pose(&ref_space);
 
         // Lazily anchor the HUD to the user's initial head pose
@@ -501,6 +522,17 @@ fn setup_xr_render_loop(
 
         // Keep driving WebGPU console redraws even when window RAF is backgrounded
         let _ = proxy.send_event(());
+
+        // Heartbeat log every ~2 seconds (144 frames) to confirm texture pipeline on remote relay
+        if frame_count % 144 == 1 {
+            let (ax, ay, az) = hud_anchor
+                .map(|a| (a.center[0], a.center[1], a.center[2]))
+                .unwrap_or((0.0, 0.0, 0.0));
+            web_sys::console::log_1(&format!(
+                "WebXR HUD frame {frame_count}: canvas {}x{}, anchor at ({ax:.2}, {ay:.2}, {az:.2})",
+                canvas.width(), canvas.height()
+            ).into());
+        }
 
         // Process controller ray intersections for Tier 1 HUD interaction
         let input_sources = session_loop.input_sources();
@@ -573,10 +605,11 @@ fn setup_xr_render_loop(
                                         y: screen_y,
                                     });
 
-                                    // Check trigger button from gamepad
+                                    // Check buttons from gamepad
                                     if let Some(gamepad) = source.gamepad() {
                                         let buttons = gamepad.buttons();
                                         if buttons.length() > 0 {
+                                            // Button 0: Trigger (Primary click)
                                             if let Ok(btn_val) =
                                                 js_sys::Reflect::get(&buttons, &0.into())
                                             {
@@ -612,18 +645,51 @@ fn setup_xr_render_loop(
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
 
-                                        // Recenter HUD on secondary button press (B / Y button: index 1 or 3)
-                                        if buttons.length() > 1 {
-                                            if let Ok(b_val) =
-                                                js_sys::Reflect::get(&buttons, &1.into())
-                                            {
-                                                let b_btn: web_sys::GamepadButton =
-                                                    b_val.unchecked_into();
-                                                if b_btn.pressed() {
-                                                    hud_anchor = None; // will re-anchor next frame
+                        // Direct hand grabbing & spatial move with Grip button (Button 1 / Squeeze)
+                        if let Some(gamepad) = source.gamepad() {
+                            let buttons = gamepad.buttons();
+                            if buttons.length() > 1 {
+                                if let Ok(grip_val) = js_sys::Reflect::get(&buttons, &1.into()) {
+                                    let grip_btn: web_sys::GamepadButton =
+                                        grip_val.unchecked_into();
+                                    let grip_pressed = grip_btn.pressed();
+
+                                    if grip_pressed {
+                                        if let Some(grab) = grab_state {
+                                            if grab.source_index == i {
+                                                // Currently dragging quad: update center in real-time
+                                                let shift_x = ox - grab.initial_ctrl_pos[0];
+                                                let shift_y = oy - grab.initial_ctrl_pos[1];
+                                                let shift_z = oz - grab.initial_ctrl_pos[2];
+
+                                                if let Some(ref mut a) = hud_anchor {
+                                                    a.center = [
+                                                        grab.initial_anchor_center[0] + shift_x,
+                                                        grab.initial_anchor_center[1] + shift_y,
+                                                        grab.initial_anchor_center[2] + shift_z,
+                                                    ];
+                                                    a.model[12] = a.center[0];
+                                                    a.model[13] = a.center[1];
+                                                    a.model[14] = a.center[2];
                                                 }
                                             }
+                                        } else if hit_cursor.is_some() {
+                                            // Grip just pressed while targeting quad: initiate grab!
+                                            grab_state = Some(GrabState {
+                                                source_index: i,
+                                                initial_ctrl_pos: [ox, oy, oz],
+                                                initial_anchor_center: anchor.center,
+                                            });
+                                        }
+                                    } else if let Some(grab) = grab_state {
+                                        if grab.source_index == i {
+                                            // Grip released: release quad and lock in place!
+                                            grab_state = None;
                                         }
                                     }
                                 }
@@ -718,29 +784,17 @@ fn draw_hud_quad(
 }
 
 fn compute_quad_mvp(proj: &[f32], view: &[f32], model: &[f32]) -> [f32; 16] {
-    // vm = view * model
     let mut vm = [0.0f32; 16];
-    for col in 0..4 {
-        for row in 0..4 {
-            let mut sum = 0.0;
-            for k in 0..4 {
-                sum += view[k * 4 + row] * model[col * 4 + k];
-            }
-            vm[col * 4 + row] = sum;
+    for c in 0..4 {
+        for r in 0..4 {
+            vm[c * 4 + r] = (0..4).map(|k| view[k * 4 + r] * model[c * 4 + k]).sum();
         }
     }
-
-    // mvp = proj * vm
     let mut mvp = [0.0f32; 16];
-    for col in 0..4 {
-        for row in 0..4 {
-            let mut sum = 0.0;
-            for k in 0..4 {
-                sum += proj[k * 4 + row] * vm[col * 4 + k];
-            }
-            mvp[col * 4 + row] = sum;
+    for c in 0..4 {
+        for r in 0..4 {
+            mvp[c * 4 + r] = (0..4).map(|k| proj[k * 4 + r] * vm[c * 4 + k]).sum();
         }
     }
-
     mvp
 }
