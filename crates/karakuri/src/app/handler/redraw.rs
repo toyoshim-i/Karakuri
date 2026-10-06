@@ -27,6 +27,16 @@ impl App {
         }
         self.frame_drawn_at = Some(now);
 
+        #[cfg(target_arch = "wasm32")]
+        {
+            static GPU_FRAME_COUNT: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(0);
+            let count = GPU_FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if count % 120 == 1 {
+                println!("Karakuri WebGPU frame {count} rendered");
+            }
+        }
+
         // Capture frame start clock to compute total frame period including swapchain wait ([`Cost::period`]).
         let period = self.costs.tick(now);
         // Process client model requests and save completions before window operations so faulted windows still respond.
@@ -342,7 +352,14 @@ impl App {
         // -- the egui pass -------------------------------------
         let started = Instant::now();
         let (allocs, bytes) = counted();
-        let input = gfx.egui.take_egui_input(&gfx.window);
+        let mut input = gfx.egui.take_egui_input(&gfx.window);
+        let ppp = gfx.egui.egui_ctx().pixels_per_point();
+        let logical_w = gfx.config.width as f32 / ppp;
+        let logical_h = gfx.config.height as f32 / ppp;
+        input.screen_rect = Some(karakuri_console::egui::Rect::from_min_size(
+            karakuri_console::egui::pos2(0.0, 0.0),
+            karakuri_console::egui::vec2(logical_w, logical_h),
+        ));
         let panel = &mut self.readout.panel;
         let view = &mut self.readout.view;
         view.sync_theme(gfx.egui.egui_ctx().system_theme());

@@ -227,6 +227,17 @@ impl WebApp {
             let proxy = xr_proxy_for_hook.clone();
             let pending_active = Rc::clone(&pending_active_clone);
 
+            // If session is already active and WebXR button is clicked again, exit VR
+            if xr_state.borrow().is_active {
+                log::info!(
+                    "Karakuri Web: Operator clicked WebXR button while in VR - ending session"
+                );
+                xr_state.borrow_mut().end_session();
+                *pending_active.borrow_mut() = Some(false);
+                let _ = proxy.send_event(());
+                return;
+            }
+
             if on {
                 let dom_window = web_sys::window().expect("window");
                 let document = dom_window.document().expect("document");
@@ -236,27 +247,40 @@ impl WebApp {
                     .dyn_into::<web_sys::HtmlCanvasElement>()
                     .expect("HtmlCanvasElement");
 
-                let pointer_sink = xr_state.borrow().pending_pointer_events.clone();
+                let xr_state_for_start = xr_state.clone();
+                let pending_active_for_start = pending_active.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    match crate::webxr::start_webxr_session(canvas, pointer_sink, proxy.clone())
-                        .await
+                    match crate::webxr::start_webxr_session(
+                        canvas.clone(),
+                        xr_state_for_start.clone(),
+                        pending_active_for_start.clone(),
+                        proxy.clone(),
+                    )
+                    .await
                     {
-                        Ok(_session) => {
+                        Ok(session) => {
                             log::info!("Karakuri Web: WebXR immersive-vr session started");
-                            xr_state.borrow_mut().is_active = true;
-                            *pending_active.borrow_mut() = Some(true);
+                            // Expand console canvas to FHD (1920x1080) for roomy hand HUD
+                            canvas.set_width(1920);
+                            canvas.set_height(1080);
+                            let _ = canvas.style().set_property("width", "1920px");
+                            let _ = canvas.style().set_property("height", "1080px");
+                            xr_state_for_start.borrow_mut().session = Some(session);
+                            xr_state_for_start.borrow_mut().is_active = true;
+                            *pending_active_for_start.borrow_mut() = Some(true);
                             let _ = proxy.send_event(());
                         }
                         Err(e) => {
                             log::warn!("Karakuri Web: Failed to start WebXR session: {e}");
-                            xr_state.borrow_mut().is_active = false;
-                            *pending_active.borrow_mut() = Some(false);
+                            xr_state_for_start.borrow_mut().is_active = false;
+                            xr_state_for_start.borrow_mut().session = None;
+                            *pending_active_for_start.borrow_mut() = Some(false);
                             let _ = proxy.send_event(());
                         }
                     }
                 });
             } else {
-                xr_state.borrow_mut().is_active = false;
+                xr_state.borrow_mut().end_session();
                 *pending_active.borrow_mut() = Some(false);
                 let _ = proxy.send_event(());
             }
@@ -417,6 +441,42 @@ impl ApplicationHandler<()> for WebApp {
         if let Some(active) = self.pending_webxr_active.borrow_mut().take() {
             self.app.set_plugin_override(true, Some("WebXR"), active);
             if let Some(ref window) = self.window {
+                let dom_window = web_sys::window().expect("window");
+                let target_size = if active {
+                    winit::dpi::PhysicalSize::new(1920, 1080)
+                } else {
+                    let dpr = dom_window.device_pixel_ratio();
+                    let logical_w = dom_window
+                        .inner_width()
+                        .ok()
+                        .and_then(|w| w.as_f64())
+                        .unwrap_or(1440.0);
+                    let logical_h = dom_window
+                        .inner_height()
+                        .ok()
+                        .and_then(|h| h.as_f64())
+                        .unwrap_or(900.0);
+                    let document = dom_window.document().expect("document");
+                    if let Some(canvas) = document
+                        .get_element_by_id("karakuri-canvas")
+                        .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+                    {
+                        canvas.set_width((logical_w * dpr) as u32);
+                        canvas.set_height((logical_h * dpr) as u32);
+                        let _ = canvas.style().set_property("width", "100%");
+                        let _ = canvas.style().set_property("height", "100%");
+                    }
+                    winit::dpi::PhysicalSize::new(
+                        (logical_w * dpr) as u32,
+                        (logical_h * dpr) as u32,
+                    )
+                };
+                let _ = window.request_inner_size(target_size);
+                self.app.on_window_event(
+                    _event_loop,
+                    window.id(),
+                    WindowEvent::Resized(target_size),
+                );
                 window.request_redraw();
             }
         }
@@ -424,7 +484,8 @@ impl ApplicationHandler<()> for WebApp {
         // Keep driving WebGPU rendering while WebXR session is active
         if self.webxr_state.borrow().is_active {
             if let Some(ref window) = self.window {
-                window.request_redraw();
+                self.app
+                    .on_window_event(_event_loop, window.id(), WindowEvent::RedrawRequested);
             }
         }
     }
