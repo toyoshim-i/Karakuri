@@ -184,8 +184,12 @@ impl App {
                 caps.formats
             )),
         };
+        let mut usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
+        if caps.usages.contains(wgpu::TextureUsages::COPY_SRC) {
+            usage |= wgpu::TextureUsages::COPY_SRC;
+        }
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage,
             format,
             color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width.max(1),
