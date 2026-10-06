@@ -33,13 +33,8 @@ pub async fn check_webxr_support() -> bool {
         .unwrap_or(false)
 }
 
-/// Requests and initializes a WebXR `immersive-vr` session.
-pub async fn start_webxr_session(
-    main_canvas: HtmlCanvasElement,
-    xr_state: Rc<RefCell<WebXrState>>,
-    pending_active: Rc<RefCell<Option<bool>>>,
-    proxy: EventLoopProxy<()>,
-) -> Result<XrSession, String> {
+/// Synchronously initiates an `immersive-vr` session request within the user gesture event context.
+pub fn request_immersive_vr_session() -> Result<js_sys::Promise, String> {
     let window = web_sys::window().ok_or("No global window")?;
     let xr = window.navigator().xr();
 
@@ -49,8 +44,20 @@ pub async fn start_webxr_session(
     let has_xrgpu = js_sys::Reflect::has(&window, &"XRGPUBinding".into()).unwrap_or(false);
     web_sys::console::log_1(&format!("WebXR diagnostic: window.XRGPUBinding = {has_xrgpu}").into());
 
-    let session_promise =
-        xr.request_session_with_options(XrSessionMode::ImmersiveVr, &session_init);
+    Ok(xr
+        .request_session_with_options(XrSessionMode::ImmersiveVr, &session_init)
+        .unchecked_into())
+}
+
+/// Initializes an active WebXR `immersive-vr` session from the requested promise.
+pub async fn start_webxr_session(
+    session_promise: js_sys::Promise,
+    main_canvas: HtmlCanvasElement,
+    xr_state: Rc<RefCell<WebXrState>>,
+    pending_active: Rc<RefCell<Option<bool>>>,
+    proxy: EventLoopProxy<()>,
+) -> Result<XrSession, String> {
+    let window = web_sys::window().ok_or("No global window")?;
     let session_val = wasm_bindgen_futures::JsFuture::from(session_promise)
         .await
         .map_err(|e| format!("Failed to request WebXR session: {e:?}"))?;
@@ -118,9 +125,6 @@ pub async fn start_webxr_session(
 
     let renderer = Rc::new(RefCell::new(XrQuadRenderer::new(&gl)?));
     let world_renderer = Rc::new(RefCell::new(XrWorldRenderer::new(&gl)?));
-    let world_canvas: Option<HtmlCanvasElement> = document
-        .get_element_by_id("karakuri-xr-canvas")
-        .and_then(|el| el.dyn_into::<HtmlCanvasElement>().ok());
 
     setup_xr_render_loop(
         session.clone(),
@@ -130,7 +134,6 @@ pub async fn start_webxr_session(
         renderer,
         world_renderer,
         main_canvas,
-        world_canvas,
         pointer_sink,
         current_stereo_pose,
         proxy,
@@ -150,7 +153,6 @@ fn setup_xr_render_loop(
     renderer: Rc<RefCell<XrQuadRenderer>>,
     world_renderer: Rc<RefCell<XrWorldRenderer>>,
     canvas: HtmlCanvasElement,
-    world_canvas: Option<HtmlCanvasElement>,
     pointer_sink: Rc<RefCell<Vec<WebXrPointerAction>>>,
     current_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     proxy: EventLoopProxy<()>,
@@ -397,12 +399,6 @@ fn setup_xr_render_loop(
         if let (Some(pose), Some(anchor)) = (pose, hud_anchor) {
             let views = pose.views();
             let num_views = views.length();
-
-            if let Some(ref xr_c) = world_canvas {
-                world_renderer
-                    .borrow_mut()
-                    .update_texture_from_canvas(&gl, xr_c);
-            }
 
             gl.bind_framebuffer(
                 WebGl2RenderingContext::FRAMEBUFFER,
