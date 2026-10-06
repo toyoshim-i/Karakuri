@@ -1435,6 +1435,7 @@ dependencies = [
  "karakuri-pattern",
  "karakuri-signal",
  "karakuri-store",
+ "log",
  "objc2 0.6.4",
  "objc2-io-surface",
  "objc2-metal 0.3.2",

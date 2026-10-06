@@ -140,6 +140,16 @@ impl Deck {
         slot_idx.map(|i| self.slots[i].swap.live_mut())
     }
 
+    /// Returns the viewport of the Set [`Deck::draw_stereo_eye`] would draw.
+    ///
+    /// A stereo eye target must be exactly this size: the Set's own depth,
+    /// weighted-transparency and merge targets are, and a render pass whose
+    /// attachments differ in size is a validation error.
+    pub fn stereo_viewport(&mut self, target_slot: Option<DeckSlot>) -> Option<(u32, u32)> {
+        self.active_stereo_set_mut(target_slot)
+            .map(|set| set.viewport())
+    }
+
     /// Records rasterization pass for a single stereo eye into a specified viewport.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_stereo_eye(

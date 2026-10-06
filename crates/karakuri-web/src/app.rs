@@ -387,6 +387,18 @@ impl ApplicationHandler<()> for WebApp {
             match Gpu::from_instance(instance, Some(&surface)).await {
                 Ok(gpu) => {
                     log::info!("Karakuri Web: WebGPU initialized successfully");
+                    // Validation errors otherwise go only to devtools, never
+                    // through console.log, so the remote log relay would not
+                    // see a frame the GPU refused.
+                    gpu.device
+                        .on_uncaptured_error(std::sync::Arc::new(|error: wgpu::Error| {
+                            use std::sync::atomic::{AtomicU32, Ordering};
+                            // A per-frame error would otherwise flood the relay.
+                            static SAID: AtomicU32 = AtomicU32::new(0);
+                            if SAID.fetch_add(1, Ordering::Relaxed) < 20 {
+                                log::error!("Karakuri Web: WebGPU error: {error}");
+                            }
+                        }));
                     *pending.borrow_mut() = Some((win, surface, gpu));
                     let _ = proxy.send_event(());
                 }

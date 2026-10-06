@@ -23,6 +23,8 @@ pub(crate) mod key;
 pub(crate) mod pointer;
 pub(crate) mod projector;
 pub(crate) mod redraw;
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod stereo;
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
