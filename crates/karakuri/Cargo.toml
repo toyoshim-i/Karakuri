@@ -163,5 +163,10 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Threading",
 ] }
 
+# `println!` is a no-op on wasm32-unknown-unknown; the WebXR stereo pass reports
+# through `log`, which karakuri-web routes to the browser console.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+log = "0.4"
+
 [lints]
 workspace = true

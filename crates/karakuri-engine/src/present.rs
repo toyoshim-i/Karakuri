@@ -396,6 +396,46 @@ impl Present {
         })
     }
 
+    /// Draws `bind_group`'s source stretched over `viewport` of `target`.
+    ///
+    /// Unlike [`Present::draw_with_bind_group`] this neither letterboxes nor
+    /// clears outside the viewport unless `clear` is set, so several sources
+    /// (one per stereo eye) can share one target.
+    pub fn draw_into_viewport(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &wgpu::BindGroup,
+        target: &wgpu::TextureView,
+        viewport: (f32, f32, f32, f32),
+        clear: bool,
+    ) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("present (viewport)"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: if clear {
+                        wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                    } else {
+                        wgpu::LoadOp::Load
+                    },
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        let (x, y, w, h) = viewport;
+        pass.set_viewport(x, y, w, h, 0.0, 1.0);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
     /// Draws `bind_group`'s source into `target`, letterboxed to fit `target_size`.
     pub fn draw_with_bind_group(
         &self,

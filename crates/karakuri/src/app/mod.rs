@@ -293,58 +293,20 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     pub fn attach_xr_surface(&mut self, surface: wgpu::Surface<'static>) {
         if let Some(ref mut gfx) = self.gfx {
+            // The tone-mapping present pipeline targets the sRGB picture format,
+            // while a canvas is configured with its plain format. Offering the
+            // sRGB variant as a view format lets the stereo pass view the canvas
+            // texture as sRGB; without it every present into the canvas is a
+            // pipeline/attachment format mismatch.
             let mut xr_config = gfx.config.clone();
-            xr_config.width = 1920;
-            xr_config.height = 1080;
+            xr_config.width = crate::gfx::XR_CANVAS.0;
+            xr_config.height = crate::gfx::XR_CANVAS.1;
+            xr_config.view_formats = vec![gfx.picture_format];
             surface.configure(&gfx.gpu.device, &xr_config);
             gfx.xr_surface = Some(surface);
-
-            let hdr = gfx.gpu.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("WebXR Stereo HDR Target"),
-                size: wgpu::Extent3d {
-                    width: 1920,
-                    height: 1080,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: karakuri_engine::Present::HDR_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
-            let hdr_view = hdr.create_view(&wgpu::TextureViewDescriptor::default());
-
-            let depth = gfx.gpu.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("WebXR Stereo Depth Target"),
-                size: wgpu::Extent3d {
-                    width: 1920,
-                    height: 1080,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            let depth_view = depth.create_view(&wgpu::TextureViewDescriptor::default());
-
-            let bind_group = gfx
-                .engine
-                .present
-                .create_bind_group_for(&gfx.gpu.device, &hdr_view);
-
-            gfx.stereo_target = Some(crate::gfx::StereoTarget {
-                hdr,
-                hdr_view,
-                depth,
-                depth_view,
-                bind_group,
-            });
+            // Eye targets are sized to the drawn Set, which can change; they
+            // are made on the first stereo frame (`stereo::draw_world`).
+            gfx.stereo_target = None;
         }
     }
 

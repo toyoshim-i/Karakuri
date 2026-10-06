@@ -61,15 +61,28 @@ pub(crate) struct Projector {
     pub(crate) size: (u32, u32),
 }
 
+/// Size of the side-by-side WebXR world canvas (`#karakuri-xr-canvas` in
+/// karakuri-web's index.html): the left eye fills the left half, the right eye
+/// the right half.
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-pub(crate) struct StereoTarget {
+pub(crate) const XR_CANVAS: (u32, u32) = (1920, 1080);
+
+/// One eye of the WebXR stereo world: an HDR colour target the Set draws into
+/// and the bind group the tone-mapping present pass samples it through.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) struct EyeTarget {
     #[allow(dead_code)]
     pub(crate) hdr: wgpu::Texture,
     pub(crate) hdr_view: wgpu::TextureView,
-    #[allow(dead_code)]
-    pub(crate) depth: wgpu::Texture,
-    pub(crate) depth_view: wgpu::TextureView,
     pub(crate) bind_group: wgpu::BindGroup,
+}
+
+/// Per-eye HDR targets for the WebXR stereo world, sized to the drawn Set's
+/// own viewport (see `Deck::stereo_viewport`) and rebuilt when it changes.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) struct StereoTarget {
+    pub(crate) size: (u32, u32),
+    pub(crate) eyes: [EyeTarget; 2],
 }
 
 pub(crate) struct Gfx {
