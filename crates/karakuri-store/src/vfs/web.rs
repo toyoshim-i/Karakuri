@@ -140,8 +140,8 @@ pub async fn hydrate_web_fs(fs: &Arc<MemoryFs>) {
     let mut hydrated = Vec::new();
     for item in entries.iter() {
         if let Some(obj) = js_sys::Object::try_from(&item) {
-            let path_val = js_sys::Reflect::get(&obj, &JsValue::from_str("path"));
-            let data_val = js_sys::Reflect::get(&obj, &JsValue::from_str("data"));
+            let path_val = js_sys::Reflect::get(obj, &JsValue::from_str("path"));
+            let data_val = js_sys::Reflect::get(obj, &JsValue::from_str("data"));
             if let (Ok(p), Ok(d)) = (path_val, data_val) {
                 if let Some(path_str) = p.as_string() {
                     if let Ok(uint8) = d.dyn_into::<js_sys::Uint8Array>() {
