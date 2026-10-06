@@ -366,6 +366,7 @@ impl App {
             gpu,
             surface,
             config,
+            xr_surface: None,
             picture_format,
             egui,
             renderer,
