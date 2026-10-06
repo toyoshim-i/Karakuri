@@ -44,6 +44,12 @@ pub struct WebXrState {
     pub(crate) pending_pointer_events: Rc<RefCell<Vec<WebXrPointerAction>>>,
 }
 
+impl Default for WebXrState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebXrState {
     pub fn new() -> Self {
         Self {
@@ -125,12 +131,21 @@ pub async fn start_webxr_session(
     session.update_render_state_with_state(&render_state);
 
     // Request reference space (local-floor, with fallback to local)
-    let ref_space_promise =
-        session.request_reference_space(web_sys::XrReferenceSpaceType::LocalFloor);
-    let ref_space_val = wasm_bindgen_futures::JsFuture::from(ref_space_promise)
-        .await
-        .map_err(|e| format!("Failed to get local-floor reference space: {e:?}"))?;
-    let ref_space: XrReferenceSpace = ref_space_val.unchecked_into();
+    let ref_space = match wasm_bindgen_futures::JsFuture::from(
+        session.request_reference_space(web_sys::XrReferenceSpaceType::LocalFloor),
+    )
+    .await
+    {
+        Ok(val) => val.unchecked_into::<XrReferenceSpace>(),
+        Err(_) => {
+            let fallback = wasm_bindgen_futures::JsFuture::from(
+                session.request_reference_space(web_sys::XrReferenceSpaceType::Local),
+            )
+            .await
+            .map_err(|e| format!("Failed to get reference space: {e:?}"))?;
+            fallback.unchecked_into::<XrReferenceSpace>()
+        }
+    };
 
     // Compile quad rendering shader pipeline
     let renderer = Rc::new(RefCell::new(XrQuadRenderer::new(&gl)?));
@@ -160,6 +175,11 @@ struct XrQuadRenderer {
     program: WebGlProgram,
     texture: WebGlTexture,
     u_mvp: web_sys::WebGlUniformLocation,
+    u_cursor: web_sys::WebGlUniformLocation,
+    u_cursor_active: web_sys::WebGlUniformLocation,
+    _vertex_buffer: web_sys::WebGlBuffer,
+    _index_buffer: web_sys::WebGlBuffer,
+    vao: web_sys::WebGlVertexArrayObject,
 }
 
 impl XrQuadRenderer {
@@ -179,9 +199,41 @@ impl XrQuadRenderer {
         precision highp float;
         in vec2 v_uv;
         uniform sampler2D u_texture;
+        uniform vec2 u_cursor;
+        uniform int u_cursor_active;
         out vec4 frag_color;
+
         void main() {
-            frag_color = texture(u_texture, v_uv);
+            // Bezel frame styling
+            vec2 b_dist = min(v_uv, 1.0 - v_uv);
+            float border_w = 0.008;
+            float is_border = 1.0 - step(border_w, min(b_dist.x, b_dist.y));
+
+            // Sample console texture (flip Y so canvas top matches quad top)
+            vec2 tex_uv = vec2(v_uv.x, 1.0 - v_uv.y);
+            vec4 tex_sample = texture(u_texture, tex_uv);
+
+            // Dark slate console base background
+            vec3 panel_base = vec3(0.06, 0.07, 0.10);
+            vec3 screen_rgb = mix(panel_base, tex_sample.rgb, tex_sample.a);
+
+            // Glowing cyan/mint cyberpunk bezel
+            vec3 bezel_color = vec3(0.0, 0.94, 0.82);
+            vec3 final_rgb = mix(screen_rgb, bezel_color, is_border);
+
+            // Controller laser hit reticle
+            if (u_cursor_active == 1) {
+                vec2 diff = v_uv - u_cursor;
+                diff.x *= (0.72 / 0.42); // Aspect correction
+                float dist = length(diff);
+                float ring = smoothstep(0.015, 0.012, dist) * smoothstep(0.008, 0.011, dist);
+                float dot = smoothstep(0.005, 0.003, dist);
+                vec3 reticle_color = vec3(1.0, 0.2, 0.55);
+                final_rgb = mix(final_rgb, reticle_color, max(ring, dot));
+            }
+
+            // WebXR MUST have alpha = 1.0 to prevent compositor transparency
+            frag_color = vec4(final_rgb, 1.0);
         }
         "#;
 
@@ -203,8 +255,14 @@ impl XrQuadRenderer {
         let u_mvp = gl
             .get_uniform_location(&program, "u_mvp")
             .ok_or("No u_mvp uniform")?;
-        let texture = gl.create_texture().ok_or("Failed to create texture")?;
+        let u_cursor = gl
+            .get_uniform_location(&program, "u_cursor")
+            .ok_or("No u_cursor uniform")?;
+        let u_cursor_active = gl
+            .get_uniform_location(&program, "u_cursor_active")
+            .ok_or("No u_cursor_active uniform")?;
 
+        let texture = gl.create_texture().ok_or("Failed to create texture")?;
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
         gl.tex_parameteri(
             WebGl2RenderingContext::TEXTURE_2D,
@@ -227,10 +285,67 @@ impl XrQuadRenderer {
             WebGl2RenderingContext::CLAMP_TO_EDGE as i32,
         );
 
+        // Preallocate static geometry VAO, VBO, IBO once
+        let hw = QUAD_WIDTH * 0.5;
+        let hh = QUAD_HEIGHT * 0.5;
+        let vertices: [f32; 20] = [
+            -hw, -hh, 0.0, 0.0, 0.0, // bottom-left
+            hw, -hh, 0.0, 1.0, 0.0, // bottom-right
+            hw, hh, 0.0, 1.0, 1.0, // top-right
+            -hw, hh, 0.0, 0.0, 1.0, // top-left
+        ];
+        let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
+
+        let vao = gl
+            .create_vertex_array()
+            .ok_or("Failed to create vertex array")?;
+        gl.bind_vertex_array(Some(&vao));
+
+        let vertex_buffer = gl.create_buffer().ok_or("Failed to create vertex buffer")?;
+        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
+        unsafe {
+            let view = js_sys::Float32Array::view(&vertices);
+            gl.buffer_data_with_array_buffer_view(
+                WebGl2RenderingContext::ARRAY_BUFFER,
+                &view,
+                WebGl2RenderingContext::STATIC_DRAW,
+            );
+        }
+
+        let index_buffer = gl.create_buffer().ok_or("Failed to create index buffer")?;
+        gl.bind_buffer(
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+            Some(&index_buffer),
+        );
+        unsafe {
+            let view = js_sys::Uint16Array::view(&indices);
+            gl.buffer_data_with_array_buffer_view(
+                WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+                &view,
+                WebGl2RenderingContext::STATIC_DRAW,
+            );
+        }
+
+        let a_pos = gl.get_attrib_location(&program, "a_position") as u32;
+        let a_uv = gl.get_attrib_location(&program, "a_uv") as u32;
+
+        gl.enable_vertex_attrib_array(a_pos);
+        gl.vertex_attrib_pointer_with_i32(a_pos, 3, WebGl2RenderingContext::FLOAT, false, 20, 0);
+
+        gl.enable_vertex_attrib_array(a_uv);
+        gl.vertex_attrib_pointer_with_i32(a_uv, 2, WebGl2RenderingContext::FLOAT, false, 20, 12);
+
+        gl.bind_vertex_array(None);
+
         Ok(Self {
             program,
             texture,
             u_mvp,
+            u_cursor,
+            u_cursor_active,
+            _vertex_buffer: vertex_buffer,
+            _index_buffer: index_buffer,
+            vao,
         })
     }
 
@@ -271,15 +386,18 @@ fn compile_shader(
 }
 
 /// 30-inch Deck HUD model parameters in meters:
-/// - Width: 0.70m, Height: 0.40m
-/// - Position: Center at (0.0, 1.0, -0.70) in local-floor coordinates
-/// - Tilt: Tilted up towards user by 35 degrees (-35 deg pitch around X axis)
-const QUAD_WIDTH: f32 = 0.70;
-const QUAD_HEIGHT: f32 = 0.40;
-const QUAD_POS_Y: f32 = 1.00;
-const QUAD_POS_Z: f32 = -0.70;
-const QUAD_TILT_RAD: f32 = -35.0 * std::f32::consts::PI / 180.0;
+/// - Width: 0.72m, Height: 0.42m (~30" 16:9 widescreen)
+/// - Position: Center at (0.0, 1.15, -0.75) in local-floor coordinates
+/// - Tilt: Tilted up towards user by 28 degrees (-28 deg pitch around X axis)
+const QUAD_WIDTH: f32 = 0.72;
+const QUAD_HEIGHT: f32 = 0.42;
+const QUAD_POS_Y: f32 = 1.15;
+const QUAD_POS_Z: f32 = -0.75;
+const QUAD_TILT_RAD: f32 = -28.0 * std::f32::consts::PI / 180.0;
 
+type XrFrameClosure = Rc<RefCell<Option<Closure<dyn FnMut(f64, XrFrame)>>>>;
+
+#[allow(clippy::too_many_arguments)]
 fn setup_xr_render_loop(
     session: XrSession,
     ref_space: XrReferenceSpace,
@@ -290,7 +408,7 @@ fn setup_xr_render_loop(
     pointer_sink: Rc<RefCell<Vec<WebXrPointerAction>>>,
     proxy: EventLoopProxy<()>,
 ) {
-    let f: Rc<RefCell<Option<Closure<dyn FnMut(f64, XrFrame)>>>> = Rc::new(RefCell::new(None));
+    let f: XrFrameClosure = Rc::new(RefCell::new(None));
     let g = f.clone();
 
     let mut last_trigger_pressed = false;
@@ -302,11 +420,15 @@ fn setup_xr_render_loop(
         // Upload latest egui console canvas frame to WebGL texture
         renderer.borrow().update_texture(&gl, &canvas);
 
+        // Keep driving WebGPU console redraws even when window RAF is backgrounded
+        let _ = proxy.send_event(());
+
         // Process controller ray intersections for Tier 1 HUD interaction
         let input_sources = session_loop.input_sources();
         let num_sources = input_sources.length();
         let canvas_w = canvas.width() as f64;
         let canvas_h = canvas.height() as f64;
+        let mut hit_cursor: Option<(f32, f32)> = None;
 
         for i in 0..num_sources {
             if let Some(source) = input_sources.get(i) {
@@ -331,7 +453,6 @@ fn setup_xr_render_loop(
                     let dz = -(1.0 - 2.0 * (qx * qx + qy * qy));
 
                     // Plane equation for tilted quad:
-                    // Normal N = (0, cos(tilt), -sin(tilt))
                     let cos_t = QUAD_TILT_RAD.cos();
                     let sin_t = QUAD_TILT_RAD.sin();
                     let nx = 0.0f32;
@@ -342,19 +463,17 @@ fn setup_xr_render_loop(
                     if denom.abs() > 1e-4 {
                         let t = ((0.0 - ox) * nx + (QUAD_POS_Y - oy) * ny + (QUAD_POS_Z - oz) * nz)
                             / denom;
-                        if t > 0.05 && t < 3.0 {
+                        if t > 0.05 && t < 3.5 {
                             // Hit point in world coords
                             let hx = ox + t * dx;
                             let hy = oy + t * dy;
                             let hz = oz + t * dz;
 
                             // Transform hit point to quad local UV space
-                            // Shift by quad center
                             let rel_x = hx;
                             let rel_y = hy - QUAD_POS_Y;
                             let rel_z = hz - QUAD_POS_Z;
 
-                            // Rotate back around X axis by -tilt
                             let local_x = rel_x;
                             let local_y = rel_y * cos_t - rel_z * (-sin_t);
 
@@ -362,6 +481,7 @@ fn setup_xr_render_loop(
                             let v = (local_y / QUAD_HEIGHT) + 0.5;
 
                             if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
+                                hit_cursor = Some((u, v));
                                 let screen_x = u as f64 * canvas_w;
                                 let screen_y = (1.0 - v as f64) * canvas_h;
 
@@ -411,7 +531,6 @@ fn setup_xr_render_loop(
                                         }
                                     }
                                 }
-                                let _ = proxy.send_event(());
                             }
                         }
                     }
@@ -430,6 +549,12 @@ fn setup_xr_render_loop(
             );
             gl.enable(WebGl2RenderingContext::DEPTH_TEST);
 
+            // Clear color to deep cosmic navy with alpha = 1.0 to avoid compositor blacking
+            gl.clear_color(0.02, 0.02, 0.05, 1.0);
+            gl.clear(
+                WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
+            );
+
             for v in 0..num_views {
                 let view: XrView = views.get(v).unchecked_into();
                 let viewport = layer.get_viewport(&view).unwrap();
@@ -442,8 +567,7 @@ fn setup_xr_render_loop(
                 );
 
                 // Quad mesh rendering for Tier 1 HUD Console
-                // Render quad into view with calculated MVP matrix
-                draw_hud_quad(&gl, &renderer.borrow(), &view);
+                draw_hud_quad(&gl, &renderer.borrow(), &view, hit_cursor);
             }
         }
 
@@ -461,7 +585,12 @@ fn setup_xr_render_loop(
     }
 }
 
-fn draw_hud_quad(gl: &WebGl2RenderingContext, renderer: &XrQuadRenderer, view: &XrView) {
+fn draw_hud_quad(
+    gl: &WebGl2RenderingContext,
+    renderer: &XrQuadRenderer,
+    view: &XrView,
+    hit_cursor: Option<(f32, f32)>,
+) {
     gl.use_program(Some(&renderer.program));
 
     // Construct Model-View-Projection matrix
@@ -469,60 +598,26 @@ fn draw_hud_quad(gl: &WebGl2RenderingContext, renderer: &XrQuadRenderer, view: &
     let view_inv = view.transform().inverse();
     let view_matrix = view_inv.matrix();
 
-    // Multiply Projection * View * Model in simple column-major float array
     let mvp = compute_quad_mvp(&proj, &view_matrix);
     gl.uniform_matrix4fv_with_f32_array(Some(&renderer.u_mvp), false, &mvp);
 
-    // Quad geometry: 2 triangles, 4 vertices
-    let hw = QUAD_WIDTH * 0.5;
-    let hh = QUAD_HEIGHT * 0.5;
-    let vertices: [f32; 20] = [
-        // x, y, z, u, v
-        -hw, -hh, 0.0, 0.0, 0.0, hw, -hh, 0.0, 1.0, 0.0, hw, hh, 0.0, 1.0, 1.0, -hw, hh, 0.0, 0.0,
-        1.0,
-    ];
-    let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
-
-    let buffer = gl.create_buffer();
-    gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, buffer.as_ref());
-    unsafe {
-        let view = js_sys::Float32Array::view(&vertices);
-        gl.buffer_data_with_array_buffer_view(
-            WebGl2RenderingContext::ARRAY_BUFFER,
-            &view,
-            WebGl2RenderingContext::STATIC_DRAW,
-        );
+    // Update cursor reticle uniforms
+    if let Some((u, v)) = hit_cursor {
+        gl.uniform2f(Some(&renderer.u_cursor), u, v);
+        gl.uniform1i(Some(&renderer.u_cursor_active), 1);
+    } else {
+        gl.uniform1i(Some(&renderer.u_cursor_active), 0);
     }
 
-    let index_buffer = gl.create_buffer();
-    gl.bind_buffer(
-        WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
-        index_buffer.as_ref(),
-    );
-    unsafe {
-        let view = js_sys::Uint16Array::view(&indices);
-        gl.buffer_data_with_array_buffer_view(
-            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
-            &view,
-            WebGl2RenderingContext::STATIC_DRAW,
-        );
-    }
-
-    let a_pos = gl.get_attrib_location(&renderer.program, "a_position") as u32;
-    let a_uv = gl.get_attrib_location(&renderer.program, "a_uv") as u32;
-
-    gl.enable_vertex_attrib_array(a_pos);
-    gl.vertex_attrib_pointer_with_i32(a_pos, 3, WebGl2RenderingContext::FLOAT, false, 20, 0);
-
-    gl.enable_vertex_attrib_array(a_uv);
-    gl.vertex_attrib_pointer_with_i32(a_uv, 2, WebGl2RenderingContext::FLOAT, false, 20, 12);
-
+    // Bind static VAO preallocated during renderer initialization
+    gl.bind_vertex_array(Some(&renderer.vao));
     gl.draw_elements_with_i32(
         WebGl2RenderingContext::TRIANGLES,
         6,
         WebGl2RenderingContext::UNSIGNED_SHORT,
         0,
     );
+    gl.bind_vertex_array(None);
 }
 
 fn compute_quad_mvp(proj: &[f32], view: &[f32]) -> [f32; 16] {
