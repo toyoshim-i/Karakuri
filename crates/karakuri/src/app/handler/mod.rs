@@ -366,6 +366,7 @@ impl App {
             gpu,
             surface,
             config,
+            xr_surface: None,
             picture_format,
             egui,
             renderer,
@@ -439,6 +440,10 @@ impl App {
                     gfx.config.width = size.width.max(1);
                     gfx.config.height = size.height.max(1);
                     gfx.surface.configure(&gfx.gpu.device, &gfx.config);
+                    #[cfg(target_arch = "wasm32")]
+                    if let Some(ref xr_surf) = gfx.xr_surface {
+                        xr_surf.configure(&gfx.gpu.device, &gfx.config);
+                    }
                     let (w, h) = (
                         size.width as f32 / self.scale as f32,
                         size.height as f32 / self.scale as f32,
