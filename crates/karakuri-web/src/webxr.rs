@@ -215,11 +215,19 @@ impl XrQuadRenderer {
 
             // Dark slate console base background
             vec3 panel_base = vec3(0.06, 0.07, 0.10);
-            vec3 screen_rgb = mix(panel_base, tex_sample.rgb, tex_sample.a);
+
+            // Robust content calculation: show texel colors even if alpha channel is zero
+            vec3 content_rgb = panel_base;
+            float lum = dot(tex_sample.rgb, vec3(0.299, 0.587, 0.114));
+            if (tex_sample.a > 0.05) {
+                content_rgb = mix(panel_base, tex_sample.rgb, tex_sample.a);
+            } else if (lum > 0.01) {
+                content_rgb = tex_sample.rgb;
+            }
 
             // Glowing cyan/mint cyberpunk bezel
             vec3 bezel_color = vec3(0.0, 0.94, 0.82);
-            vec3 final_rgb = mix(screen_rgb, bezel_color, is_border);
+            vec3 final_rgb = mix(content_rgb, bezel_color, is_border);
 
             // Controller laser hit reticle
             if (u_cursor_active == 1) {
@@ -351,14 +359,16 @@ impl XrQuadRenderer {
 
     fn update_texture(&self, gl: &WebGl2RenderingContext, canvas: &HtmlCanvasElement) {
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&self.texture));
-        let _ = gl.tex_image_2d_with_u32_and_u32_and_html_canvas_element(
+        if let Err(e) = gl.tex_image_2d_with_u32_and_u32_and_html_canvas_element(
             WebGl2RenderingContext::TEXTURE_2D,
             0,
             WebGl2RenderingContext::RGBA as i32,
             WebGl2RenderingContext::RGBA,
             WebGl2RenderingContext::UNSIGNED_BYTE,
             canvas,
-        );
+        ) {
+            web_sys::console::warn_2(&"Karakuri WebXR tex_image_2d failed:".into(), &e);
+        }
     }
 }
 
@@ -385,15 +395,76 @@ fn compile_shader(
     }
 }
 
-/// 30-inch Deck HUD model parameters in meters:
-/// - Width: 0.72m, Height: 0.42m (~30" 16:9 widescreen)
-/// - Position: Center at (0.0, 1.15, -0.75) in local-floor coordinates
-/// - Tilt: Tilted up towards user by 28 degrees (-28 deg pitch around X axis)
+/// 30-inch Deck HUD model dimensions in meters (~30" 16:9 widescreen)
 const QUAD_WIDTH: f32 = 0.72;
 const QUAD_HEIGHT: f32 = 0.42;
-const QUAD_POS_Y: f32 = 1.15;
-const QUAD_POS_Z: f32 = -0.75;
-const QUAD_TILT_RAD: f32 = -28.0 * std::f32::consts::PI / 180.0;
+
+#[derive(Clone, Copy, Debug)]
+struct HudAnchor {
+    center: [f32; 3],
+    normal: [f32; 3],
+    right: [f32; 3],
+    up: [f32; 3],
+    model: [f32; 16],
+}
+
+impl HudAnchor {
+    /// Constructs a spatial HUD anchor positioned relative to the user's initial viewer pose:
+    /// - Front distance: ~0.65m in the horizontal gaze direction
+    /// - Height offset: -0.38m below the eyes (natural lap/desk/hand height whether sitting or standing)
+    /// - Tilt: 30° upwards facing the user's eyes
+    fn from_viewer_pose(pose: &XrViewerPose) -> Self {
+        let transform = pose.transform();
+        let pos = transform.position();
+        let orient = transform.orientation();
+
+        let (hx, hy, hz) = (pos.x() as f32, pos.y() as f32, pos.z() as f32);
+        let (qx, qy, qz, qw) = (
+            orient.x() as f32,
+            orient.y() as f32,
+            orient.z() as f32,
+            orient.w() as f32,
+        );
+
+        // Forward vector in world coordinates (ignoring head pitch/roll)
+        let fwd_x = 2.0 * (qx * qz + qw * qy);
+        let fwd_z = -(1.0 - 2.0 * (qx * qx + qy * qy));
+        let mut fwd_len = (fwd_x * fwd_x + fwd_z * fwd_z).sqrt();
+        if fwd_len < 1e-4 {
+            fwd_len = 1.0;
+        }
+        let fwd = (fwd_x / fwd_len, 0.0, fwd_z / fwd_len);
+
+        // Horizontal right vector: perpendicular to horizontal forward
+        let right = [-fwd.2, 0.0, fwd.0];
+
+        // Hand-level console center
+        let center = [hx + fwd.0 * 0.65, hy - 0.38, hz + fwd.2 * 0.65];
+
+        // 30 degrees tilt up towards user's eyes
+        let tilt: f32 = 30.0 * std::f32::consts::PI / 180.0;
+        let cos_t = tilt.cos();
+        let sin_t = tilt.sin();
+
+        let up = [-fwd.0 * sin_t, cos_t, -fwd.2 * sin_t];
+
+        let normal = [fwd.0 * cos_t, sin_t, fwd.2 * cos_t];
+
+        // Column-major affine matrix [right, up, normal, center]
+        let model = [
+            right[0], right[1], right[2], 0.0, up[0], up[1], up[2], 0.0, normal[0], normal[1],
+            normal[2], 0.0, center[0], center[1], center[2], 1.0,
+        ];
+
+        Self {
+            center,
+            normal,
+            right,
+            up,
+            model,
+        }
+    }
+}
 
 type XrFrameClosure = Rc<RefCell<Option<Closure<dyn FnMut(f64, XrFrame)>>>>;
 
@@ -412,10 +483,18 @@ fn setup_xr_render_loop(
     let g = f.clone();
 
     let mut last_trigger_pressed = false;
+    let mut hud_anchor: Option<HudAnchor> = None;
     let session_loop = session.clone();
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |_time: f64, frame: XrFrame| {
         let pose: Option<XrViewerPose> = frame.get_viewer_pose(&ref_space);
+
+        // Lazily anchor the HUD to the user's initial head pose
+        if hud_anchor.is_none() {
+            if let Some(ref p) = pose {
+                hud_anchor = Some(HudAnchor::from_viewer_pose(p));
+            }
+        }
 
         // Upload latest egui console canvas frame to WebGL texture
         renderer.borrow().update_texture(&gl, &canvas);
@@ -430,102 +509,119 @@ fn setup_xr_render_loop(
         let canvas_h = canvas.height() as f64;
         let mut hit_cursor: Option<(f32, f32)> = None;
 
-        for i in 0..num_sources {
-            if let Some(source) = input_sources.get(i) {
-                let source: XrInputSource = source.unchecked_into();
-                let target_ray_space = source.target_ray_space();
-                if let Some(ray_pose) = frame.get_pose(&target_ray_space, &ref_space) {
-                    let transform = ray_pose.transform();
-                    let pos = transform.position();
-                    let orient = transform.orientation();
+        if let Some(anchor) = hud_anchor {
+            for i in 0..num_sources {
+                if let Some(source) = input_sources.get(i) {
+                    let source: XrInputSource = source.unchecked_into();
+                    let target_ray_space = source.target_ray_space();
+                    if let Some(ray_pose) = frame.get_pose(&target_ray_space, &ref_space) {
+                        let transform = ray_pose.transform();
+                        let pos = transform.position();
+                        let orient = transform.orientation();
 
-                    // Compute ray origin and direction vector from orientation quaternion
-                    let (ox, oy, oz) = (pos.x() as f32, pos.y() as f32, pos.z() as f32);
-                    let (qx, qy, qz, qw) = (
-                        orient.x() as f32,
-                        orient.y() as f32,
-                        orient.z() as f32,
-                        orient.w() as f32,
-                    );
-                    // Forward direction vector (0, 0, -1) rotated by quaternion
-                    let dx = 2.0 * (qx * qz - qw * qy);
-                    let dy = 2.0 * (qy * qz + qw * qx);
-                    let dz = -(1.0 - 2.0 * (qx * qx + qy * qy));
+                        // Compute ray origin and direction vector from orientation quaternion
+                        let (ox, oy, oz) = (pos.x() as f32, pos.y() as f32, pos.z() as f32);
+                        let (qx, qy, qz, qw) = (
+                            orient.x() as f32,
+                            orient.y() as f32,
+                            orient.z() as f32,
+                            orient.w() as f32,
+                        );
+                        // Forward direction vector (0, 0, -1) rotated by quaternion
+                        let dx = 2.0 * (qx * qz - qw * qy);
+                        let dy = 2.0 * (qy * qz + qw * qx);
+                        let dz = -(1.0 - 2.0 * (qx * qx + qy * qy));
 
-                    // Plane equation for tilted quad:
-                    let cos_t = QUAD_TILT_RAD.cos();
-                    let sin_t = QUAD_TILT_RAD.sin();
-                    let nx = 0.0f32;
-                    let ny = cos_t;
-                    let nz = -sin_t;
+                        // Plane equation: (P - Center) . Normal = 0
+                        let nx = anchor.normal[0];
+                        let ny = anchor.normal[1];
+                        let nz = anchor.normal[2];
 
-                    let denom = nx * dx + ny * dy + nz * dz;
-                    if denom.abs() > 1e-4 {
-                        let t = ((0.0 - ox) * nx + (QUAD_POS_Y - oy) * ny + (QUAD_POS_Z - oz) * nz)
-                            / denom;
-                        if t > 0.05 && t < 3.5 {
-                            // Hit point in world coords
-                            let hx = ox + t * dx;
-                            let hy = oy + t * dy;
-                            let hz = oz + t * dz;
+                        let denom = nx * dx + ny * dy + nz * dz;
+                        if denom.abs() > 1e-4 {
+                            let t = ((anchor.center[0] - ox) * nx
+                                + (anchor.center[1] - oy) * ny
+                                + (anchor.center[2] - oz) * nz)
+                                / denom;
+                            if t > 0.05 && t < 3.5 {
+                                let hx = ox + t * dx;
+                                let hy = oy + t * dy;
+                                let hz = oz + t * dz;
 
-                            // Transform hit point to quad local UV space
-                            let rel_x = hx;
-                            let rel_y = hy - QUAD_POS_Y;
-                            let rel_z = hz - QUAD_POS_Z;
+                                let rel_x = hx - anchor.center[0];
+                                let rel_y = hy - anchor.center[1];
+                                let rel_z = hz - anchor.center[2];
 
-                            let local_x = rel_x;
-                            let local_y = rel_y * cos_t - rel_z * (-sin_t);
+                                let local_x = rel_x * anchor.right[0]
+                                    + rel_y * anchor.right[1]
+                                    + rel_z * anchor.right[2];
+                                let local_y = rel_x * anchor.up[0]
+                                    + rel_y * anchor.up[1]
+                                    + rel_z * anchor.up[2];
 
-                            let u = (local_x / QUAD_WIDTH) + 0.5;
-                            let v = (local_y / QUAD_HEIGHT) + 0.5;
+                                let u = (local_x / QUAD_WIDTH) + 0.5;
+                                let v = (local_y / QUAD_HEIGHT) + 0.5;
 
-                            if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
-                                hit_cursor = Some((u, v));
-                                let screen_x = u as f64 * canvas_w;
-                                let screen_y = (1.0 - v as f64) * canvas_h;
+                                if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
+                                    hit_cursor = Some((u, v));
+                                    let screen_x = u as f64 * canvas_w;
+                                    let screen_y = (1.0 - v as f64) * canvas_h;
 
-                                let mut sink = pointer_sink.borrow_mut();
-                                sink.push(WebXrPointerAction::CursorMoved {
-                                    x: screen_x,
-                                    y: screen_y,
-                                });
+                                    let mut sink = pointer_sink.borrow_mut();
+                                    sink.push(WebXrPointerAction::CursorMoved {
+                                        x: screen_x,
+                                        y: screen_y,
+                                    });
 
-                                // Check trigger button from gamepad
-                                if let Some(gamepad) = source.gamepad() {
-                                    let buttons = gamepad.buttons();
-                                    if buttons.length() > 0 {
-                                        if let Ok(btn_val) =
-                                            js_sys::Reflect::get(&buttons, &0.into())
-                                        {
-                                            let btn: web_sys::GamepadButton =
-                                                btn_val.unchecked_into();
-                                            let pressed = btn.pressed();
-                                            if pressed != last_trigger_pressed {
-                                                last_trigger_pressed = pressed;
-                                                sink.push(WebXrPointerAction::MouseInput {
-                                                    state: if pressed {
-                                                        ElementState::Pressed
-                                                    } else {
-                                                        ElementState::Released
-                                                    },
-                                                    button: MouseButton::Left,
-                                                });
+                                    // Check trigger button from gamepad
+                                    if let Some(gamepad) = source.gamepad() {
+                                        let buttons = gamepad.buttons();
+                                        if buttons.length() > 0 {
+                                            if let Ok(btn_val) =
+                                                js_sys::Reflect::get(&buttons, &0.into())
+                                            {
+                                                let btn: web_sys::GamepadButton =
+                                                    btn_val.unchecked_into();
+                                                let pressed = btn.pressed();
+                                                if pressed != last_trigger_pressed {
+                                                    last_trigger_pressed = pressed;
+                                                    sink.push(WebXrPointerAction::MouseInput {
+                                                        state: if pressed {
+                                                            ElementState::Pressed
+                                                        } else {
+                                                            ElementState::Released
+                                                        },
+                                                        button: MouseButton::Left,
+                                                    });
+                                                }
                                             }
                                         }
-                                    }
 
-                                    // Thumbstick scroll (axes 2 or 3)
-                                    let axes = gamepad.axes();
-                                    if axes.length() >= 4 {
-                                        if let Ok(stick_y_val) =
-                                            js_sys::Reflect::get(&axes, &3.into())
-                                        {
-                                            if let Some(stick_y) = stick_y_val.as_f64() {
-                                                if stick_y.abs() > 0.15 {
-                                                    sink.push(WebXrPointerAction::MouseWheel {
-                                                        delta_y: (-stick_y * 15.0) as f32,
-                                                    });
+                                        // Thumbstick scroll (axes 2 or 3)
+                                        let axes = gamepad.axes();
+                                        if axes.length() >= 4 {
+                                            if let Ok(stick_y_val) =
+                                                js_sys::Reflect::get(&axes, &3.into())
+                                            {
+                                                if let Some(stick_y) = stick_y_val.as_f64() {
+                                                    if stick_y.abs() > 0.15 {
+                                                        sink.push(WebXrPointerAction::MouseWheel {
+                                                            delta_y: (-stick_y * 15.0) as f32,
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Recenter HUD on secondary button press (B / Y button: index 1 or 3)
+                                        if buttons.length() > 1 {
+                                            if let Ok(b_val) =
+                                                js_sys::Reflect::get(&buttons, &1.into())
+                                            {
+                                                let b_btn: web_sys::GamepadButton =
+                                                    b_val.unchecked_into();
+                                                if b_btn.pressed() {
+                                                    hud_anchor = None; // will re-anchor next frame
                                                 }
                                             }
                                         }
@@ -539,7 +635,7 @@ fn setup_xr_render_loop(
         }
 
         // Render stereo eye views
-        if let Some(pose) = pose {
+        if let (Some(pose), Some(anchor)) = (pose, hud_anchor) {
             let views = pose.views();
             let num_views = views.length();
 
@@ -567,7 +663,7 @@ fn setup_xr_render_loop(
                 );
 
                 // Quad mesh rendering for Tier 1 HUD Console
-                draw_hud_quad(&gl, &renderer.borrow(), &view, hit_cursor);
+                draw_hud_quad(&gl, &renderer.borrow(), &view, &anchor.model, hit_cursor);
             }
         }
 
@@ -589,6 +685,7 @@ fn draw_hud_quad(
     gl: &WebGl2RenderingContext,
     renderer: &XrQuadRenderer,
     view: &XrView,
+    model: &[f32; 16],
     hit_cursor: Option<(f32, f32)>,
 ) {
     gl.use_program(Some(&renderer.program));
@@ -598,7 +695,7 @@ fn draw_hud_quad(
     let view_inv = view.transform().inverse();
     let view_matrix = view_inv.matrix();
 
-    let mvp = compute_quad_mvp(&proj, &view_matrix);
+    let mvp = compute_quad_mvp(&proj, &view_matrix, model);
     gl.uniform_matrix4fv_with_f32_array(Some(&renderer.u_mvp), false, &mvp);
 
     // Update cursor reticle uniforms
@@ -620,14 +717,7 @@ fn draw_hud_quad(
     gl.bind_vertex_array(None);
 }
 
-fn compute_quad_mvp(proj: &[f32], view: &[f32]) -> [f32; 16] {
-    // Model matrix: Translation(0, QUAD_POS_Y, QUAD_POS_Z) * RotationX(QUAD_TILT_RAD)
-    let c = QUAD_TILT_RAD.cos();
-    let s = QUAD_TILT_RAD.sin();
-    let model: [f32; 16] = [
-        1.0, 0.0, 0.0, 0.0, 0.0, c, s, 0.0, 0.0, -s, c, 0.0, 0.0, QUAD_POS_Y, QUAD_POS_Z, 1.0,
-    ];
-
+fn compute_quad_mvp(proj: &[f32], view: &[f32], model: &[f32]) -> [f32; 16] {
     // vm = view * model
     let mut vm = [0.0f32; 16];
     for col in 0..4 {

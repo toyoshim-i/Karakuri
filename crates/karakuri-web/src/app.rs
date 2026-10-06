@@ -420,6 +420,13 @@ impl ApplicationHandler<()> for WebApp {
                 window.request_redraw();
             }
         }
+
+        // Keep driving WebGPU rendering while WebXR session is active
+        if self.webxr_state.borrow().is_active {
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
