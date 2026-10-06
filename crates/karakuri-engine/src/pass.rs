@@ -54,6 +54,46 @@ pub fn record_fullscreen_pass(
     pass.draw(0..3, 0..1);
 }
 
+/// Records a fullscreen pass over `target` using a 3-vertex oversized triangle within an optional viewport.
+pub fn record_fullscreen_pass_viewport(
+    encoder: &mut wgpu::CommandEncoder,
+    label: Option<&str>,
+    target: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    bind_groups: &[&wgpu::BindGroup],
+    first: bool,
+    viewport: Option<(f32, f32, f32, f32)>,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label,
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: target,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: if first {
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                } else {
+                    wgpu::LoadOp::Load
+                },
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    if let Some((x, y, w, h)) = viewport {
+        pass.set_viewport(x, y, w, h, 0.0, 1.0);
+    }
+    pass.set_pipeline(pipeline);
+    for (i, bg) in bind_groups.iter().enumerate() {
+        pass.set_bind_group(i as u32, *bg, &[]);
+    }
+    pass.draw(0..3, 0..1);
+}
+
 /// Allocates a 2D linear HDR render target view.
 pub fn create_hdr_target(
     device: &wgpu::Device,

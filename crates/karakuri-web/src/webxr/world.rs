@@ -166,8 +166,31 @@ void main() {
                 WebGl2RenderingContext::UNSIGNED_BYTE,
                 canvas,
             );
+            let err = gl.get_error();
+            if err != WebGl2RenderingContext::NO_ERROR {
+                static ERR_WARNED: std::sync::atomic::AtomicBool =
+                    std::sync::atomic::AtomicBool::new(false);
+                if !ERR_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    web_sys::console::warn_1(
+                        &format!("Karakuri XR world gl.get_error after tex_image_2d: 0x{err:x}")
+                            .into(),
+                    );
+                }
+            }
             match res {
                 Ok(_) => {
+                    static LOGGED: std::sync::atomic::AtomicBool =
+                        std::sync::atomic::AtomicBool::new(false);
+                    if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                        web_sys::console::log_1(
+                            &format!(
+                                "Karakuri XR world initial texture upload succeeded (canvas {}x{})",
+                                canvas.width(),
+                                canvas.height()
+                            )
+                            .into(),
+                        );
+                    }
                     self.has_texture = true;
                 }
                 Err(e) => {

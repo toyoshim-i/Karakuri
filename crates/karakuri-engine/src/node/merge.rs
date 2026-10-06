@@ -50,6 +50,18 @@ impl Merge {
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
         self.composite.record(encoder, target);
     }
+
+    /// Records the composite pass folding all inputs into `target` within an optional viewport.
+    pub(crate) fn record_viewport(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        first: bool,
+        viewport: Option<(f32, f32, f32, f32)>,
+    ) {
+        self.composite
+            .record_viewport(encoder, target, first, viewport);
+    }
 }
 
 impl crate::pass::RenderPassNode for Merge {

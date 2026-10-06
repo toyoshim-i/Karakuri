@@ -114,6 +114,49 @@ impl Deck {
         deck
     }
 
+    /// Returns the live Set to render for WebXR stereo world display, prioritizing target_slot,
+    /// then Live slots, then the first available slot.
+    fn active_stereo_set_mut(
+        &mut self,
+        target_slot: Option<DeckSlot>,
+    ) -> Option<&mut crate::set::Set> {
+        let idx = if let Some(target) = target_slot {
+            if target.index() < self.slots.len() {
+                Some(target.index())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let slot_idx = idx
+            .or_else(|| {
+                self.slots
+                    .iter()
+                    .position(|s| s.effective == Residency::Live)
+            })
+            .or_else(|| (!self.slots.is_empty()).then_some(0));
+
+        slot_idx.map(|i| self.slots[i].swap.live_mut())
+    }
+
+    /// Records rasterization pass for a single stereo eye into a specified viewport.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_stereo_eye(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        target_slot: Option<DeckSlot>,
+        matrices: &crate::camera::StereoMatrices,
+        first: bool,
+        viewport: (f32, f32, f32, f32),
+    ) {
+        if let Some(set) = self.active_stereo_set_mut(target_slot) {
+            set.draw_stereo_eye(queue, encoder, target, matrices, first, viewport);
+        }
+    }
+
     /// Records Side-by-Side (SBS) stereo rasterization passes for the target or live slot.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_stereo(
@@ -127,19 +170,8 @@ impl Deck {
         width: u32,
         height: u32,
     ) {
-        if let Some(target_slot) = target_slot {
-            if let Some(slot) = self.slots.get_mut(target_slot.index()) {
-                let set = slot.swap.live_mut();
-                set.draw_stereo(queue, encoder, target, left, right, width, height);
-                return;
-            }
-        }
-        for slot in &mut self.slots {
-            if slot.effective == Residency::Live {
-                let set = slot.swap.live_mut();
-                set.draw_stereo(queue, encoder, target, left, right, width, height);
-                break;
-            }
+        if let Some(set) = self.active_stereo_set_mut(target_slot) {
+            set.draw_stereo(queue, encoder, target, left, right, width, height);
         }
     }
 

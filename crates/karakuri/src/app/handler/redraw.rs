@@ -632,32 +632,67 @@ impl App {
                 let xr_frame = match acquired_xr {
                     wgpu::CurrentSurfaceTexture::Success(f)
                     | wgpu::CurrentSurfaceTexture::Suboptimal(f) => Some(f),
-                    _ => None,
+                    _ => {
+                        static WARNED: std::sync::atomic::AtomicBool =
+                            std::sync::atomic::AtomicBool::new(false);
+                        if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                            eprintln!(
+                                "Karakuri Web: xr_surface get_current_texture failed: {acquired_xr:?}"
+                            );
+                        }
+                        None
+                    }
                 };
                 if let Some(xr_frame) = xr_frame {
                     let xr_view = xr_frame
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default());
-                    let mut xr_encoder =
-                        gfx.gpu
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("WebXR Stereo World"),
-                            });
                     let target_slot = Some(karakuri_engine::DeckSlot(
                         self.readout.view.target_deck() as u8,
                     ));
-                    gfx.engine.deck.draw_stereo(
+                    let (w, h) = (1920.0f32, 1080.0f32);
+                    let half_w = w * 0.5;
+                    let left_vp = (0.0, 0.0, half_w, h);
+                    let right_vp = (half_w, 0.0, half_w, h);
+
+                    // Left eye pass (clears canvas target)
+                    let mut left_encoder =
+                        gfx.gpu
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("WebXR Left Eye"),
+                            });
+                    gfx.engine.deck.draw_stereo_eye(
                         &gfx.gpu.queue,
-                        &mut xr_encoder,
+                        &mut left_encoder,
                         &xr_view,
                         target_slot,
                         left,
-                        right,
-                        gfx.config.width,
-                        gfx.config.height,
+                        true,
+                        left_vp,
                     );
-                    gfx.gpu.queue.submit(std::iter::once(xr_encoder.finish()));
+                    gfx.gpu.queue.submit(std::iter::once(left_encoder.finish()));
+
+                    // Right eye pass (preserves left viewport)
+                    let mut right_encoder =
+                        gfx.gpu
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("WebXR Right Eye"),
+                            });
+                    gfx.engine.deck.draw_stereo_eye(
+                        &gfx.gpu.queue,
+                        &mut right_encoder,
+                        &xr_view,
+                        target_slot,
+                        right,
+                        false,
+                        right_vp,
+                    );
+                    gfx.gpu
+                        .queue
+                        .submit(std::iter::once(right_encoder.finish()));
+
                     gfx.gpu.queue.present(xr_frame);
                 }
             }
