@@ -64,6 +64,8 @@ pub struct WebApp {
     /// Where the head was when the WebXR session began, in the headset's
     /// reference space; the stereo eyes ride the Set's camera from here.
     xr_rig_origin: Option<[f32; 3]>,
+    /// The headset pose last handed to the App as stereo matrices.
+    xr_synced_pose: Option<crate::webxr::StereoPose>,
 }
 
 impl WebApp {
@@ -313,6 +315,7 @@ impl WebApp {
             initialized: false,
             ime_overlay: None,
             xr_rig_origin: None,
+            xr_synced_pose: None,
         }
     }
 
@@ -326,6 +329,7 @@ impl WebApp {
         let pose = self.webxr_state.borrow().stereo_pose();
         let Some(pose) = pose else {
             self.xr_rig_origin = None;
+            self.xr_synced_pose = None;
             self.app.set_stereo_matrices(None);
             return;
         };
@@ -349,6 +353,17 @@ impl WebApp {
         };
         self.app
             .set_stereo_matrices(Some((eye(&pose.left), eye(&pose.right))));
+        self.xr_synced_pose = Some(pose);
+    }
+
+    /// After a redraw: if it drew the stereo world, the XR canvas now shows
+    /// the pose last handed over, which the XR layer reprojects from.
+    fn note_stereo_drawn(&mut self) {
+        if self.app.take_stereo_drawn() {
+            self.webxr_state
+                .borrow()
+                .set_rendered_stereo_pose(self.xr_synced_pose);
+        }
     }
 }
 
@@ -598,15 +613,21 @@ impl ApplicationHandler<()> for WebApp {
 
         // Keep driving WebGPU rendering while WebXR session is active
         if self.webxr_state.borrow().is_active {
-            if let Some(ref window) = self.window {
+            if let Some(id) = self.window.as_ref().map(|w| w.id()) {
+                // The XR frame that woke us has just stored the newest head
+                // pose; draw with it rather than the one about_to_wait last
+                // handed over, which is a frame older.
+                self.sync_stereo_matrices();
                 self.app
-                    .on_window_event(_event_loop, window.id(), WindowEvent::RedrawRequested);
+                    .on_window_event(_event_loop, id, WindowEvent::RedrawRequested);
+                self.note_stereo_drawn();
             }
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         self.app.on_window_event(event_loop, id, event);
+        self.note_stereo_drawn();
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -665,9 +686,11 @@ impl ApplicationHandler<()> for WebApp {
             }
         }
 
+        self.note_stereo_drawn();
         self.sync_stereo_matrices();
 
         self.app.on_about_to_wait(event_loop);
+        self.note_stereo_drawn();
         if matches!(
             event_loop.control_flow(),
             winit::event_loop::ControlFlow::Wait

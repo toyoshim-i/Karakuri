@@ -18,9 +18,14 @@ use crate::gfx::{EyeTarget, Gfx, StereoTarget, XR_CANVAS};
 
 /// Draws the stereo world for one frame, reporting what happened through
 /// `log` when it differs from the previous frame (so a stuck state is said
-/// once, not sixty times a second).
-pub(crate) fn draw_world(gfx: &mut Gfx, slot: DeckSlot, eyes: &(StereoMatrices, StereoMatrices)) {
-    let said = match draw(gfx, slot, eyes) {
+/// once, not sixty times a second). True when the XR canvas got a new frame.
+pub(crate) fn draw_world(
+    gfx: &mut Gfx,
+    slot: DeckSlot,
+    eyes: &(StereoMatrices, StereoMatrices),
+) -> bool {
+    let drawn = draw(gfx, slot, eyes);
+    let said = match &drawn {
         Ok(size) => format!("drawing slot {} at {}x{} per eye", slot.0, size.0, size.1),
         Err(why) => format!("not drawn: {why}"),
     };
@@ -31,6 +36,7 @@ pub(crate) fn draw_world(gfx: &mut Gfx, slot: DeckSlot, eyes: &(StereoMatrices, 
             *last = said;
         }
     }
+    drawn.is_ok()
 }
 
 fn draw(
