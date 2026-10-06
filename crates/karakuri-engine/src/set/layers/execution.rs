@@ -404,8 +404,10 @@ impl Set {
         first: bool,
         viewport: (f32, f32, f32, f32),
     ) {
+        // The eye rides each camera: its own placement this frame, composed
+        // with the head (see `Camera::record_xr`).
         for camera in &self.cameras {
-            camera.write_derived_matrices(queue, matrices);
+            camera.record_xr(queue, encoder, matrices);
         }
         let merge = self.merge.as_ref();
         let depth_view = depth_view.or(self.depth_view.as_ref());
@@ -437,28 +439,6 @@ impl Set {
         if let Some(merge) = merge {
             merge.record_viewport(encoder, target, first, Some(viewport));
         }
-    }
-
-    /// Records Side-by-Side (SBS) stereo rasterization passes for WebXR into `target`.
-    /// Left eye draws to left viewport (0..w/2), Right eye draws to right viewport (w/2..w).
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_stereo(
-        &mut self,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        left: &crate::camera::StereoMatrices,
-        right: &crate::camera::StereoMatrices,
-        width: u32,
-        height: u32,
-    ) {
-        let half_w = (width / 2) as f32;
-        let h = height as f32;
-        let left_vp = (0.0, 0.0, half_w, h);
-        let right_vp = (half_w, 0.0, half_w, h);
-
-        self.draw_stereo_eye(queue, encoder, target, None, left, true, left_vp);
-        self.draw_stereo_eye(queue, encoder, target, None, right, false, right_vp);
     }
 }
 

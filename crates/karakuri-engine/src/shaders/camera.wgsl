@@ -68,3 +68,55 @@ fn derive() {
     // normal, matching the host's `State::depth_range`.
     derived.depth_range = vec2<f32>(near, 1.0 / max(far - near, 1.17549435e-38));
 }
+
+// WebXR: one eye riding this camera. `head` is the eye's view matrix relative
+// to where the headset started (rig space -> eye space) and `proj` is the
+// eye's own, possibly off-centre, projection. Both column-major.
+struct Xr {
+    head: mat4x4<f32>,
+    proj: mat4x4<f32>,
+};
+@group(0) @binding(3) var<uniform> xr: Xr;
+
+// The same placement `derive` reads — whatever the orbit or an L3 wrote this
+// frame — taken as a rig the performer rides, with the head's own motion
+// composed on top: the camera carries them, and they look around from it.
+@compute @workgroup_size(1)
+fn derive_xr() {
+    let eye = state.eye;
+    let f = normalize(state.look_at - eye);
+    let s = normalize(cross(f, state.up));
+    let u = cross(s, f);
+    let rig = mat4x4<f32>(
+        vec4<f32>(s.x, u.x, -f.x, 0.0),
+        vec4<f32>(s.y, u.y, -f.y, 0.0),
+        vec4<f32>(s.z, u.z, -f.z, 0.0),
+        vec4<f32>(-dot(s, eye), -dot(u, eye), dot(f, eye), 1.0),
+    );
+    let view = xr.head * rig;
+
+    // WebXR projections map depth onto -1..1, the GL convention; wgpu clips
+    // to 0..1, so remap z' = (z + w) / 2.
+    let to_unit_depth = mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.5, 0.0),
+        vec4<f32>(0.0, 0.0, 0.5, 1.0),
+    );
+    derived.view_proj = to_unit_depth * xr.proj * view;
+
+    // The view's rotation rows are the eye's axes in world space; its
+    // position is the rotation's transpose applied to minus the translation.
+    let axes = transpose(mat3x3<f32>(view[0].xyz, view[1].xyz, view[2].xyz));
+    derived.eye = -(axes * view[3].xyz);
+    derived.fwd = -axes[2];
+    // Pre-scaled like `derive`'s: by the half-extent of the frustum, which a
+    // projection carries as the reciprocal of its diagonal. An off-centre
+    // frustum's shift is not carried — a marching L4 is centred on the eye's
+    // forward axis (the celestial dome is where that gets answered).
+    derived.right = axes[0] / xr.proj[0][0];
+    derived.up = axes[1] / xr.proj[1][1];
+    let near = state.near;
+    let far = state.far;
+    derived.depth_range = vec2<f32>(near, 1.0 / max(far - near, 1.17549435e-38));
+}

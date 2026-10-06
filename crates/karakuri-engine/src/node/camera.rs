@@ -20,6 +20,9 @@ fn builtin_param_keys() -> &'static [String] {
     })
 }
 
+/// Byte size of `Xr` in camera.wgsl: two column-major `mat4x4<f32>`.
+const XR_SIZE: u64 = 128;
+
 /// The camera node, coordinating state buffers, derived views, and compute passes.
 pub(crate) struct Camera {
     /// Raw camera state buffer (`CameraState`).
@@ -29,7 +32,12 @@ pub(crate) struct Camera {
     derived: wgpu::Buffer,
     /// Canvas parameters buffer (aspect ratio).
     canvas: wgpu::Buffer,
+    /// One WebXR eye's head pose and projection, read by `derive_xr`.
+    xr: wgpu::Buffer,
     derive: wgpu::ComputePipeline,
+    /// [`Camera::record_xr`]'s pass: the camera's own placement composed
+    /// with a headset eye.
+    derive_xr: wgpu::ComputePipeline,
     derive_bg: wgpu::BindGroup,
     /// Bind group layout shared by downstream renderers.
     read_bgl: wgpu::BindGroupLayout,
@@ -92,18 +100,23 @@ impl Camera {
             // arithmetic for the debug overlay, and two derivations of one
             // camera agree until one of them is edited. Reading it back is how
             // that stops being a hope.
-            // `COPY_DST` for WebXR: each stereo eye's matrices are written here
-            // from the host (`write_derived_matrices`) in place of the derive pass.
             usage: wgpu::BufferUsages::UNIFORM
                 | wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
+                | wgpu::BufferUsages::COPY_SRC,
             size: wire::SIZE,
             mapped_at_creation: false,
         });
         let canvas = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("canvas"),
             size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // WebXR: one eye's head pose and projection (`Xr` in camera.wgsl).
+        let xr = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("camera xr"),
+            size: XR_SIZE,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -141,6 +154,16 @@ impl Camera {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
         let derive_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -159,6 +182,10 @@ impl Camera {
                     binding: 2,
                     resource: canvas.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: xr.as_entire_binding(),
+                },
             ],
         });
         let derive_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -171,6 +198,14 @@ impl Camera {
             layout: Some(&derive_layout),
             module: &module,
             entry_point: Some("derive"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        let derive_xr = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("camera derive (xr)"),
+            layout: Some(&derive_layout),
+            module: &module,
+            entry_point: Some("derive_xr"),
             compilation_options: Default::default(),
             cache: None,
         });
@@ -204,7 +239,9 @@ impl Camera {
             state,
             derived,
             canvas,
+            xr,
             derive,
+            derive_xr,
             derive_bg,
             read_bgl,
             read_bg,
@@ -295,34 +332,32 @@ impl Camera {
         queue.write_buffer(&self.canvas, 0, &bytes);
     }
 
-    /// Writes precomputed derived camera parameters directly to the derived uniform buffer.
-    /// Used for WebXR stereo rendering where view and projection matrices are supplied externally.
-    pub(crate) fn write_derived_matrices(
+    /// Derives this camera as seen by one WebXR eye riding it.
+    ///
+    /// The camera's own placement — whatever this frame's orbit or L3 wrote
+    /// into the state buffer, which never comes back to the host — is the
+    /// rig; `m.view` is the eye's pose relative to where the headset started,
+    /// so the performer rides the camera and looks around from it. Each eye
+    /// must be its own submission: the uniform is written with
+    /// `queue.write_buffer`, which lands at the next submit.
+    pub(crate) fn record_xr(
         &self,
         queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
         m: &crate::camera::StereoMatrices,
     ) {
-        let mut bytes = [0u8; wire::SIZE as usize];
-        for (c, col) in m.view_proj.iter().enumerate() {
-            for (r, &val) in col.iter().enumerate() {
-                let offset = (c * 4 + r) * 4;
-                bytes[offset..offset + 4].copy_from_slice(&val.to_le_bytes());
-            }
+        let mut bytes = [0u8; XR_SIZE as usize];
+        for (at, value) in m.view.iter().chain(m.proj.iter()).flatten().enumerate() {
+            bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
         }
-        let put_vec3 = |bytes: &mut [u8], offset: usize, v: [f32; 3]| {
-            for (i, &val) in v.iter().enumerate() {
-                bytes[offset + i * 4..offset + (i + 1) * 4].copy_from_slice(&val.to_le_bytes());
-            }
-        };
-        put_vec3(&mut bytes, 64, m.eye);
-        put_vec3(&mut bytes, 80, m.fwd);
-        put_vec3(&mut bytes, 96, m.right);
-        put_vec3(&mut bytes, 112, m.up);
-        let depth_scale = 1.0 / (m.far - m.near).max(f32::MIN_POSITIVE);
-        bytes[128..132].copy_from_slice(&m.near.to_le_bytes());
-        bytes[132..136].copy_from_slice(&depth_scale.to_le_bytes());
-
-        queue.write_buffer(&self.derived, 0, &bytes);
+        queue.write_buffer(&self.xr, 0, &bytes);
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("camera (xr)"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.derive_xr);
+        pass.set_bind_group(0, &self.derive_bg, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
     }
 
     /// Records camera compute passes (reduction and procedure passes if

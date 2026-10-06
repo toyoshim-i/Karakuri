@@ -61,6 +61,9 @@ pub struct WebApp {
     pending_webxr_active: Rc<RefCell<Option<bool>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
+    /// Where the head was when the WebXR session began, in the headset's
+    /// reference space; the stereo eyes ride the Set's camera from here.
+    xr_rig_origin: Option<[f32; 3]>,
 }
 
 impl WebApp {
@@ -309,7 +312,43 @@ impl WebApp {
             pending_webxr_active,
             initialized: false,
             ime_overlay: None,
+            xr_rig_origin: None,
         }
+    }
+
+    /// Hands the headset's latest eye poses to the App for the stereo world.
+    ///
+    /// Each eye rides the Set's camera: rig space is the headset's reference
+    /// space re-centred on where the head was when the session began, so
+    /// standing still puts the eyes exactly on the camera and any head motion
+    /// is a look-around from it (one world unit = one metre for now).
+    fn sync_stereo_matrices(&mut self) {
+        let pose = self.webxr_state.borrow().stereo_pose();
+        let Some(pose) = pose else {
+            self.xr_rig_origin = None;
+            self.app.set_stereo_matrices(None);
+            return;
+        };
+        let origin = *self.xr_rig_origin.get_or_insert_with(|| {
+            let (l, r) = (pose.left.eye, pose.right.eye);
+            [
+                (l[0] + r[0]) * 0.5,
+                (l[1] + r[1]) * 0.5,
+                (l[2] + r[2]) * 0.5,
+            ]
+        });
+        // head = V_xr * T(origin): a rig-space point p sits at p + origin in
+        // the headset's reference space.
+        let eye = |e: &crate::webxr::StereoEye| {
+            let mut v = e.view;
+            let [ox, oy, oz] = origin;
+            for row in 0..3 {
+                v[12 + row] += ox * v[row] + oy * v[4 + row] + oz * v[8 + row];
+            }
+            karakuri_engine::StereoMatrices::from_slices(&v, &e.proj)
+        };
+        self.app
+            .set_stereo_matrices(Some((eye(&pose.left), eye(&pose.right))));
     }
 }
 
@@ -626,27 +665,7 @@ impl ApplicationHandler<()> for WebApp {
             }
         }
 
-        // Sync active WebXR stereo camera matrices into App for Tier 2 world rendering
-        if let Some(pose) = self.webxr_state.borrow().stereo_pose() {
-            // Place Set at eye-level floating distance in front of viewer in room scale.
-            // Model translation in WebXR space: tx = 0.0, ty = 1.0m (chest level), tz = -5.0m (in front of HUD)
-            // Effective View matrix = V_xr * T_model
-            let make_matrices = |view_slice: &[f32; 16], proj_slice: &[f32; 16], eye: [f32; 3]| {
-                let mut v = *view_slice;
-                let (tx, ty, tz) = (0.0f32, 1.0f32, -5.0f32);
-                v[12] += tx * v[0] + ty * v[4] + tz * v[8];
-                v[13] += tx * v[1] + ty * v[5] + tz * v[9];
-                v[14] += tx * v[2] + ty * v[6] + tz * v[10];
-
-                let local_eye = [eye[0] - tx, eye[1] - ty, eye[2] - tz];
-                karakuri_engine::StereoMatrices::from_slices(&v, proj_slice, local_eye)
-            };
-            let left = make_matrices(&pose.left.view, &pose.left.proj, pose.left.eye);
-            let right = make_matrices(&pose.right.view, &pose.right.proj, pose.right.eye);
-            self.app.set_stereo_matrices(Some((left, right)));
-        } else {
-            self.app.set_stereo_matrices(None);
-        }
+        self.sync_stereo_matrices();
 
         self.app.on_about_to_wait(event_loop);
         if matches!(

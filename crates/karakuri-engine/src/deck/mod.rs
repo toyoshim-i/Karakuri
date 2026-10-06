@@ -170,24 +170,6 @@ impl Deck {
         }
     }
 
-    /// Records Side-by-Side (SBS) stereo rasterization passes for the target or live slot.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_stereo(
-        &mut self,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        target_slot: Option<DeckSlot>,
-        left: &crate::camera::StereoMatrices,
-        right: &crate::camera::StereoMatrices,
-        width: u32,
-        height: u32,
-    ) {
-        if let Some(set) = self.active_stereo_set_mut(target_slot) {
-            set.draw_stereo(queue, encoder, target, left, right, width, height);
-        }
-    }
-
     /// Sets the measurement resolution for all slot build workers and profilers.
     pub fn set_measure_size(&mut self, at: (u32, u32)) {
         if at.0 == 0 || at.1 == 0 {
