@@ -392,6 +392,51 @@ impl Set {
         }
     }
 
+    /// Records rasterization pass for a single stereo eye into a specified viewport.
+    pub fn draw_stereo_eye(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        matrices: &crate::camera::StereoMatrices,
+        first: bool,
+        viewport: (f32, f32, f32, f32),
+    ) {
+        for camera in &self.cameras {
+            camera.write_derived_matrices(queue, matrices);
+        }
+        let merge = self.merge.as_ref();
+        let depth_view = self.depth_view.as_ref();
+
+        for (source_at, source) in self.sources.iter().enumerate() {
+            let (parity, counts) = (source.sim.parity(), self.output_counts(source));
+            for (i, renderer) in source.renderers.iter().enumerate() {
+                match merge {
+                    None => renderer.draw_viewport(
+                        encoder,
+                        target,
+                        depth_view,
+                        parity,
+                        counts,
+                        first && source_at == 0 && i == 0,
+                        Some(viewport),
+                    ),
+                    Some(merge) => renderer.draw(
+                        encoder,
+                        merge.target(i),
+                        depth_view,
+                        parity,
+                        counts,
+                        source_at == 0,
+                    ),
+                }
+            }
+        }
+        if let Some(merge) = merge {
+            merge.record_viewport(encoder, target, first, Some(viewport));
+        }
+    }
+
     /// Records Side-by-Side (SBS) stereo rasterization passes for WebXR into `target`.
     /// Left eye draws to left viewport (0..w/2), Right eye draws to right viewport (w/2..w).
     #[allow(clippy::too_many_arguments)]
@@ -410,45 +455,8 @@ impl Set {
         let left_vp = (0.0, 0.0, half_w, h);
         let right_vp = (half_w, 0.0, half_w, h);
 
-        let depth_view = self.depth_view.as_ref();
-
-        // Left eye pass (clears whole target at start)
-        for camera in &self.cameras {
-            camera.write_derived_matrices(queue, left);
-        }
-        for (source_at, source) in self.sources.iter().enumerate() {
-            let (parity, counts) = (source.sim.parity(), self.output_counts(source));
-            for (i, renderer) in source.renderers.iter().enumerate() {
-                renderer.draw_viewport(
-                    encoder,
-                    target,
-                    depth_view,
-                    parity,
-                    counts,
-                    source_at == 0 && i == 0,
-                    Some(left_vp),
-                );
-            }
-        }
-
-        // Right eye pass (keeps left viewport intact)
-        for camera in &self.cameras {
-            camera.write_derived_matrices(queue, right);
-        }
-        for source in &self.sources {
-            let (parity, counts) = (source.sim.parity(), self.output_counts(source));
-            for renderer in &source.renderers {
-                renderer.draw_viewport(
-                    encoder,
-                    target,
-                    depth_view,
-                    parity,
-                    counts,
-                    false,
-                    Some(right_vp),
-                );
-            }
-        }
+        self.draw_stereo_eye(queue, encoder, target, left, true, left_vp);
+        self.draw_stereo_eye(queue, encoder, target, right, false, right_vp);
     }
 }
 

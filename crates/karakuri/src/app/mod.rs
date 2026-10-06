@@ -293,7 +293,10 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     pub fn attach_xr_surface(&mut self, surface: wgpu::Surface<'static>) {
         if let Some(ref mut gfx) = self.gfx {
-            surface.configure(&gfx.gpu.device, &gfx.config);
+            let mut xr_config = gfx.config.clone();
+            xr_config.width = 1920;
+            xr_config.height = 1080;
+            surface.configure(&gfx.gpu.device, &xr_config);
             gfx.xr_surface = Some(surface);
         }
     }

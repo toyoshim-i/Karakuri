@@ -213,6 +213,25 @@ impl Composite {
             &[&self.bind_group],
         );
     }
+
+    /// Records the compositing pass into the command encoder targeting an optional viewport.
+    pub(crate) fn record_viewport(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        first: bool,
+        viewport: Option<(f32, f32, f32, f32)>,
+    ) {
+        crate::pass::record_fullscreen_pass_viewport(
+            encoder,
+            Some("composite"),
+            target,
+            &self.pipeline,
+            &[&self.bind_group],
+            first,
+            viewport,
+        );
+    }
 }
 
 impl crate::pass::RenderPassNode for Composite {
