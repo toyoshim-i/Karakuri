@@ -44,3 +44,33 @@ pub fn arrow_mark(painter: &Painter, centre: Pos2, across: f32, colour: Color32,
         Stroke::NONE,
     ));
 }
+
+/// Draws a circular reload/restore arrow glyph centered at `center`.
+pub fn reload_glyph(painter: &Painter, center: Pos2, r: f32, color: Color32) {
+    let stroke = Stroke::new(1.2, color);
+    // Draw 3/4 circle arc (approx 270 degrees, from -45 to 225 deg).
+    let steps = 12;
+    let mut prev = None;
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let angle = -std::f32::consts::PI * 0.25 + std::f32::consts::PI * 1.5 * t;
+        let pt = Pos2::new(center.x + r * angle.cos(), center.y + r * angle.sin());
+        if let Some(p0) = prev {
+            painter.line_segment([p0, pt], stroke);
+        }
+        prev = Some(pt);
+    }
+    // Arrowhead pointing along the tangent at the end of the arc
+    if let Some(tip) = prev {
+        let s = r * 0.7;
+        painter.add(egui::Shape::convex_polygon(
+            vec![
+                tip,
+                Pos2::new(tip.x - s, tip.y - s * 0.3),
+                Pos2::new(tip.x - s * 0.3, tip.y + s),
+            ],
+            color,
+            Stroke::NONE,
+        ));
+    }
+}

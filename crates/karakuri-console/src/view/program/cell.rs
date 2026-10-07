@@ -1,7 +1,10 @@
-use super::*;
+use egui::vec2;
 
-/// Draws one deck preview cell's image: well background, optional texture, and hairline border.
-pub fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
+use super::*;
+use crate::view::widgets::glyph::reload_glyph;
+
+/// Draws one deck preview cell's image: well background, optional texture, and border / recovery state.
+pub fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>, overloaded: bool) {
     let radius = CornerRadius::same(size::PREVIEW_RADIUS as u8);
     // Clipped to the cell for the reason the picture is clipped to its region:
     // the rectangle in `picture` came from outside, and a stale one is a
@@ -12,13 +15,61 @@ pub fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
     if let Some(picture) = picture {
         painter.image(picture.id, picture.rect, WHOLE_TEXTURE, Color32::WHITE);
     }
-    // Inset hairline stroke on every cell; master mix monitors per ADR-0240.
-    painter.rect_stroke(
-        cell,
-        radius,
-        Stroke::new(size::HAIRLINE, pal.hair),
-        StrokeKind::Inside,
-    );
+
+    if overloaded {
+        // Red warning wash and prominent border indicating stopped/overloaded slot
+        painter.rect_filled(
+            cell,
+            radius,
+            Color32::from_rgba_unmultiplied(220, 30, 30, 40),
+        );
+        painter.rect_stroke(
+            cell,
+            radius,
+            Stroke::new(1.5, Color32::from_rgb(255, 60, 60)),
+            StrokeKind::Inside,
+        );
+
+        // Centered restore/ungate button badge inviting click to recover
+        let badge_w = 68.0;
+        let badge_h = 22.0;
+        let badge = Rect::from_center_size(cell.center(), vec2(badge_w, badge_h));
+        painter.rect_filled(
+            badge,
+            CornerRadius::same(4),
+            Color32::from_rgba_unmultiplied(20, 20, 25, 220),
+        );
+        painter.rect_stroke(
+            badge,
+            CornerRadius::same(4),
+            Stroke::new(1.0, Color32::from_rgb(255, 75, 75)),
+            StrokeKind::Inside,
+        );
+        reload_glyph(
+            &painter,
+            Pos2::new(badge.min.x + 10.0, badge.center().y),
+            4.5,
+            Color32::from_rgb(255, 90, 90),
+        );
+        let galley = painter.layout_no_wrap(
+            "RESTORE".into(),
+            FontId::new(9.5, FontFamily::Proportional),
+            Color32::from_rgb(255, 210, 210),
+        );
+        painter.galley(
+            Pos2::new(badge.min.x + 19.0, badge.center().y - galley.size().y * 0.5),
+            galley,
+            Color32::from_rgb(255, 210, 210),
+        );
+    } else {
+        // Inset hairline stroke on every cell; master mix monitors per ADR-0240.
+        painter.rect_stroke(
+            cell,
+            radius,
+            Stroke::new(size::HAIRLINE, pal.hair),
+            StrokeKind::Inside,
+        );
+    }
 }
 
 /// Returns the status label for a preview cell (`material`, `overloaded`, or `no slot`).
@@ -72,30 +123,58 @@ pub fn caption_into(
         ink,
     );
 
-    let word = painter.layout_no_wrap(state_word(picture, overloaded).to_owned(), font, pal.faint);
+    let (word_str, word_color) = if overloaded {
+        ("OVERLOADED", Color32::from_rgb(255, 60, 60))
+    } else {
+        (state_word(picture, overloaded), pal.faint)
+    };
+    let word = painter.layout_no_wrap(word_str.to_owned(), font, word_color);
     painter.galley(
         Pos2::new(
             at.min.x + width + size::PREVIEW_CAPTION_GAP_X,
             at.center().y - word.size().y * 0.5,
         ),
         word,
-        pal.faint,
+        word_color,
     );
 
-    // Draw the risk badge dot if a slot exists and has a valid budget.
-    let dot = picture
-        .and(cost)
-        .filter(|budgeted| budgeted.ms.is_finite())
-        .map(|budgeted| band_of(budgeted.ms));
-    if let Some(band) = dot {
-        // `margin-left: auto` — the far end of the caption, centred in its
-        // height, and `border-radius: 999px` on a 6px box is a circle of half
-        // that across.
-        let radius = size::PREVIEW_RISK * 0.5;
-        painter.circle_filled(
-            Pos2::new(at.max.x - radius, at.center().y),
-            radius,
-            band.colour(pal),
+    if overloaded {
+        // Prominent reload badge icon at the right end of the caption
+        let badge =
+            Rect::from_center_size(Pos2::new(at.max.x - 11.0, at.center().y), vec2(22.0, 14.0));
+        painter.rect_filled(
+            badge,
+            CornerRadius::same(3),
+            Color32::from_rgba_unmultiplied(255, 60, 60, 45),
         );
+        painter.rect_stroke(
+            badge,
+            CornerRadius::same(3),
+            Stroke::new(1.0, Color32::from_rgb(255, 75, 75)),
+            StrokeKind::Inside,
+        );
+        reload_glyph(
+            &painter,
+            badge.center(),
+            4.0,
+            Color32::from_rgb(255, 90, 90),
+        );
+    } else {
+        // Draw the risk badge dot if a slot exists and has a valid budget.
+        let dot = picture
+            .and(cost)
+            .filter(|budgeted| budgeted.ms.is_finite())
+            .map(|budgeted| band_of(budgeted.ms));
+        if let Some(band) = dot {
+            // `margin-left: auto` — the far end of the caption, centred in its
+            // height, and `border-radius: 999px` on a 6px box is a circle of half
+            // that across.
+            let radius = size::PREVIEW_RISK * 0.5;
+            painter.circle_filled(
+                Pos2::new(at.max.x - radius, at.center().y),
+                radius,
+                band.colour(pal),
+            );
+        }
     }
 }

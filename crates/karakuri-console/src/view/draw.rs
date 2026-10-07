@@ -86,11 +86,10 @@ impl View {
         let plugin_available = self.plugin_available;
         let plugin_name = self.plugin_name;
 
-        // Resolution and overload interaction tracking across closure boundary.
+        // Resolution tracking across closure boundary.
         let output_resolutions = self.output_resolutions.as_slice();
         let output_resolution_selected = self.output_resolution_selected;
         let resolution_menu_open = self.resolution_menu_open;
-        let mut clicked_recover_deck = None;
 
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -300,7 +299,7 @@ impl View {
                     if marked {
                         drop_ring(ui, &pal, cell, size::PREVIEW_RADIUS);
                     }
-                    program::preview(ui, &pal, cell, previews[deck]);
+                    program::preview(ui, &pal, cell, previews[deck], overloaded[deck]);
                     program::caption_into(
                         ui,
                         &pal,
@@ -312,14 +311,12 @@ impl View {
                         marked,
                     );
                     if overloaded[deck] {
-                        let resp = ui.interact(
-                            cell,
-                            ui.id().with(("cell_overload_recover", deck)),
-                            egui::Sense::click(),
+                        let slot_rect = Rect::from_min_max(
+                            cell.min,
+                            Pos2::new(cell.max.x, cell.max.y + program::caption_band()),
                         );
-                        if resp.clicked() {
-                            clicked_recover_deck = Some(deck);
-                        }
+                        ui.allocate_rect(slot_rect, egui::Sense::hover())
+                            .on_hover_text("Overloaded: performance dropped below 20 FPS. Click to restore / ungate this slot");
                     }
                 }
             }
@@ -537,11 +534,6 @@ impl View {
                 }
             }
         });
-
-        // Apply deferred updates after the panel closure to satisfy borrow rules.
-        if let Some(deck) = clicked_recover_deck {
-            self.ungate_requested = Some(deck);
-        }
     }
 
     /// Updates platform cursor icon based on hovered controls or active drag (ADR-0273).

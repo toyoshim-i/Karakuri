@@ -849,4 +849,19 @@ impl Readout {
             },
         }
     }
+
+    /// Dispatches pointer presses in the Program bay (e.g. un-gating overloaded decks).
+    pub(crate) fn dispatch_program_press(
+        &mut self,
+        _ctx: &egui::Context,
+        at: Point,
+    ) -> Option<Acted> {
+        let bay = program_bay(self.panel.layout(), self.view.canvas)?;
+        let deck = usize::from(bay.cell(at)?);
+        if self.view.overloaded.get(deck).copied().unwrap_or(false) {
+            self.view.ungate_requested = Some(deck);
+            return Some(Acted::Pointed);
+        }
+        None
+    }
 }

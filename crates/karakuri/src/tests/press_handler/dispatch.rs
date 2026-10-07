@@ -751,3 +751,41 @@ fn the_press_handler_dispatches_resolution_controls() {
     readout.pointer(&ctx, Pointer::Down);
     assert!(!readout.view.resolution_menu_open);
 }
+
+#[test]
+fn the_press_handler_ungates_overloaded_deck_preview_cell() {
+    let ctx = crate::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    let bay =
+        view::program_bay(readout.panel.layout(), readout.view.canvas).expect("program bay exists");
+    let cells = bay.cells.expect("cells exist");
+
+    // Initially, no deck is overloaded and no ungate requested
+    assert_eq!(readout.view.ungate_requested, None);
+
+    // Clicking non-overloaded cell 0 does not request ungate
+    let cell0_pt = Point::new(cells[0].center().x, cells[0].center().y);
+    readout.pointer(&ctx, Pointer::Moved(cell0_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(readout.view.ungate_requested, None);
+
+    // Mark deck 1 (slot B) as overloaded
+    readout.view.overloaded[1] = true;
+
+    // Clicking cell 1 (image or caption reload badge) un-gates deck 1
+    let cell1_pt = Point::new(cells[1].center().x, cells[1].center().y);
+    readout.pointer(&ctx, Pointer::Moved(cell1_pt));
+    let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(acted, Acted::Pointed);
+    assert_eq!(readout.view.ungate_requested, Some(1));
+
+    // Also clicking the caption area directly below cell 1 triggers un-gating
+    readout.view.ungate_requested = None;
+    let caption_pt = Point::new(cells[1].center().x, cells[1].max.y + 6.0);
+    readout.pointer(&ctx, Pointer::Moved(caption_pt));
+    let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(acted, Acted::Pointed);
+    assert_eq!(readout.view.ungate_requested, Some(1));
+}
