@@ -227,6 +227,11 @@ impl HotSwap {
         self.overloaded
     }
 
+    /// Sets whether the active Set is stopped due to budget overload gating.
+    pub fn set_overloaded(&mut self, overloaded: bool) {
+        self.overloaded = overloaded;
+    }
+
     /// Sets the frame budget in milliseconds against which candidates are evaluated.
     pub fn set_budget_ms(&mut self, budget_ms: f32) {
         if budget_ms.is_finite() && budget_ms > 0.0 {

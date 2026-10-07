@@ -39,6 +39,8 @@ pub struct Deck {
     pub(crate) muted: [bool; MAX_SLOTS],
     pub(crate) solo: Option<usize>,
     pub(crate) revision: u64,
+    pub(crate) activation_order: Vec<usize>,
+    pub(crate) last_in_mix: [bool; MAX_SLOTS],
 }
 
 impl Deck {
@@ -52,6 +54,7 @@ impl Deck {
             swaps.len()
         );
 
+        let swap_count = swaps.len();
         let targets: Vec<(wgpu::Texture, wgpu::TextureView)> = (0..swaps.len())
             .map(|i| make_slot_target(device, i, width, height))
             .collect();
@@ -109,6 +112,8 @@ impl Deck {
             muted: [false; MAX_SLOTS],
             solo: None,
             revision: 0,
+            activation_order: (0..swap_count).collect(),
+            last_in_mix: [false; MAX_SLOTS],
         };
         deck.set_measure_size((width, height));
         deck
@@ -120,22 +125,28 @@ impl Deck {
         &mut self,
         target_slot: Option<DeckSlot>,
     ) -> Option<&mut crate::set::Set> {
-        let idx = if let Some(target) = target_slot {
-            if target.index() < self.slots.len() {
+        let slot_idx = if let Some(target) = target_slot {
+            if target.index() < self.slots.len() && !self.slots[target.index()].swap.overloaded() {
                 Some(target.index())
             } else {
                 None
             }
         } else {
-            None
+            self.slots
+                .iter()
+                .position(|s| {
+                    s.effective == Residency::Live
+                        && !s.swap.overloaded()
+                        && s.online
+                        && s.opacity > 0.0
+                })
+                .or_else(|| {
+                    self.slots
+                        .iter()
+                        .position(|s| s.effective == Residency::Live && !s.swap.overloaded())
+                })
+                .or_else(|| (!self.slots.is_empty()).then_some(0))
         };
-        let slot_idx = idx
-            .or_else(|| {
-                self.slots
-                    .iter()
-                    .position(|s| s.effective == Residency::Live)
-            })
-            .or_else(|| (!self.slots.is_empty()).then_some(0));
 
         slot_idx.map(|i| self.slots[i].swap.live_mut())
     }
@@ -148,6 +159,7 @@ impl Deck {
     pub fn stereo_viewport(&mut self, target_slot: Option<DeckSlot>) -> Option<(u32, u32)> {
         self.active_stereo_set_mut(target_slot)
             .map(|set| set.viewport())
+            .or_else(|| (self.width > 0 && self.height > 0).then_some((self.width, self.height)))
     }
 
     /// Records rasterization pass for a single stereo eye into a specified viewport.
@@ -245,6 +257,14 @@ impl Deck {
     ) -> Frame<'a> {
         for slot in self.slots.iter_mut() {
             slot.swap.live_mut().discard();
+        }
+        for (i, slot) in self.slots.iter().enumerate() {
+            let in_mix = slot.online && slot.opacity > 0.0;
+            if in_mix && !self.last_in_mix[i] {
+                self.activation_order.retain(|&idx| idx != i);
+                self.activation_order.push(i);
+            }
+            self.last_in_mix[i] = in_mix;
         }
         for (i, slot) in self.slots.iter_mut().enumerate() {
             let seen = slot.swap.pending_events().len();
@@ -402,6 +422,50 @@ impl Deck {
     /// Returns true if the slot has been stopped by the performance watchdog.
     pub fn overloaded(&self, slot: DeckSlot) -> bool {
         self.slots[slot.index()].swap.overloaded()
+    }
+
+    /// Sets whether the specified slot is stopped due to budget overload gating.
+    pub fn set_overloaded(&mut self, slot: DeckSlot, overloaded: bool) {
+        if let Some(s) = self.slots.get_mut(slot.index()) {
+            s.swap.set_overloaded(overloaded);
+        }
+    }
+
+    /// Evaluates runtime performance watchdog against `frame_budget_ms`.
+    ///
+    /// Automatically gates active live slots if the rolling median frame period
+    /// exceeds the budget threshold (e.g. dropping frames under heavy load),
+    /// halting their updates to preserve console responsiveness.
+    /// Returns the index of the gated slot if a gating decision occurred.
+    pub fn watchdog_gate(&mut self) -> Option<usize> {
+        let period = self.frame_period_ms()?;
+        let threshold = self.frame_budget_ms * 1.35;
+        if period > threshold {
+            let to_gate = self
+                .activation_order
+                .iter()
+                .rev()
+                .copied()
+                .find(|&slot_idx| {
+                    if let Some(s) = self.slots.get(slot_idx) {
+                        let in_mix = s.online && s.opacity > 0.0;
+                        s.effective == Residency::Live && !s.swap.overloaded() && in_mix
+                    } else {
+                        false
+                    }
+                })
+                .or_else(|| {
+                    self.slots.iter().enumerate().rev().find_map(|(i, s)| {
+                        (s.effective == Residency::Live && !s.swap.overloaded()).then_some(i)
+                    })
+                });
+
+            if let Some(slot_idx) = to_gate {
+                self.slots[slot_idx].swap.set_overloaded(true);
+                return Some(slot_idx);
+            }
+        }
+        None
     }
 
     /// Requests a residency level for the specified slot.
