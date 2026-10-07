@@ -871,5 +871,53 @@ proc six {
             }
             close(f32_at(&square, 20), f32_at(&wide, 20), "view_proj[1][1]");
         }
+
+        /// Tests that WebXR off-centre projection shifts are reflected in `derived.fwd`.
+        #[test]
+        fn xr_off_centre_projection_shifts_the_forward_basis() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let state = State {
+                eye: [0.0, 0.0, 5.0],
+                target: [0.0, 0.0, 0.0],
+                up: [0.0, 1.0, 0.0],
+                fov_y: 1.0,
+                near: 0.1,
+                far: 50.0,
+            };
+            let cam = Camera::build(&gpu.device, None, &[], None);
+            cam.write_state(&gpu.queue, &state);
+
+            // A WebXR eye with identity head view (eye aligned with rig)
+            // and an off-centre projection matrix (shifted along x by 0.25).
+            let eye_m = crate::camera::StereoMatrices {
+                view: [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ],
+                proj: [
+                    [1.5, 0.0, 0.0, 0.0],
+                    [0.0, 1.5, 0.0, 0.0],
+                    [0.25, 0.1, -1.0, -1.0],
+                    [0.0, 0.0, -0.2, 0.0],
+                ],
+            };
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            cam.record_xr(&gpu.queue, &mut encoder, &eye_m);
+            gpu.queue.submit([encoder.finish()]);
+
+            let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
+            let fwd = vec3_at(&bytes, 80);
+            let right = vec3_at(&bytes, 96);
+            let up = vec3_at(&bytes, 112);
+
+            // With camera looking at -Z ([0, 0, -1]):
+            // right = [1 / 1.5, 0, 0], up = [0, 1 / 1.5, 0]
+            // fwd should be [0, 0, -1] + right * 0.25 + up * 0.1
+            close(fwd[0], right[0] * 0.25, "fwd.x matches off-centre shift");
+            close(fwd[1], up[1] * 0.1, "fwd.y matches off-centre shift");
+            close(fwd[2], -1.0, "fwd.z");
+        }
     }
 }

@@ -109,13 +109,21 @@ fn derive_xr() {
     // position is the rotation's transpose applied to minus the translation.
     let axes = transpose(mat3x3<f32>(view[0].xyz, view[1].xyz, view[2].xyz));
     derived.eye = -(axes * view[3].xyz);
-    derived.fwd = -axes[2];
     // Pre-scaled like `derive`'s: by the half-extent of the frustum, which a
-    // projection carries as the reciprocal of its diagonal. An off-centre
-    // frustum's shift is not carried — a marching L4 is centred on the eye's
-    // forward axis (the celestial dome is where that gets answered).
+    // projection carries as the reciprocal of its diagonal.
     derived.right = axes[0] / xr.proj[0][0];
     derived.up = axes[1] / xr.proj[1][1];
+    // In WebXR, the frustum is typically asymmetric / off-centre (e.g. canted lenses,
+    // eye displacement). An eye-space ray through NDC (x, y) with -z=1 satisfies:
+    //   x_eye = (x_ndc + xr.proj[2][0]) / xr.proj[0][0]
+    //   y_eye = (y_ndc + xr.proj[2][1]) / xr.proj[1][1]
+    // In world space via `axes`:
+    //   v_world = -axes[2] + derived.right * xr.proj[2][0] + derived.up * xr.proj[2][1]
+    //             + derived.right * x_ndc + derived.up * y_ndc
+    // Accounting for the off-centre shift in `fwd` ensures fullscreen L4 rays
+    // (such as celestial sky domes or raymarchers) align exactly with vertex-projected
+    // L1 geometry across both eyes instead of causing divergent stereoscopic parallax.
+    derived.fwd = -axes[2] + derived.right * xr.proj[2][0] + derived.up * xr.proj[2][1];
     let near = state.near;
     let far = state.far;
     derived.depth_range = vec2<f32>(near, 1.0 / max(far - near, 1.17549435e-38));
