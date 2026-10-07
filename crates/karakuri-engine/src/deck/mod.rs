@@ -1,6 +1,8 @@
 //! Multi-slot Set compositing, frame synchronization, and residency management.
 //! A [`Deck`] manages resident [`HotSwap`] instances, mixing HDR targets using gain, blend, and masks.
 
+use web_time::{Duration, Instant};
+
 use crate::binding::Signals;
 use crate::governor::{Estimated, Governor, Report, SlotState};
 use crate::meter::{Level, Meters};
@@ -18,6 +20,13 @@ pub mod types;
 pub use frame::Frame;
 pub(crate) use frame::{make_slot_target, StagedSlotControl};
 pub use types::*;
+
+/// Default frame period threshold for watchdog overload gating: 50.0 ms (20 FPS).
+pub const DEFAULT_WATCHDOG_THRESHOLD_MS: f32 = 50.0;
+/// Default warmup grace period after startup before watchdog gating activates: 3.0 seconds.
+pub const DEFAULT_WATCHDOG_WARMUP: Duration = Duration::from_secs(3);
+/// Default continuous period overrun duration before watchdog gating triggers: 1.0 second.
+pub const DEFAULT_WATCHDOG_SUSTAINED: Duration = Duration::from_secs(1);
 
 /// Multi-slot Set runtime managing presentation targets, mixing, and frame dispatch.
 pub struct Deck {
@@ -41,6 +50,11 @@ pub struct Deck {
     pub(crate) revision: u64,
     pub(crate) activation_order: Vec<usize>,
     pub(crate) last_in_mix: [bool; MAX_SLOTS],
+    pub(crate) started_at: Instant,
+    pub(crate) overload_since: Option<Instant>,
+    pub(crate) watchdog_threshold_ms: f32,
+    pub(crate) watchdog_warmup: Duration,
+    pub(crate) watchdog_sustained: Duration,
 }
 
 impl Deck {
@@ -114,6 +128,11 @@ impl Deck {
             revision: 0,
             activation_order: (0..swap_count).collect(),
             last_in_mix: [false; MAX_SLOTS],
+            started_at: Instant::now(),
+            overload_since: None,
+            watchdog_threshold_ms: DEFAULT_WATCHDOG_THRESHOLD_MS,
+            watchdog_warmup: DEFAULT_WATCHDOG_WARMUP,
+            watchdog_sustained: DEFAULT_WATCHDOG_SUSTAINED,
         };
         deck.set_measure_size((width, height));
         deck
@@ -431,39 +450,54 @@ impl Deck {
         }
     }
 
-    /// Evaluates runtime performance watchdog against `frame_budget_ms`.
+    /// Evaluates runtime performance watchdog against `watchdog_threshold_ms`.
     ///
     /// Automatically gates active live slots if the rolling median frame period
-    /// exceeds the budget threshold (e.g. dropping frames under heavy load),
-    /// halting their updates to preserve console responsiveness.
+    /// continuously exceeds the overload threshold (e.g. dropping below 20 FPS)
+    /// for at least `watchdog_sustained` (default 1.0 second), after an initial
+    /// startup grace period (`watchdog_warmup`, default 3.0 seconds).
+    /// Halts updates to preserve console responsiveness.
     /// Returns the index of the gated slot if a gating decision occurred.
     pub fn watchdog_gate(&mut self) -> Option<usize> {
-        let period = self.frame_period_ms()?;
-        let threshold = self.frame_budget_ms * 1.35;
-        if period > threshold {
-            let to_gate = self
-                .activation_order
-                .iter()
-                .rev()
-                .copied()
-                .find(|&slot_idx| {
-                    if let Some(s) = self.slots.get(slot_idx) {
-                        let in_mix = s.online && s.opacity > 0.0;
-                        s.effective == Residency::Live && !s.swap.overloaded() && in_mix
-                    } else {
-                        false
-                    }
-                })
-                .or_else(|| {
-                    self.slots.iter().enumerate().rev().find_map(|(i, s)| {
-                        (s.effective == Residency::Live && !s.swap.overloaded()).then_some(i)
-                    })
-                });
+        let now = Instant::now();
+        // Warmup grace period: ignore gating during initial startup
+        if now.duration_since(self.started_at) < self.watchdog_warmup {
+            self.overload_since = None;
+            return None;
+        }
 
-            if let Some(slot_idx) = to_gate {
-                self.slots[slot_idx].swap.set_overloaded(true);
-                return Some(slot_idx);
+        let period = self.frame_period_ms()?;
+        if period >= self.watchdog_threshold_ms {
+            let start = *self.overload_since.get_or_insert(now);
+            if now.duration_since(start) >= self.watchdog_sustained {
+                let to_gate = self
+                    .activation_order
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|&slot_idx| {
+                        if let Some(s) = self.slots.get(slot_idx) {
+                            let in_mix = s.online && s.opacity > 0.0;
+                            s.effective == Residency::Live && !s.swap.overloaded() && in_mix
+                        } else {
+                            false
+                        }
+                    })
+                    .or_else(|| {
+                        self.slots.iter().enumerate().rev().find_map(|(i, s)| {
+                            (s.effective == Residency::Live && !s.swap.overloaded()).then_some(i)
+                        })
+                    });
+
+                if let Some(slot_idx) = to_gate {
+                    self.slots[slot_idx].swap.set_overloaded(true);
+                    // Reset overload timer so subsequent gates require another sustained duration
+                    self.overload_since = None;
+                    return Some(slot_idx);
+                }
             }
+        } else {
+            self.overload_since = None;
         }
         None
     }
@@ -562,6 +596,24 @@ impl Deck {
     /// Returns the target frame duration budget in milliseconds.
     pub fn frame_budget_ms(&self) -> f32 {
         self.frame_budget_ms
+    }
+
+    /// Sets the frame period threshold in milliseconds for watchdog overload gating.
+    pub fn set_watchdog_threshold_ms(&mut self, threshold_ms: f32) {
+        if threshold_ms.is_finite() && threshold_ms > 0.0 {
+            self.watchdog_threshold_ms = threshold_ms;
+        }
+    }
+
+    /// Returns the frame period threshold in milliseconds for watchdog overload gating.
+    pub fn watchdog_threshold_ms(&self) -> f32 {
+        self.watchdog_threshold_ms
+    }
+
+    /// Configures the warmup grace period and sustained period overrun duration for watchdog gating.
+    pub fn set_watchdog_timing(&mut self, warmup: Duration, sustained: Duration) {
+        self.watchdog_warmup = warmup;
+        self.watchdog_sustained = sustained;
     }
 
     /// Sets the master chain's summed `ops_per_fragment`.

@@ -432,6 +432,8 @@ mod gpu {
             HEIGHT,
         );
         deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+        deck.set_watchdog_threshold_ms(OVER_A_SLOW_FRAME_MS * 1.35);
+        deck.set_watchdog_timing(Duration::ZERO, Duration::ZERO);
         deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
         deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
 
@@ -478,6 +480,8 @@ mod gpu {
             HEIGHT,
         );
         deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+        deck.set_watchdog_threshold_ms(OVER_A_SLOW_FRAME_MS * 1.35);
+        deck.set_watchdog_timing(Duration::ZERO, Duration::ZERO);
 
         // Slot 0 is activated first.
         deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
@@ -510,6 +514,39 @@ mod gpu {
             Some(0),
             "watchdog did not gate the next active slot (slot 0) after slot 1 was dropped"
         );
+        assert!(deck.overloaded(karakuri_engine::DeckSlot(0)));
+    }
+
+    /// Verifies that watchdog suppresses gating during startup warmup and requires sustained overrun.
+    #[test]
+    fn watchdog_suppresses_gating_during_warmup() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(build(&gpu, SEED_A, CAPACITY))],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+        deck.set_watchdog_threshold_ms(OVER_A_SLOW_FRAME_MS * 1.35);
+        // Configure 1 hour warmup
+        deck.set_watchdog_timing(Duration::from_secs(3600), Duration::ZERO);
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
+
+        // Run slow frames
+        for _ in 0..PERIOD_WINDOW {
+            slow_frame(&gpu, &mut deck, &present);
+        }
+
+        // Must NOT gate during warmup!
+        assert_eq!(deck.watchdog_gate(), None);
+        assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
+
+        // Now remove warmup: gating triggers
+        deck.set_watchdog_timing(Duration::ZERO, Duration::ZERO);
+        assert_eq!(deck.watchdog_gate(), Some(0));
         assert!(deck.overloaded(karakuri_engine::DeckSlot(0)));
     }
 }
