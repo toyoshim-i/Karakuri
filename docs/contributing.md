@@ -12,6 +12,14 @@ Code must never be contorted to accommodate hasty hacks or accumulate technical 
 Every change should aim to leave the codebase cleaner, more cohesive, and easier to reason about than before.
 When a choice arises between preserving an awkward historical convention and adopting a demonstrably cleaner design, **design correctness wins**.
 
+### Console GUI Component Architecture & Multi-Modal Pointer Invariance (ADR-0387)
+Karakuri operates across diverse user interaction modalities: Desktop (mouse/keys), Touch screens, and WebXR (6DoF VR controller laser rays + triggers, hand tracking). To guarantee deterministic behavior across all platforms, **every interactive console GUI element must be a properly componentized widget adhering to the Three-Layer Pattern ([ADR-0387](adr/0387-universal-console-gui-component-architecture-and-multi-modal-pointer-invariance.md))**:
+1. **Geometry & Hit-Testing Layer**: Exposes geometric boundaries (`Rect`) and pure hit-testing functions (`hit`, `owns`, `row`, `item`, `ask(&self, state, p) -> Option<Ask>`). Zero dependencies on egui UI or OS event queues.
+2. **Pure Paint Layer**: Renders visuals using egui `Painter`, theme tokens (`Palette`), and standard glyphs. **Strictly prohibited: calling `ui.interact()`, `ui.input(|i| i.pointer.primary_clicked())`, or mutating state inside the paint pass.** The paint pass only draws; it never decides or consumes input.
+3. **Canonical Pointer Dispatch Layer**: All user interaction routes exclusively through `readout.pointer()` and `crates/karakuri/src/readout/dispatch/press.rs`. The dispatch pipeline queries the component's `ask()` method to mutate state, emit an `Operation`, or request repaints.
+Ad-hoc inline click handlers inside drawing functions break WebXR laser pointer dispatch, disrupt modal overlay dismissal, and are strictly prohibited.
+
+
 ### Separate Specifications from Arguments (No Arguments in Code or Manuals)
 To maintain clarity across documentation and prevent conversational monologue from leaking into production artifacts:
 - **ADRs are Arguments (Rationale)**: An Architectural Decision Record ([`docs/adr/`](adr/)) records *why* a decision was made, historical context, rejected alternatives, and design trade-offs.
