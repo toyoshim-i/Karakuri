@@ -244,6 +244,18 @@ impl View {
             // Pre-allocate inspector panes up to PANES capacity.
             inspector: Vec::with_capacity(PANES),
             canvas: MOCK_CANVAS,
+            output_resolutions: vec![
+                ((1024, 768), "1024x768 (XGA)".into()),
+                ((1280, 720), "1280x720 (HD)".into()),
+                ((1920, 1080), "1920x1080 (FHD)".into()),
+                ((2560, 1440), "2560x1440 (2K)".into()),
+                ((3840, 2160), "3840x2160 (4K)".into()),
+            ],
+            output_resolution_selected: 1,
+            output_resolution_changed: false,
+            resolution_menu_open: false,
+            vr_mode: false,
+            ungate_requested: None,
             // Bay opening state defaulted to closed (ADR-0235).
             opening: Open::CLOSED,
             slot_policies: [SlotPolicy::Auto; DECKS],

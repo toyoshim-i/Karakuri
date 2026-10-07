@@ -154,7 +154,10 @@ impl App {
         // Read projector size before borrowing engine in aim call.
         let projector = gfx.projector.as_ref().map(|p| p.size);
         let plugin = gfx.plugin.as_ref().map(|p| p.size());
-        let external_output = crate::bridge::render_size(&[projector, plugin]);
+        let selected_res = (!self.readout.view.vr_mode)
+            .then(|| self.readout.view.selected_resolution())
+            .flatten();
+        let external_output = crate::bridge::render_size(&[projector, plugin, selected_res]);
         let stereo_eye = self.stereo_matrices.and(self.stereo_eye_size);
         let (picture, previews) = gfx.engine.aim(
             &gfx.gpu,
@@ -178,6 +181,19 @@ impl App {
         }
         self.readout.view.picture = picture;
         self.readout.view.previews = previews;
+
+        // Apply manual un-gating request from UI (P-0100).
+        if let Some(slot) = self.readout.view.ungate_requested.take() {
+            gfx.engine
+                .deck
+                .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+        }
+
+        // Automatic watchdog gating if frame period overruns frame budget.
+        if let Some(gated) = gfx.engine.deck.watchdog_gate() {
+            eprintln!("Deck slot {gated} automatically gated due to frame period overrun");
+        }
+
         // Determine whether each deck displays live or held material following watchdog stops (ADR-0269, ADR-0316).
         self.readout.view.overloaded = stopped_slots(&gfx.engine.deck);
 

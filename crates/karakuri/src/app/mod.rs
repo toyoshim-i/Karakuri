@@ -806,4 +806,14 @@ impl App {
         }
         self.cjk_font_bytes = Some(bytes);
     }
+
+    /// Returns a reference to the View state.
+    pub fn view(&self) -> &karakuri_console::view::View {
+        &self.readout.view
+    }
+
+    /// Returns a mutable reference to the View state.
+    pub fn view_mut(&mut self) -> &mut karakuri_console::view::View {
+        &mut self.readout.view
+    }
 }
