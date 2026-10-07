@@ -12,6 +12,7 @@
 
 use std::sync::Mutex;
 
+use karakuri_engine::plane_warp::PlaneWarp;
 use karakuri_engine::{DeckSlot, Present, StereoMatrices};
 
 use crate::gfx::{EyeTarget, Gfx, StereoTarget};
@@ -71,15 +72,18 @@ fn draw(
         ..Default::default()
     });
 
-    let target = gfx.stereo_target.as_ref().expect("made above");
     let full = (0.0, 0.0, size.0 as f32, size.1 as f32);
-    for (eye, matrices) in target.eyes.iter().zip([left, right]) {
+    let eyes = [left, right];
+    let target = gfx.stereo_target.as_ref().expect("made above");
+    super::effect_screen::aim(&gfx.gpu.queue, target, eyes);
+    for (at, matrices) in eyes.into_iter().enumerate() {
         let mut encoder = gfx
             .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("WebXR stereo eye"),
             });
+        let eye = &gfx.stereo_target.as_ref().expect("made above").eyes[at];
         // `None`: the Set's own depth, which is its viewport's size.
         gfx.engine.deck.draw_stereo_eye(
             &gfx.gpu.queue,
@@ -91,8 +95,10 @@ fn draw(
             true,
             full,
         );
+        super::effect_screen::record(gfx, slot, &mut encoder, at);
         gfx.gpu.queue.submit(std::iter::once(encoder.finish()));
     }
+    let target = gfx.stereo_target.as_ref().expect("made above");
 
     let mut encoder = gfx
         .gpu
@@ -164,8 +170,9 @@ fn fit(inner: (u32, u32), outer: (u32, u32)) -> (f32, f32, f32, f32) {
 }
 
 fn stereo_target(gfx: &Gfx, size: (u32, u32)) -> StereoTarget {
-    let eye = |label| {
-        let hdr = gfx.gpu.device.create_texture(&wgpu::TextureDescriptor {
+    let device = &gfx.gpu.device;
+    let hdr = |label| {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
                 width: size.0,
@@ -179,19 +186,28 @@ fn stereo_target(gfx: &Gfx, size: (u32, u32)) -> StereoTarget {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        let hdr_view = hdr.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = gfx
-            .engine
-            .present
-            .create_bind_group_for(&gfx.gpu.device, &hdr_view);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        (texture, view)
+    };
+    let warp = PlaneWarp::new(device);
+    let (screen, screen_view) = hdr("WebXR effect screen");
+    let eye = |label| {
+        let (hdr, hdr_view) = hdr(label);
+        let bind_group = gfx.engine.present.create_bind_group_for(device, &hdr_view);
         EyeTarget {
+            to_screen: warp.bind(device, &hdr_view),
+            from_screen: warp.bind(device, &screen_view),
             hdr,
             hdr_view,
             bind_group,
         }
     };
+    let eyes = [eye("WebXR left eye"), eye("WebXR right eye")];
     StereoTarget {
         size,
-        eyes: [eye("WebXR left eye"), eye("WebXR right eye")],
+        eyes,
+        warp,
+        screen,
+        screen_view,
     }
 }

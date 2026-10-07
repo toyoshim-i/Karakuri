@@ -440,6 +440,34 @@ impl Set {
             merge.record_viewport(encoder, target, first, Some(viewport));
         }
     }
+
+    /// Where the Set's L5s read their input, or `None` without L5s: an
+    /// extra view (a WebXR eye) writes its picture here, then runs
+    /// [`Set::record_l5s_unheld`].
+    pub fn l5_input(&self) -> Option<&wgpu::TextureView> {
+        if self.l5s.is_empty() {
+            return None;
+        }
+        self.l5_target_view.as_ref()
+    }
+
+    /// Runs the Set's L5s from [`Set::l5_input`] into `out`, the same
+    /// ping-pong [`Set::draw`] runs, without holding the result: the held
+    /// frame stays the one this frame's own draw held, which is what the
+    /// next frame's feedback must read.
+    pub fn record_l5s_unheld(&self, encoder: &mut wgpu::CommandEncoder, out: &wgpu::TextureView) {
+        let total = self.l5s.len();
+        for (at, l5) in self.l5s.iter().enumerate() {
+            let dst_view = if at + 1 == total {
+                out
+            } else if at % 2 == 0 {
+                self.l5_ping_view.as_ref().unwrap()
+            } else {
+                self.l5_target_view.as_ref().unwrap()
+            };
+            l5.pass.record(encoder, dst_view, &l5.bind_group);
+        }
+    }
 }
 
 impl VideoSource for Set {

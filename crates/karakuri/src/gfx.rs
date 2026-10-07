@@ -75,6 +75,10 @@ pub(crate) struct EyeTarget {
     pub(crate) hdr: wgpu::Texture,
     pub(crate) hdr_view: wgpu::TextureView,
     pub(crate) bind_group: wgpu::BindGroup,
+    /// Reads this eye's picture onto the effect screen.
+    pub(crate) to_screen: karakuri_engine::plane_warp::WarpBinding,
+    /// Reads the effect screen back into this eye.
+    pub(crate) from_screen: karakuri_engine::plane_warp::WarpBinding,
 }
 
 /// Per-eye HDR targets for the WebXR stereo world, sized to the drawn Set's
@@ -83,6 +87,12 @@ pub(crate) struct EyeTarget {
 pub(crate) struct StereoTarget {
     pub(crate) size: (u32, u32),
     pub(crate) eyes: [EyeTarget; 2],
+    pub(crate) warp: karakuri_engine::plane_warp::PlaneWarp,
+    /// The effect screen's picture after the effects, which each eye reads
+    /// back from; shared, as the eyes are drawn one submission after another.
+    #[allow(dead_code)]
+    pub(crate) screen: wgpu::Texture,
+    pub(crate) screen_view: wgpu::TextureView,
 }
 
 pub(crate) struct Gfx {

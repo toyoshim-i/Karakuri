@@ -351,6 +351,19 @@ impl Present {
         self.chain.record(encoder, &self.hdr_view);
     }
 
+    /// The master chain's input, or `None` while the chain is empty.
+    pub fn chain_entry(&self) -> Option<&wgpu::TextureView> {
+        self.chain.entry()
+    }
+
+    /// Runs the master chain once more, from [`Present::chain_entry`] into
+    /// `out`, for another view of this frame (a WebXR eye): the held `mix`
+    /// and `exit` cuts are left as this frame's own [`Present::draw_chain`]
+    /// held them.
+    pub fn draw_chain_unheld(&self, encoder: &mut wgpu::CommandEncoder, out: &wgpu::TextureView) {
+        self.chain.record_unheld(encoder, out);
+    }
+
     pub fn hdr_texture(&self) -> &wgpu::Texture {
         &self.hdr
     }

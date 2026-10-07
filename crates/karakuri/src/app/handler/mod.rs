@@ -19,6 +19,8 @@ use crate::{MAPPED, SERVED, WINDOW};
 
 use super::*;
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod effect_screen;
 pub(crate) mod key;
 pub(crate) mod pointer;
 pub(crate) mod projector;

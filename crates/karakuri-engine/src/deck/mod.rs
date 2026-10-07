@@ -170,6 +170,25 @@ impl Deck {
         }
     }
 
+    /// The L5 input of the Set [`Deck::draw_stereo_eye`] draws, or `None`
+    /// where it has no L5s; see [`crate::set::Set::l5_input`].
+    pub fn stereo_l5_input(&mut self, target_slot: Option<DeckSlot>) -> Option<&wgpu::TextureView> {
+        self.active_stereo_set_mut(target_slot)?.l5_input()
+    }
+
+    /// Runs that Set's L5s for a stereo eye; see
+    /// [`crate::set::Set::record_l5s_unheld`].
+    pub fn record_stereo_l5s(
+        &mut self,
+        target_slot: Option<DeckSlot>,
+        encoder: &mut wgpu::CommandEncoder,
+        out: &wgpu::TextureView,
+    ) {
+        if let Some(set) = self.active_stereo_set_mut(target_slot) {
+            set.record_l5s_unheld(encoder, out);
+        }
+    }
+
     /// Sets the measurement resolution for all slot build workers and profilers.
     pub fn set_measure_size(&mut self, at: (u32, u32)) {
         if at.0 == 0 || at.1 == 0 {
