@@ -40,6 +40,22 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                     return Claim::Panel;
                 }
             }
+            if let Some(id) = panel.layout().find("program") {
+                let bay_rect = crate::view::to_egui(panel.layout().rect(id));
+                let viewport = crate::view::to_egui(panel.layout().viewport());
+                if let Some(pill) = crate::view::resolution_pill(
+                    ctx,
+                    bay_rect,
+                    viewport,
+                    &view.output_resolutions,
+                    view.output_resolution_selected,
+                    view.resolution_menu_open,
+                ) {
+                    if pill.hit(p) {
+                        return Claim::Panel;
+                    }
+                }
+            }
             if let Some(pill) = crate::view::mcp_server_pill(
                 ctx,
                 panel.layout(),

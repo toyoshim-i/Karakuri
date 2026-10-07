@@ -231,6 +231,32 @@ impl Readout {
             }
         }
 
+        // Program bay resolution dropdown menu and header pill
+        if let Some(id) = self.panel.layout().find("program") {
+            let bay_rect = view::to_egui(self.panel.layout().rect(id));
+            let viewport = view::to_egui(self.panel.layout().viewport());
+            if let Some(pill) = view::resolution_pill(
+                ctx,
+                bay_rect,
+                viewport,
+                &self.view.output_resolutions,
+                self.view.output_resolution_selected,
+                self.view.resolution_menu_open,
+            ) {
+                let asked = pill.ask(
+                    self.view.resolution_menu_open,
+                    self.view.output_resolutions.len(),
+                    at,
+                );
+                if self.view.resolution_menu_open {
+                    return Some(self.resolution_asked(asked.unwrap_or(view::ResolutionAsk::Shut)));
+                }
+                if let Some(ask) = asked {
+                    return Some(self.resolution_asked(ask));
+                }
+            }
+        }
+
         None
     }
 

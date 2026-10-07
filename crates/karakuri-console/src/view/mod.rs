@@ -76,9 +76,11 @@ mod program;
 /// Program bay module re-exports (ADR-0121).
 pub use program::{
     band_of, caption_of, picture_rect, preview_rects, program_bay, program_body,
-    program_body_with_row_h, program_head, rearrange, Band, Basis, Body, Budgeted, Picture,
-    Placement, ProgramBay, ProgramHead, BAND_BLUE_MS, BAND_PURPLE_MS, BAND_RED_MS, BAND_YELLOW_MS,
-    MOCK_CANVAS, PREVIEW_MATERIAL, PREVIEW_NO_SLOT, PREVIEW_OVERLOADED,
+    program_body_with_row_h, program_head, rearrange, resolution_into, resolution_menu_into,
+    resolution_pill, resolution_pill_into, Band, Basis, Body, Budgeted, Picture, Placement,
+    ProgramBay, ProgramHead, ResolutionAsk, ResolutionPill, BAND_BLUE_MS, BAND_PURPLE_MS,
+    BAND_RED_MS, BAND_YELLOW_MS, MOCK_CANVAS, PREVIEW_MATERIAL, PREVIEW_NO_SLOT,
+    PREVIEW_OVERLOADED,
 };
 
 mod master;

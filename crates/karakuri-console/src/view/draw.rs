@@ -1,5 +1,5 @@
 use super::*;
-use egui::{vec2, Ui};
+use egui::Ui;
 
 impl View {
     /// Draw the whole console. The `ui` is the root one [`egui::Context::run_ui`]
@@ -91,9 +91,6 @@ impl View {
         let output_resolution_selected = self.output_resolution_selected;
         let resolution_menu_open = self.resolution_menu_open;
         let mut clicked_recover_deck = None;
-        let mut toggle_resolution_menu = false;
-        let mut new_resolution_selected = None;
-        let mut close_resolution_menu = false;
 
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -108,17 +105,24 @@ impl View {
                     Kind::Bay { .. } => {
                         bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
-                        if placed.region.name == "program"
-                            && draw_program_resolution_pill(
-                                ui,
-                                &pal,
+                        if placed.region.name == "program" {
+                            if let Some(pill) = resolution_pill(
+                                ui.ctx(),
                                 rect,
+                                to_egui(panel.layout().viewport()),
                                 output_resolutions,
                                 output_resolution_selected,
                                 resolution_menu_open,
-                            )
-                        {
-                            toggle_resolution_menu = true;
+                            ) {
+                                resolution_pill_into(
+                                    ui,
+                                    &pal,
+                                    &pill,
+                                    output_resolutions,
+                                    output_resolution_selected,
+                                    resolution_menu_open,
+                                );
+                            }
                         }
                         // The inspector is the one bay that is a split, and
                         // its panes' boundary is drawn as the mock's
@@ -514,19 +518,21 @@ impl View {
             if resolution_menu_open {
                 if let Some(id) = panel.layout().find("program") {
                     let bay_rect = to_egui(panel.layout().rect(id));
-                    let (selected, close) = draw_resolution_menu(
-                        ui,
-                        &pal,
+                    if let Some(pill) = resolution_pill(
+                        ui.ctx(),
                         bay_rect,
                         to_egui(panel.layout().viewport()),
                         output_resolutions,
                         output_resolution_selected,
-                    );
-                    if let Some(idx) = selected {
-                        new_resolution_selected = Some(idx);
-                    }
-                    if close {
-                        close_resolution_menu = true;
+                        true,
+                    ) {
+                        resolution_menu_into(
+                            ui,
+                            &pal,
+                            &pill,
+                            output_resolutions,
+                            output_resolution_selected,
+                        );
                     }
                 }
             }
@@ -535,19 +541,6 @@ impl View {
         // Apply deferred updates after the panel closure to satisfy borrow rules.
         if let Some(deck) = clicked_recover_deck {
             self.ungate_requested = Some(deck);
-        }
-        if toggle_resolution_menu {
-            self.resolution_menu_open = !self.resolution_menu_open;
-        }
-        if close_resolution_menu {
-            self.resolution_menu_open = false;
-        }
-        if let Some(new_idx) = new_resolution_selected {
-            if self.output_resolution_selected != new_idx {
-                self.output_resolution_selected = new_idx;
-                self.output_resolution_changed = true;
-            }
-            self.resolution_menu_open = false;
         }
     }
 
@@ -573,157 +566,4 @@ impl View {
             None => {}
         }
     }
-}
-
-/// Measures the bounding rectangle of the resolution selector pill in the Program bay header.
-fn resolution_pill_rect(
-    ctx: &egui::Context,
-    bay_rect: Rect,
-    resolutions: &[((u32, u32), String)],
-    selected: usize,
-) -> Rect {
-    let head = head_box(bay_rect);
-    let mid = head.center().y;
-    // Position next to title "PROGRAM".
-    let title_w = ctx.fonts_mut(|f| {
-        f.layout_no_wrap(
-            "PROGRAM".to_owned(),
-            FontId::new(size::HEAD_SIZE, FontFamily::Proportional),
-            Color32::PLACEHOLDER,
-        )
-        .size()
-        .x
-    });
-    let label = resolutions
-        .get(selected)
-        .map(|(_, l)| l.as_str())
-        .unwrap_or("---");
-    let text_w = pill_width(ctx, label);
-    let pill_w = text_w + size::SINK_GAP + CHEVRON_W;
-    let left = head.min.x + size::HEAD_PAD_X + title_w + 12.0;
-    Rect::from_min_size(
-        Pos2::new(left, mid - size::PILL_H * 0.5),
-        vec2(pill_w, size::PILL_H),
-    )
-}
-
-/// Draws the resolution selector pill next to the "PROGRAM" title in the bay header.
-fn draw_program_resolution_pill(
-    ui: &mut Ui,
-    pal: &Palette,
-    bay_rect: Rect,
-    resolutions: &[((u32, u32), String)],
-    selected: usize,
-    armed: bool,
-) -> bool {
-    if resolutions.is_empty() {
-        return false;
-    }
-    let pill = resolution_pill_rect(ui.ctx(), bay_rect, resolutions, selected);
-    let label = resolutions
-        .get(selected)
-        .map(|(_, l)| l.clone())
-        .unwrap_or_else(|| "---".into());
-
-    pill_into(ui, pal, pill, &label, armed);
-
-    let chevron_rect = Rect::from_center_size(
-        Pos2::new(
-            pill.max.x - size::PILL_PAD_X - CHEVRON_W * 0.5,
-            pill.center().y,
-        ),
-        vec2(CHEVRON_W, CHEVRON_H),
-    );
-    let chevron_color = if armed { pal.mint } else { pal.dim };
-    chevron_down(ui.painter(), chevron_rect, chevron_color);
-
-    let resp = ui.interact(
-        pill,
-        ui.id().with("program_resolution_pill"),
-        egui::Sense::click(),
-    );
-    resp.clicked()
-}
-
-/// Draws the floating resolution selection dropdown menu above bays (Rule 2 modal).
-fn draw_resolution_menu(
-    ui: &mut Ui,
-    pal: &Palette,
-    bay_rect: Rect,
-    viewport: Rect,
-    resolutions: &[((u32, u32), String)],
-    selected: usize,
-) -> (Option<usize>, bool) {
-    let pill = resolution_pill_rect(ui.ctx(), bay_rect, resolutions, selected);
-    let count = resolutions.len();
-    let menu_w = 160.0f32.max(pill.width());
-    let row_h = size::LIB_ROW_H;
-    let menu_h = size::LIB_LIST_PAD * 2.0 + row_h * count as f32;
-
-    let min_x = pill
-        .min
-        .x
-        .clamp(viewport.min.x + 8.0, viewport.max.x - 8.0 - menu_w);
-    let min_y = if pill.max.y + 4.0 + menu_h <= viewport.max.y - 8.0 {
-        pill.max.y + 4.0
-    } else {
-        (pill.min.y - 4.0 - menu_h).max(viewport.min.y + 8.0)
-    };
-    let menu_rect = Rect::from_min_size(Pos2::new(min_x, min_y), vec2(menu_w, menu_h));
-
-    popup_card(ui.painter(), pal, menu_rect);
-
-    let hover_pos = ui.input(|i| i.pointer.hover_pos());
-    let clicked = ui.input(|i| i.pointer.primary_clicked());
-
-    // Check click outside menu and pill to dismiss
-    if clicked {
-        if let Some(pos) = hover_pos {
-            if !menu_rect.contains(pos) && !pill.contains(pos) {
-                return (None, true);
-            }
-        }
-    }
-
-    let painter = ui.painter().with_clip_rect(menu_rect);
-    let mut selected_choice = None;
-    let mut close = false;
-
-    for (index, (_res, label)) in resolutions.iter().enumerate() {
-        let row_y = menu_rect.min.y + size::LIB_LIST_PAD + index as f32 * row_h;
-        let row_rect = Rect::from_min_size(
-            Pos2::new(menu_rect.min.x + size::LIB_LIST_PAD, row_y),
-            vec2(menu_rect.width() - size::LIB_LIST_PAD * 2.0, row_h),
-        );
-
-        let is_selected = index == selected;
-        let is_hovered = hover_pos.is_some_and(|pos| row_rect.contains(pos));
-
-        if is_hovered {
-            painter.rect_filled(row_rect, CornerRadius::same(3), tint(pal.mint, 22));
-        }
-
-        let text_color = if is_selected {
-            pal.mint
-        } else if is_hovered {
-            pal.text
-        } else {
-            pal.dim
-        };
-
-        card_row_text(&painter, row_rect, label, text_color);
-
-        if is_selected {
-            let dot_x = row_rect.max.x - 8.0;
-            let mid_y = row_rect.center().y;
-            painter.circle_filled(Pos2::new(dot_x, mid_y), 2.5, pal.mint);
-        }
-
-        if clicked && is_hovered {
-            selected_choice = Some(index);
-            close = true;
-        }
-    }
-
-    (selected_choice, close)
 }

@@ -279,6 +279,7 @@ mod badge;
 mod cell;
 mod head;
 mod placement;
+pub mod resolution;
 
 pub use badge::{
     band_of, Band, Basis, Budgeted, BAND_BLUE_MS, BAND_PURPLE_MS, BAND_RED_MS, BAND_YELLOW_MS,
@@ -287,3 +288,7 @@ pub use cell::{caption_into, preview, PREVIEW_MATERIAL, PREVIEW_NO_SLOT, PREVIEW
 pub use head::{program_head, ProgramHead};
 pub(crate) use placement::drawable;
 pub use placement::program_body_with_row_h;
+pub use resolution::{
+    resolution_into, resolution_menu_into, resolution_pill, resolution_pill_into, ResolutionAsk,
+    ResolutionPill,
+};
