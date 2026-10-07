@@ -332,9 +332,20 @@ impl WebApp {
             self.xr_synced_pose = None;
             self.app.set_stereo_matrices(None);
             self.app.set_stereo_eye_size(None);
+            if self.app.view().vr_mode {
+                self.app.view_mut().configure_normal_resolutions();
+            }
             return;
         };
-        self.app.set_stereo_eye_size(Some(pose.eye_size));
+        if !self.app.view().vr_mode {
+            self.app.view_mut().configure_vr_resolutions(pose.eye_size);
+        }
+        let eye_size = self
+            .app
+            .view()
+            .selected_resolution()
+            .unwrap_or((pose.eye_size.0 / 2, pose.eye_size.1 / 2));
+        self.app.set_stereo_eye_size(Some(eye_size));
         let origin = *self.xr_rig_origin.get_or_insert_with(|| {
             let (l, r) = (pose.left.eye, pose.right.eye);
             [

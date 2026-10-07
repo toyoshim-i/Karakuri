@@ -32,6 +32,8 @@ pub enum ModalOverlay {
     ThemeMenu,
     /// Transport MCP server configuration dropdown menu.
     McpServerMenu,
+    /// Program bay resolution selection dropdown menu.
+    ResolutionMenu,
 }
 
 impl ModalOverlay {
@@ -50,6 +52,7 @@ impl ModalOverlay {
             Self::PromptCliMenu => "PromptCliMenu",
             Self::ThemeMenu => "ThemeMenu",
             Self::McpServerMenu => "McpServerMenu",
+            Self::ResolutionMenu => "ResolutionMenu",
         }
     }
 }
@@ -92,6 +95,9 @@ impl View {
         }
         if self.mcp_server.open() {
             return Some(ModalOverlay::McpServerMenu);
+        }
+        if self.resolution_menu_open {
+            return Some(ModalOverlay::ResolutionMenu);
         }
         None
     }
@@ -137,6 +143,10 @@ impl View {
             }
             ModalOverlay::McpServerMenu => {
                 self.mcp_server.shut();
+                true
+            }
+            ModalOverlay::ResolutionMenu => {
+                self.resolution_menu_open = false;
                 true
             }
         }

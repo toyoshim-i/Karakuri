@@ -81,6 +81,18 @@ pub struct View {
     pub inspector: Vec<Pane>,
     /// Program bay rendering dimensions `(width, height)` used for layout arrangement (ADR-0156).
     pub canvas: (u32, u32),
+    /// Available output resolution options: `((width, height), label)`, sorted ascending.
+    pub output_resolutions: Vec<((u32, u32), String)>,
+    /// Currently selected resolution option index in `output_resolutions`.
+    pub output_resolution_selected: usize,
+    /// Set when the user changes resolution via the Program bay dropdown.
+    pub output_resolution_changed: bool,
+    /// Whether the Program bay resolution dropdown menu is open.
+    pub resolution_menu_open: bool,
+    /// Whether VR mode is active (adjusts dropdown options to device ratio).
+    pub vr_mode: bool,
+    /// Slot index requested for manual overload un-gating, if any.
+    pub ungate_requested: Option<usize>,
     /// Opened capability classes for MCP model access (ADR-0156, ADR-0235).
     pub opening: Open,
     /// Slot-level MCP modification policy for each deck slot.
@@ -136,4 +148,53 @@ pub struct View {
     /// Inspector node groups that are folded by (pane_index, node_index).
     pub(crate) inspector_folded: std::collections::BTreeSet<(usize, usize)>,
     pub(crate) placed: Vec<Placed>,
+}
+
+impl View {
+    /// Returns the currently selected output resolution, if any.
+    pub fn selected_resolution(&self) -> Option<(u32, u32)> {
+        self.output_resolutions
+            .get(self.output_resolution_selected)
+            .map(|(res, _)| *res)
+    }
+
+    /// Configures output resolution options for WebXR mode based on native device eye size.
+    ///
+    /// Sorted ascending by resolution: 1/4, 1/2 (default safe setting), 1/1.
+    pub fn configure_vr_resolutions(&mut self, native_eye: (u32, u32)) {
+        self.vr_mode = true;
+        let (ew, eh) = native_eye;
+        let sbs_w = ew * 2;
+        self.output_resolutions = vec![
+            (
+                ((ew / 4) & !1, (eh / 4) & !1),
+                format!("{}x{} (1/4)", (sbs_w / 4) & !1, (eh / 4) & !1),
+            ),
+            (
+                ((ew / 2) & !1, (eh / 2) & !1),
+                format!("{}x{} (1/2)", (sbs_w / 2) & !1, (eh / 2) & !1),
+            ),
+            ((ew, eh), format!("{sbs_w}x{eh} (1/1)")),
+        ];
+        // Default to index 1 (1/2 safe resolution for Quest/VR)
+        self.output_resolution_selected = 1;
+    }
+
+    /// Configures standard output resolution options for Normal display mode.
+    ///
+    /// Sorted ascending by resolution: XGA, HD (default), FHD, 2K, 4K.
+    pub fn configure_normal_resolutions(&mut self) {
+        if self.vr_mode || self.output_resolutions.is_empty() {
+            self.vr_mode = false;
+            self.output_resolutions = vec![
+                ((1024, 768), "1024x768 (XGA)".into()),
+                ((1280, 720), "1280x720 (HD)".into()),
+                ((1920, 1080), "1920x1080 (FHD)".into()),
+                ((2560, 1440), "2560x1440 (2K)".into()),
+                ((3840, 2160), "3840x2160 (4K)".into()),
+            ];
+            // Default to index 1 (1280x720 HD)
+            self.output_resolution_selected = 1;
+        }
+    }
 }
