@@ -102,6 +102,28 @@ impl Readout {
         }
     }
 
+    /// Dispatches Program bay resolution selector interactions, toggling the dropdown or selecting a resolution.
+    pub(crate) fn resolution_asked(&mut self, ask: view::ResolutionAsk) -> Acted {
+        match ask {
+            view::ResolutionAsk::Toggle => {
+                self.view.resolution_menu_open = !self.view.resolution_menu_open;
+                Acted::Nothing
+            }
+            view::ResolutionAsk::Select(idx) => {
+                if self.view.output_resolution_selected != idx {
+                    self.view.output_resolution_selected = idx;
+                    self.view.output_resolution_changed = true;
+                }
+                self.view.resolution_menu_open = false;
+                Acted::Nothing
+            }
+            view::ResolutionAsk::Shut => {
+                self.view.resolution_menu_open = false;
+                Acted::Nothing
+            }
+        }
+    }
+
     /// Dispatches theme selector pill interactions, toggling the dropdown menu or selecting a theme mode.
     pub(crate) fn themed(&mut self, ctx: &egui::Context, ask: view::ThemeAsk) -> Acted {
         match ask {

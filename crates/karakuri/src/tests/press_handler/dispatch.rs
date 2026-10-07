@@ -676,3 +676,78 @@ fn the_press_handler_dispatches_prompt_bay_controls() {
     readout.pointer(&ctx, Pointer::Down);
     assert!(!readout.view.prompt.menu_open);
 }
+
+#[test]
+fn the_press_handler_dispatches_resolution_controls() {
+    let ctx = crate::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.view.output_resolutions = vec![
+        ((1280, 720), "720p".into()),
+        ((1920, 1080), "1080p".into()),
+        ((2560, 1440), "1440p".into()),
+    ];
+    readout.view.output_resolution_selected = 0;
+    readout.panel.solve();
+
+    let prog_id = readout
+        .panel
+        .layout()
+        .find("program")
+        .expect("program bay exists");
+    let bay_rect = view::to_egui(readout.panel.layout().rect(prog_id));
+    let viewport = view::to_egui(readout.panel.layout().viewport());
+
+    let pill = view::resolution_pill(
+        &ctx,
+        bay_rect,
+        viewport,
+        &readout.view.output_resolutions,
+        readout.view.output_resolution_selected,
+        false,
+    )
+    .expect("resolution pill measured");
+
+    let pill_center = Point::new(pill.pill.center().x, pill.pill.center().y);
+
+    // Initial state: menu closed, index 0
+    assert!(!readout.view.resolution_menu_open);
+    assert_eq!(readout.view.output_resolution_selected, 0);
+
+    // 1. Click on header selector pill opens dropdown menu
+    readout.pointer(&ctx, Pointer::Moved(pill_center));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(readout.view.resolution_menu_open);
+    assert_eq!(
+        readout.view.active_overlay(),
+        Some(view::ModalOverlay::ResolutionMenu)
+    );
+
+    // 2. Click on item 1 inside menu
+    let open_pill = view::resolution_pill(
+        &ctx,
+        bay_rect,
+        viewport,
+        &readout.view.output_resolutions,
+        readout.view.output_resolution_selected,
+        true,
+    )
+    .expect("open resolution pill");
+    let row1 = open_pill.row(1, 3).expect("row 1 rect");
+    let row1_pt = Point::new(row1.center().x, row1.center().y);
+
+    readout.pointer(&ctx, Pointer::Moved(row1_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(!readout.view.resolution_menu_open);
+    assert_eq!(readout.view.output_resolution_selected, 1);
+    assert!(readout.view.output_resolution_changed);
+
+    // 3. Open menu again and click outside to dismiss (Rule 2)
+    readout.pointer(&ctx, Pointer::Moved(pill_center));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(readout.view.resolution_menu_open);
+
+    let outside_pt = Point::new(bay_rect.min.x + 10.0, bay_rect.max.y - 10.0);
+    readout.pointer(&ctx, Pointer::Moved(outside_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(!readout.view.resolution_menu_open);
+}
