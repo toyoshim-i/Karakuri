@@ -315,8 +315,45 @@ impl View {
                             cell.min,
                             Pos2::new(cell.max.x, cell.max.y + program::caption_band()),
                         );
-                        ui.allocate_rect(slot_rect, egui::Sense::hover())
-                            .on_hover_text("Overloaded: performance dropped below 20 FPS. Click to restore / ungate this slot");
+                        if ui
+                            .input(|i| i.pointer.hover_pos())
+                            .is_some_and(|pos| slot_rect.contains(pos))
+                        {
+                            let painter = ui.painter();
+                            let tip =
+                                "Overloaded: dropped below 10 FPS. Click to restore / ungate.";
+                            let font = FontId::new(size::BASE, FontFamily::Proportional);
+                            let galley = painter.layout_no_wrap(
+                                tip.into(),
+                                font,
+                                Color32::from_rgb(255, 230, 230),
+                            );
+                            let pad_x = 8.0;
+                            let pad_y = 4.0;
+                            let tip_w = galley.size().x + pad_x * 2.0;
+                            let tip_h = galley.size().y + pad_y * 2.0;
+                            let tip_pos = Pos2::new(
+                                (cell.center().x - tip_w * 0.5).max(cell.min.x),
+                                (cell.max.y - tip_h - 4.0).max(cell.min.y),
+                            );
+                            let tip_rect = Rect::from_min_size(tip_pos, egui::vec2(tip_w, tip_h));
+                            painter.rect_filled(
+                                tip_rect,
+                                CornerRadius::same(4),
+                                Color32::from_rgba_unmultiplied(15, 15, 20, 230),
+                            );
+                            painter.rect_stroke(
+                                tip_rect,
+                                CornerRadius::same(4),
+                                Stroke::new(1.0, Color32::from_rgb(255, 80, 80)),
+                                StrokeKind::Inside,
+                            );
+                            painter.galley(
+                                Pos2::new(tip_rect.min.x + pad_x, tip_rect.min.y + pad_y),
+                                galley,
+                                Color32::from_rgb(255, 230, 230),
+                            );
+                        }
                     }
                 }
             }
