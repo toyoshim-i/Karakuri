@@ -331,8 +331,10 @@ impl WebApp {
             self.xr_rig_origin = None;
             self.xr_synced_pose = None;
             self.app.set_stereo_matrices(None);
+            self.app.set_stereo_eye_size(None);
             return;
         };
+        self.app.set_stereo_eye_size(Some(pose.eye_size));
         let origin = *self.xr_rig_origin.get_or_insert_with(|| {
             let (l, r) = (pose.left.eye, pose.right.eye);
             [

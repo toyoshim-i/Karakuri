@@ -32,6 +32,9 @@ pub(crate) struct Presented {
     pub(crate) format: wgpu::TextureFormat,
     /// Whether this sink has an active display rectangle on the current frame.
     pub(crate) aimed: bool,
+    /// Whether the WebXR stereo world draws this picture — both eyes side by
+    /// side — in place of the composite, which then skips it.
+    pub(crate) stereo: bool,
 }
 
 impl Presented {
@@ -97,6 +100,7 @@ impl Presented {
             label,
             format,
             aimed: false,
+            stereo: false,
         }
     }
 
@@ -132,9 +136,10 @@ impl Presented {
         *freed += 1;
         // Carried across, because a resize is not an un-aiming: the rectangle
         // this was aimed at is the one it was just resized to.
-        let aimed = self.aimed;
+        let (aimed, stereo) = (self.aimed, self.stereo);
         *self = Presented::made(gpu, renderer, self.label, self.format, size);
         self.aimed = aimed;
+        self.stereo = stereo;
         true
     }
 }
@@ -142,9 +147,10 @@ impl Presented {
 /// Engine output sink implementation for textures sampled into egui UI panels.
 impl Sink for Presented {
     fn acquire(&mut self, _gpu: &Gpu) -> Result<(), Skip> {
-        match self.aimed {
+        match self.aimed && !self.stereo {
             true => Ok(()),
-            // Folded regions skip presentation without faulting.
+            // Folded regions — and a picture the stereo world draws — skip
+            // presentation without faulting.
             false => Err(Skip::Transient),
         }
     }

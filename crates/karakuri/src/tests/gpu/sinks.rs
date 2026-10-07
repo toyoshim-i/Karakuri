@@ -247,7 +247,8 @@ mod gpu {
         );
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cell = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen")[0];
-        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None);
+        let (picture, previews) =
+            engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None, None);
 
         // Each texture matches its corresponding scaled layout rectangle.
         assert_eq!(
@@ -321,7 +322,8 @@ mod gpu {
             "the picture is folded and the row is still set aside, so the Program bay \
          claims nothing and has gone from the panel"
         );
-        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None);
+        let (picture, previews) =
+            engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None, None);
         assert!(
             picture.is_none(),
             "the picture is folded away and the frame still gave the console one to draw"

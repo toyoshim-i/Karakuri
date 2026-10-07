@@ -240,8 +240,13 @@ impl Engine {
         scale: f32,
         // The projector window's size, or `None` while closed.
         projector: Option<(u32, u32)>,
+        // One WebXR eye's size while the stereo world is drawn, else `None`.
+        stereo_eye: Option<(u32, u32)>,
     ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
         let (picture_at, preview_ats) = aims(layout, CANVAS);
+        // In WebXR the eyes are the output: the Program bay shows them side by
+        // side (drawn by the stereo world) rather than a composite of its own.
+        self.picture.stereo = stereo_eye.is_some();
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
@@ -274,7 +279,11 @@ impl Engine {
         }
 
         // Resize composite targets and deck when output resolution changes (ADR-0247, P-0091).
-        let outputs = [self.picture.aimed.then_some(self.picture.size), projector];
+        // In WebXR the eye alone decides: it is the only output looked at.
+        let outputs = match stereo_eye {
+            Some(eye) => [Some(eye), None],
+            None => [self.picture.aimed.then_some(self.picture.size), projector],
+        };
         if let Some(at) = render_size(&outputs) {
             if at != self.present.size() {
                 // Suppress per-frame resize logging during interactive divider drags (P-0095).

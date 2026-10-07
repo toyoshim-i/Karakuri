@@ -98,6 +98,10 @@ pub(crate) struct Gfx {
     pub(crate) config: wgpu::SurfaceConfiguration,
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) xr_surface: Option<wgpu::Surface<'static>>,
+    /// The XR canvas's configured size: two eyes side by side once the
+    /// headset has said how big an eye is, [`XR_CANVAS`] until then.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) xr_canvas: (u32, u32),
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) stereo_target: Option<StereoTarget>,
     /// Target texture format for rendering pictures, selected as the first supported sRGB format on the surface (P-0064, ADR-0162).

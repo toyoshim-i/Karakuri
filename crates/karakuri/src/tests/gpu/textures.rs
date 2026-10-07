@@ -53,7 +53,7 @@ mod gpu {
             "a wider window changed the picture's texture, so the picture is still the \
          width of its region and every frame of a horizontal drag reallocates"
         );
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         assert_eq!(
             engine.freed, 0,
             "a wider window freed a registration, so it remade the texture"
@@ -91,7 +91,7 @@ mod gpu {
          {want:?}"
         );
 
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         assert_eq!(engine.picture.size, taller);
         assert_eq!(
             (
@@ -111,7 +111,7 @@ mod gpu {
 
         // And a second aim with nothing moved remakes nothing, which is what
         // keeps all of the above on the resize path instead of on every frame.
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         assert_eq!(engine.freed, 1);
         assert!(renderer.texture(&engine.picture.id).is_some());
     }
@@ -161,7 +161,7 @@ mod gpu {
                 .deck
                 .set_residency(EngineSlot(slot as u8), Residency::Live);
         }
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         for _ in 0..4 {
             let Engine {
                 deck,
@@ -203,7 +203,7 @@ mod gpu {
             for (slot, residency) in residencies.into_iter().enumerate() {
                 engine.deck.set_residency(EngineSlot(slot as u8), residency);
             }
-            let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+            let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
             for (slot, aimed) in previews.into_iter().enumerate() {
                 let aimed = aimed.unwrap_or_else(|| {
                     panic!(
