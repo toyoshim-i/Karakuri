@@ -21,6 +21,7 @@ mod node;
 /// Order-independent transparency pipeline for weighted blending.
 mod oit;
 pub mod pass;
+pub mod plane_warp;
 pub mod points;
 pub mod present;
 pub mod probe;

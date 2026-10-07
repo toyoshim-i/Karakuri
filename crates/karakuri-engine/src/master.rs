@@ -782,10 +782,30 @@ impl MasterChain {
 
     /// Records execution of all chain slots and history copies into `encoder`.
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, out: &wgpu::TextureView) {
-        let total = self.slots.len();
         if self.entry.is_none() {
             return;
         }
+        self.record_slots(encoder, out);
+        self.retention.record(encoder);
+    }
+
+    /// Records the chain's slots from [`MasterChain::entry`] into `out`,
+    /// leaving the held cuts as they are: another view of a frame whose own
+    /// pass already held them (a WebXR eye), which must not overwrite the
+    /// history the next frame's feedback reads.
+    pub(crate) fn record_unheld(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        out: &wgpu::TextureView,
+    ) {
+        if self.entry.is_none() {
+            return;
+        }
+        self.record_slots(encoder, out);
+    }
+
+    fn record_slots(&self, encoder: &mut wgpu::CommandEncoder, out: &wgpu::TextureView) {
+        let total = self.slots.len();
         for (at, slot) in self.slots.iter().enumerate() {
             let target = if at + 1 == total {
                 out
@@ -802,8 +822,6 @@ impl MasterChain {
                 pass.record(encoder, target);
             }
         }
-
-        self.retention.record(encoder);
     }
 
     /// Allocates intermediate targets, ping-pong views, and slot bind groups on the calling thread.
