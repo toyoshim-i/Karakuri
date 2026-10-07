@@ -83,6 +83,7 @@ impl Readout {
                     .or_else(|| self.dispatch_staging_press(ctx, at))
                     .or_else(|| self.dispatch_transition_press(ctx, at))
                     .or_else(|| self.dispatch_sequencer_press(ctx, at))
+                    .or_else(|| self.dispatch_program_press(ctx, at))
                     .unwrap_or_else(|| self.dispatch_mixer_and_master_press(ctx, at));
                 return (claim, did);
             }

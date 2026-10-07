@@ -81,7 +81,7 @@ fn preview_row(row: Rect) -> [Rect; DECKS] {
 }
 
 /// Height of the caption area below a preview cell image.
-fn caption_band() -> f32 {
+pub fn caption_band() -> f32 {
     size::PREVIEW_CAPTION_GAP + size::PREVIEW_CAPTION_H
 }
 
@@ -154,7 +154,13 @@ impl ProgramBay {
         let at = Pos2::new(p.x, p.y);
         self.cells?
             .iter()
-            .position(|cell| cell.contains(at))
+            .position(|cell| {
+                let slot = Rect::from_min_max(
+                    cell.min,
+                    Pos2::new(cell.max.x, cell.max.y + caption_band()),
+                );
+                slot.contains(at)
+            })
             .map(|deck| deck as u8)
     }
 
