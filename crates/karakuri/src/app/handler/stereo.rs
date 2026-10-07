@@ -50,11 +50,7 @@ fn draw(
     // Determine active live slots participating in the mix (ADR-0040, ADR-0156).
     let active_slots: Vec<DeckSlot> = (0..gfx.engine.deck.slot_count())
         .map(|i| DeckSlot(i as u8))
-        .filter(|&slot| {
-            gfx.engine.deck.is_in_mix(slot)
-                && gfx.engine.deck.residency(slot) == karakuri_engine::Residency::Live
-                && !gfx.engine.deck.overloaded(slot)
-        })
+        .filter(|&slot| gfx.engine.deck.is_in_mix(slot) && !gfx.engine.deck.overloaded(slot))
         .collect();
 
     let primary_slot = active_slots.first().copied();
@@ -62,6 +58,10 @@ fn draw(
         .engine
         .deck
         .stereo_viewport(primary_slot)
+        .or_else(|| {
+            let s = gfx.engine.deck.size();
+            (s.0 > 0 && s.1 > 0).then_some(s)
+        })
         .ok_or("the deck has no Set to draw")?;
     if size.0 == 0 || size.1 == 0 {
         return Err(format!("the Set's viewport is {}x{}", size.0, size.1));

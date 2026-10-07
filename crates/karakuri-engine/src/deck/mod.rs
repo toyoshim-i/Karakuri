@@ -21,8 +21,8 @@ pub use frame::Frame;
 pub(crate) use frame::{make_slot_target, StagedSlotControl};
 pub use types::*;
 
-/// Default frame period threshold for watchdog overload gating: 50.0 ms (20 FPS).
-pub const DEFAULT_WATCHDOG_THRESHOLD_MS: f32 = 50.0;
+/// Default frame period threshold for watchdog overload gating: 100.0 ms (10 FPS).
+pub const DEFAULT_WATCHDOG_THRESHOLD_MS: f32 = 100.0;
 /// Default warmup grace period after startup before watchdog gating activates: 3.0 seconds.
 pub const DEFAULT_WATCHDOG_WARMUP: Duration = Duration::from_secs(3);
 /// Default continuous period overrun duration before watchdog gating triggers: 1.0 second.
@@ -55,6 +55,8 @@ pub struct Deck {
     pub(crate) watchdog_threshold_ms: f32,
     pub(crate) watchdog_warmup: Duration,
     pub(crate) watchdog_sustained: Duration,
+    pub(crate) last_frame_at: Option<Instant>,
+    pub(crate) last_frame_dt_ms: Option<f32>,
 }
 
 impl Deck {
@@ -133,6 +135,8 @@ impl Deck {
             watchdog_threshold_ms: DEFAULT_WATCHDOG_THRESHOLD_MS,
             watchdog_warmup: DEFAULT_WATCHDOG_WARMUP,
             watchdog_sustained: DEFAULT_WATCHDOG_SUSTAINED,
+            last_frame_at: None,
+            last_frame_dt_ms: None,
         };
         deck.set_measure_size((width, height));
         deck
@@ -153,12 +157,7 @@ impl Deck {
         } else {
             self.slots
                 .iter()
-                .position(|s| {
-                    s.effective == Residency::Live
-                        && !s.swap.overloaded()
-                        && s.online
-                        && s.opacity > 0.0
-                })
+                .position(|s| !s.swap.overloaded() && s.online && s.opacity > 0.0)
                 .or_else(|| {
                     self.slots
                         .iter()
@@ -179,6 +178,11 @@ impl Deck {
         self.active_stereo_set_mut(target_slot)
             .map(|set| set.viewport())
             .or_else(|| (self.width > 0 && self.height > 0).then_some((self.width, self.height)))
+    }
+
+    /// Returns the deck's configured surface dimensions `(width, height)`.
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
     /// Records rasterization pass for a single stereo eye into a specified viewport.
@@ -274,6 +278,13 @@ impl Deck {
         device: &wgpu::Device,
         queue: &'a wgpu::Queue,
     ) -> Frame<'a> {
+        let now = Instant::now();
+        if let Some(prev) = self.last_frame_at {
+            let dt = now.duration_since(prev);
+            self.last_frame_dt_ms = Some(dt.as_secs_f32() * 1000.0);
+        }
+        self.last_frame_at = Some(now);
+
         for slot in self.slots.iter_mut() {
             slot.swap.live_mut().discard();
         }
@@ -466,9 +477,23 @@ impl Deck {
             return None;
         }
 
-        let period = self.frame_period_ms()?;
+        let dt_ms = self
+            .last_frame_at
+            .map(|t| now.duration_since(t).as_secs_f32() * 1000.0);
+        let period = self
+            .last_frame_dt_ms
+            .into_iter()
+            .chain(dt_ms)
+            .chain(self.frame_period_ms())
+            .fold(0.0f32, f32::max);
+        if period <= 0.0 {
+            return None;
+        }
         if period >= self.watchdog_threshold_ms {
-            let start = *self.overload_since.get_or_insert(now);
+            let frame_duration = Duration::from_secs_f32(period / 1000.0);
+            let start = *self
+                .overload_since
+                .get_or_insert_with(|| now.checked_sub(frame_duration).unwrap_or(now));
             if now.duration_since(start) >= self.watchdog_sustained {
                 let to_gate = self
                     .activation_order
@@ -515,7 +540,9 @@ impl Deck {
         }
         self.slots[slot.index()].effective = residency;
         if residency != Residency::Live {
-            self.slots[slot.index()].online = false;
+            if self.solo != Some(slot.index()) {
+                self.slots[slot.index()].online = false;
+            }
             if let Some(meters) = &mut self.meters {
                 meters.retire(slot.index());
             }

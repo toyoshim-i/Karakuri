@@ -549,4 +549,72 @@ mod gpu {
         assert_eq!(deck.watchdog_gate(), Some(0));
         assert!(deck.overloaded(karakuri_engine::DeckSlot(0)));
     }
+
+    /// Verifies that a frame taking longer than the sustained overload threshold
+    /// triggers watchdog gating without requiring thirty frames to fill a rolling window.
+    #[test]
+    fn watchdog_gates_on_low_fps_frame_without_waiting_thirty_frames() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(build(&gpu, SEED_A, CAPACITY))],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_watchdog_threshold_ms(50.0);
+        deck.set_watchdog_timing(Duration::ZERO, Duration::from_millis(50));
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
+
+        // Run a single frame that sleeps 60 ms (> 50 ms threshold and > 50 ms sustained)
+        let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
+        std::thread::sleep(Duration::from_millis(60));
+        f.render(present.mix_target(), present.size(), 1);
+        f.finish();
+
+        let gated = deck.watchdog_gate();
+        assert_eq!(
+            gated,
+            Some(0),
+            "watchdog did not gate on a single low-FPS frame exceeding sustained duration"
+        );
+        assert!(deck.overloaded(karakuri_engine::DeckSlot(0)));
+    }
+
+    /// Verifies that soloing a slot promotes its requested and effective residency
+    /// to Live so that it is properly displayed on air.
+    #[test]
+    fn soloing_slot_promotes_to_live_and_preserves_online() {
+        let gpu = Gpu::headless().expect("no GPU available");
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build(&gpu, SEED_B, CAPACITY)),
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+
+        let slot2 = karakuri_engine::DeckSlot(2);
+        // Initially slot 2 is unmuted or muted, but soloing slot 2 makes it online and Live.
+        deck.set_residency(slot2, Residency::Allocated);
+        assert_eq!(deck.residency(slot2), Residency::Allocated);
+
+        deck.set_solo(slot2, true);
+        assert_eq!(deck.solo(), Some(2));
+        assert!(deck.is_soloed(slot2));
+        assert!(deck.is_online(slot2));
+        assert_eq!(deck.residency(slot2), Residency::Live);
+        assert!(deck.is_in_mix(slot2));
+
+        // Background governor pass does not strip online state from the soloed slot.
+        let report = deck.govern();
+        assert!(deck.is_online(slot2));
+        assert!(deck.is_in_mix(slot2));
+        assert_eq!(report.decisions[2].effective, Residency::Live);
+    }
 }

@@ -96,6 +96,8 @@ impl Deck {
         if slot.index() < self.slots.len() {
             if solo {
                 self.solo = Some(slot.index());
+                self.slots[slot.index()].effective = crate::deck::Residency::Live;
+                self.slots[slot.index()].requested = crate::deck::Residency::Live;
             } else if self.solo == Some(slot.index()) {
                 self.solo = None;
             }

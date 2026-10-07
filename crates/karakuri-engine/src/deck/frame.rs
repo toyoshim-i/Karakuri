@@ -170,6 +170,15 @@ impl Frame<'_> {
             if let Some(meters) = &mut self.deck.meters {
                 meters.arm();
             }
+            if let Some(prev) = self.deck.last_frame_at {
+                let dt = web_time::Instant::now().duration_since(prev);
+                let dt_ms = dt.as_secs_f32() * 1000.0;
+                self.deck.last_frame_dt_ms = Some(
+                    self.deck
+                        .last_frame_dt_ms
+                        .map_or(dt_ms, |prev_dt| prev_dt.max(dt_ms)),
+                );
+            }
         }
     }
 }
