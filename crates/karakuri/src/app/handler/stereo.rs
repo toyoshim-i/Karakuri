@@ -20,14 +20,13 @@ use crate::gfx::{EyeTarget, Gfx, StereoTarget};
 /// Draws the stereo world for one frame, reporting what happened through
 /// `log` when it differs from the previous frame (so a stuck state is said
 /// once, not sixty times a second). True when the XR canvas got a new frame.
-pub(crate) fn draw_world(
-    gfx: &mut Gfx,
-    slot: DeckSlot,
-    eyes: &(StereoMatrices, StereoMatrices),
-) -> bool {
-    let drawn = draw(gfx, slot, eyes);
+pub(crate) fn draw_world(gfx: &mut Gfx, eyes: &(StereoMatrices, StereoMatrices)) -> bool {
+    let drawn = draw(gfx, eyes);
     let said = match &drawn {
-        Ok(size) => format!("drawing slot {} at {}x{} per eye", slot.0, size.0, size.1),
+        Ok((count, size)) => format!(
+            "drawing {count} active slot(s) at {}x{} per eye",
+            size.0, size.1
+        ),
         Err(why) => format!("not drawn: {why}"),
     };
     static LAST: Mutex<String> = Mutex::new(String::new());
@@ -42,16 +41,27 @@ pub(crate) fn draw_world(
 
 fn draw(
     gfx: &mut Gfx,
-    slot: DeckSlot,
     (left, right): &(StereoMatrices, StereoMatrices),
-) -> Result<(u32, u32), String> {
+) -> Result<(usize, (u32, u32)), String> {
     if gfx.xr_surface.is_none() {
         return Err("no XR canvas surface".into());
     }
+
+    // Determine active live slots participating in the mix (ADR-0040, ADR-0156).
+    let active_slots: Vec<DeckSlot> = (0..gfx.engine.deck.slot_count())
+        .map(|i| DeckSlot(i as u8))
+        .filter(|&slot| {
+            gfx.engine.deck.is_in_mix(slot)
+                && gfx.engine.deck.residency(slot) == karakuri_engine::Residency::Live
+                && !gfx.engine.deck.overloaded(slot)
+        })
+        .collect();
+
+    let primary_slot = active_slots.first().copied();
     let size = gfx
         .engine
         .deck
-        .stereo_viewport(Some(slot))
+        .stereo_viewport(primary_slot)
         .ok_or("the deck has no Set to draw")?;
     if size.0 == 0 || size.1 == 0 {
         return Err(format!("the Set's viewport is {}x{}", size.0, size.1));
@@ -84,18 +94,42 @@ fn draw(
                 label: Some("WebXR stereo eye"),
             });
         let eye = &gfx.stereo_target.as_ref().expect("made above").eyes[at];
-        // `None`: the Set's own depth, which is its viewport's size.
-        gfx.engine.deck.draw_stereo_eye(
-            &gfx.gpu.queue,
-            &mut encoder,
-            &eye.hdr_view,
-            None,
-            Some(slot),
-            matrices,
-            true,
-            full,
-        );
-        super::effect_screen::record(gfx, slot, &mut encoder, at);
+
+        if active_slots.is_empty() {
+            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("WebXR blank eye"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &eye.hdr_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+        } else {
+            for (slot_idx, &slot) in active_slots.iter().enumerate() {
+                // `None`: the Set's own depth, which is its viewport's size.
+                gfx.engine.deck.draw_stereo_eye(
+                    &gfx.gpu.queue,
+                    &mut encoder,
+                    &eye.hdr_view,
+                    None,
+                    Some(slot),
+                    matrices,
+                    slot_idx == 0,
+                    full,
+                );
+            }
+            if let Some(slot) = primary_slot {
+                super::effect_screen::record(gfx, slot, &mut encoder, at);
+            }
+        }
         gfx.gpu.queue.submit(std::iter::once(encoder.finish()));
     }
     let target = gfx.stereo_target.as_ref().expect("made above");
@@ -134,7 +168,7 @@ fn draw(
     }
     gfx.gpu.queue.submit(std::iter::once(encoder.finish()));
     gfx.gpu.queue.present(frame);
-    Ok(size)
+    Ok((active_slots.len(), size))
 }
 
 /// Sizes the XR canvas: its surface configuration, which on the web is also
