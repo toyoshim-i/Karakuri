@@ -412,6 +412,8 @@ number; new records continue from the end.
 | [ADR-0384](0384-web-audio-api-microphone-input-via-unified-pcm-audio-core.md) | Web Audio API microphone input via unified PCM audio core | 2026-10-05 | accepted |
 | [ADR-0385](0385-web-midi-api-control-surface-integration-via-decoupled-port-feeder.md) | Web MIDI API control surface integration via decoupled Port feeder | 2026-10-05 | accepted |
 | [ADR-0386](0386-pluggable-virtual-filesystem-abstraction-with-web-persistent-storage.md) | Pluggable Virtual FileSystem abstraction with Web persistent storage | 2026-10-05 | accepted |
+| [ADR-0387](0387-universal-console-gui-component-architecture-and-multi-modal-pointer-invariance.md) | Universal Console GUI component architecture and multi-modal pointer invariance | 2026-10-07 | accepted |
+
 
 ## Retired numbers
 
