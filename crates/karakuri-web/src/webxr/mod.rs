@@ -209,6 +209,12 @@ fn setup_xr_render_loop(
                 let p1 = v1.transform().position();
 
                 let to_mat4 = |v: Vec<f32>| -> [f32; 16] { v.try_into().unwrap_or([0.0; 16]) };
+                // The layer's viewport for an eye is how many framebuffer
+                // pixels that eye gets — the resolution worth drawing it at.
+                let eye_size = layer
+                    .get_viewport(&v0)
+                    .map(|vp| (vp.width().max(1) as u32, vp.height().max(1) as u32))
+                    .unwrap_or((960, 1080));
                 let stereo = StereoPose {
                     left: StereoEye {
                         view: to_mat4(v0.transform().inverse().matrix()),
@@ -220,6 +226,7 @@ fn setup_xr_render_loop(
                         proj: to_mat4(v1.projection_matrix()),
                         eye: [p1.x() as f32, p1.y() as f32, p1.z() as f32],
                     },
+                    eye_size,
                 };
                 *current_stereo_pose.borrow_mut() = Some(stereo);
             }

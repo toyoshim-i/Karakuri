@@ -32,6 +32,8 @@ pub struct StereoEye {
 pub struct StereoPose {
     pub left: StereoEye,
     pub right: StereoEye,
+    /// One eye's share of the XR layer's framebuffer, in pixels.
+    pub eye_size: (u32, u32),
 }
 
 /// Shared state for WebXR spatial HUD session.

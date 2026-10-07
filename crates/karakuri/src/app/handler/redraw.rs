@@ -155,12 +155,14 @@ impl App {
         let projector = gfx.projector.as_ref().map(|p| p.size);
         let plugin = gfx.plugin.as_ref().map(|p| p.size());
         let external_output = crate::bridge::render_size(&[projector, plugin]);
+        let stereo_eye = self.stereo_matrices.and(self.stereo_eye_size);
         let (picture, previews) = gfx.engine.aim(
             &gfx.gpu,
             &mut gfx.renderer,
             self.readout.panel.layout(),
             scale,
             external_output,
+            stereo_eye,
         );
         // Update projector chip readout state for current frame.
         self.readout.view.projector = projector.is_some();

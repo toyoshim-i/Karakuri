@@ -113,6 +113,8 @@ pub struct App {
     )>,
     /// Set when a redraw drew the stereo world; see [`App::take_stereo_drawn`].
     pub(crate) stereo_drawn: bool,
+    /// One WebXR eye's size; see [`App::set_stereo_eye_size`].
+    pub(crate) stereo_eye_size: Option<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,6 +280,7 @@ impl App {
             plugin_route_hook: None,
             stereo_matrices: None,
             stereo_drawn: false,
+            stereo_eye_size: None,
         }
     }
 
@@ -299,21 +302,24 @@ impl App {
         self.stereo_matrices = matrices;
     }
 
+    /// Sets one WebXR eye's size in pixels: while the stereo world is drawn
+    /// it is the render size, and the XR canvas holds two of it side by side.
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_stereo_eye_size(&mut self, size: Option<(u32, u32)>) {
+        self.stereo_eye_size = size;
+        if let (Some(gfx), Some((w, h))) = (self.gfx.as_mut(), size) {
+            handler::stereo::fit_canvas(gfx, (w * 2, h));
+        }
+    }
+
     /// Configures and attaches secondary WebXR canvas surface for SBS spatial world rendering.
     #[cfg(target_arch = "wasm32")]
     pub fn attach_xr_surface(&mut self, surface: wgpu::Surface<'static>) {
         if let Some(ref mut gfx) = self.gfx {
-            // The tone-mapping present pipeline targets the sRGB picture format,
-            // while a canvas is configured with its plain format. Offering the
-            // sRGB variant as a view format lets the stereo pass view the canvas
-            // texture as sRGB; without it every present into the canvas is a
-            // pipeline/attachment format mismatch.
-            let mut xr_config = gfx.config.clone();
-            xr_config.width = crate::gfx::XR_CANVAS.0;
-            xr_config.height = crate::gfx::XR_CANVAS.1;
-            xr_config.view_formats = vec![gfx.picture_format];
-            surface.configure(&gfx.gpu.device, &xr_config);
             gfx.xr_surface = Some(surface);
+            let at = gfx.xr_canvas;
+            gfx.xr_canvas = (0, 0);
+            handler::stereo::fit_canvas(gfx, at);
             // Eye targets are sized to the drawn Set, which can change; they
             // are made on the first stereo frame (`stereo::draw_world`).
             gfx.stereo_target = None;

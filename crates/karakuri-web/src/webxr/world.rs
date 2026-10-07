@@ -20,6 +20,8 @@ pub struct XrWorldRenderer {
     u_has_texture_loc: Option<WebGlUniformLocation>,
     u_time_loc: Option<WebGlUniformLocation>,
     has_texture: bool,
+    /// The size `texture` was last allocated at.
+    texture_size: (u32, u32),
     warp: WarpUniforms,
 }
 
@@ -189,6 +191,7 @@ void main() {
             u_has_texture_loc,
             u_time_loc,
             has_texture: false,
+            texture_size: (0, 0),
             warp,
         })
     }
@@ -203,7 +206,10 @@ void main() {
             let t2d = WebGl2RenderingContext::TEXTURE_2D;
             gl.bind_texture(t2d, Some(&self.texture));
 
-            let res = if !self.has_texture {
+            // The canvas follows the headset's eye size, so it can change
+            // size; texSubImage cannot grow a texture, so reallocate then.
+            let size = (canvas.width(), canvas.height());
+            let res = if !self.has_texture || self.texture_size != size {
                 let r = gl.tex_image_2d_with_u32_and_u32_and_html_canvas_element(
                     t2d,
                     0,
@@ -214,6 +220,7 @@ void main() {
                 );
                 if r.is_ok() {
                     self.has_texture = true;
+                    self.texture_size = size;
                     web_sys::console::log_1(
                         &format!(
                             "Karakuri XR world texture allocated: {}x{}",

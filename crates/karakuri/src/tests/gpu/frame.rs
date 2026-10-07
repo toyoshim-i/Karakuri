@@ -60,7 +60,8 @@ mod gpu {
 
         // Aims view cells via `Engine::aim` to test render pass sequencing against the panel.
         let mut view = View::new(ROOM);
-        (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        (view.picture, view.previews) =
+            engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         assert_eq!(
             view.picture.expect("the picture was not aimed").rect,
             rect,
@@ -382,7 +383,7 @@ mod gpu {
         );
 
         // Default configuration without projector composites at picture size.
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         assert_eq!(
             engine.present.size(),
             picture,
@@ -400,7 +401,14 @@ mod gpu {
 
         // Larger enabled projector raises compositing resolution.
         let projector = (3840, 2160);
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(projector));
+        engine.aim(
+            &gpu,
+            &mut renderer,
+            panel.layout(),
+            1.0,
+            Some(projector),
+            None,
+        );
         assert_eq!(
             engine.present.size(),
             projector,
@@ -432,7 +440,7 @@ mod gpu {
         .expect("the frame composes at the derived size");
 
         // Disabling the projector drops presentation size back to picture bounds.
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
         assert_eq!(
             engine.present.size(),
             picture,
