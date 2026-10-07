@@ -30,7 +30,7 @@ pub(crate) fn draw_world(gfx: &mut Gfx, eyes: &(StereoMatrices, StereoMatrices))
         Err(why) => format!("not drawn: {why}"),
     };
     static LAST: Mutex<String> = Mutex::new(String::new());
-    if let Ok(mut last) = LAST.lock() {
+    if let Ok(mut last) = LAST.try_lock() {
         if *last != said {
             log::info!("Karakuri WebXR stereo world: {said}");
             *last = said;

@@ -123,10 +123,11 @@ pub fn caption_into(
         ink,
     );
 
-    let (word_str, word_color) = if overloaded {
-        ("OVERLOADED", Color32::from_rgb(255, 60, 60))
+    let word_str = state_word(picture, overloaded);
+    let word_color = if overloaded {
+        Color32::from_rgb(255, 60, 60)
     } else {
-        (state_word(picture, overloaded), pal.faint)
+        pal.faint
     };
     let word = painter.layout_no_wrap(word_str.to_owned(), font, word_color);
     painter.galley(

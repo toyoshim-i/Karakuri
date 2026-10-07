@@ -21,9 +21,9 @@ pub fn stamped_id() -> String {
     static ISSUED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
         std::sync::OnceLock::new();
     let issued = ISSUED.get_or_init(Default::default);
-    match issued.lock() {
+    match issued.try_lock() {
         Ok(mut issued) => unused(&mut issued, stamp),
-        // A poisoned lock means a caller panicked holding it. The stamp is
+        // A busy or poisoned lock means recursion or a panicked caller. The stamp is
         // still a name, and refusing to save over it would be this bookkeeping
         // deciding whether an operator keeps their work.
         Err(_) => stamp,
