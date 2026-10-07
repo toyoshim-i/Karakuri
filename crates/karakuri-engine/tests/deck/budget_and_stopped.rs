@@ -414,4 +414,102 @@ mod gpu {
          distinguishable and the assertion above proves nothing"
         );
     }
+
+    /// Verifies that the performance watchdog automatically gates overloaded slots
+    /// when the deck's rolling median period exceeds the frame budget.
+    #[test]
+    fn watchdog_automatically_gates_overloaded_slot_on_period_overrun() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build(&gpu, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
+
+        // Before slow frames, slot 0 is not overloaded.
+        assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
+        assert_eq!(deck.watchdog_gate(), None);
+
+        // Simulate frame overrun by running slow frames until period window fills.
+        for _ in 0..PERIOD_WINDOW {
+            slow_frame(&gpu, &mut deck, &present);
+        }
+
+        // Period now exceeds budget; watchdog should gate the live slot.
+        let gated = deck.watchdog_gate();
+        assert_eq!(
+            gated,
+            Some(0),
+            "watchdog did not gate the active live slot on period overrun"
+        );
+        assert!(
+            deck.overloaded(karakuri_engine::DeckSlot(0)),
+            "slot was not marked overloaded after watchdog gate"
+        );
+
+        // Can clear overload via set_overloaded (e.g. manual recovery).
+        deck.set_overloaded(karakuri_engine::DeckSlot(0), false);
+        assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
+    }
+
+    /// Verifies that when multiple slots are in mix, watchdog gates the most
+    /// recently activated slot first, dropping one by one until within budget.
+    #[test]
+    fn watchdog_gates_most_recently_activated_slot_first() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build(&gpu, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+
+        // Slot 0 is activated first.
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
+        frame(&gpu, &mut deck, &present, 1);
+
+        // Slot 1 is activated second (most recently active).
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
+        frame(&gpu, &mut deck, &present, 1);
+
+        // Run slow frames to trigger period overrun.
+        for _ in 0..PERIOD_WINDOW {
+            slow_frame(&gpu, &mut deck, &present);
+        }
+
+        // Watchdog should gate slot 1 first because it was activated most recently!
+        let first_gated = deck.watchdog_gate();
+        assert_eq!(
+            first_gated,
+            Some(1),
+            "watchdog did not gate the most recently activated slot (slot 1) first"
+        );
+        assert!(deck.overloaded(karakuri_engine::DeckSlot(1)));
+        assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
+
+        // If load remains over threshold, next gate drops slot 0.
+        let second_gated = deck.watchdog_gate();
+        assert_eq!(
+            second_gated,
+            Some(0),
+            "watchdog did not gate the next active slot (slot 0) after slot 1 was dropped"
+        );
+        assert!(deck.overloaded(karakuri_engine::DeckSlot(0)));
+    }
 }
