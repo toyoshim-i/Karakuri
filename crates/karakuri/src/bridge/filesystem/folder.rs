@@ -31,6 +31,7 @@ pub(crate) fn presets_listing(
 }
 
 /// Lists available Sets (`.kset` and `.kbset`) directly within a dropped folder directory (ADR-0275).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
     folder_files(dir).into_iter().map(|row| row.id).collect()
 }

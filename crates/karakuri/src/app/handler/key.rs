@@ -395,7 +395,7 @@ impl App {
         let mut took = Repaint::Never;
         let acted = match (readout.view.scope(), row) {
             // Take in preset or folder item into store and load it (ADR-0229, ADR-0275, ADR-0299).
-            (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
+            (Some(scope @ (Scope::Presets | Scope::Folder | Scope::MySets)), Some(row)) => {
                 let from = match scope {
                     Scope::Folder => Taking::Folder(folder),
                     _ => Taking::Presets(presets),
@@ -416,6 +416,10 @@ impl App {
                         )
                         .repaint;
                         Acted::Emitted(Some(load))
+                    }
+                    Err(_) if scope == Scope::MySets => {
+                        // User-kept set already in the store: proceed directly with LoadSet
+                        Acted::Emitted(Some(Operation::LoadSet { deck, set: row }))
                     }
                     // Report import failure from `setfile::unbundle` before attempting any load.
                     Err(e) => {

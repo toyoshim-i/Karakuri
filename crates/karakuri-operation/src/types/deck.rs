@@ -59,6 +59,40 @@ impl LibraryKinds {
     pub fn shows_sets(&self) -> bool {
         !self.narrowing() || self.sets
     }
+
+    /// Evaluates whether an item matches all enabled filter buttons (AND logic across all active chips).
+    ///
+    /// If no filters are enabled, all items match.
+    /// If one or more filters are enabled, the row must satisfy ALL enabled filters:
+    /// - If `sets` is on, the row must be a Set (!is_procedure).
+    /// - If `l1`..`l5`/`field` are on, the row must contain those respective layers.
+    pub fn matches_row(&self, badges: &[Layer], is_procedure: bool) -> bool {
+        if !self.narrowing() {
+            return true;
+        }
+        if self.sets && is_procedure {
+            return false;
+        }
+        if self.l1 && !badges.contains(&Layer::L1) {
+            return false;
+        }
+        if self.l2 && !badges.contains(&Layer::L2) {
+            return false;
+        }
+        if self.l3 && !badges.contains(&Layer::L3) {
+            return false;
+        }
+        if self.l4 && !badges.contains(&Layer::L4) {
+            return false;
+        }
+        if self.field && !badges.contains(&Layer::Field) {
+            return false;
+        }
+        if self.l5 && !badges.contains(&Layer::L5) {
+            return false;
+        }
+        true
+    }
 }
 
 /// What a deck's clock is locked to. `karakuri_engine::transport::Sync`'s

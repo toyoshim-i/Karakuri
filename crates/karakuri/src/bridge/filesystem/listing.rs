@@ -171,17 +171,6 @@ pub(crate) fn shipped_row(shipped: &karakuri_environment::places::PresetProcedur
     }
 }
 
-/// Determines if a procedure matches the kind filter. Unkinded procedures match only when no filter is active.
-pub(crate) fn shows_kept(
-    kinds: karakuri_operation::LibraryKinds,
-    kind: Option<karakuri_operation::Layer>,
-) -> bool {
-    match kind {
-        Some(layer) => kinds.shows_layer(layer),
-        None => !kinds.narrowing(),
-    }
-}
-
 /// What the presets root ships that can go over a layer, as its rows —
 /// [`presets_listing`]'s shape one extension along and with its failures.
 pub(crate) fn presets_procedures(
@@ -335,13 +324,12 @@ pub(crate) fn listing(
             let mut rows: Vec<(String, RowKind, std::time::SystemTime)> = held
                 .iter()
                 .filter(|set| narrows(set, holds.as_deref(), layer))
-                .filter(|_| kinds.shows_sets())
                 .map(|set| (set.id.clone(), set_row(set), set.written))
                 .chain(
                     kept.iter()
-                        .filter(|kept| shows_kept(kinds, kept.kind))
                         .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
                 )
+                .filter(|(_, kind, _)| kinds.matches_row(&kind.badges, kind.procedure))
                 .collect();
             // Sort by modification time descending, breaking ties alphabetically by name.
             rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
@@ -353,12 +341,10 @@ pub(crate) fn listing(
                 .iter()
                 .filter(|set| view.starred.contains(&set.id))
                 .filter(|set| narrows(set, holds.as_deref(), layer))
-                .filter(|_| kinds.shows_sets())
                 .map(|set| (set.id.clone(), set_row(set), set.written))
                 .chain(
                     kept.iter()
                         .filter(|kept| view.starred.contains(&kept.name))
-                        .filter(|kept| shows_kept(kinds, kept.kind))
                         .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
                 )
                 .chain(
@@ -371,19 +357,12 @@ pub(crate) fn listing(
                                 .and_then(|m| m.modified())
                                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
                             (preset.id, kind, written)
-                        })
-                        .filter(|(_, kind, _)| {
-                            kinds.shows_sets()
-                                && (!kinds.narrowing()
-                                    || kind.badges.is_empty()
-                                    || kind.badges.iter().any(|&l| kinds.shows_layer(l)))
                         }),
                 )
                 .chain(
                     presets_procedures(presets)
                         .into_iter()
                         .filter(|shipped| view.starred.contains(&shipped.name))
-                        .filter(|shipped| shows_kept(kinds, shipped.kind.and_then(kind_of)))
                         .map(|shipped| {
                             let kind = shipped_row(&shipped);
                             let written = karakuri_store::fs::metadata(&shipped.file)
@@ -396,7 +375,6 @@ pub(crate) fn listing(
                     karakuri_environment::mix::shipped::ALL
                         .iter()
                         .filter(|(name, _)| view.starred.contains(*name))
-                        .filter(|_| kinds.shows_layer(karakuri_operation::Layer::L5))
                         .map(|(name, _)| {
                             (
                                 (*name).to_string(),
@@ -408,6 +386,7 @@ pub(crate) fn listing(
                             )
                         }),
                 )
+                .filter(|(_, kind, _)| kinds.matches_row(&kind.badges, kind.procedure))
                 .collect();
             let mut seen = std::collections::BTreeSet::new();
             rows.retain(|(name, _, _)| seen.insert(name.clone()));
@@ -423,27 +402,24 @@ pub(crate) fn listing(
                     let kind = preset_set_row(&preset.path);
                     (preset.id, kind)
                 })
-                .filter(|(_, kind)| {
-                    kinds.shows_sets()
-                        && (!kinds.narrowing()
-                            || kind.badges.is_empty()
-                            || kind.badges.iter().any(|&l| kinds.shows_layer(l)))
-                })
                 .chain(
                     shipped
                         .iter()
-                        .filter(|shipped| shows_kept(kinds, shipped.kind.and_then(kind_of)))
                         .map(|shipped| (shipped.name.clone(), shipped_row(shipped))),
                 )
+                .filter(|(_, kind)| kinds.matches_row(&kind.badges, kind.procedure))
                 .collect();
             rows.sort_by(|a, b| a.0.cmp(&b.0));
             rows
         }
         // Folder drag-and-drop listing; lists sets only, excluding loose `.kir` files (ADR-0156, ADR-0338).
-        Scope::Folder => folder_listing(folder)
+        Scope::Folder => folder_files(folder)
             .into_iter()
-            .filter(|_| kinds.shows_sets())
-            .map(|id| (id, RowKind::default()))
+            .map(|row| {
+                let kind = preset_set_row(&row.path);
+                (row.id, kind)
+            })
+            .filter(|(_, kind)| kinds.matches_row(&kind.badges, kind.procedure))
             .collect(),
         // History versions for the active set, unconstrained by kind chips.
         Scope::History => walked

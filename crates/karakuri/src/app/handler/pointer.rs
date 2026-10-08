@@ -421,7 +421,7 @@ impl App {
         match (&acted, self.readout.view.scope()) {
             (
                 Acted::Emitted(Some(Operation::LoadSet { deck, set })),
-                Some(scope @ (Scope::Presets | Scope::Folder)),
+                Some(scope @ (Scope::Presets | Scope::Folder | Scope::MySets)),
             ) => {
                 let (deck, row) = (*deck, set.clone());
                 let from = match scope {
@@ -442,6 +442,10 @@ impl App {
                         )
                         .repaint;
                         (Acted::Emitted(Some(load)), took)
+                    }
+                    Err(_) if scope == Scope::MySets => {
+                        // User-kept set already in the store: proceed directly with LoadSet
+                        (acted, Repaint::Never)
                     }
                     Err(e) => {
                         println!(
