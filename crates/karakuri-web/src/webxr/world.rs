@@ -51,6 +51,8 @@ impl XrWorldRenderer {
         // For Celestial Dome (Tier 3), we also pass the world-space ray
         // direction to the fragment shader for exact dome-master projection.
         let vs_source = r#"#version 300 es
+precision highp float;
+precision highp int;
 layout(location = 0) in vec2 a_pos;
 uniform int u_warp; // 1 = reproject with the matrices below
 uniform mat4 u_cur_view;
@@ -79,6 +81,7 @@ void main() {
 
         let fs_source = r#"#version 300 es
 precision highp float;
+precision highp int;
 
 in vec2 v_uv;
 in vec3 v_world_ray;
