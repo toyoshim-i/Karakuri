@@ -544,3 +544,41 @@ fn all_presets_in_examples_can_be_taken_in() {
     );
     std::fs::remove_dir_all(&root).expect("clean up");
 }
+
+#[test]
+fn all_presets_in_examples_have_valid_part_kinds() {
+    let presets = shipped_presets();
+    let listed = presets_listing(Some(&presets));
+    let mut failures = Vec::new();
+    for preset in listed {
+        if let Ok(lines) = karakuri_store::ndjson::read(&preset.path) {
+            for line in lines {
+                if let karakuri_store::record::Record::Part { layer, path, .. } = line.record() {
+                    let kir_path = presets.dir.join(path);
+                    if let Ok(source) = karakuri_store::fs::read(&kir_path) {
+                        let declared = karakuri_environment::history::declared_kind(&source);
+                        let expected = match layer {
+                            karakuri_store::record::Layer::L1 => "L1",
+                            karakuri_store::record::Layer::L2 => "L2",
+                            karakuri_store::record::Layer::L3 => "L3",
+                            karakuri_store::record::Layer::L4 => "L4",
+                            karakuri_store::record::Layer::Field => "Field",
+                            karakuri_store::record::Layer::L5 => "L5",
+                        };
+                        if declared != Some(expected) {
+                            failures.push(format!(
+                                "{}: part `{path}` declares {declared:?} but placed in layer {expected}",
+                                preset.id
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "Presets with mismatched part kinds:\n{}",
+        failures.join("\n")
+    );
+}

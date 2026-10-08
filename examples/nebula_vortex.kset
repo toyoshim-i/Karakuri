@@ -1,5 +1,5 @@
 {"t":"set","id":"nebula_vortex","v":1}
-{"t":"part","layer":"L1","path":"star_flares.kir"}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
 {"t":"part","layer":"L4","path":"nebula_vortex.kir"}
 {"t":"capacity","layer":"L1","value":512}
 {"t":"bind","layer":"L4","key":"surge","signal":"bass","curve":"pow2","range":[0.0,1.8]}

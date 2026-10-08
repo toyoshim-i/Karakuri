@@ -1,5 +1,5 @@
 {"t":"set","id":"sol_observatory","v":1}
-{"t":"part","layer":"L1","path":"plain_points.kir"}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
 {"t":"part","layer":"L4","path":"sol_observatory.kir"}
 {"t":"capacity","layer":"L1","value":256}
 {"t":"bind","layer":"L4","key":"flare","signal":"bass","curve":"pow2","range":[0.0,1.8]}
