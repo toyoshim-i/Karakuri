@@ -143,6 +143,24 @@ pub async fn start_webxr_session(
         .into(),
     );
 
+    let wr_for_window = world_renderer.clone();
+    let cycle_cb = Closure::wrap(Box::new(move || {
+        let m = wr_for_window.borrow_mut().cycle_dome_mode();
+        let name = match m {
+            1 => "Celestial Dome (180° Planetarium)",
+            2 => "Wide Celestial Dome (220° Horizon)",
+            _ => "Planar Cinema Screen",
+        };
+        web_sys::console::log_1(&format!("WebXR visual mode: {name}").into());
+        m
+    }) as Box<dyn FnMut() -> i32>);
+    let _ = js_sys::Reflect::set(
+        &window,
+        &"__karakuri_cycle_dome_mode".into(),
+        cycle_cb.as_ref().unchecked_ref(),
+    );
+    cycle_cb.forget();
+
     setup_xr_render_loop(
         session.clone(),
         ref_space,
@@ -182,6 +200,7 @@ fn setup_xr_render_loop(
     let g = f.clone();
 
     let mut last_trigger_pressed = false;
+    let mut last_dome_btn_pressed = false;
     let mut hud_anchor: Option<HudAnchor> = None;
     let mut grab_state: Option<GrabState> = None;
     let mut frame_count: u64 = 0;
@@ -254,6 +273,7 @@ fn setup_xr_render_loop(
         let canvas_w = canvas.width() as f64;
         let canvas_h = canvas.height() as f64;
         let mut hit_cursor: Option<(f32, f32)> = None;
+        let mut dome_btn_down_this_frame = false;
 
         if let Some(anchor) = hud_anchor {
             for i in 0..num_sources {
@@ -418,9 +438,47 @@ fn setup_xr_render_loop(
                                 }
                             }
                         }
+
+                        // Detect Primary Button (Button 4 / A or X) or Secondary Button (Button 5 / B or Y)
+                        // to cycle Celestial Dome projection modes
+                        if let Some(gamepad) = source.gamepad() {
+                            let buttons = gamepad.buttons();
+                            if buttons.length() > 4 {
+                                let btn4 = js_sys::Reflect::get(&buttons, &4.into())
+                                    .ok()
+                                    .and_then(|v| v.dyn_into::<web_sys::GamepadButton>().ok())
+                                    .map(|b| b.pressed())
+                                    .unwrap_or(false);
+                                let btn5 = if buttons.length() > 5 {
+                                    js_sys::Reflect::get(&buttons, &5.into())
+                                        .ok()
+                                        .and_then(|v| v.dyn_into::<web_sys::GamepadButton>().ok())
+                                        .map(|b| b.pressed())
+                                        .unwrap_or(false)
+                                } else {
+                                    false
+                                };
+                                if btn4 || btn5 {
+                                    dome_btn_down_this_frame = true;
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        if dome_btn_down_this_frame && !last_dome_btn_pressed {
+            last_dome_btn_pressed = true;
+            let new_mode = world_renderer.borrow_mut().cycle_dome_mode();
+            let name = match new_mode {
+                1 => "Celestial Dome (180° Planetarium)",
+                2 => "Wide Celestial Dome (220° Horizon)",
+                _ => "Planar Cinema Screen",
+            };
+            web_sys::console::log_1(&format!("WebXR visual mode cycled: {name}").into());
+        } else if !dome_btn_down_this_frame {
+            last_dome_btn_pressed = false;
         }
 
         // Render stereo eye views
