@@ -211,7 +211,7 @@ fn setup_xr_render_loop(
     pointer_sink: Rc<RefCell<Vec<WebXrPointerAction>>>,
     current_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     rendered_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
-    is_fullscreen: Rc<RefCell<bool>>,
+    _is_fullscreen: Rc<RefCell<bool>>,
     session_mode: WebXrSessionMode,
     proxy: EventLoopProxy<()>,
 ) {
@@ -603,17 +603,10 @@ fn setup_xr_render_loop(
             }
         }
 
-        // Automatic visual projection mode based on Session Mode (AR vs VR) and Active Topology (Fullscreen vs 3D)
-        let is_fs = *is_fullscreen.borrow();
+        // Visual projection mode: Mode 0 (Natural Stereo Perspective Reprojection) for VR, Mode 3 for AR
         let target_mode = match session_mode {
             WebXrSessionMode::Ar => 3, // MR Passthrough
-            WebXrSessionMode::Vr => {
-                if is_fs {
-                    1 // Celestial Dome for Topology::Fullscreen fragment art
-                } else {
-                    0 // Planar Screen for 3D topologies (Points, Lines, Triangles, etc.)
-                }
-            }
+            WebXrSessionMode::Vr => 0, // Natural Stereo Perspective (preserves WebGPU 6DoF stereo camera and Quest off-centre frustum)
         };
         world_renderer.borrow_mut().set_dome_mode(target_mode);
 
