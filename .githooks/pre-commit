@@ -130,6 +130,7 @@ is_allowed_stdfs() {
         crates/karakuri-store/src/stream.rs) return 0 ;;
         crates/karakuri-console/src/room/font.rs) return 0 ;;
         crates/karakuri-console/src/view/prompt/cli.rs) return 0 ;;
+        crates/karakuri-cli/*) return 0 ;;
         build.rs | */build.rs) return 0 ;;
         examples/* | */examples/*) return 0 ;;
         tests/* | */tests/* | *test*.rs) return 0 ;;
@@ -155,6 +156,32 @@ if [ -n "$stdfs_violators" ]; then
     printf '%s' "$stdfs_violators"
     echo
     echo "route all filesystem operations through \`karakuri_store::fs\`."
+    echo "see docs/adr/0386-pluggable-virtual-filesystem-abstraction-with-web-persistent-storage.md"
+    exit 1
+fi
+
+# **Direct `std::path` filesystem query methods are prohibited outside native backend crates (ADR-0386).**
+# `Path::is_file()`, `Path::is_dir()`, and `Path::exists()` query the host OS filesystem directly,
+# bypassing `karakuri_store::fs` and failing on virtual filesystems (e.g. Wasm/MemoryFs).
+# Use `karakuri_store::fs::{is_file, is_dir, exists}` instead.
+stdpath_violators=""
+for f in $files; do
+    if is_allowed_stdfs "$f"; then
+        continue
+    fi
+    violating_lines=$(git show ":$f" | grep -n -E '^\s*([^/]|/[^/])*(\)|[a-zA-Z0-9_]+)\.(is_file|is_dir|exists)\(' | grep -v -E '(file_type|FileType|\bkind\b|\bwhat\b|\bmeta\b|\bm\b)' || true)
+    if [ -n "$violating_lines" ]; then
+        stdpath_violators="$stdpath_violators$f:
+$violating_lines
+"
+    fi
+done
+
+if [ -n "$stdpath_violators" ]; then
+    echo "direct Path filesystem query methods (.is_file, .is_dir, .exists) are prohibited (ADR-0386):"
+    printf '%s' "$stdpath_violators"
+    echo
+    echo "route all filesystem checks through \`karakuri_store::fs::{is_file, is_dir, exists}\`."
     echo "see docs/adr/0386-pluggable-virtual-filesystem-abstraction-with-web-persistent-storage.md"
     exit 1
 fi

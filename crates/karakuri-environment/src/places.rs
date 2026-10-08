@@ -63,7 +63,7 @@ pub struct Presets {
 /// Resolves preset library root from optional explicit path or default search locations.
 pub fn presets(given: Option<&Path>) -> Result<Option<Presets>, String> {
     if let Some(dir) = given {
-        return match dir.exists() {
+        return match karakuri_store::fs::exists(dir) {
             true => Ok(Some(Presets {
                 dir: dir.to_path_buf(),
                 found: Found::Given,
@@ -261,7 +261,7 @@ impl Plugins {
         for entry in entries {
             let entry = entry.map_err(|e| self.cannot_be_listed(&e))?;
             let path = entry.path();
-            if path.is_file() {
+            if karakuri_store::fs::is_file(&path) {
                 #[cfg(target_os = "windows")]
                 let is_exec = path
                     .extension()
@@ -303,7 +303,7 @@ impl Plugins {
 /// or the first of the four places that has a plugins directory.
 pub fn plugins(given: Option<&Path>) -> Result<Option<Plugins>, String> {
     if let Some(dir) = given {
-        return match dir.is_dir() {
+        return match karakuri_store::fs::is_dir(dir) {
             true => Ok(Some(Plugins {
                 dir: dir.to_path_buf(),
                 found: Found::Given,
@@ -313,7 +313,7 @@ pub fn plugins(given: Option<&Path>) -> Result<Option<Plugins>, String> {
     }
     if let Ok(env_dir) = std::env::var("KARAKURI_PLUGINS_DIR") {
         let path = PathBuf::from(env_dir);
-        return match path.is_dir() {
+        return match karakuri_store::fs::is_dir(&path) {
             true => Ok(Some(Plugins {
                 dir: path,
                 found: Found::Given,
@@ -356,7 +356,7 @@ fn searched_plugins(exe_dir: Option<&Path>, workspace: &Path) -> Option<Plugins>
 }
 
 fn is_a_plugin_directory(dir: &Path) -> bool {
-    dir.is_dir()
+    karakuri_store::fs::is_dir(dir)
 }
 
 /// A plugin directory that is not there.
