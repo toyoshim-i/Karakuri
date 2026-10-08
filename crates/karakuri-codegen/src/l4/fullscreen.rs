@@ -107,19 +107,41 @@ pub(super) fn generate_fullscreen(
     } else {
         src.push_str(
             r#"    var point_coord = in.point_coord;
-    if cam.vr_mode >= 1.0 {
-        let theta = acos(clamp(ray.y, -1.0, 1.0));
-        let r = theta / (3.14159265 * 0.5);
-        let a = atan2(ray.x, -ray.z) + u.beats * cam.vr_spin * 6.2831853;
-        let a_norm = (a / 6.2831853 + 0.5) % 1.0;
-
+    if cam.vr_mode >= 0.5 {
         if cam.vr_mode < 1.5 {
-            // Mode 1: Dome
-            let q = r * vec2<f32>(sin(a), cos(a)) * cam.vr_zoom;
+            // Mode 1: Wall (Giant flat screen anchored in front of user in room space)
+            if ray.z >= -0.01 {
+                discard;
+            }
+            // 16:9 flat screen in front (-Z). At zoom = 1.0, wall_span = 1.2 (~100 deg horizontal FOV).
+            let wall_span = 1.2 / max(cam.vr_zoom, 0.05);
+            let u_wall = (ray.x / -ray.z) / wall_span * 0.5 + 0.5;
+            let v_wall = (ray.y / -ray.z) / (wall_span * 0.5625) * 0.5 + 0.5;
+            if u_wall < 0.0 || u_wall > 1.0 || v_wall < 0.0 || v_wall > 1.0 {
+                discard;
+            }
+            point_coord = vec2<f32>(u_wall, 1.0 - v_wall);
+        } else if cam.vr_mode < 2.5 {
+            // Mode 2: Dome (180° Celestial Dome overhead - Option A)
+            if ray.y <= 0.001 {
+                discard;
+            }
+            let theta = acos(clamp(ray.y, 0.0, 1.0));
+            let r = (theta / (3.14159265 * 0.5)) * max(cam.vr_zoom, 0.01);
+            if r > 1.0 {
+                discard;
+            }
+            let a = atan2(ray.x, -ray.z) + u.beats * cam.vr_spin * 6.2831853;
+            let q = r * vec2<f32>(sin(a), cos(a));
             point_coord = q * 0.5 + 0.5;
         } else {
-            // Mode 2: Kaleidosky (r-axis N-division mirror repeat)
-            let r_scaled = r * cam.vr_rings * 0.5 * cam.vr_zoom;
+            // Mode 3: Kaleidosky (Radial & Mirrored Angular Repeat)
+            let theta = acos(clamp(ray.y, -1.0, 1.0));
+            let r = theta / (3.14159265 * 0.5);
+            let a = atan2(ray.x, -ray.z) + u.beats * cam.vr_spin * 6.2831853;
+            let a_norm = (a / 6.2831853 + 0.5) % 1.0;
+
+            let r_scaled = r * cam.vr_rings * 0.5 * max(cam.vr_zoom, 0.01);
             let r_frac = fract(r_scaled);
             var r_tiled = r_frac;
             if cam.vr_mirror >= 0.5 {
