@@ -1,0 +1,73 @@
+// Golden paper lanterns rise from the horizon toward the zenith beneath an
+// emerald aurora. Fullscreen dome-master: centre = zenith, radius .75 = horizon.
+// Select Built-in VR Dome with zoom 1.0. Motion runs without audio.
+
+proc sky_lanterns {
+  kind L4
+  blend additive
+
+  // Lantern ascent rate; zero holds their positions.
+  param drift : float [0.0, 2.0] = 0.6
+  // Number of lanterns, rounded down.
+  param crowd : float [4.0, 8.0] = 8.0
+  // Aurora curtain brightness.
+  param veil : float [0.0, 2.0] = 0.65
+  // Overall light level.
+  param glow : float [0.0, 2.0] = 1.0
+  // Audio adds warmth and luminance without moving the sky.
+  param pulse : float [0.0, 1.0] = 0.0
+
+  fragment {
+    let p = point_coord * 2.0 - vec2(1.0);
+    let r = length(p);
+    // Reconstruct a unit sky direction for seamless noise around the azimuth.
+    let radial = p / max(r, 0.00001);
+    let theta = r * 2.0943951;
+    let sky = vec3(radial * sin(theta), cos(theta));
+    let slow = t * 0.035;
+    let n = perlin(sky * 3.0 + vec3(0.0, 0.0, slow));
+    let detail = perlin(sky * 9.0 - vec3(slow, slow * 0.5, 0.0));
+    let curtain = pow(clamp(0.5 + n * 0.65 + detail * 0.2, 0.0, 1.0), 3.0);
+    let belt = exp(-pow((r - 0.47 - n * 0.1) * 6.0, 2.0));
+    let green = srgb_to_linear(vec3(0.16, 0.85, 0.62));
+    let blue = srgb_to_linear(vec3(0.25, 0.38, 0.85));
+    let gold = srgb_to_linear(vec3(1.0, 0.60, 0.19));
+    let cream = srgb_to_linear(vec3(1.0, 0.92, 0.62));
+    var rgb = mix(green, blue, vec3(clamp(r + n * 0.3, 0.0, 1.0)))
+            * curtain * belt * veil * 0.55;
+    // A stationary twilight rim gives the viewer an elevation reference.
+    rgb += blue * exp(-abs(r - 0.75) * 24.0) * 0.08;
+
+    for i in 0..8 {
+      let h = hash3(uint(i) * 1973u + 17u);
+      let life = fract(t * drift * (0.011 + h.z * 0.006) + h.x);
+      let rise = mix(0.79, 0.065, life);
+      let angle = h.y * 6.2831853 + sin(t * drift * 0.12 + h.x * 20.0) * 0.045;
+      let axis = vec2(sin(angle), cos(angle));
+      let side = vec2(axis.y, -axis.x);
+      let delta = p - axis * rise;
+      let scale = mix(0.014, 0.034, life) * (0.75 + h.z * 0.5);
+      // Local y points toward the horizon; flame and tassel hang below the body.
+      let q = vec2(dot(delta, side), dot(delta, axis)) / scale;
+      let body = length(q / vec2(0.72, 1.0));
+      let paper = 1.0 - smoothstep(0.85, 1.05, body);
+      let ribs = pow(0.5 + 0.5 * cos(q.x * 17.0), 8.0);
+      let flame = exp(-dot(q - vec2(0.0, 0.48), q - vec2(0.0, 0.48)) * 16.0);
+      let lip = exp(-pow((q.y - 0.86) * 18.0, 2.0))
+              * (1.0 - smoothstep(0.45, 0.72, abs(q.x)));
+      let tassel = (1.0 - smoothstep(0.025, 0.09, abs(q.x)))
+                 * smoothstep(0.9, 1.02, q.y) * (1.0 - smoothstep(1.35, 1.65, q.y));
+      let halo = exp(-dot(q, q) * 0.65);
+      let fade = smoothstep(0.0, 0.09, life) * (1.0 - smoothstep(0.84, 1.0, life));
+      let active = 1.0 - step(floor(crowd), float(i));
+      let flicker = 0.92 + 0.08 * sin(t * 2.0 + h.z * 30.0);
+      rgb += (gold * (paper * (0.65 - ribs * 0.16) + halo * 0.13 + tassel * 0.3)
+              + cream * (flame * paper * 0.75 + lip * 0.25))
+             * fade * active * flicker * (1.0 + pulse * 0.65);
+    }
+
+    // Soft extinction below the horizon and at the edge of the dome.
+    let rim = 1.0 - smoothstep(0.84, 1.0, r);
+    color = vec4(rgb * glow * rim, 1.0);
+  }
+}

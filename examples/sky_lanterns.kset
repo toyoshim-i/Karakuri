@@ -1,0 +1,5 @@
+{"t":"set","id":"sky_lanterns","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"sky_lanterns.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"pulse","signal":"energy","curve":"smooth","range":[0.0,1.0]}
