@@ -235,6 +235,7 @@ pub struct HudAnchor {
     pub right: [f32; 3],
     pub up: [f32; 3],
     pub model: [f32; 16],
+    pub scale: f32,
 }
 
 impl HudAnchor {
@@ -290,6 +291,7 @@ impl HudAnchor {
             right,
             up,
             model,
+            scale: 1.0,
         }
     }
 }
@@ -303,6 +305,8 @@ pub struct GrabState {
     pub initial_anchor_right: [f32; 3],
     pub initial_anchor_up: [f32; 3],
     pub initial_anchor_normal: [f32; 3],
+    pub current_distance: f32,
+    pub current_scale: f32,
 }
 
 /// Multiplies two unit quaternions: q1 * q2

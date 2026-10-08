@@ -343,8 +343,11 @@ fn setup_xr_render_loop(
                                     + rel_y * anchor.up[1]
                                     + rel_z * anchor.up[2];
 
-                                let u = (local_x / QUAD_WIDTH) + 0.5;
-                                let v = (local_y / QUAD_HEIGHT) + 0.5;
+                                let quad_w = QUAD_WIDTH * anchor.scale;
+                                let quad_h = QUAD_HEIGHT * anchor.scale;
+
+                                let u = (local_x / quad_w) + 0.5;
+                                let v = (local_y / quad_h) + 0.5;
 
                                 is_targeting_quad =
                                     (-0.1..=1.1).contains(&u) && (-0.1..=1.1).contains(&v);
@@ -425,6 +428,21 @@ fn setup_xr_render_loop(
                                     let btn: web_sys::GamepadButton = btn_val.unchecked_into();
                                     let grip_pressed = btn.pressed();
 
+                                    let axes = gamepad.axes();
+                                    let (stick_x_val, stick_y_val) = if axes.length() >= 4 {
+                                        (
+                                            js_sys::Reflect::get(&axes, &2.into()).ok(),
+                                            js_sys::Reflect::get(&axes, &3.into()).ok(),
+                                        )
+                                    } else if axes.length() >= 2 {
+                                        (
+                                            js_sys::Reflect::get(&axes, &0.into()).ok(),
+                                            js_sys::Reflect::get(&axes, &1.into()).ok(),
+                                        )
+                                    } else {
+                                        (None, None)
+                                    };
+
                                     if grip_pressed {
                                         match grab_state {
                                             None => {
@@ -436,6 +454,17 @@ fn setup_xr_render_loop(
                                                 let can_grab =
                                                     is_targeting_quad || dist_to_center < 0.6;
                                                 if can_grab {
+                                                    let offset_0 = [
+                                                        anchor.center[0] - ox,
+                                                        anchor.center[1] - oy,
+                                                        anchor.center[2] - oz,
+                                                    ];
+                                                    let init_d = (offset_0[0] * offset_0[0]
+                                                        + offset_0[1] * offset_0[1]
+                                                        + offset_0[2] * offset_0[2])
+                                                        .sqrt()
+                                                        .max(0.1);
+
                                                     grab_state = Some(GrabState {
                                                         source_index: i,
                                                         initial_ctrl_pos: [ox, oy, oz],
@@ -444,10 +473,48 @@ fn setup_xr_render_loop(
                                                         initial_anchor_right: anchor.right,
                                                         initial_anchor_up: anchor.up,
                                                         initial_anchor_normal: anchor.normal,
+                                                        current_distance: init_d,
+                                                        current_scale: anchor.scale,
                                                     });
                                                 }
                                             }
-                                            Some(gs) if gs.source_index == i => {
+                                            Some(mut gs) if gs.source_index == i => {
+                                                // 1. Thumbstick Y: distance along beam (Stick forward/up pushes away, back/down pulls closer)
+                                                if let Some(val) = stick_y_val {
+                                                    if let Some(sy) = val.as_f64() {
+                                                        let deadzone = 0.15;
+                                                        let abs_y = sy.abs();
+                                                        if abs_y > deadzone {
+                                                            let sign = -sy.signum(); // stick forward is negative in WebXR, pushes away (+dist)
+                                                            let mag = (abs_y - deadzone)
+                                                                / (1.0 - deadzone);
+                                                            let delta =
+                                                                (sign * mag * mag * 0.025) as f32;
+                                                            gs.current_distance =
+                                                                (gs.current_distance + delta)
+                                                                    .clamp(0.20, 8.0);
+                                                        }
+                                                    }
+                                                }
+
+                                                // 2. Thumbstick X: scale HUD (Stick right expands, stick left shrinks)
+                                                if let Some(val) = stick_x_val {
+                                                    if let Some(sx) = val.as_f64() {
+                                                        let deadzone = 0.15;
+                                                        let abs_x = sx.abs();
+                                                        if abs_x > deadzone {
+                                                            let sign = sx.signum(); // stick right is positive in WebXR, scales up
+                                                            let mag = (abs_x - deadzone)
+                                                                / (1.0 - deadzone);
+                                                            let factor =
+                                                                1.0 + (sign * mag * 0.015) as f32;
+                                                            gs.current_scale = (gs.current_scale
+                                                                * factor)
+                                                                .clamp(0.25, 4.0);
+                                                        }
+                                                    }
+                                                }
+
                                                 let q_curr = [qx, qy, qz, qw];
                                                 let q_inv = [
                                                     -gs.initial_ctrl_orient[0],
@@ -465,11 +532,22 @@ fn setup_xr_render_loop(
                                                     gs.initial_anchor_center[2]
                                                         - gs.initial_ctrl_pos[2],
                                                 ];
-                                                let offset_rot = quat_rotate_vec(delta_q, offset_0);
+                                                let init_d = (offset_0[0] * offset_0[0]
+                                                    + offset_0[1] * offset_0[1]
+                                                    + offset_0[2] * offset_0[2])
+                                                    .sqrt()
+                                                    .max(1e-4);
+                                                let unit_dir_0 = [
+                                                    offset_0[0] / init_d,
+                                                    offset_0[1] / init_d,
+                                                    offset_0[2] / init_d,
+                                                ];
+                                                let unit_dir_rot =
+                                                    quat_rotate_vec(delta_q, unit_dir_0);
                                                 let new_center = [
-                                                    ox + offset_rot[0],
-                                                    oy + offset_rot[1],
-                                                    oz + offset_rot[2],
+                                                    ox + unit_dir_rot[0] * gs.current_distance,
+                                                    oy + unit_dir_rot[1] * gs.current_distance,
+                                                    oz + unit_dir_rot[2] * gs.current_distance,
                                                 ];
 
                                                 let right = quat_rotate_vec(
@@ -483,14 +561,15 @@ fn setup_xr_render_loop(
                                                     gs.initial_anchor_normal,
                                                 );
 
+                                                let s = gs.current_scale;
                                                 let model = [
-                                                    right[0],
-                                                    right[1],
-                                                    right[2],
+                                                    right[0] * s,
+                                                    right[1] * s,
+                                                    right[2] * s,
                                                     0.0,
-                                                    up[0],
-                                                    up[1],
-                                                    up[2],
+                                                    up[0] * s,
+                                                    up[1] * s,
+                                                    up[2] * s,
                                                     0.0,
                                                     normal[0],
                                                     normal[1],
@@ -508,7 +587,9 @@ fn setup_xr_render_loop(
                                                     right,
                                                     up,
                                                     model,
+                                                    scale: gs.current_scale,
                                                 });
+                                                grab_state = Some(gs);
                                             }
                                             _ => {}
                                         }
