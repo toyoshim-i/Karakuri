@@ -425,7 +425,7 @@ pub(crate) fn tools() -> Value {
             "description":
                 "Lists all available reference documentation, language specifications, \
                  and operation manuals (e.g. karakuri://operations, karakuri://ir-spec, \
-                 karakuri://ir-vocabulary). Call this to discover reference URIs.",
+                 karakuri://ir-vocabulary, karakuri://vr-projection). Call this to discover reference URIs.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -438,7 +438,8 @@ pub(crate) fn tools() -> Value {
                  Available URIs include: \
                  - `karakuri://operations`: Supported command names, payloads, and parameter schemas for the `operate` tool. \
                  - `karakuri://ir-spec`: Complete .kir shading language specification, grammar, semantics, and examples. \
-                 - `karakuri://ir-vocabulary`: Built-in function signatures and geometry topologies.",
+                 - `karakuri://ir-vocabulary`: Built-in function signatures and geometry topologies. \
+                 - `karakuri://vr-projection`: Built-in VR projection modes (Wall, Dome, Kaleidosky) and celestial dome shader specification.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -449,6 +450,7 @@ pub(crate) fn tools() -> Value {
                             "karakuri://operations",
                             "karakuri://ir-spec",
                             "karakuri://ir-vocabulary",
+                            "karakuri://vr-projection",
                         ],
                     },
                 },

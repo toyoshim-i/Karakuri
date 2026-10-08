@@ -10,6 +10,7 @@ pub(crate) const ENDPOINT: &str = "/";
 pub(crate) const SPEC: &str = "karakuri://ir-spec";
 pub(crate) const VOCABULARY: &str = "karakuri://ir-vocabulary";
 pub(crate) const OPERATIONS: &str = "karakuri://operations";
+pub(crate) const VR_PROJECTION: &str = "karakuri://vr-projection";
 
 pub(crate) fn resources() -> Value {
     json!([
@@ -39,6 +40,15 @@ pub(crate) fn resources() -> Value {
                  table the tool accepts against. Read this before calling `operate`.",
             "mimeType": "text/markdown",
         },
+        {
+            "uri": VR_PROJECTION,
+            "name": "Built-in VR Projection and Celestial Dome Shader Specification",
+            "description":
+                "Specification of VR projection modes (Wall, Dome, Kaleidosky), \
+                 celestial dome coordinate spaces (point_coord, ray), parameters, \
+                 and guidelines for authoring VR and sky dome shaders.",
+            "mimeType": "text/markdown",
+        },
     ])
 }
 
@@ -52,6 +62,7 @@ pub(crate) fn read_resource(request: &Value) -> Result<Value, String> {
         SPEC => include_str!("../../../docs/ir-spec.md").to_string(),
         VOCABULARY => vocabulary(),
         OPERATIONS => operations(),
+        VR_PROJECTION => include_str!("../../../docs/vr-projection.md").to_string(),
         other => return Err(format!("no resource `{other}`")),
     };
     Ok(json!({
