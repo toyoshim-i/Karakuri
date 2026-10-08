@@ -1,0 +1,108 @@
+// A cosmic singularity and swirling accretion vortex projected overhead in the celestial dome.
+// A dark gravitational void at the zenith is framed by a blinding relativistic photon ring,
+// feeding multi-armed logarithmic spiral filaments of ultraviolet, deep magenta, and cyan gas.
+//
+// Optimized for the WebXR Built-in VR Dome and Kaleidosky projections (docs/vr-projection.md):
+// - Standing in the center of the room places the viewer directly beneath the vortex eye.
+// - Accretion gas spirals outward from the zenith down across the sky to the horizon.
+// - In `Kaleidosky` mode, the spiral arms multiply into a hyper-dimensional geometric warp.
+//
+//     cargo run -p karakuri -- examples/star_flares.kir examples/nebula_vortex.kir
+
+proc nebula_vortex {
+  kind  L4
+  blend additive
+
+  // Orbital swirl speed of the accretion vortex.
+  param spin    : float [0.0, 2.0]    = 0.4
+
+  // Tightness of the logarithmic spiral winding.
+  param wind    : float [1.0, 8.0]    = 3.2
+
+  // Number of main galactic spiral arms.
+  param arms    : float [1.0, 6.0]    = 3.0
+
+  // Brightness of the accretion gas filaments.
+  param glow    : float [0.0, 4.0]    = 1.3
+
+  // Color of the outer nebula gas veil.
+  param violet  : vec3  [0.0, 2.0]    = vec3(0.55, 0.15, 0.95)
+
+  // Color of the inner high-energy accretion stream.
+  param cyan    : vec3  [0.0, 2.0]    = vec3(0.20, 0.85, 1.0)
+
+  // Audio surge: expands the photon ring and electrifies the gas arms.
+  param surge   : float [0.0, 2.0]    = 0.0
+
+  // Interstellar dust density along the horizon.
+  param dust    : float [0.0, 1.0]    = 0.3
+
+  fragment {
+    // ---- Polar coordinate transform relative to Zenith (0.5, 0.5) --------
+    let p  = point_coord * 2.0 - vec2(1.0);
+    let r  = length(p);
+    let az = atan2(p.x, p.y + 0.000001);
+
+    let tt = t * spin;
+    let n_arms = floor(arms);
+
+    // ---- 1. Logarithmic Spiral Accretion Geometry -------------------------
+    // Logarithmic spiral angle coordinate
+    let log_r  = log(max(r + 0.06, 0.001));
+    let spiral = az * n_arms + wind * log_r - tt * 1.5;
+
+    // Unit vector along the spiral coordinates for seamless 3D noise sampling
+    let sp_vec = vec2(sin(spiral), cos(spiral));
+
+    // Multi-scale procedural gas noise
+    let noise1 = perlin(vec3(sp_vec * 2.2, r * 3.5 - tt * 0.4));
+    let noise2 = perlin(vec3(sp_vec * 4.5 + vec2(1.7, 3.2), r * 7.0 + tt * 0.6));
+    let gas_turb = 0.6 * noise1 + 0.4 * noise2;
+
+    // Spiral arm concentration profiles
+    let arm_profile = pow(0.5 + 0.5 * cos(spiral), 2.5);
+    let arm_gas = max(arm_profile + gas_turb * 0.45, 0.0);
+
+    // Elevation density curve: thickest mid-sky (r ~ 0.2 to 0.7), tapering toward horizon
+    let dome_falloff = smoothstep(0.04, 0.22, r) * exp(-r * 1.8);
+    let gas_intensity = arm_gas * dome_falloff * (1.0 + surge * 1.5);
+
+    // ---- 2. Zenith Singularity & Relativistic Photon Ring ------------------
+    // Event horizon radius at zenith
+    let r_ring = 0.075 + surge * 0.025;
+    let photon_ring = exp(-abs(r - r_ring) * 65.0) * (2.0 + surge * 3.0);
+
+    // Dark void inside the event horizon (r < r_ring * 0.7)
+    let shadow = smoothstep(r_ring * 0.3, r_ring * 0.85, r);
+
+    // Coronal photon haze bleeding just outside the ring
+    let inner_haze = exp(-max(r - r_ring, 0.0) * 16.0) * 0.8;
+
+    // ---- 3. Star Clouds & Embedded Stellar Clusters -----------------------
+    let star_uv   = vec3(p * 35.0, tt * 0.1);
+    let star_cell = floor(star_uv);
+    let star_key  = uint(abs(star_cell.x) * 131.0 + abs(star_cell.y) * 263.0 + abs(star_cell.z) * 521.0);
+    let star_hash = hash3(star_key);
+    let star_dist = distance(fract(star_uv.xy), star_hash.xy);
+    let star_tw   = 0.5 + 0.5 * sin(t * (2.0 + 3.0 * star_hash.z));
+    let star_core = step(0.72, star_hash.z) * star_tw * exp(-star_dist * star_dist * 80.0) * smoothstep(0.1, 0.8, r);
+
+    // ---- 4. Interstellar Horizon Dust Veil ---------------------------------
+    let horiz_dust = exp(-abs(r - 0.75) * 4.0) * dust * (0.8 + 0.2 * sin(az * 8.0 + t));
+
+    // ---- 5. Color Compositing ----------------------------------------------
+    let col_gas = mix(violet, cyan, vec3(clamp(gas_turb * 0.5 + 0.5, 0.0, 1.0)));
+    let col_photon = vec3(1.0, 0.95, 0.75);
+
+    var rgb = col_gas * gas_intensity * shadow
+            + col_photon * (photon_ring + inner_haze)
+            + vec3(0.9, 0.95, 1.0) * star_core * 1.5
+            + vec3(0.08, 0.04, 0.12) * horiz_dust;
+
+    rgb = rgb * glow;
+
+    // Horizon rim falloff 30 deg below horizon
+    let rim = 1.0 - smoothstep(0.92, 1.0, r);
+    color = vec4(rgb * rim, 1.0);
+  }
+}
