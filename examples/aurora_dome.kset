@@ -1,0 +1,6 @@
+{"t":"set","id":"aurora_dome","v":1}
+{"t":"part","layer":"L1","path":"step_grid.kir"}
+{"t":"part","layer":"L4","path":"aurora_dome.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"pulse","signal":"energy","curve":"pow2","range":[0.0,1.2]}
+{"t":"bind","layer":"L4","key":"sparkle","signal":"air","curve":"lin","range":[0.3,1.6]}
