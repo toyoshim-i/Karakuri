@@ -109,6 +109,21 @@ pub fn metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {
     current_fs().metadata(path.as_ref())
 }
 
+/// Returns `true` if the path exists on disk and points at a regular file.
+pub fn is_file(path: impl AsRef<Path>) -> bool {
+    metadata(path).map(|m| m.is_file()).unwrap_or(false)
+}
+
+/// Returns `true` if the path exists on disk and points at a directory.
+pub fn is_dir(path: impl AsRef<Path>) -> bool {
+    metadata(path).map(|m| m.is_dir()).unwrap_or(false)
+}
+
+/// Returns `true` if the path exists on disk.
+pub fn exists(path: impl AsRef<Path>) -> bool {
+    metadata(path).is_ok()
+}
+
 /// Returns the canonical, absolute form of a path with all intermediate components normalized.
 pub fn canonicalize(path: impl AsRef<Path>) -> io::Result<PathBuf> {
     current_fs().canonicalize(path.as_ref())
