@@ -413,6 +413,7 @@ number; new records continue from the end.
 | [ADR-0385](0385-web-midi-api-control-surface-integration-via-decoupled-port-feeder.md) | Web MIDI API control surface integration via decoupled Port feeder | 2026-10-05 | accepted |
 | [ADR-0386](0386-pluggable-virtual-filesystem-abstraction-with-web-persistent-storage.md) | Pluggable Virtual FileSystem abstraction with Web persistent storage | 2026-10-05 | accepted |
 | [ADR-0387](0387-universal-console-gui-component-architecture-and-multi-modal-pointer-invariance.md) | Universal Console GUI component architecture and multi-modal pointer invariance | 2026-10-07 | accepted |
+| [ADR-0388](0388-built-in-vr-projection-modes-and-celestial-dome-specification.md) | Built-in VR projection modes and celestial dome shader specification | 2026-10-08 | accepted |
 
 
 ## Retired numbers
