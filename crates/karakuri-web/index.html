@@ -30,8 +30,24 @@
       const host = window.location.hostname;
       const relayUrl = '/log';
 
+      let logCount = 0;
+      let lastReset = Date.now();
+      let lastMsg = '';
+      let repeatCount = 0;
+      let fatalCount = 0;
+      const MAX_LOGS_PER_SEC = 20;
+
       function sendLog(level, args) {
         try {
+          const now = Date.now();
+          if (now - lastReset > 1000) {
+            logCount = 0;
+            lastReset = now;
+          }
+          if (logCount >= MAX_LOGS_PER_SEC) {
+            return;
+          }
+
           const msg = Array.from(args).map(a => {
             if (typeof a === 'object') {
               try { return JSON.stringify(a); } catch(_) { return String(a); }
@@ -39,6 +55,32 @@
             return String(a);
           }).join(' ');
 
+          if (msg.includes('RuntimeError: unreachable') || msg.includes('memory access out of bounds')) {
+            fatalCount++;
+            if (fatalCount > 5) {
+              if (fatalCount === 6) {
+                fetch(relayUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'text/plain' },
+                  body: '[ERROR] Fatal Wasm RuntimeError limit reached. Suppressing further error reports.',
+                  mode: 'cors',
+                }).catch(() => {});
+              }
+              return;
+            }
+          }
+
+          if (msg === lastMsg) {
+            repeatCount++;
+            if (repeatCount > 3) {
+              return;
+            }
+          } else {
+            lastMsg = msg;
+            repeatCount = 0;
+          }
+
+          logCount++;
           fetch(relayUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
