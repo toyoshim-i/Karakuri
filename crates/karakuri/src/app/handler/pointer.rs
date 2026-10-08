@@ -341,6 +341,7 @@ impl App {
                 Operation::SelectScope { .. }
                     | Operation::WalkHistory { .. }
                     | Operation::ListSets { .. }
+                    | Operation::FilterLibrary { .. }
                     | Operation::SetFavourite { .. }
             ))
         ) {
