@@ -224,6 +224,39 @@ impl Deck {
         }
     }
 
+    /// Returns true if the active stereo set in the deck mix is purely Fullscreen topology.
+    pub fn is_fullscreen_stereo(&self) -> bool {
+        let active_slots: Vec<DeckSlot> = (0..self.slots.len())
+            .map(|i| DeckSlot(i as u8))
+            .filter(|&slot| self.is_in_mix(slot) && !self.overloaded(slot))
+            .collect();
+        if active_slots.is_empty() {
+            let Some(first) = self.slots.first() else {
+                return false;
+            };
+            let topos = first.swap.live().drawn_topologies();
+            return !topos.is_empty()
+                && topos
+                    .iter()
+                    .all(|&t| t == karakuri_ir::Topology::Fullscreen);
+        }
+        let mut has_fullscreen = false;
+        for &slot in &active_slots {
+            let topos = self.slot(slot).live().drawn_topologies();
+            if topos.is_empty() {
+                continue;
+            }
+            for topo in topos {
+                if topo == karakuri_ir::Topology::Fullscreen {
+                    has_fullscreen = true;
+                } else {
+                    return false;
+                }
+            }
+        }
+        has_fullscreen
+    }
+
     /// Sets the measurement resolution for all slot build workers and profilers.
     pub fn set_measure_size(&mut self, at: (u32, u32)) {
         if at.0 == 0 || at.1 == 0 {

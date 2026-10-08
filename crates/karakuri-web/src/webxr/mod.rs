@@ -123,6 +123,7 @@ pub async fn start_webxr_session(
     let pointer_sink = xr_state.borrow().pending_pointer_events.clone();
     let current_stereo_pose = xr_state.borrow().current_stereo_pose.clone();
     let rendered_stereo_pose = xr_state.borrow().rendered_stereo_pose.clone();
+    let is_fullscreen = xr_state.borrow().is_fullscreen.clone();
 
     // Register 'end' event listener on session so if the user exits via Quest system menu or session.end(),
     // the application cleans up gracefully.
@@ -163,23 +164,17 @@ pub async fn start_webxr_session(
     );
 
     let wr_for_window = world_renderer.clone();
-    let cycle_cb = Closure::wrap(Box::new(move || {
-        let m = wr_for_window.borrow_mut().cycle_dome_mode();
-        let name = match m {
-            1 => "Celestial Dome (180° Planetarium)",
-            2 => "Wide Celestial Dome (220° Horizon)",
-            3 => "MR Passthrough",
-            _ => "Planar Cinema Screen",
-        };
-        web_sys::console::log_1(&format!("WebXR visual mode: {name}").into());
-        m
-    }) as Box<dyn FnMut() -> i32>);
+    let toggle_bg_cb = Closure::wrap(Box::new(move || {
+        let on = wr_for_window.borrow_mut().toggle_background();
+        web_sys::console::log_1(&format!("WebXR cosmic background: {on}").into());
+        on
+    }) as Box<dyn FnMut() -> bool>);
     let _ = js_sys::Reflect::set(
         &window,
-        &"__karakuri_cycle_dome_mode".into(),
-        cycle_cb.as_ref().unchecked_ref(),
+        &"__karakuri_toggle_background".into(),
+        toggle_bg_cb.as_ref().unchecked_ref(),
     );
-    cycle_cb.forget();
+    toggle_bg_cb.forget();
 
     setup_xr_render_loop(
         session.clone(),
@@ -193,6 +188,8 @@ pub async fn start_webxr_session(
         pointer_sink,
         current_stereo_pose,
         rendered_stereo_pose,
+        is_fullscreen,
+        mode,
         proxy,
     );
 
@@ -214,13 +211,14 @@ fn setup_xr_render_loop(
     pointer_sink: Rc<RefCell<Vec<WebXrPointerAction>>>,
     current_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     rendered_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
+    is_fullscreen: Rc<RefCell<bool>>,
+    session_mode: WebXrSessionMode,
     proxy: EventLoopProxy<()>,
 ) {
     let f: XrFrameClosure = Rc::new(RefCell::new(None));
     let g = f.clone();
 
     let mut last_trigger_pressed = false;
-    let mut last_dome_btn_pressed = false;
     let mut hud_anchor: Option<HudAnchor> = None;
     let mut grab_state: Option<GrabState> = None;
     let mut frame_count: u64 = 0;
@@ -293,7 +291,6 @@ fn setup_xr_render_loop(
         let canvas_w = canvas.width() as f64;
         let canvas_h = canvas.height() as f64;
         let mut hit_cursor: Option<(f32, f32)> = None;
-        let mut dome_btn_down_this_frame = false;
 
         if let Some(anchor) = hud_anchor {
             for i in 0..num_sources {
@@ -601,49 +598,24 @@ fn setup_xr_render_loop(
                                 }
                             }
                         }
-
-                        // Detect Primary Button (Button 4 / A or X) or Secondary Button (Button 5 / B or Y)
-                        // to cycle Celestial Dome projection modes
-                        if let Some(gamepad) = source.gamepad() {
-                            let buttons = gamepad.buttons();
-                            if buttons.length() > 4 {
-                                let btn4 = js_sys::Reflect::get(&buttons, &4.into())
-                                    .ok()
-                                    .and_then(|v| v.dyn_into::<web_sys::GamepadButton>().ok())
-                                    .map(|b| b.pressed())
-                                    .unwrap_or(false);
-                                let btn5 = if buttons.length() > 5 {
-                                    js_sys::Reflect::get(&buttons, &5.into())
-                                        .ok()
-                                        .and_then(|v| v.dyn_into::<web_sys::GamepadButton>().ok())
-                                        .map(|b| b.pressed())
-                                        .unwrap_or(false)
-                                } else {
-                                    false
-                                };
-                                if btn4 || btn5 {
-                                    dome_btn_down_this_frame = true;
-                                }
-                            }
-                        }
                     }
                 }
             }
         }
 
-        if dome_btn_down_this_frame && !last_dome_btn_pressed {
-            last_dome_btn_pressed = true;
-            let new_mode = world_renderer.borrow_mut().cycle_dome_mode();
-            let name = match new_mode {
-                1 => "Celestial Dome (180° Planetarium)",
-                2 => "Wide Celestial Dome (220° Horizon)",
-                3 => "MR Passthrough",
-                _ => "Planar Cinema Screen",
-            };
-            web_sys::console::log_1(&format!("WebXR visual mode cycled: {name}").into());
-        } else if !dome_btn_down_this_frame {
-            last_dome_btn_pressed = false;
-        }
+        // Automatic visual projection mode based on Session Mode (AR vs VR) and Active Topology (Fullscreen vs 3D)
+        let is_fs = *is_fullscreen.borrow();
+        let target_mode = match session_mode {
+            WebXrSessionMode::Ar => 3, // MR Passthrough
+            WebXrSessionMode::Vr => {
+                if is_fs {
+                    1 // Celestial Dome for Topology::Fullscreen fragment art
+                } else {
+                    0 // Planar Screen for 3D topologies (Points, Lines, Triangles, etc.)
+                }
+            }
+        };
+        world_renderer.borrow_mut().set_dome_mode(target_mode);
 
         // Render stereo eye views
         if let (Some(pose), Some(anchor)) = (pose, hud_anchor) {

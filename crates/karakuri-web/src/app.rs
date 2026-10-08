@@ -393,6 +393,9 @@ impl WebApp {
             self.webxr_state
                 .borrow()
                 .set_rendered_stereo_pose(self.xr_synced_pose);
+            self.webxr_state
+                .borrow()
+                .set_is_fullscreen(self.app.is_fullscreen_stereo());
         }
     }
 }

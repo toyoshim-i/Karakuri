@@ -58,6 +58,8 @@ pub struct WebXrState {
     /// The head pose the XR canvas's current picture was drawn for; the XR
     /// layer reprojects it to the pose of the frame it is shown in.
     pub(crate) rendered_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
+    /// Whether the active visual in mix has only Fullscreen topology (requiring Celestial Dome).
+    pub(crate) is_fullscreen: Rc<RefCell<bool>>,
 }
 
 impl WebXrState {
@@ -86,5 +88,15 @@ impl WebXrState {
     /// Records the pose the XR canvas's picture was just drawn for.
     pub fn set_rendered_stereo_pose(&self, pose: Option<StereoPose>) {
         *self.rendered_stereo_pose.borrow_mut() = pose;
+    }
+
+    /// Sets whether the active visual in mix has only Fullscreen topology.
+    pub fn set_is_fullscreen(&self, is_fs: bool) {
+        *self.is_fullscreen.borrow_mut() = is_fs;
+    }
+
+    /// Returns whether the active visual in mix has only Fullscreen topology.
+    pub fn is_fullscreen(&self) -> bool {
+        *self.is_fullscreen.borrow()
     }
 }
