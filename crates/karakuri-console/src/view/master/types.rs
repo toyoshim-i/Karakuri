@@ -338,39 +338,73 @@ pub enum Added {
 /// Built-in VR projection parameter identifiers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VrParamKey {
+    Zoom,
     Rings,
     Facets,
     Mirror,
-    Zoom,
+    Stars,
+    Density,
+    Grid,
+    Lines,
 }
 
 impl VrParamKey {
-    pub const ALL: [Self; 4] = [Self::Rings, Self::Facets, Self::Mirror, Self::Zoom];
+    pub const ALL: [Self; 8] = [
+        Self::Zoom,
+        Self::Rings,
+        Self::Facets,
+        Self::Mirror,
+        Self::Stars,
+        Self::Density,
+        Self::Grid,
+        Self::Lines,
+    ];
 
     pub const fn label(self) -> &'static str {
         match self {
+            Self::Zoom => "zoom",
             Self::Rings => "rings",
             Self::Facets => "facets",
             Self::Mirror => "mirror",
-            Self::Zoom => "zoom",
+            Self::Stars => "stars",
+            Self::Density => "density",
+            Self::Grid => "grid",
+            Self::Lines => "lines",
         }
     }
 
     pub const fn range(self) -> [f32; 2] {
         match self {
+            Self::Zoom => [0.2, 4.0],
             Self::Rings => [1.0, 16.0],
             Self::Facets => [0.0, 16.0],
             Self::Mirror => [0.0, 1.0],
-            Self::Zoom => [0.2, 4.0],
+            Self::Stars => [0.0, 2.0],
+            Self::Density => [0.0, 2.0],
+            Self::Grid => [0.0, 2.0],
+            Self::Lines => [0.25, 3.0],
         }
     }
 
     pub fn value(self, proj: &crate::view::VrProjection) -> f32 {
         match self {
+            Self::Zoom => proj.zoom,
             Self::Rings => proj.rings,
             Self::Facets => proj.facets,
             Self::Mirror => proj.mirror,
-            Self::Zoom => proj.zoom,
+            Self::Stars => proj.stars,
+            Self::Density => proj.density,
+            Self::Grid => proj.grid,
+            Self::Lines => proj.lines,
+        }
+    }
+
+    pub fn is_active_for(self, mode: crate::view::VrProjectionMode) -> bool {
+        match self {
+            Self::Zoom | Self::Stars | Self::Density | Self::Grid | Self::Lines => true,
+            Self::Rings | Self::Facets | Self::Mirror => {
+                mode == crate::view::VrProjectionMode::Kaleidosky
+            }
         }
     }
 }
@@ -445,6 +479,7 @@ pub struct VrParamRow {
     pub amount: Rect,
     pub value: f32,
     pub range: [f32; 2],
+    pub is_active: bool,
 }
 
 impl VrParamRow {

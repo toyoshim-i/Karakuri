@@ -832,8 +832,8 @@ fn the_press_handler_dispatches_vr_projection_controls_and_drags() {
     );
     readout.pointer(&ctx, Pointer::Up);
 
-    // 4. Test dragging a parameter slider (rings is params[0])
-    let ring_param = &vr_stage.params[0];
+    // 4. Test dragging a parameter slider (rings is params[1])
+    let ring_param = &vr_stage.params[1];
     let track_start = Point::new(
         ring_param.fader.track.min.x,
         ring_param.fader.track.center().y,

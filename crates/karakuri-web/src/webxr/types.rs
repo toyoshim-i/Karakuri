@@ -60,6 +60,8 @@ pub struct WebXrState {
     pub(crate) rendered_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     /// Whether the active visual in mix has only Fullscreen topology (requiring Celestial Dome).
     pub(crate) is_fullscreen: Rc<RefCell<bool>>,
+    /// Active Built-in VR projection parameters.
+    pub(crate) vr_projection: Rc<RefCell<Option<karakuri_console::view::VrProjection>>>,
 }
 
 impl WebXrState {
@@ -98,5 +100,10 @@ impl WebXrState {
     /// Returns whether the active visual in mix has only Fullscreen topology.
     pub fn is_fullscreen(&self) -> bool {
         *self.is_fullscreen.borrow()
+    }
+
+    /// Sets the active Built-in VR projection parameters.
+    pub fn set_vr_projection(&self, proj: karakuri_console::view::VrProjection) {
+        *self.vr_projection.borrow_mut() = Some(proj);
     }
 }

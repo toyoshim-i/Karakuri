@@ -389,6 +389,9 @@ impl WebApp {
     /// After a redraw: if it drew the stereo world, the XR canvas now shows
     /// the pose last handed over, which the XR layer reprojects from.
     fn note_stereo_drawn(&mut self) {
+        self.webxr_state
+            .borrow()
+            .set_vr_projection(self.app.view().vr_projection);
         if self.app.take_stereo_drawn() {
             self.webxr_state
                 .borrow()
@@ -664,6 +667,10 @@ impl ApplicationHandler<()> for WebApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.webxr_state
+            .borrow()
+            .set_vr_projection(self.app.view().vr_projection);
+
         if let Some(ref overlay) = self.ime_overlay {
             let rect = self.app.prompt_rect();
             let scale = self

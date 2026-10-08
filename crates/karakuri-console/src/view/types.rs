@@ -239,6 +239,10 @@ impl View {
             "facets" => self.vr_projection.facets = value,
             "mirror" => self.vr_projection.mirror = value,
             "zoom" => self.vr_projection.zoom = value,
+            "stars" => self.vr_projection.stars = value,
+            "density" => self.vr_projection.density = value,
+            "grid" => self.vr_projection.grid = value,
+            "lines" => self.vr_projection.lines = value,
             _ => return false,
         }
         true
@@ -301,20 +305,28 @@ impl VrProjectionMode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VrProjection {
     pub mode: VrProjectionMode,
+    pub zoom: f32,
     pub rings: f32,
     pub facets: f32,
     pub mirror: f32,
-    pub zoom: f32,
+    pub stars: f32,
+    pub density: f32,
+    pub grid: f32,
+    pub lines: f32,
 }
 
 impl Default for VrProjection {
     fn default() -> Self {
         Self {
             mode: VrProjectionMode::Wall,
+            zoom: 1.0,
             rings: 4.0,
             facets: 6.0,
             mirror: 1.0,
-            zoom: 1.0,
+            stars: 1.0,
+            density: 1.0,
+            grid: 1.0,
+            lines: 1.0,
         }
     }
 }

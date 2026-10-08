@@ -124,6 +124,7 @@ pub async fn start_webxr_session(
     let current_stereo_pose = xr_state.borrow().current_stereo_pose.clone();
     let rendered_stereo_pose = xr_state.borrow().rendered_stereo_pose.clone();
     let is_fullscreen = xr_state.borrow().is_fullscreen.clone();
+    let vr_projection = xr_state.borrow().vr_projection.clone();
 
     // Register 'end' event listener on session so if the user exits via Quest system menu or session.end(),
     // the application cleans up gracefully.
@@ -189,6 +190,7 @@ pub async fn start_webxr_session(
         current_stereo_pose,
         rendered_stereo_pose,
         is_fullscreen,
+        vr_projection,
         mode,
         proxy,
     );
@@ -212,6 +214,7 @@ fn setup_xr_render_loop(
     current_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     rendered_stereo_pose: Rc<RefCell<Option<StereoPose>>>,
     _is_fullscreen: Rc<RefCell<bool>>,
+    vr_projection: Rc<RefCell<Option<karakuri_console::view::VrProjection>>>,
     session_mode: WebXrSessionMode,
     proxy: EventLoopProxy<()>,
 ) {
@@ -327,7 +330,7 @@ fn setup_xr_render_loop(
                             if mag > deadzone {
                                 let norm_mag =
                                     ((mag - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0);
-                                let curved_speed = norm_mag * norm_mag * 2.5; // 2.5 m/s
+                                let curved_speed = norm_mag * norm_mag * 5.0; // 5.0 m/s
 
                                 let forward_input = -stick_y; // Stick forward is -Y in WebXR
                                 let strafe_input = stick_x; // Stick right is +X in WebXR
@@ -689,6 +692,15 @@ fn setup_xr_render_loop(
             WebXrSessionMode::Vr => 0, // Natural Stereo Perspective (preserves WebGPU 6DoF stereo camera and Quest off-centre frustum)
         };
         world_renderer.borrow_mut().set_dome_mode(target_mode);
+
+        if let Some(proj) = *vr_projection.borrow() {
+            world_renderer.borrow_mut().set_environment_params(
+                proj.stars,
+                proj.density,
+                proj.grid,
+                proj.lines,
+            );
+        }
 
         // Render stereo eye views
         if let (Some(pose), Some(anchor)) = (pose, hud_anchor) {
