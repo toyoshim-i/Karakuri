@@ -213,89 +213,106 @@ impl WebApp {
         let pending_webxr_support = Rc::new(RefCell::new(None));
         let pending_webxr_active = Rc::new(RefCell::new(None));
 
-        // Auto-detect WebXR immersive-vr capability on startup
+        // Auto-detect WebXR immersive-vr and immersive-ar capability on startup
         let xr_proxy = proxy.clone();
         let pending_support_clone = Rc::clone(&pending_webxr_support);
         let xr_state_clone = Rc::clone(&webxr_state);
         wasm_bindgen_futures::spawn_local(async move {
-            let supported = crate::webxr::check_webxr_support().await;
+            let (vr_supported, ar_supported) = crate::webxr::check_webxr_support().await;
+            let supported = vr_supported || ar_supported;
             xr_state_clone.borrow_mut().is_supported = supported;
+            xr_state_clone.borrow_mut().is_ar_supported = ar_supported;
             *pending_support_clone.borrow_mut() = Some(supported);
             let _ = xr_proxy.send_event(());
         });
 
-        // Shared helper for initiating or ending WebXR immersive-vr session
+        // Shared helper for initiating or ending WebXR immersive session
         let start_vr_flow = {
             let xr_state = Rc::clone(&webxr_state);
             let pending_active = Rc::clone(&pending_webxr_active);
             let proxy = proxy.clone();
-            Rc::new(move || {
-                if xr_state.borrow().is_active {
-                    log::info!("Karakuri Web: User requested exit VR - ending session");
-                    xr_state.borrow_mut().end_session();
-                    *pending_active.borrow_mut() = Some(false);
-                    let _ = proxy.send_event(());
-                    return;
-                }
-
-                let session_promise = match crate::webxr::request_immersive_vr_session() {
-                    Ok(p) => p,
-                    Err(e) => {
-                        log::warn!("Karakuri Web: Failed to request WebXR session: {e}");
+            Rc::new(
+                move |xr_session_mode: karakuri_console::view::XrSessionMode| {
+                    if xr_state.borrow().is_active {
+                        log::info!("Karakuri Web: User requested exit XR - ending session");
+                        xr_state.borrow_mut().end_session();
                         *pending_active.borrow_mut() = Some(false);
                         let _ = proxy.send_event(());
                         return;
                     }
-                };
 
-                let dom_window = web_sys::window().expect("window");
-                let document = dom_window.document().expect("document");
-                let canvas = document
-                    .get_element_by_id("karakuri-canvas")
-                    .expect("canvas with id karakuri-canvas")
-                    .dyn_into::<web_sys::HtmlCanvasElement>()
-                    .expect("HtmlCanvasElement");
+                    let mode = match xr_session_mode {
+                        karakuri_console::view::XrSessionMode::Vr => {
+                            crate::webxr::WebXrSessionMode::Vr
+                        }
+                        karakuri_console::view::XrSessionMode::Mr => {
+                            crate::webxr::WebXrSessionMode::Ar
+                        }
+                    };
+                    let ar_supported = xr_state.borrow().is_ar_supported;
 
-                let xr_state_for_start = xr_state.clone();
-                let pending_active_for_start = pending_active.clone();
-                let proxy_for_start = proxy.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    match crate::webxr::start_webxr_session(
-                        session_promise,
-                        canvas.clone(),
-                        xr_state_for_start.clone(),
-                        pending_active_for_start.clone(),
-                        proxy_for_start.clone(),
-                    )
-                    .await
-                    {
-                        Ok(session) => {
-                            log::info!("Karakuri Web: WebXR immersive-vr session started");
-                            canvas.set_width(1920);
-                            canvas.set_height(1080);
-                            let _ = canvas.style().set_property("width", "1920px");
-                            let _ = canvas.style().set_property("height", "1080px");
-                            xr_state_for_start.borrow_mut().session = Some(session);
-                            xr_state_for_start.borrow_mut().is_active = true;
-                            *pending_active_for_start.borrow_mut() = Some(true);
-                            let _ = proxy_for_start.send_event(());
+                    let session_promise =
+                        match crate::webxr::request_webxr_session(mode, ar_supported) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                log::warn!("Karakuri Web: Failed to request WebXR session: {e}");
+                                *pending_active.borrow_mut() = Some(false);
+                                let _ = proxy.send_event(());
+                                return;
+                            }
+                        };
+
+                    let dom_window = web_sys::window().expect("window");
+                    let document = dom_window.document().expect("document");
+                    let canvas = document
+                        .get_element_by_id("karakuri-canvas")
+                        .expect("canvas with id karakuri-canvas")
+                        .dyn_into::<web_sys::HtmlCanvasElement>()
+                        .expect("HtmlCanvasElement");
+
+                    let xr_state_for_start = xr_state.clone();
+                    let pending_active_for_start = pending_active.clone();
+                    let proxy_for_start = proxy.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        match crate::webxr::start_webxr_session(
+                            session_promise,
+                            canvas.clone(),
+                            mode,
+                            xr_state_for_start.clone(),
+                            pending_active_for_start.clone(),
+                            proxy_for_start.clone(),
+                        )
+                        .await
+                        {
+                            Ok(session) => {
+                                log::info!("Karakuri Web: WebXR session started (mode: {mode:?})");
+                                canvas.set_width(1920);
+                                canvas.set_height(1080);
+                                let _ = canvas.style().set_property("width", "1920px");
+                                let _ = canvas.style().set_property("height", "1080px");
+                                xr_state_for_start.borrow_mut().session = Some(session);
+                                xr_state_for_start.borrow_mut().session_mode = mode;
+                                xr_state_for_start.borrow_mut().is_active = true;
+                                *pending_active_for_start.borrow_mut() = Some(true);
+                                let _ = proxy_for_start.send_event(());
+                            }
+                            Err(e) => {
+                                log::warn!("Karakuri Web: Failed to start WebXR session: {e}");
+                                xr_state_for_start.borrow_mut().is_active = false;
+                                xr_state_for_start.borrow_mut().session = None;
+                                *pending_active_for_start.borrow_mut() = Some(false);
+                                let _ = proxy_for_start.send_event(());
+                            }
                         }
-                        Err(e) => {
-                            log::warn!("Karakuri Web: Failed to start WebXR session: {e}");
-                            xr_state_for_start.borrow_mut().is_active = false;
-                            xr_state_for_start.borrow_mut().session = None;
-                            *pending_active_for_start.borrow_mut() = Some(false);
-                            let _ = proxy_for_start.send_event(());
-                        }
-                    }
-                });
-            })
+                    });
+                },
+            )
         };
 
         // Set up WebXR session request hook when operator clicks WebXR plugin chip
         let vr_flow_for_hook = Rc::clone(&start_vr_flow);
-        app.set_plugin_route_hook(move |_n, _on| {
-            vr_flow_for_hook();
+        app.set_plugin_route_hook(move |_n, _on, xr_mode| {
+            vr_flow_for_hook(xr_mode);
         });
 
         Self {

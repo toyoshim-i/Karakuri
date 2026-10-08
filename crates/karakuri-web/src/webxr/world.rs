@@ -94,6 +94,12 @@ out vec4 fragColor;
 const float PI = 3.141592653589793;
 
 void main() {
+    // Mode 3: Passthrough MR - emit transparent black so real-world video shines through
+    if (u_dome_mode == 3) {
+        fragColor = vec4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
+
     vec3 world_dir = normalize(v_world_ray);
 
     // 1. Procedural 3D Celestial Cosmos (The Sky Dome / 天球)
@@ -435,7 +441,7 @@ void main() {
     }
 
     /// Returns the active celestial dome visual projection mode:
-    /// 1 = 180° Celestial Dome (Planetarium), 2 = 220° Wide Horizon Dome, 0 = Planar Screen.
+    /// 1 = 180° Celestial Dome (Planetarium), 2 = 220° Wide Horizon Dome, 0 = Planar Screen, 3 = MR Passthrough.
     pub fn dome_mode(&self) -> i32 {
         self.dome_mode
     }
@@ -446,11 +452,12 @@ void main() {
     }
 
     /// Cycles to the next projection mode:
-    /// 1 (Celestial Dome) -> 2 (Wide Dome) -> 0 (Planar Screen) -> 1.
+    /// 1 (Celestial Dome) -> 2 (Wide Dome) -> 0 (Planar Screen) -> 3 (MR Passthrough) -> 1.
     pub fn cycle_dome_mode(&mut self) -> i32 {
         self.dome_mode = match self.dome_mode {
             1 => 2,
             2 => 0,
+            0 => 3,
             _ => 1,
         };
         self.dome_mode

@@ -303,7 +303,12 @@ impl App {
         }
         if let Acted::Emitted(Some(Operation::RouteFrame { output, on })) = acted {
             if let karakuri_operation::Output::Plugin(n) = output {
-                Self::trigger_plugin_route(&mut self.plugin_route_hook, n, on);
+                Self::trigger_plugin_route(
+                    &mut self.plugin_route_hook,
+                    n,
+                    on,
+                    self.readout.view.xr_mode,
+                );
             }
             if let Some(line) = routed(gfx, event_loop, output, on) {
                 println!("{line}");

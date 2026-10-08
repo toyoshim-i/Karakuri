@@ -90,6 +90,8 @@ impl View {
         let output_resolutions = self.output_resolutions.as_slice();
         let output_resolution_selected = self.output_resolution_selected;
         let resolution_menu_open = self.resolution_menu_open;
+        let xr_mode = self.xr_mode;
+        let xr_menu_open = self.xr_menu_open;
 
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -163,6 +165,8 @@ impl View {
                             opening,
                             plugin_available,
                             plugin_name,
+                            xr_mode,
+                            xr_menu_open,
                         )
                         .map(|r| {
                             r.told(projector).told_plugin_name(
@@ -567,6 +571,22 @@ impl View {
                             output_resolutions,
                             output_resolution_selected,
                         );
+                    }
+                }
+            }
+            // Outputs WebXR mode dropdown menu rendered above bays (Rule 2).
+            if xr_menu_open {
+                if let Some(row) = outputs_with_plugin_name(
+                    ui.ctx(),
+                    panel.layout(),
+                    opening,
+                    plugin_available,
+                    plugin_name,
+                    xr_mode,
+                    true,
+                ) {
+                    if let Some(ref xr_pill) = row.xr_pill {
+                        outputs::xr_menu_into(ui, &pal, xr_pill, xr_mode);
                     }
                 }
             }

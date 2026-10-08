@@ -4,6 +4,32 @@ use super::*;
 // The View struct
 // ---------------------------------------------------------------------------
 
+/// WebXR presentation mode: VR (Immersive Virtual Reality) or MR (Real-World Passthrough).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum XrSessionMode {
+    #[default]
+    Vr,
+    Mr,
+}
+
+impl XrSessionMode {
+    pub const ALL: [Self; 2] = [Self::Vr, Self::Mr];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Vr => "VR",
+            Self::Mr => "MR",
+        }
+    }
+
+    pub const fn menu_label(self) -> &'static str {
+        match self {
+            Self::Vr => "VR (Immersive)",
+            Self::Mr => "MR (Passthrough)",
+        }
+    }
+}
+
 pub struct View {
     pub room: Room,
     /// Active theme selection mode (Auto, Day, or Night).
@@ -91,6 +117,10 @@ pub struct View {
     pub resolution_menu_open: bool,
     /// Whether VR mode is active (adjusts dropdown options to device ratio).
     pub vr_mode: bool,
+    /// WebXR presentation mode: VR (Immersive) or MR (Passthrough).
+    pub xr_mode: XrSessionMode,
+    /// Whether the Outputs row WebXR mode dropdown menu is open.
+    pub xr_menu_open: bool,
     /// Slot index requested for manual overload un-gating, if any.
     pub ungate_requested: Option<usize>,
     /// Opened capability classes for MCP model access (ADR-0156, ADR-0235).

@@ -257,6 +257,27 @@ impl Readout {
             }
         }
 
+        // Outputs WebXR mode dropdown menu and pill
+        if let Some(row) = outputs_with_plugin_name(
+            ctx,
+            self.panel.layout(),
+            self.view.opening,
+            self.view.plugin_available,
+            self.view.plugin_name,
+            self.view.xr_mode,
+            self.view.xr_menu_open,
+        ) {
+            if let Some(ref pill) = row.xr_pill {
+                let asked = pill.ask(self.view.xr_menu_open, at);
+                if self.view.xr_menu_open {
+                    return Some(self.xr_mode_asked(asked.unwrap_or(view::XrAsk::Shut)));
+                }
+                if let Some(ask) = asked {
+                    return Some(self.xr_mode_asked(ask));
+                }
+            }
+        }
+
         None
     }
 
@@ -760,6 +781,8 @@ impl Readout {
             self.view.opening,
             self.view.plugin_available,
             self.view.plugin_name,
+            self.view.xr_mode,
+            self.view.xr_menu_open,
         )
         .map(|row| {
             row.told(self.view.projector).told_plugin_name(
