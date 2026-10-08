@@ -11,9 +11,9 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{
-    HtmlCanvasElement, WebGl2RenderingContext, XrFrame, XrInputSource, XrReferenceSpace,
-    XrRenderStateInit, XrSession, XrSessionInit, XrSessionMode, XrView, XrViewerPose, XrWebGlLayer,
-    XrWebGlLayerInit,
+    HtmlCanvasElement, WebGl2RenderingContext, XrFrame, XrHandedness, XrInputSource,
+    XrReferenceSpace, XrRenderStateInit, XrSession, XrSessionInit, XrSessionMode, XrView,
+    XrViewerPose, XrWebGlLayer, XrWebGlLayerInit,
 };
 use winit::event::{ElementState, MouseButton};
 use winit::event_loop::EventLoopProxy;
@@ -222,10 +222,20 @@ fn setup_xr_render_loop(
     let mut hud_anchor: Option<HudAnchor> = None;
     let mut grab_state: Option<GrabState> = None;
     let mut frame_count: u64 = 0;
+    let mut last_frame_time: Option<f64> = None;
+    let mut locomotion_pos = [0.0f32; 3];
+    let mut locomotion_yaw = 0.0f32;
     let session_loop = session.clone();
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |_time: f64, frame: XrFrame| {
         frame_count = frame_count.wrapping_add(1);
+        let dt = if let Some(last_t) = last_frame_time {
+            ((_time - last_t) * 0.001).clamp(0.0005, 0.05) as f32
+        } else {
+            1.0 / 72.0
+        };
+        last_frame_time = Some(_time);
+
         let pose: Option<XrViewerPose> = frame.get_viewer_pose(&ref_space);
 
         // Lazily anchor the HUD to the user's initial head pose
@@ -235,67 +245,131 @@ fn setup_xr_render_loop(
             }
         }
 
-        // Update stereo poses for Karakuri stereo camera feed
+        let to_mat4 = |v: Vec<f32>| -> [f32; 16] { v.try_into().unwrap_or([0.0; 16]) };
+
+        // Determine player head horizontal facing and right vectors for locomotion
+        let mut move_fwd = [0.0f32, 0.0, -1.0];
+        let mut move_right = [1.0f32, 0.0, 0.0];
         if let Some(ref p) = pose {
             let views = p.views();
-            if views.length() >= 2 {
+            if views.length() > 0 {
                 let v0: XrView = views.get(0).unchecked_into();
-                let v1: XrView = views.get(1).unchecked_into();
+                let raw_v0 = to_mat4(v0.transform().inverse().matrix());
 
-                let p0 = v0.transform().position();
-                let p1 = v1.transform().position();
-
-                let to_mat4 = |v: Vec<f32>| -> [f32; 16] { v.try_into().unwrap_or([0.0; 16]) };
-                // The layer's viewport for an eye is how many framebuffer
-                // pixels that eye gets — the resolution worth drawing it at.
-                let eye_size = layer
-                    .get_viewport(&v0)
-                    .map(|vp| (vp.width().max(1) as u32, vp.height().max(1) as u32))
-                    .unwrap_or((960, 1080));
-                let stereo = StereoPose {
-                    left: StereoEye {
-                        view: to_mat4(v0.transform().inverse().matrix()),
-                        proj: to_mat4(v0.projection_matrix()),
-                        eye: [p0.x() as f32, p0.y() as f32, p0.z() as f32],
-                    },
-                    right: StereoEye {
-                        view: to_mat4(v1.transform().inverse().matrix()),
-                        proj: to_mat4(v1.projection_matrix()),
-                        eye: [p1.x() as f32, p1.y() as f32, p1.z() as f32],
-                    },
-                    eye_size,
+                let fwd_h = [-raw_v0[2], 0.0, -raw_v0[10]];
+                let len_fwd = (fwd_h[0] * fwd_h[0] + fwd_h[2] * fwd_h[2]).sqrt();
+                let (uf_x, uf_z) = if len_fwd > 1e-4 {
+                    (fwd_h[0] / len_fwd, fwd_h[2] / len_fwd)
+                } else {
+                    (0.0, -1.0)
                 };
-                *current_stereo_pose.borrow_mut() = Some(stereo);
+                let (ur_x, ur_z) = (-uf_z, uf_x);
+                let (cos_y, sin_y) = (locomotion_yaw.cos(), locomotion_yaw.sin());
+                move_fwd = [
+                    uf_x * cos_y - uf_z * sin_y,
+                    0.0,
+                    uf_x * sin_y + uf_z * cos_y,
+                ];
+                move_right = [
+                    ur_x * cos_y - ur_z * sin_y,
+                    0.0,
+                    ur_x * sin_y + ur_z * cos_y,
+                ];
             }
         }
 
-        // Upload latest egui console canvas frame to WebGL texture
-        renderer.borrow().update_texture(&gl, &canvas);
-
-        // Keep driving WebGPU console redraws even when window RAF is backgrounded
-        let _ = proxy.send_event(());
-
-        if frame_count % 144 == 1 {
-            let (ax, ay, az) = hud_anchor
-                .map(|a| (a.center[0], a.center[1], a.center[2]))
-                .unwrap_or((0.0, 0.0, 0.0));
-            web_sys::console::log_1(&format!(
-                "WebXR HUD frame {frame_count}: canvas {}x{}, anchor at ({ax:.2}, {ay:.2}, {az:.2})",
-                canvas.width(), canvas.height()
-            ).into());
-        }
-
-        // Process controller ray intersections for Tier 1 HUD interaction
+        // Process controller inputs (Left stick = Move, Right stick = Turn & HUD scroll, Trigger = Click, Grip = HUD drag)
         let input_sources = session_loop.input_sources();
         let num_sources = input_sources.length();
         let canvas_w = canvas.width() as f64;
         let canvas_h = canvas.height() as f64;
         let mut hit_cursor: Option<(f32, f32)> = None;
 
-        if let Some(anchor) = hud_anchor {
-            for i in 0..num_sources {
-                if let Some(source) = input_sources.get(i) {
-                    let source: XrInputSource = source.unchecked_into();
+        for i in 0..num_sources {
+            if let Some(source) = input_sources.get(i) {
+                let source: XrInputSource = source.unchecked_into();
+                let handedness = source.handedness();
+                let is_left = handedness == XrHandedness::Left
+                    || (handedness == XrHandedness::None && i == 1);
+                let is_right = handedness == XrHandedness::Right
+                    || (handedness == XrHandedness::None && i == 0);
+
+                let mut stick_x = 0.0f32;
+                let mut stick_y = 0.0f32;
+
+                if let Some(gamepad) = source.gamepad() {
+                    let axes = gamepad.axes();
+                    if axes.length() >= 4 {
+                        stick_x = js_sys::Reflect::get(&axes, &2.into())
+                            .ok()
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0) as f32;
+                        stick_y = js_sys::Reflect::get(&axes, &3.into())
+                            .ok()
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0) as f32;
+                    } else if axes.length() >= 2 {
+                        stick_x = js_sys::Reflect::get(&axes, &0.into())
+                            .ok()
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0) as f32;
+                        stick_y = js_sys::Reflect::get(&axes, &1.into())
+                            .ok()
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0) as f32;
+                    }
+
+                    if grab_state.is_none() {
+                        if is_left {
+                            // Left stick: Translation (forward/backward, strafe left/right)
+                            let mag = (stick_x * stick_x + stick_y * stick_y).sqrt();
+                            let deadzone = 0.15f32;
+                            if mag > deadzone {
+                                let norm_mag =
+                                    ((mag - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0);
+                                let curved_speed = norm_mag * norm_mag * 2.5; // 2.5 m/s
+
+                                let forward_input = -stick_y; // Stick forward is -Y in WebXR
+                                let strafe_input = stick_x; // Stick right is +X in WebXR
+
+                                let move_dir_x = (move_fwd[0] * forward_input
+                                    + move_right[0] * strafe_input)
+                                    / mag;
+                                let move_dir_z = (move_fwd[2] * forward_input
+                                    + move_right[2] * strafe_input)
+                                    / mag;
+
+                                locomotion_pos[0] += move_dir_x * curved_speed * dt;
+                                locomotion_pos[2] += move_dir_z * curved_speed * dt;
+                            }
+                        } else if is_right {
+                            // Right stick horizontal: Rotate locomotion yaw / facing direction
+                            let deadzone_x = 0.15f32;
+                            let abs_x = stick_x.abs();
+                            if abs_x > deadzone_x {
+                                let norm_x =
+                                    ((abs_x - deadzone_x) / (1.0 - deadzone_x)).clamp(0.0, 1.0);
+                                let turn_speed = 2.0f32; // 2.0 rad/s
+                                let turn_rate = stick_x.signum() * (norm_x * norm_x) * turn_speed;
+                                locomotion_yaw += turn_rate * dt;
+                            }
+
+                            // Right stick vertical: HUD scrolling as before
+                            let deadzone_y = 0.18f32;
+                            let abs_y = stick_y.abs();
+                            if abs_y > deadzone_y {
+                                let sign = -stick_y.signum();
+                                let mag = (abs_y - deadzone_y) / (1.0 - deadzone_y);
+                                let curved = mag * mag;
+                                let delta_y = (sign * curved * 0.45) as f32;
+                                let mut sink = pointer_sink.borrow_mut();
+                                sink.push(WebXrPointerAction::MouseWheel { delta_y });
+                            }
+                        }
+                    }
+                }
+
+                if let Some(anchor) = hud_anchor {
                     let target_ray_space = source.target_ray_space();
                     if let Some(ray_pose) = frame.get_pose(&target_ray_space, &ref_space) {
                         let transform = ray_pose.transform();
@@ -382,36 +456,6 @@ fn setup_xr_render_loop(
                                                 }
                                             }
                                         }
-
-                                        let axes = gamepad.axes();
-                                        let stick_y_val = if axes.length() >= 4 {
-                                            js_sys::Reflect::get(&axes, &3.into()).ok()
-                                        } else if axes.length() >= 2 {
-                                            js_sys::Reflect::get(&axes, &1.into()).ok()
-                                        } else {
-                                            None
-                                        };
-
-                                        if let Some(val) = stick_y_val {
-                                            if let Some(stick_y) = val.as_f64() {
-                                                // Only scroll HUD if not actively grabbing HUD
-                                                if grab_state.is_none() {
-                                                    let deadzone = 0.18;
-                                                    let abs_y = stick_y.abs();
-                                                    if abs_y > deadzone {
-                                                        let sign = -stick_y.signum();
-                                                        let mag =
-                                                            (abs_y - deadzone) / (1.0 - deadzone);
-                                                        // Quadratic response curve: gentle precision at small tilt, smooth scrolling at full tilt
-                                                        let curved = mag * mag;
-                                                        let delta_y = (sign * curved * 0.45) as f32;
-                                                        sink.push(WebXrPointerAction::MouseWheel {
-                                                            delta_y,
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                        }
                                     }
                                 }
                             }
@@ -424,21 +468,6 @@ fn setup_xr_render_loop(
                                 if let Ok(btn_val) = js_sys::Reflect::get(&buttons, &1.into()) {
                                     let btn: web_sys::GamepadButton = btn_val.unchecked_into();
                                     let grip_pressed = btn.pressed();
-
-                                    let axes = gamepad.axes();
-                                    let (stick_x_val, stick_y_val) = if axes.length() >= 4 {
-                                        (
-                                            js_sys::Reflect::get(&axes, &2.into()).ok(),
-                                            js_sys::Reflect::get(&axes, &3.into()).ok(),
-                                        )
-                                    } else if axes.length() >= 2 {
-                                        (
-                                            js_sys::Reflect::get(&axes, &0.into()).ok(),
-                                            js_sys::Reflect::get(&axes, &1.into()).ok(),
-                                        )
-                                    } else {
-                                        (None, None)
-                                    };
 
                                     if grip_pressed {
                                         match grab_state {
@@ -476,40 +505,26 @@ fn setup_xr_render_loop(
                                                 }
                                             }
                                             Some(mut gs) if gs.source_index == i => {
-                                                // 1. Thumbstick Y: distance along beam (Stick forward/up pushes away, back/down pulls closer)
-                                                if let Some(val) = stick_y_val {
-                                                    if let Some(sy) = val.as_f64() {
-                                                        let deadzone = 0.15;
-                                                        let abs_y = sy.abs();
-                                                        if abs_y > deadzone {
-                                                            let sign = -sy.signum(); // stick forward is negative in WebXR, pushes away (+dist)
-                                                            let mag = (abs_y - deadzone)
-                                                                / (1.0 - deadzone);
-                                                            let delta =
-                                                                (sign * mag * mag * 0.025) as f32;
-                                                            gs.current_distance =
-                                                                (gs.current_distance + delta)
-                                                                    .clamp(0.20, 8.0);
-                                                        }
-                                                    }
+                                                // 1. Thumbstick Y: distance along beam
+                                                let deadzone = 0.15;
+                                                let abs_y = stick_y.abs();
+                                                if abs_y > deadzone {
+                                                    let sign = -stick_y.signum();
+                                                    let mag = (abs_y - deadzone) / (1.0 - deadzone);
+                                                    let delta = (sign * mag * mag * 0.025) as f32;
+                                                    gs.current_distance = (gs.current_distance
+                                                        + delta)
+                                                        .clamp(0.20, 8.0);
                                                 }
 
-                                                // 2. Thumbstick X: scale HUD (Stick right expands, stick left shrinks)
-                                                if let Some(val) = stick_x_val {
-                                                    if let Some(sx) = val.as_f64() {
-                                                        let deadzone = 0.15;
-                                                        let abs_x = sx.abs();
-                                                        if abs_x > deadzone {
-                                                            let sign = sx.signum(); // stick right is positive in WebXR, scales up
-                                                            let mag = (abs_x - deadzone)
-                                                                / (1.0 - deadzone);
-                                                            let factor =
-                                                                1.0 + (sign * mag * 0.015) as f32;
-                                                            gs.current_scale = (gs.current_scale
-                                                                * factor)
-                                                                .clamp(0.25, 4.0);
-                                                        }
-                                                    }
+                                                // 2. Thumbstick X: scale HUD
+                                                let abs_x = stick_x.abs();
+                                                if abs_x > deadzone {
+                                                    let sign = stick_x.signum();
+                                                    let mag = (abs_x - deadzone) / (1.0 - deadzone);
+                                                    let factor = 1.0 + (sign * mag * 0.015) as f32;
+                                                    gs.current_scale = (gs.current_scale * factor)
+                                                        .clamp(0.25, 4.0);
                                                 }
 
                                                 let q_curr = [qx, qy, qz, qw];
@@ -603,6 +618,71 @@ fn setup_xr_render_loop(
             }
         }
 
+        // Update stereo poses for Karakuri stereo camera feed, applying locomotion
+        if let Some(ref p) = pose {
+            let views = p.views();
+            if views.length() >= 2 {
+                let v0: XrView = views.get(0).unchecked_into();
+                let v1: XrView = views.get(1).unchecked_into();
+
+                let p0 = v0.transform().position();
+                let p1 = v1.transform().position();
+
+                let p0_arr = [p0.x() as f32, p0.y() as f32, p0.z() as f32];
+                let p1_arr = [p1.x() as f32, p1.y() as f32, p1.z() as f32];
+                let head_center = [
+                    (p0_arr[0] + p1_arr[0]) * 0.5,
+                    (p0_arr[1] + p1_arr[1]) * 0.5,
+                    (p0_arr[2] + p1_arr[2]) * 0.5,
+                ];
+
+                let raw_v0 = to_mat4(v0.transform().inverse().matrix());
+                let raw_v1 = to_mat4(v1.transform().inverse().matrix());
+
+                let (left_view, left_eye) =
+                    apply_locomotion(raw_v0, p0_arr, head_center, locomotion_pos, locomotion_yaw);
+                let (right_view, right_eye) =
+                    apply_locomotion(raw_v1, p1_arr, head_center, locomotion_pos, locomotion_yaw);
+
+                let eye_size = layer
+                    .get_viewport(&v0)
+                    .map(|vp| (vp.width().max(1) as u32, vp.height().max(1) as u32))
+                    .unwrap_or((960, 1080));
+                let stereo = StereoPose {
+                    left: StereoEye {
+                        view: left_view,
+                        proj: to_mat4(v0.projection_matrix()),
+                        eye: left_eye,
+                    },
+                    right: StereoEye {
+                        view: right_view,
+                        proj: to_mat4(v1.projection_matrix()),
+                        eye: right_eye,
+                    },
+                    eye_size,
+                };
+                *current_stereo_pose.borrow_mut() = Some(stereo);
+            }
+        }
+
+        // Upload latest egui console canvas frame to WebGL texture
+        renderer.borrow().update_texture(&gl, &canvas);
+
+        // Keep driving WebGPU console redraws even when window RAF is backgrounded
+        let _ = proxy.send_event(());
+
+        if frame_count % 144 == 1 {
+            let (ax, ay, az) = hud_anchor
+                .map(|a| (a.center[0], a.center[1], a.center[2]))
+                .unwrap_or((0.0, 0.0, 0.0));
+            web_sys::console::log_1(&format!(
+                "WebXR HUD frame {frame_count}: canvas {}x{}, anchor at ({ax:.2}, {ay:.2}, {az:.2}), loco at ({:.2}, {:.2}, {:.2}), yaw {:.1} deg",
+                canvas.width(), canvas.height(),
+                locomotion_pos[0], locomotion_pos[1], locomotion_pos[2],
+                locomotion_yaw.to_degrees()
+            ).into());
+        }
+
         // Visual projection mode: Mode 0 (Natural Stereo Perspective Reprojection) for VR, Mode 3 for AR
         let target_mode = match session_mode {
             WebXrSessionMode::Ar => 3, // MR Passthrough
@@ -672,5 +752,148 @@ fn setup_xr_render_loop(
         if let Some(ref cb) = *cb_ref {
             let _ = session.request_animation_frame(cb.as_ref().unchecked_ref());
         }
+    }
+}
+
+/// Applies artificial locomotion (translation and yaw rotation around player's head center)
+/// to an eye's raw view matrix and world-space eye position.
+pub fn apply_locomotion(
+    eye_view: [f32; 16],
+    eye_pos: [f32; 3],
+    head_center: [f32; 3],
+    locomotion_pos: [f32; 3],
+    locomotion_yaw: f32,
+) -> ([f32; 16], [f32; 3]) {
+    let c = head_center;
+    let d = [
+        c[0] + locomotion_pos[0],
+        c[1] + locomotion_pos[1],
+        c[2] + locomotion_pos[2],
+    ];
+    let (cos_y, sin_y) = (locomotion_yaw.cos(), locomotion_yaw.sin());
+
+    // M_loco_inv transforms world points back into raw reference space:
+    // M_loco_inv = T(c) * Ry(-locomotion_yaw) * T(-d)
+    // Column-major order:
+    let m_inv = [
+        // Col 0
+        cos_y,
+        0.0,
+        -sin_y,
+        0.0,
+        // Col 1
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        // Col 2
+        sin_y,
+        0.0,
+        cos_y,
+        0.0,
+        // Col 3
+        c[0] - d[0] * cos_y - d[2] * sin_y,
+        c[1] - d[1],
+        c[2] + d[0] * sin_y - d[2] * cos_y,
+        1.0,
+    ];
+
+    // V_new = eye_view * M_loco_inv
+    let mut v_new = [0.0f32; 16];
+    for col in 0..4 {
+        for row in 0..4 {
+            let mut sum = 0.0f32;
+            for k in 0..4 {
+                sum += eye_view[k * 4 + row] * m_inv[col * 4 + k];
+            }
+            v_new[col * 4 + row] = sum;
+        }
+    }
+
+    // eye_new = M_loco * eye_pos
+    // M_loco = T(d) * Ry(locomotion_yaw) * T(-c)
+    let delta = [eye_pos[0] - c[0], eye_pos[1] - c[1], eye_pos[2] - c[2]];
+    let rot_delta = [
+        delta[0] * cos_y - delta[2] * sin_y,
+        delta[1],
+        delta[0] * sin_y + delta[2] * cos_y,
+    ];
+    let eye_new = [
+        rot_delta[0] + d[0],
+        rot_delta[1] + d[1],
+        rot_delta[2] + d[2],
+    ];
+
+    (v_new, eye_new)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_locomotion_identity() {
+        let view_identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let eye_pos = [0.03, 1.7, 0.0];
+        let head_center = [0.0, 1.7, 0.0];
+        let (view_out, eye_out) =
+            apply_locomotion(view_identity, eye_pos, head_center, [0.0, 0.0, 0.0], 0.0);
+
+        for (a, b) in view_out.iter().zip(view_identity.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+        for (a, b) in eye_out.iter().zip(eye_pos.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_apply_locomotion_translation() {
+        let view_identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let eye_pos = [0.03, 1.7, 0.0];
+        let head_center = [0.0, 1.7, 0.0];
+        let (view_out, eye_out) =
+            apply_locomotion(view_identity, eye_pos, head_center, [2.0, 0.0, -5.0], 0.0);
+
+        assert!((eye_out[0] - 2.03).abs() < 1e-5);
+        assert!((eye_out[1] - 1.7).abs() < 1e-5);
+        assert!((eye_out[2] - (-5.0)).abs() < 1e-5);
+
+        // A point in front of the moved eye at [2.03, 1.7, -6.0] should map to [0.0, 0.0, -1.0]
+        let pt = [2.03f32, 1.7, -6.0, 1.0];
+        let mut eye_space_z = 0.0f32;
+        for k in 0..4 {
+            eye_space_z += view_out[k * 4 + 2] * pt[k];
+        }
+        assert!((eye_space_z - (-1.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_apply_locomotion_rotation() {
+        let view_identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let eye_pos = [0.03, 1.7, 0.0];
+        let head_center = [0.0, 1.7, 0.0];
+        let yaw = std::f32::consts::FRAC_PI_2; // 90 degrees clockwise (turn right)
+        let (view_out, eye_out) =
+            apply_locomotion(view_identity, eye_pos, head_center, [0.0, 0.0, 0.0], yaw);
+
+        // Head center remains at [0.0, 1.7, 0.0], while right offset [0.03, 0, 0] rotates clockwise to back [0, 0, 0.03]
+        assert!((eye_out[0] - 0.0).abs() < 1e-5);
+        assert!((eye_out[1] - 1.7).abs() < 1e-5);
+        assert!((eye_out[2] - 0.03).abs() < 1e-5);
+
+        // Looking right: a point at [10.0, 1.7, 0.0] in world space should be directly in front of camera (-Z in eye space)
+        let pt = [10.0f32, 1.7, 0.0, 1.0];
+        let mut eye_space_z = 0.0f32;
+        for k in 0..4 {
+            eye_space_z += view_out[k * 4 + 2] * pt[k];
+        }
+        assert!((eye_space_z - (-10.0)).abs() < 1e-4);
     }
 }
