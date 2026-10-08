@@ -20,8 +20,8 @@ fn builtin_param_keys() -> &'static [String] {
     })
 }
 
-/// Byte size of `Xr` in camera.wgsl: two column-major `mat4x4<f32>`.
-const XR_SIZE: u64 = 128;
+/// Byte size of `Xr` in camera.wgsl: two column-major `mat4x4<f32>` (128 bytes) plus two `vec4<f32>` (32 bytes).
+const XR_SIZE: u64 = 160;
 
 /// The camera node, coordinating state buffers, derived views, and compute passes.
 pub(crate) struct Camera {
@@ -349,6 +349,16 @@ impl Camera {
         let mut bytes = [0u8; XR_SIZE as usize];
         for (at, value) in m.view.iter().chain(m.proj.iter()).flatten().enumerate() {
             bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        let cfg0 = [
+            m.vr_config.mode,
+            m.vr_config.rings,
+            m.vr_config.facets,
+            m.vr_config.spin,
+        ];
+        let cfg1 = [m.vr_config.mirror, m.vr_config.zoom, 0.0, 0.0];
+        for (at, value) in cfg0.iter().chain(cfg1.iter()).enumerate() {
+            bytes[128 + at * 4..128 + at * 4 + 4].copy_from_slice(&value.to_le_bytes());
         }
         queue.write_buffer(&self.xr, 0, &bytes);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -902,6 +912,7 @@ proc six {
                     [0.25, 0.1, -1.0, -1.0],
                     [0.0, 0.0, -0.2, 0.0],
                 ],
+                vr_config: Default::default(),
             };
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
             cam.record_xr(&gpu.queue, &mut encoder, &eye_m);

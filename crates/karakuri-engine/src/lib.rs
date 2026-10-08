@@ -35,7 +35,7 @@ pub mod uniforms;
 pub mod video_source;
 
 pub use binding::{Binding, Curve, ParamWrite, Signals};
-pub use camera::{Orbit, StereoMatrices};
+pub use camera::{Orbit, StereoMatrices, VrConfig};
 pub use chain_swap::{ChainEvent, ChainRefusal, ChainSlot, ChainSwap};
 pub use compaction::Compaction;
 pub use deck::{Blend, Deck, DeckSlot, Frame, Mask, MaskKind, Residency};

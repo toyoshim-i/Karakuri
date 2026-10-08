@@ -287,6 +287,36 @@ fn normalize(v: [f32; 3]) -> [f32; 3] {
     }
 }
 
+/// Configuration for VR projection modes (Wall, Dome, Kaleidosky) on 2D fullscreen shaders.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VrConfig {
+    /// 0.0 = Wall (default infinite wall screen), 1.0 = Dome, 2.0 = Kaleidosky
+    pub mode: f32,
+    /// Radial N-division for concentric rings in Kaleidosky (default 4.0)
+    pub rings: f32,
+    /// Azimuthal M-division for radial symmetry in Kaleidosky (default 6.0)
+    pub facets: f32,
+    /// Rotation speed around zenith in turns per beat (default 0.05)
+    pub spin: f32,
+    /// 1.0 = ping-pong mirror reflection, 0.0 = cyclic repeat (default 1.0)
+    pub mirror: f32,
+    /// Scale zoom factor (default 1.0)
+    pub zoom: f32,
+}
+
+impl Default for VrConfig {
+    fn default() -> Self {
+        Self {
+            mode: 0.0,
+            rings: 4.0,
+            facets: 6.0,
+            spin: 0.05,
+            mirror: 1.0,
+            zoom: 1.0,
+        }
+    }
+}
+
 /// One WebXR eye, as the headset reports it: column-major view and projection.
 ///
 /// `view` maps rig space to eye space, where rig space is the headset's own
@@ -298,6 +328,7 @@ fn normalize(v: [f32; 3]) -> [f32; 3] {
 pub struct StereoMatrices {
     pub view: Mat4,
     pub proj: Mat4,
+    pub vr_config: VrConfig,
 }
 
 impl StereoMatrices {
@@ -313,7 +344,14 @@ impl StereoMatrices {
         StereoMatrices {
             view: to_mat4(view),
             proj: to_mat4(proj),
+            vr_config: VrConfig::default(),
         }
+    }
+
+    /// Sets the VR projection config.
+    pub fn with_vr_config(mut self, config: VrConfig) -> Self {
+        self.vr_config = config;
+        self
     }
 }
 

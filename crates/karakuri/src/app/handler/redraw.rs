@@ -645,7 +645,17 @@ impl App {
             // The WebXR stereo world, after the window's frame so its submits
             // never interleave with the composed picture's.
             #[cfg(target_arch = "wasm32")]
-            if let Some(eyes) = self.stereo_matrices {
+            if let Some(mut eyes) = self.stereo_matrices {
+                let vr_cfg = karakuri_engine::VrConfig {
+                    mode: self.readout.view.vr_projection.mode.as_f32(),
+                    rings: self.readout.view.vr_projection.rings,
+                    facets: self.readout.view.vr_projection.facets,
+                    spin: self.readout.view.vr_projection.spin,
+                    mirror: self.readout.view.vr_projection.mirror,
+                    zoom: self.readout.view.vr_projection.zoom,
+                };
+                eyes.0.vr_config = vr_cfg;
+                eyes.1.vr_config = vr_cfg;
                 self.stereo_drawn |= super::stereo::draw_world(gfx, &eyes);
             }
         }

@@ -45,6 +45,9 @@ pub(crate) fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
 
     let list_clip = row.list.unwrap_or(Rect::EVERYTHING);
     let painter = ui.painter().with_clip_rect(list_clip);
+    if let Some(vr) = &row.vr_stage {
+        vr_stage_into(&painter, pal, vr);
+    }
     for slot in &row.slots {
         slot_into(&painter, pal, slot);
     }
@@ -161,5 +164,159 @@ pub(super) fn add_into(painter: &egui::Painter, pal: &Palette, add: Rect) {
         ),
         galley,
         pal.faint,
+    );
+}
+
+/// Paints the Built-in VR Projection stage (well, indicator dot, name, Built-in badge, mode pill, and parameter faders).
+pub(super) fn vr_stage_into(painter: &egui::Painter, pal: &Palette, vr: &VrProjectionRow) {
+    painter.rect_filled(vr.well, CornerRadius::same(size::FX_RADIUS), pal.well);
+    let is_active = vr.mode != crate::view::VrProjectionMode::Wall;
+    let border = if is_active { pal.mint } else { pal.line };
+    painter.rect_stroke(
+        vr.well,
+        CornerRadius::same(size::FX_RADIUS),
+        Stroke::new(size::HAIRLINE, border),
+        StrokeKind::Inside,
+    );
+    let head_radius = if vr.is_folded {
+        CornerRadius::same(size::FX_RADIUS)
+    } else {
+        CornerRadius {
+            nw: size::FX_RADIUS,
+            ne: size::FX_RADIUS,
+            sw: 0,
+            se: 0,
+        }
+    };
+    painter.rect_filled(vr.head, head_radius, pal.tint);
+    if !vr.is_folded {
+        painter.line_segment(
+            [
+                Pos2::new(vr.head.min.x, vr.head.max.y),
+                Pos2::new(vr.head.max.x, vr.head.max.y),
+            ],
+            Stroke::new(size::HAIRLINE, pal.line),
+        );
+    }
+    let dot_col = if is_active { pal.mint } else { pal.faint };
+    painter.circle_filled(vr.dot.center(), size::FX_DOT * 0.5, dot_col);
+
+    let word = |rect: Rect, text: &str, colour: Color32, align_right: bool| {
+        let galley = painter.layout_no_wrap(
+            text.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            colour,
+        );
+        let x = match align_right {
+            true => rect.max.x - galley.size().x,
+            false => rect.min.x,
+        };
+        painter.galley(
+            Pos2::new(x, rect.center().y - galley.size().y * 0.5),
+            galley,
+            colour,
+        );
+    };
+
+    word(vr.name, "VR Projection", pal.text, false);
+
+    // [Built-in] badge
+    let badge_radius = CornerRadius::same(size::BADGE_RADIUS as u8);
+    painter.rect_filled(vr.badge, badge_radius, pal.panel);
+    painter.rect_stroke(
+        vr.badge,
+        badge_radius,
+        Stroke::new(size::HAIRLINE, pal.faint),
+        StrokeKind::Inside,
+    );
+    let badge_galley = painter.layout_no_wrap(
+        "Built-in".to_owned(),
+        FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+        pal.faint,
+    );
+    painter.galley(
+        Pos2::new(
+            vr.badge.center().x - badge_galley.size().x * 0.5,
+            vr.badge.center().y - badge_galley.size().y * 0.5,
+        ),
+        badge_galley,
+        pal.faint,
+    );
+
+    // Mode pill
+    let (pill_bg, pill_fg) = if is_active {
+        (pal.mint, pal.panel)
+    } else {
+        (pal.tint, pal.text)
+    };
+    let pill_radius = CornerRadius::same((size::MINI_H * 0.5) as u8);
+    painter.rect_filled(vr.mode_pill, pill_radius, pill_bg);
+    painter.rect_stroke(
+        vr.mode_pill,
+        pill_radius,
+        Stroke::new(size::HAIRLINE, if is_active { pal.mint } else { pal.line }),
+        StrokeKind::Inside,
+    );
+    let mode_galley = painter.layout_no_wrap(
+        vr.mode.label().to_owned(),
+        FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+        pill_fg,
+    );
+    painter.galley(
+        Pos2::new(
+            vr.mode_pill.center().x - mode_galley.size().x * 0.5,
+            vr.mode_pill.center().y - mode_galley.size().y * 0.5,
+        ),
+        mode_galley,
+        pill_fg,
+    );
+
+    if !vr.is_folded {
+        for param in &vr.params {
+            vr_param_into(painter, pal, param);
+        }
+    }
+}
+
+fn vr_param_into(painter: &egui::Painter, pal: &Palette, param: &VrParamRow) {
+    let ord_galley = painter.layout_no_wrap(
+        format!("{:02}", param.ord),
+        FontId::new(size::PARAM_ORD_SIZE, FontFamily::Monospace),
+        pal.faint,
+    );
+    painter.galley(
+        Pos2::new(
+            param.ord_rect.min.x,
+            param.ord_rect.center().y - ord_galley.size().y * 0.5,
+        ),
+        ord_galley,
+        pal.faint,
+    );
+    let label_galley = painter.layout_no_wrap(
+        param.key.label().to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.faint,
+    );
+    painter.galley(
+        Pos2::new(
+            param.label.min.x,
+            param.label.center().y - label_galley.size().y * 0.5,
+        ),
+        label_galley,
+        pal.faint,
+    );
+    fader_into(painter, pal, param.fader, false, None);
+    let amount_galley = painter.layout_no_wrap(
+        format!("{:.2}", param.value),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.text,
+    );
+    painter.galley(
+        Pos2::new(
+            param.amount.max.x - amount_galley.size().x,
+            param.amount.center().y - amount_galley.size().y * 0.5,
+        ),
+        amount_galley,
+        pal.text,
     );
 }

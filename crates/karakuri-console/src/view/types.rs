@@ -121,6 +121,10 @@ pub struct View {
     pub xr_mode: XrSessionMode,
     /// Whether the Outputs row WebXR mode dropdown menu is open.
     pub xr_menu_open: bool,
+    /// Built-in VR projection parameters (mode, rings, facets, spin, mirror, zoom).
+    pub vr_projection: VrProjection,
+    /// Whether the Built-in VR projection stage in Master bay is folded.
+    pub vr_projection_folded: bool,
     /// Slot index requested for manual overload un-gating, if any.
     pub ungate_requested: Option<usize>,
     /// Opened capability classes for MCP model access (ADR-0156, ADR-0235).
@@ -225,6 +229,95 @@ impl View {
             ];
             // Default to index 1 (1280x720 HD)
             self.output_resolution_selected = 1;
+        }
+    }
+
+    /// Sets a VR projection parameter by key, returning true if recognised.
+    pub fn set_vr_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "rings" => self.vr_projection.rings = value,
+            "facets" => self.vr_projection.facets = value,
+            "spin" => self.vr_projection.spin = value,
+            "mirror" => self.vr_projection.mirror = value,
+            "zoom" => self.vr_projection.zoom = value,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Toggles the folded state of the Built-in VR projection stage in Master bay.
+    pub fn toggle_vr_projection_fold(&mut self) {
+        self.vr_projection_folded = !self.vr_projection_folded;
+    }
+}
+
+/// VR projection mode for 2D Fullscreen shaders: flat infinite wall, celestial dome, or Kaleidosky dome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VrProjectionMode {
+    #[default]
+    Wall,
+    Dome,
+    Kaleidosky,
+}
+
+impl VrProjectionMode {
+    pub const ALL: [Self; 3] = [Self::Wall, Self::Dome, Self::Kaleidosky];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Wall => "Wall",
+            Self::Dome => "Dome",
+            Self::Kaleidosky => "Kaleidosky",
+        }
+    }
+
+    pub const fn as_f32(self) -> f32 {
+        match self {
+            Self::Wall => 0.0,
+            Self::Dome => 1.0,
+            Self::Kaleidosky => 2.0,
+        }
+    }
+
+    pub fn from_f32(val: f32) -> Self {
+        if val >= 1.5 {
+            Self::Kaleidosky
+        } else if val >= 0.5 {
+            Self::Dome
+        } else {
+            Self::Wall
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Wall => Self::Dome,
+            Self::Dome => Self::Kaleidosky,
+            Self::Kaleidosky => Self::Wall,
+        }
+    }
+}
+
+/// Parameters for Built-in VR Projection in Master bay.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VrProjection {
+    pub mode: VrProjectionMode,
+    pub rings: f32,
+    pub facets: f32,
+    pub spin: f32,
+    pub mirror: f32,
+    pub zoom: f32,
+}
+
+impl Default for VrProjection {
+    fn default() -> Self {
+        Self {
+            mode: VrProjectionMode::Wall,
+            rings: 4.0,
+            facets: 6.0,
+            spin: 0.05,
+            mirror: 1.0,
+            zoom: 1.0,
         }
     }
 }
