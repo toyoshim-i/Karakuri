@@ -841,6 +841,22 @@ impl Readout {
             self.view.toggle_master_fold(slot);
             return Acted::Pointed;
         }
+        if let Some(ask) = master.as_ref().and_then(|row| row.vr_ask(at)) {
+            match ask {
+                view::VrAsk::CycleMode => {
+                    self.view.vr_projection.mode = self.view.vr_projection.mode.next();
+                    return Acted::Pointed;
+                }
+                view::VrAsk::ToggleFold => {
+                    self.view.toggle_vr_projection_fold();
+                    return Acted::Pointed;
+                }
+                view::VrAsk::SetParam { key, value } => {
+                    self.view.set_vr_param(key.label(), value);
+                    return Acted::Pointed;
+                }
+            }
+        }
         match (sink, knob, chip, tally, mask) {
             (Some((row, Output::Program)), ..) => Acted::Operated(self.sink(row.route(), row.op())),
             (Some((row, output)), ..) => Acted::Emitted(

@@ -101,6 +101,9 @@ impl View {
             &self.master_folded,
             &self.master_muted,
             self.master_soloed,
+            self.vr_mode,
+            &self.vr_projection,
+            self.vr_projection_folded,
         )
     }
 }

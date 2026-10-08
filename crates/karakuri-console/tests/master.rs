@@ -7,7 +7,8 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Knob, Panel, Released, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    master, AddChoice, AddChoices, Added, Chain, ChainSlot, MasterRow, SlotParam, View,
+    master, AddChoice, AddChoices, Added, Chain, ChainSlot, MasterRow, SlotParam, View, VrAsk,
+    VrParamKey, VrProjectionMode,
 };
 use karakuri_layout::Point;
 use karakuri_operation::{ChainParam, Cut, Operation};
@@ -772,4 +773,60 @@ fn master_scrolling_moves_slots_and_clamps() {
     // Scroll past zero clamps at 0
     assert!(v.scroll_master_by(-100.0));
     assert_eq!(v.master_scroll(), 0.0);
+}
+
+/// VR projection stage appears in Master bay when `vr_mode` is active and collapses on fold.
+#[test]
+fn master_vr_projection_stage_lifecycle() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let mut v = view(MOCK);
+
+    // 1. By default, vr_mode is false and vr_stage is None
+    assert!(!v.vr_mode);
+    let row_no_vr = v.master_row_layout(&ctx, panel.layout()).expect("row");
+    assert!(row_no_vr.vr_stage.is_none());
+
+    // 2. Enable vr_mode -> vr_stage is rendered
+    v.vr_mode = true;
+    let row_vr = v.master_row_layout(&ctx, panel.layout()).expect("vr row");
+    let vr = row_vr.vr_stage.as_ref().expect("vr_stage exists");
+    assert_eq!(vr.mode, VrProjectionMode::Wall);
+    assert!(!vr.is_folded);
+    assert_eq!(vr.params.len(), 5);
+
+    // 3. Test fold toggling
+    v.toggle_vr_projection_fold();
+    assert!(v.vr_projection_folded);
+    let row_folded = v
+        .master_row_layout(&ctx, panel.layout())
+        .expect("folded vr row");
+    let vr_folded = row_folded.vr_stage.expect("folded vr_stage");
+    assert!(vr_folded.is_folded);
+    assert!(vr_folded.params.is_empty());
+    assert_eq!(vr_folded.well.height(), size::NODE_HEAD_H);
+
+    // 4. Test VrAsk emissions from hit testing
+    // Header click -> ToggleFold
+    let head_click = at(vr.name.center());
+    assert_eq!(row_vr.vr_ask(head_click), Some(VrAsk::ToggleFold));
+
+    // Mode pill click -> CycleMode
+    let pill_click = at(vr.mode_pill.center());
+    assert_eq!(row_vr.vr_ask(pill_click), Some(VrAsk::CycleMode));
+
+    // Fader knob on parameter row (Rings is params[0])
+    let ring_knob = at(vr.params[0].fader.knob.center());
+    assert!(matches!(
+        row_vr.vr_ask(ring_knob),
+        Some(VrAsk::SetParam {
+            key: VrParamKey::Rings,
+            ..
+        })
+    ));
+
+    // 5. Parameter updates via View::set_vr_param
+    v.set_vr_param(VrParamKey::Rings.label(), 4.0);
+    assert_eq!(v.vr_projection.rings, 4.0);
+    v.set_vr_param(VrParamKey::Facets.label(), 8.0);
+    assert_eq!(v.vr_projection.facets, 8.0);
 }

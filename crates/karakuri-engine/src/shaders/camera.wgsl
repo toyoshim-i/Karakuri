@@ -59,22 +59,28 @@ fn derive() {
 
     derived.view_proj = proj * view;
     derived.eye = eye;
+    derived.vr_mode = 0.0;
     derived.fwd = f;
-    // Pre-scaled, so nothing downstream has to know what the projection was.
+    derived.vr_rings = 4.0;
     derived.right = s * (half * canvas.aspect);
+    derived.vr_facets = 6.0;
     derived.up = u * half;
-    // A frustum of zero depth would divide by zero here and hand every
-    // weighted fragment a NaN weight; the floor is the smallest positive
-    // normal, matching the host's `State::depth_range`.
+    derived.vr_spin = 0.05;
     derived.depth_range = vec2<f32>(near, 1.0 / max(far - near, 1.17549435e-38));
+    derived.vr_mirror = 1.0;
+    derived.vr_zoom = 1.0;
 }
 
 // WebXR: one eye riding this camera. `head` is the eye's view matrix relative
 // to where the headset started (rig space -> eye space) and `proj` is the
 // eye's own, possibly off-centre, projection. Both column-major.
+// vr_config0 = (mode, rings, facets, spin)
+// vr_config1 = (mirror, zoom, 0.0, 0.0)
 struct Xr {
     head: mat4x4<f32>,
     proj: mat4x4<f32>,
+    vr_config0: vec4<f32>,
+    vr_config1: vec4<f32>,
 };
 @group(0) @binding(3) var<uniform> xr: Xr;
 
@@ -109,10 +115,13 @@ fn derive_xr() {
     // position is the rotation's transpose applied to minus the translation.
     let axes = transpose(mat3x3<f32>(view[0].xyz, view[1].xyz, view[2].xyz));
     derived.eye = -(axes * view[3].xyz);
+    derived.vr_mode = xr.vr_config0.x;
     // Pre-scaled like `derive`'s: by the half-extent of the frustum, which a
     // projection carries as the reciprocal of its diagonal.
     derived.right = axes[0] / xr.proj[0][0];
+    derived.vr_facets = xr.vr_config0.z;
     derived.up = axes[1] / xr.proj[1][1];
+    derived.vr_spin = xr.vr_config0.w;
     // In WebXR, the frustum is typically asymmetric / off-centre (e.g. canted lenses,
     // eye displacement). An eye-space ray through NDC (x, y) with -z=1 satisfies:
     //   x_eye = (x_ndc + xr.proj[2][0]) / xr.proj[0][0]
@@ -124,7 +133,10 @@ fn derive_xr() {
     // (such as celestial sky domes or raymarchers) align exactly with vertex-projected
     // L1 geometry across both eyes instead of causing divergent stereoscopic parallax.
     derived.fwd = -axes[2] + derived.right * xr.proj[2][0] + derived.up * xr.proj[2][1];
+    derived.vr_rings = xr.vr_config0.y;
     let near = state.near;
     let far = state.far;
     derived.depth_range = vec2<f32>(near, 1.0 / max(far - near, 1.17549435e-38));
+    derived.vr_mirror = xr.vr_config1.x;
+    derived.vr_zoom = xr.vr_config1.y;
 }

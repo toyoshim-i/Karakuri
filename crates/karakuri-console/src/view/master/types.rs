@@ -42,6 +42,8 @@ pub struct MasterRow {
     pub out: f32,
     /// Visible chain slot wells in order (ADR-0340). Rows drop from bottom up if space is short.
     pub slots: Vec<SlotRow>,
+    /// Built-in VR projection stage, present when in VR mode.
+    pub vr_stage: Option<VrProjectionRow>,
     /// `+ add` at the end of the list, or `None` where the bay has no room for
     /// it. A press puts [`AddCard`] down and asks for nothing on its own; the
     /// procedure is named by picking an item of that card.
@@ -333,6 +335,136 @@ pub enum Added {
     Add(Operation),
 }
 
+/// Built-in VR projection parameter identifiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VrParamKey {
+    Rings,
+    Facets,
+    Spin,
+    Mirror,
+    Zoom,
+}
+
+impl VrParamKey {
+    pub const ALL: [Self; 5] = [
+        Self::Rings,
+        Self::Facets,
+        Self::Spin,
+        Self::Mirror,
+        Self::Zoom,
+    ];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Rings => "rings",
+            Self::Facets => "facets",
+            Self::Spin => "spin",
+            Self::Mirror => "mirror",
+            Self::Zoom => "zoom",
+        }
+    }
+
+    pub const fn range(self) -> [f32; 2] {
+        match self {
+            Self::Rings => [1.0, 16.0],
+            Self::Facets => [0.0, 16.0],
+            Self::Spin => [-2.0, 2.0],
+            Self::Mirror => [0.0, 1.0],
+            Self::Zoom => [0.2, 4.0],
+        }
+    }
+
+    pub fn value(self, proj: &crate::view::VrProjection) -> f32 {
+        match self {
+            Self::Rings => proj.rings,
+            Self::Facets => proj.facets,
+            Self::Spin => proj.spin,
+            Self::Mirror => proj.mirror,
+            Self::Zoom => proj.zoom,
+        }
+    }
+}
+
+/// User actions on the Built-in VR Projection stage.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VrAsk {
+    /// Cycles VR projection mode (Wall -> Dome -> Kaleidosky -> Wall).
+    CycleMode,
+    /// Toggles fold state of the VR projection stage.
+    ToggleFold,
+    /// Sets a VR projection parameter value directly from track click or drag.
+    SetParam { key: VrParamKey, value: f32 },
+}
+
+/// Layout of the Built-in VR Projection stage well in the Master bay.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VrProjectionRow {
+    pub well: Rect,
+    pub head: Rect,
+    pub dot: Rect,
+    pub name: Rect,
+    pub badge: Rect,
+    pub mode_pill: Rect,
+    pub mode: crate::view::VrProjectionMode,
+    pub is_folded: bool,
+    pub params: Vec<VrParamRow>,
+}
+
+impl VrProjectionRow {
+    /// Hit-tests title bar, mode pill, and parameter tracks for VR stage interactions.
+    pub fn ask(&self, p: Point) -> Option<VrAsk> {
+        let at = Pos2::new(p.x, p.y);
+        if self.mode_pill.contains(at) {
+            return Some(VrAsk::CycleMode);
+        }
+        if self.head.contains(at) {
+            return Some(VrAsk::ToggleFold);
+        }
+        if !self.is_folded {
+            for param in &self.params {
+                if param.fader.track.contains(at)
+                    || param.amount.contains(at)
+                    || param.label.contains(at)
+                {
+                    let along = ((at.x - param.fader.track.min.x) / param.fader.track.width())
+                        .clamp(0.0, 1.0);
+                    let [low, high] = param.range;
+                    let value = low + (high - low) * along;
+                    return Some(VrAsk::SetParam {
+                        key: param.key,
+                        value,
+                    });
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Layout of a single VR projection parameter row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VrParamRow {
+    pub key: VrParamKey,
+    pub ord: usize,
+    pub ord_rect: Rect,
+    pub label: Rect,
+    pub fader: Fader,
+    pub amount: Rect,
+    pub value: f32,
+    pub range: [f32; 2],
+}
+
+impl VrParamRow {
+    pub fn along(&self) -> f32 {
+        let [low, high] = self.range;
+        if (high - low).abs() < f32::EPSILON {
+            0.0
+        } else {
+            ((self.value - low) / (high - low)).clamp(0.0, 1.0)
+        }
+    }
+}
+
 impl MasterRow {
     /// Resolves which knob is grabbed at point `p`. The track itself is not a target.
     pub fn grab(&self, p: Point) -> Option<Grab> {
@@ -368,6 +500,11 @@ impl MasterRow {
         self.slots.iter().find_map(|slot| slot.fold(p))
     }
 
+    /// Resolves user interactions with the Built-in VR projection stage.
+    pub fn vr_ask(&self, p: Point) -> Option<VrAsk> {
+        self.vr_stage.as_ref().and_then(|vr| vr.ask(p))
+    }
+
     /// Resolves `+ add` click or card pick/dismissal at point `p` (Rule 2).
     pub fn chose(&self, p: Point, choices: &AddChoices) -> Option<Added> {
         if let Some(card) = self.card {
@@ -397,6 +534,7 @@ impl MasterRow {
             || self.solo(p).is_some()
             || self.mute(p).is_some()
             || self.fold(p).is_some()
+            || self.vr_stage.as_ref().is_some_and(|vr| vr.well.contains(Pos2::new(p.x, p.y)))
             || self
                 .add
                 .is_some_and(|add| add.contains(Pos2::new(p.x, p.y)))

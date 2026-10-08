@@ -19,8 +19,20 @@ pub fn master(
     choices: &AddChoices,
 ) -> Option<MasterRow> {
     let empty_set = std::collections::BTreeSet::new();
+    let default_vr = crate::view::VrProjection::default();
     master_with_state(
-        ctx, layout, out, chain, choices, 0.0, &empty_set, &empty_set, None,
+        ctx,
+        layout,
+        out,
+        chain,
+        choices,
+        0.0,
+        &empty_set,
+        &empty_set,
+        None,
+        false,
+        &default_vr,
+        false,
     )
 }
 
@@ -36,6 +48,9 @@ pub fn master_with_state(
     folded: &std::collections::BTreeSet<u32>,
     muted: &std::collections::BTreeSet<u32>,
     soloed: Option<u32>,
+    vr_mode: bool,
+    vr_projection: &crate::view::VrProjection,
+    vr_projection_folded: bool,
 ) -> Option<MasterRow> {
     let out = out?;
     // Fonts are not valid until `egui` has run a pass, exactly as in `mixer`,
@@ -94,9 +109,10 @@ pub fn master_with_state(
     // console with no chain behind it draws the out row it was handed a level
     // for and nothing under it.
     let mut slots = Vec::new();
+    let mut vr_stage = None;
     let mut add = None;
     let mut list: Option<Rect> = None;
-    if let Some(chain) = chain {
+    if chain.is_some() || vr_mode {
         let body_min = Pos2::new(row.min.x, row.max.y + size::MASTER_STACK_GAP);
         let body_max = Pos2::new(
             row.max.x,
@@ -104,55 +120,92 @@ pub fn master_with_state(
         );
         let body_rect = Rect::from_min_max(body_min, body_max);
 
-        // Compute total content height across all slots and `+ add` button.
+        // Compute total content height across vr_stage, all slots and `+ add` button.
         let mut total_content_h = 0.0;
-        for (at, slot) in chain.slots.iter().enumerate() {
-            if at > 0 {
+        let vr_h = if vr_mode {
+            let count = if vr_projection_folded {
+                0
+            } else {
+                VrParamKey::ALL.len()
+            };
+            Some(well_height(count, vr_projection_folded))
+        } else {
+            None
+        };
+        if let Some(h) = vr_h {
+            total_content_h += h;
+        }
+
+        if let Some(chain) = chain {
+            for (at, slot) in chain.slots.iter().enumerate() {
+                if total_content_h > 0.0 {
+                    total_content_h += size::MASTER_STACK_GAP;
+                }
+                let is_folded = folded.contains(&(at as u32));
+                total_content_h += well_height(slot.params.len(), is_folded);
+            }
+            if !chain.slots.is_empty() || vr_mode {
                 total_content_h += size::MASTER_STACK_GAP;
             }
-            let is_folded = folded.contains(&(at as u32));
-            total_content_h += well_height(slot.params.len(), is_folded);
+            total_content_h += size::FX_H;
         }
-        if !chain.slots.is_empty() {
-            total_content_h += size::MASTER_STACK_GAP;
-        }
-        total_content_h += size::FX_H;
 
         let max_scroll = (total_content_h - body_rect.height()).max(0.0);
         let clamped_scroll = scroll.clamp(0.0, max_scroll);
 
         let mut top = body_min.y - clamped_scroll;
-        for (at, slot) in chain.slots.iter().enumerate() {
-            let at_u32 = at as u32;
-            let is_folded = folded.contains(&at_u32);
-            let is_soloed = soloed == Some(at_u32);
-            let is_muted = muted.contains(&at_u32);
-            let is_online = match soloed {
-                Some(s) => s == at_u32,
-                None => !is_muted,
-            };
-            let height = well_height(slot.params.len(), is_folded);
-            let well =
-                Rect::from_min_size(Pos2::new(row.min.x, top), egui::vec2(row.width(), height));
-            // Include slot if visible or intersecting the visible body area.
-            if well.max.y >= body_rect.min.y && well.min.y <= body_rect.max.y {
-                let num_params = if is_folded { 0 } else { slot.params.len() };
-                if let Some(drawn) = slot_row(
-                    ctx, at_u32, slot, well, widest, &width, num_params, is_folded, is_soloed,
-                    is_muted, is_online,
-                ) {
-                    slots.push(drawn);
+
+        if vr_mode {
+            if let Some(h) = vr_h {
+                let well =
+                    Rect::from_min_size(Pos2::new(row.min.x, top), egui::vec2(row.width(), h));
+                if well.max.y >= body_rect.min.y && well.min.y <= body_rect.max.y {
+                    vr_stage = vr_stage_row(
+                        ctx,
+                        vr_projection,
+                        vr_projection_folded,
+                        well,
+                        widest,
+                        &width,
+                    );
                 }
+                top = well.max.y + size::MASTER_STACK_GAP;
             }
-            top = well.max.y + size::MASTER_STACK_GAP;
         }
 
-        let pill = Rect::from_min_size(
-            Pos2::new(row.min.x, top),
-            egui::vec2(row.width(), size::FX_H),
-        );
-        if pill.max.y >= body_rect.min.y && pill.min.y <= body_rect.max.y {
-            add = Some(pill);
+        if let Some(chain) = chain {
+            for (at, slot) in chain.slots.iter().enumerate() {
+                let at_u32 = at as u32;
+                let is_folded = folded.contains(&at_u32);
+                let is_soloed = soloed == Some(at_u32);
+                let is_muted = muted.contains(&at_u32);
+                let is_online = match soloed {
+                    Some(s) => s == at_u32,
+                    None => !is_muted,
+                };
+                let height = well_height(slot.params.len(), is_folded);
+                let well =
+                    Rect::from_min_size(Pos2::new(row.min.x, top), egui::vec2(row.width(), height));
+                // Include slot if visible or intersecting the visible body area.
+                if well.max.y >= body_rect.min.y && well.min.y <= body_rect.max.y {
+                    let num_params = if is_folded { 0 } else { slot.params.len() };
+                    if let Some(drawn) = slot_row(
+                        ctx, at_u32, slot, well, widest, &width, num_params, is_folded, is_soloed,
+                        is_muted, is_online,
+                    ) {
+                        slots.push(drawn);
+                    }
+                }
+                top = well.max.y + size::MASTER_STACK_GAP;
+            }
+
+            let pill = Rect::from_min_size(
+                Pos2::new(row.min.x, top),
+                egui::vec2(row.width(), size::FX_H),
+            );
+            if pill.max.y >= body_rect.min.y && pill.min.y <= body_rect.max.y {
+                add = Some(pill);
+            }
         }
         list = Some(body_rect);
     }
@@ -171,6 +224,7 @@ pub fn master_with_state(
         value,
         out,
         slots,
+        vr_stage,
         add,
         card,
         list,
@@ -383,6 +437,128 @@ fn add_card(
     Some(AddCard {
         card,
         items: choices.items.len(),
+    })
+}
+
+/// Lays out the Built-in VR Projection stage well within `well`.
+fn vr_stage_row(
+    ctx: &egui::Context,
+    proj: &crate::view::VrProjection,
+    is_folded: bool,
+    well: Rect,
+    widest: f32,
+    width: &dyn Fn(&str) -> f32,
+) -> Option<VrProjectionRow> {
+    let width_at = |text: &str, size: f32| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    let head = Rect::from_min_size(well.min, egui::vec2(well.width(), size::NODE_HEAD_H));
+    if head.width() <= 0.0 {
+        return None;
+    }
+    let mid = head.center().y;
+    let dot = Rect::from_center_size(
+        Pos2::new(head.min.x + size::FX_PAD_X + size::FX_DOT * 0.5, mid),
+        egui::vec2(size::FX_DOT, size::FX_DOT),
+    );
+    let title_text = "VR Projection";
+    let name = Rect::from_min_size(
+        Pos2::new(dot.max.x + size::FX_GAP, head.min.y),
+        egui::vec2(width(title_text), head.height()),
+    );
+
+    let badge_word = "Built-in";
+    let badge_w = width_at(badge_word, size::MINI_SIZE) + size::MINI_PAD_X * 2.0;
+    let badge = Rect::from_center_size(
+        Pos2::new(name.max.x + size::FX_GAP + badge_w * 0.5, mid),
+        egui::vec2(badge_w, size::MINI_H),
+    );
+
+    let mode_label = proj.mode.label();
+    let mode_text_w = width_at(mode_label, size::MINI_SIZE);
+    let mode_pill_w = mode_text_w + size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0;
+    let mode_pill = Rect::from_center_size(
+        Pos2::new(head.max.x - size::FX_PAD_X - mode_pill_w * 0.5, mid),
+        egui::vec2(mode_pill_w, size::MINI_H),
+    );
+
+    let mut params = Vec::new();
+    if !is_folded {
+        let mut top = head.max.y + size::FX_PAD_Y;
+        for (i, &key) in VrParamKey::ALL.iter().enumerate() {
+            let ord = i + 1;
+            let line = Rect::from_min_size(
+                Pos2::new(well.min.x + size::FX_PAD_X, top),
+                egui::vec2(well.width() - size::FX_PAD_X * 2.0, size::MASTER_ROW_H),
+            );
+            let ord_rect =
+                Rect::from_min_size(line.min, egui::vec2(size::PARAM_ORD_W, line.height()));
+            let label = Rect::from_min_size(
+                Pos2::new(ord_rect.max.x + size::PARAM_GAP, line.min.y),
+                egui::vec2(width(key.label()), line.height()),
+            );
+            let amount = Rect::from_min_size(
+                Pos2::new(line.max.x - widest, line.min.y),
+                egui::vec2(widest, line.height()),
+            );
+            let centre = line.center().y;
+            let track = Rect::from_min_max(
+                Pos2::new(label.max.x + size::FX_GAP, centre - size::FADER_H * 0.5),
+                Pos2::new(amount.min.x - size::FX_GAP, centre + size::FADER_H * 0.5),
+            );
+            if track.width() <= 0.0 {
+                return None;
+            }
+            let val = key.value(proj);
+            let row = VrParamRow {
+                key,
+                ord,
+                ord_rect,
+                label,
+                fader: fader(
+                    track,
+                    Axis::Row,
+                    0.0,
+                    0.0,
+                    egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+                ),
+                amount,
+                value: val,
+                range: key.range(),
+            };
+            let placed = VrParamRow {
+                fader: fader(
+                    track,
+                    Axis::Row,
+                    row.along(),
+                    0.0,
+                    egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+                ),
+                ..row
+            };
+            params.push(placed);
+            top = line.max.y + size::FX_PAD_Y;
+        }
+    }
+
+    Some(VrProjectionRow {
+        well,
+        head,
+        dot,
+        name,
+        badge,
+        mode_pill,
+        mode: proj.mode,
+        is_folded,
+        params,
     })
 }
 

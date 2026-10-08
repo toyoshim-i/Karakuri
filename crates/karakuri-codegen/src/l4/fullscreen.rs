@@ -101,8 +101,47 @@ pub(super) fn generate_fullscreen(
     } else {
         src.push_str("@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
     }
-    src.push_str("    let point_coord = in.point_coord;\n");
     src.push_str(FULLSCREEN_RAY);
+    if reads_ray(fragment_blk) {
+        src.push_str("    let point_coord = in.point_coord;\n");
+    } else {
+        src.push_str(
+            r#"    var point_coord = in.point_coord;
+    if cam.vr_mode >= 1.0 {
+        let theta = acos(clamp(ray.y, -1.0, 1.0));
+        let r = theta / (3.14159265 * 0.5);
+        let a = atan2(ray.x, -ray.z) + u.beats * cam.vr_spin * 6.2831853;
+        let a_norm = (a / 6.2831853 + 0.5) % 1.0;
+
+        if cam.vr_mode < 1.5 {
+            // Mode 1: Dome
+            let q = r * vec2<f32>(sin(a), cos(a)) * cam.vr_zoom;
+            point_coord = q * 0.5 + 0.5;
+        } else {
+            // Mode 2: Kaleidosky (r-axis N-division mirror repeat)
+            let r_scaled = r * cam.vr_rings * 0.5 * cam.vr_zoom;
+            let r_frac = fract(r_scaled);
+            var r_tiled = r_frac;
+            if cam.vr_mirror >= 0.5 {
+                r_tiled = abs(r_frac * 2.0 - 1.0);
+            }
+
+            var a_tiled = a_norm;
+            if cam.vr_facets >= 1.0 {
+                let a_scaled = a_norm * cam.vr_facets * 0.5;
+                let a_frac = fract(a_scaled);
+                if cam.vr_mirror >= 0.5 {
+                    a_tiled = abs(a_frac * 2.0 - 1.0);
+                } else {
+                    a_tiled = a_frac;
+                }
+            }
+            point_coord = vec2<f32>(a_tiled, r_tiled);
+        }
+    }
+"#,
+        );
+    }
     src.push_str("    var _color: vec4<f32>;\n");
     src.push_str(&body);
     if weighted {
@@ -122,4 +161,44 @@ pub(super) fn generate_fullscreen(
         element_layout: elements.clone(),
         camera_group: Some(FULLSCREEN_CAMERA_GROUP),
     }
+}
+
+/// Checks whether an L4 fragment block explicitly reads `ray` or `eye` (i.e. raymarchers).
+fn reads_ray(block: &TBlock) -> bool {
+    use karakuri_ir::typed::{TExpr, TExprKind, TStmt};
+    use karakuri_ir::Ambient;
+
+    fn in_stmts(stmts: &[TStmt]) -> bool {
+        stmts.iter().any(|s| match s {
+            TStmt::Kill { .. } => false,
+            TStmt::Let { value, .. } | TStmt::Var { value, .. } => in_expr(value),
+            TStmt::Assign { value, .. } => in_expr(value),
+            TStmt::If {
+                cond, then, els, ..
+            } => in_expr(cond) || in_stmts(then) || in_stmts(els),
+            TStmt::For { body, .. } => in_stmts(body),
+        })
+    }
+    fn in_expr(e: &TExpr) -> bool {
+        match &e.kind {
+            TExprKind::Ambient(Ambient::Ray | Ambient::Eye) => true,
+            TExprKind::Lit(_)
+            | TExprKind::Local(_)
+            | TExprKind::Param(_)
+            | TExprKind::Attr(_)
+            | TExprKind::Far(_)
+            | TExprKind::Source { .. }
+            | TExprKind::Ambient(_)
+            | TExprKind::Reduction(_) => false,
+            TExprKind::Element { index, .. } => in_expr(index),
+            TExprKind::Unary { value, .. } | TExprKind::Swizzle { value, .. } => in_expr(value),
+            TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+            TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
+                args.iter().any(in_expr)
+            }
+            TExprKind::Field { point, .. } => in_expr(point),
+            TExprKind::Sample { at, .. } => at.as_ref().is_some_and(|a| in_expr(a)),
+        }
+    }
+    in_stmts(&block.stmts)
 }

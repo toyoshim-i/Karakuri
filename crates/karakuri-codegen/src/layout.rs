@@ -154,15 +154,16 @@ struct CameraState {
 struct Camera {
     view_proj: mat4x4<f32>,
     eye: vec3<f32>,
-    _pad0: f32,
+    vr_mode: f32,
     fwd: vec3<f32>,
-    _pad1: f32,
+    vr_rings: f32,
     right: vec3<f32>,
-    _pad2: f32,
+    vr_facets: f32,
     up: vec3<f32>,
-    _pad3: f32,
+    vr_spin: f32,
     depth_range: vec2<f32>,
-    _pad4: vec2<f32>,
+    vr_mirror: f32,
+    vr_zoom: f32,
 };
 ";
 }
