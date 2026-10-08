@@ -1,0 +1,55 @@
+// A violet hexagonal communications canopy with scanning rings and data pulses.
+// Fullscreen dome-master; the central relay aperture sits at the zenith.
+proc quantum_relay {
+  kind L4
+  blend additive
+
+  param mesh : float [6.0, 20.0] = 12.0
+  param flow : float [0.0, 2.0] = 0.65
+  param scan : float [0.0, 1.0] = 0.55
+  param glow : float [0.0, 2.0] = 1.0
+  param pulse : float [0.0, 1.0] = 0.0
+
+  fragment {
+    let p = point_coord * 2.0 - vec2(1.0);
+    let r = length(p);
+    // Nearest centre in two staggered rectangular lattices.
+    let q = p * mesh;
+    let period = vec2(1.7320508, 3.0);
+    let a = mod(q, period) - period * 0.5;
+    let b = mod(q + period * 0.5, period) - period * 0.5;
+    let local = mix(a, b, vec2(step(dot(b, b), dot(a, a))));
+    let centre = q - local;
+    let cell = perlin(vec3(centre * 0.7, 0.5));
+    let hex = max(abs(local.x), dot(abs(local), vec2(0.5, 0.8660254)));
+    let edge = exp(-abs(hex - 0.8660254) * 90.0);
+    let violet = srgb_to_linear(vec3(0.67, 0.24, 1.0));
+    let cyan = srgb_to_linear(vec3(0.12, 0.95, 1.0));
+    let white = srgb_to_linear(vec3(0.85, 0.95, 1.0));
+    let hue_color = mix(violet, cyan, vec3(clamp(cell + 0.5, 0.0, 1.0)));
+    let canopy = smoothstep(0.16, 0.24, r) * (1.0 - smoothstep(0.76, 0.92, r));
+    // A wave propagates from each relay hub to its six edges.
+    let phase = fract(t * flow * 0.27 + cell * 2.0);
+    let packet = exp(-abs(length(local) - phase * 1.05) * 35.0)
+                 * (1.0 - smoothstep(0.75, 1.0, phase));
+    let hub = exp(-dot(local, local) * 110.0);
+    let halo = exp(-dot(local, local) * 8.0);
+    let active = smoothstep(-0.12, 0.22, sin(cell * 12.0 + t * flow * 0.4));
+    var rgb = hue_color * (edge * 0.23 + packet * 0.35 + halo * active * 0.06)
+              * canopy + white * hub * canopy * (0.3 + active * 0.5);
+    // A narrow scanner sweeps toward the horizon while the mesh stays fixed.
+    let sweep = fract(t * flow * 0.08);
+    let scanner = exp(-abs(r - sweep) * 130.0)
+                  * smoothstep(0.0, 0.12, sweep) * (1.0 - smoothstep(0.82, 1.0, sweep));
+    rgb += cyan * scanner * canopy * scan * (0.6 + pulse);
+    // Segmented overhead transmitter and nested antenna rings.
+    let az = atan2(p.x, p.y + 0.000001);
+    let teeth = step(0.35, fract(az * 24.0 / 6.2831853 + t * flow * 0.02));
+    let ring1 = exp(-abs(r - 0.13) * 600.0);
+    let ring2 = exp(-abs(r - 0.18) * 600.0);
+    let core = exp(-r * r * 1800.0);
+    rgb += cyan * ring1 * (0.7 + pulse * 0.6)
+           + violet * ring2 * teeth * 0.75 + white * core * 0.6;
+    color = vec4(rgb * glow * (1.0 - smoothstep(0.90, 1.0, r)), 1.0);
+  }
+}
