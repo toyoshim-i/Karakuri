@@ -533,6 +533,7 @@ fn vr_stage_row(
                 amount,
                 value: val,
                 range: key.range(),
+                is_active: key.is_active_for(proj.mode),
             };
             let placed = VrParamRow {
                 fader: fader(

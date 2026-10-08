@@ -792,7 +792,7 @@ fn master_vr_projection_stage_lifecycle() {
     let vr = row_vr.vr_stage.as_ref().expect("vr_stage exists");
     assert_eq!(vr.mode, VrProjectionMode::Wall);
     assert!(!vr.is_folded);
-    assert_eq!(vr.params.len(), 4);
+    assert_eq!(vr.params.len(), 8);
 
     // 3. Test fold toggling
     v.toggle_vr_projection_fold();
@@ -814,8 +814,8 @@ fn master_vr_projection_stage_lifecycle() {
     let pill_click = at(vr.mode_pill.center());
     assert_eq!(row_vr.vr_ask(pill_click), Some(VrAsk::CycleMode));
 
-    // Fader knob on parameter row (Rings is params[0])
-    let ring_knob = at(vr.params[0].fader.knob.center());
+    // Fader knob on parameter row (Rings is params[1])
+    let ring_knob = at(vr.params[1].fader.knob.center());
     assert!(matches!(
         row_vr.vr_ask(ring_knob),
         Some(VrAsk::SetParam {

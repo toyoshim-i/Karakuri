@@ -3,7 +3,7 @@
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 
 use super::super::widgets::chip::{mute_button_into, solo_button_into};
-use super::super::widgets::fader::{fader_into, mini_into};
+use super::super::widgets::fader::{fader_into, mini_into, tint};
 use super::layout::master_text;
 use super::types::*;
 use crate::room::{size, Palette};
@@ -279,10 +279,17 @@ pub(super) fn vr_stage_into(painter: &egui::Painter, pal: &Palette, vr: &VrProje
 }
 
 fn vr_param_into(painter: &egui::Painter, pal: &Palette, param: &VrParamRow) {
+    let is_active = param.is_active;
+
+    let ord_col = if is_active {
+        pal.faint
+    } else {
+        tint(pal.faint, 40)
+    };
     let ord_galley = painter.layout_no_wrap(
         format!("{:02}", param.ord),
         FontId::new(size::PARAM_ORD_SIZE, FontFamily::Monospace),
-        pal.faint,
+        ord_col,
     );
     painter.galley(
         Pos2::new(
@@ -290,12 +297,18 @@ fn vr_param_into(painter: &egui::Painter, pal: &Palette, param: &VrParamRow) {
             param.ord_rect.center().y - ord_galley.size().y * 0.5,
         ),
         ord_galley,
-        pal.faint,
+        ord_col,
     );
+
+    let label_col = if is_active {
+        pal.text
+    } else {
+        tint(pal.faint, 60)
+    };
     let label_galley = painter.layout_no_wrap(
         param.key.label().to_owned(),
         FontId::new(size::BASE, FontFamily::Proportional),
-        pal.faint,
+        label_col,
     );
     painter.galley(
         Pos2::new(
@@ -303,13 +316,45 @@ fn vr_param_into(painter: &egui::Painter, pal: &Palette, param: &VrParamRow) {
             param.label.center().y - label_galley.size().y * 0.5,
         ),
         label_galley,
-        pal.faint,
+        label_col,
     );
-    fader_into(painter, pal, param.fader, false, None);
+
+    if is_active {
+        fader_into(painter, pal, param.fader, false, None);
+    } else {
+        // Muted gray track and knob without vibrant gradient for inactive parameters
+        let fader = param.fader;
+        let radius =
+            CornerRadius::same((fader.track.width().min(fader.track.height()) * 0.5) as u8);
+        painter.rect_filled(fader.track, radius, pal.well);
+        painter.rect_stroke(
+            fader.track,
+            radius,
+            Stroke::new(size::HAIRLINE, pal.line),
+            StrokeKind::Inside,
+        );
+        if fader.fill.width() > 0.0 && fader.fill.height() > 0.0 {
+            painter.rect_filled(fader.fill, CornerRadius::ZERO, tint(pal.line, 50));
+        }
+        let knob_r = CornerRadius::same((fader.knob.width().min(fader.knob.height()) * 0.5) as u8);
+        painter.rect_filled(fader.knob, knob_r, pal.panel);
+        painter.rect_stroke(
+            fader.knob,
+            knob_r,
+            Stroke::new(size::HAIRLINE, pal.line),
+            StrokeKind::Outside,
+        );
+    }
+
+    let amount_col = if is_active {
+        pal.text
+    } else {
+        tint(pal.faint, 60)
+    };
     let amount_galley = painter.layout_no_wrap(
         format!("{:.2}", param.value),
         FontId::new(size::BASE, FontFamily::Proportional),
-        pal.text,
+        amount_col,
     );
     painter.galley(
         Pos2::new(
@@ -317,6 +362,6 @@ fn vr_param_into(painter: &egui::Painter, pal: &Palette, param: &VrParamRow) {
             param.amount.center().y - amount_galley.size().y * 0.5,
         ),
         amount_galley,
-        pal.text,
+        amount_col,
     );
 }

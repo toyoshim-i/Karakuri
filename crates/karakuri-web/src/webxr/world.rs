@@ -22,9 +22,17 @@ pub struct XrWorldRenderer {
     u_show_background_loc: Option<WebGlUniformLocation>,
     u_aspect_loc: Option<WebGlUniformLocation>,
     u_time_loc: Option<WebGlUniformLocation>,
+    u_stars_loc: Option<WebGlUniformLocation>,
+    u_density_loc: Option<WebGlUniformLocation>,
+    u_grid_loc: Option<WebGlUniformLocation>,
+    u_lines_loc: Option<WebGlUniformLocation>,
     has_texture: bool,
     show_background: bool,
     dome_mode: i32,
+    stars: f32,
+    density: f32,
+    grid: f32,
+    lines: f32,
     /// The size `texture` was last allocated at.
     texture_size: (u32, u32),
     warp: WarpUniforms,
@@ -97,6 +105,10 @@ uniform int u_dome_mode; // 1 = 180 deg Celestial Dome, 0 = Planar Screen, 3 = M
 uniform int u_show_background; // 1 = Show cosmic sky and starfield, 0 = Off
 uniform float u_aspect; // Per-eye texture aspect ratio (width / height)
 uniform float u_time;
+uniform float u_stars;
+uniform float u_density;
+uniform float u_grid;
+uniform float u_lines;
 uniform sampler2D u_texture;
 
 out vec4 fragColor;
@@ -115,57 +127,66 @@ void main() {
     // 1. Procedural 3D Celestial Cosmos (The Sky Dome / 天球)
     vec3 scene_color = vec3(0.0);
 
-    if (u_show_background == 1) {
+    if (u_show_background == 1 && (u_stars > 0.001 || u_grid > 0.001)) {
         // Deep cosmic space atmosphere oriented in 3D world space
         float elev = world_dir.y;
-        vec3 zenith_col = vec3(0.010, 0.014, 0.026);
-        vec3 horizon_col = vec3(0.016, 0.020, 0.035);
-        vec3 nadir_col = vec3(0.005, 0.006, 0.010);
+        vec3 zenith_col = vec3(0.010, 0.014, 0.026) * u_grid;
+        vec3 horizon_col = vec3(0.016, 0.020, 0.035) * u_grid;
+        vec3 nadir_col = vec3(0.005, 0.006, 0.010) * u_grid;
 
         scene_color = mix(horizon_col, zenith_col, clamp(elev, 0.0, 1.0));
         scene_color = mix(scene_color, nadir_col, clamp(-elev, 0.0, 1.0));
 
         // Subtle celestial grid: Horizon (Equator) and elevation parallels
-        float horizon_line = 1.0 - smoothstep(0.0, 0.006, abs(elev));
-        scene_color += vec3(0.025, 0.060, 0.100) * horizon_line * 0.45;
+        if (u_grid > 0.001) {
+            float horizon_line = 1.0 - smoothstep(0.0, 0.006, abs(elev));
+            scene_color += vec3(0.025, 0.060, 0.100) * horizon_line * 0.45 * u_grid;
 
-        float ring30 = 1.0 - smoothstep(0.0, 0.005, abs(abs(elev) - 0.5));
-        float ring60 = 1.0 - smoothstep(0.0, 0.005, abs(abs(elev) - 0.866));
-        scene_color += vec3(0.015, 0.030, 0.055) * (ring30 + ring60) * 0.25;
+            float lat = asin(clamp(elev, -1.0, 1.0));
+            float lat_spacing = (PI / 6.0) / max(0.1, u_lines);
+            float lat_phase = abs(fract(lat / lat_spacing + 0.5) - 0.5) * lat_spacing;
+            float ring_line = 1.0 - smoothstep(0.0, 0.005, lat_phase);
+            scene_color += vec3(0.015, 0.030, 0.055) * ring_line * 0.25 * u_grid;
 
-        // Celestial meridians along azimuth (every 30 degrees = PI/6)
-        float azimuth = atan(world_dir.x, -world_dir.z);
-        float meridian_phase = fract(azimuth * (6.0 / PI) + 0.5) - 0.5;
-        float meridian_dist = abs(meridian_phase) * (PI / 6.0) * max(0.1, sqrt(max(0.0, 1.0 - elev * elev)));
-        float meridian_line = 1.0 - smoothstep(0.0, 0.004, meridian_dist);
-        scene_color += vec3(0.012, 0.025, 0.045) * meridian_line * 0.2;
-
-        // 3D Procedural Starfield fixed to celestial sphere
-        vec3 star_p = world_dir * 110.0;
-        vec3 star_id = floor(star_p);
-        vec3 star_f = fract(star_p) - 0.5;
-        float h = fract(sin(dot(star_id, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
-        if (h > 0.93) {
-            vec3 jitter = vec3(
-                fract(h * 13.3) - 0.5,
-                fract(h * 27.7) - 0.5,
-                fract(h * 41.9) - 0.5
-            ) * 0.65;
-            float d = length(star_f - jitter);
-            float twinkle = 0.75 + 0.25 * sin(u_time * 2.5 + h * 6.283);
-            float star = smoothstep(0.08, 0.01, d) * twinkle;
-            vec3 star_color = mix(vec3(0.7, 0.85, 1.0), vec3(1.0, 0.85, 0.7), fract(h * 5.0));
-            scene_color += star_color * star * (0.35 + (h - 0.93) * 12.0);
+            // Celestial meridians along azimuth (every 30 degrees = PI/6 scaled by lines)
+            float azimuth = atan(world_dir.x, -world_dir.z);
+            float az_spacing = (PI / 6.0) / max(0.1, u_lines);
+            float meridian_phase = abs(fract(azimuth / az_spacing + 0.5) - 0.5) * az_spacing;
+            float meridian_dist = meridian_phase * max(0.1, sqrt(max(0.0, 1.0 - elev * elev)));
+            float meridian_line = 1.0 - smoothstep(0.0, 0.004, meridian_dist);
+            scene_color += vec3(0.012, 0.025, 0.045) * meridian_line * 0.2 * u_grid;
         }
 
-        vec3 micro_p = world_dir * 240.0;
-        vec3 micro_id = floor(micro_p);
-        float h2 = fract(sin(dot(micro_id, vec3(93.123, 34.567, 67.891))) * 28461.23);
-        if (h2 > 0.975) {
-            vec3 micro_f = fract(micro_p) - 0.5;
-            float d2 = length(micro_f);
-            float micro_star = smoothstep(0.12, 0.02, d2);
-            scene_color += vec3(0.5, 0.65, 0.9) * micro_star * 0.25;
+        // 3D Procedural Starfield fixed to celestial sphere
+        if (u_stars > 0.001 && u_density > 0.001) {
+            float thresh = clamp(1.0 - 0.07 * u_density, 0.70, 0.999);
+            vec3 star_p = world_dir * 110.0;
+            vec3 star_id = floor(star_p);
+            vec3 star_f = fract(star_p) - 0.5;
+            float h = fract(sin(dot(star_id, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+            if (h > thresh) {
+                vec3 jitter = vec3(
+                    fract(h * 13.3) - 0.5,
+                    fract(h * 27.7) - 0.5,
+                    fract(h * 41.9) - 0.5
+                ) * 0.65;
+                float d = length(star_f - jitter);
+                float twinkle = 0.75 + 0.25 * sin(u_time * 2.5 + h * 6.283);
+                float star = smoothstep(0.08, 0.01, d) * twinkle;
+                vec3 star_color = mix(vec3(0.7, 0.85, 1.0), vec3(1.0, 0.85, 0.7), fract(h * 5.0));
+                scene_color += star_color * star * (0.35 + (h - thresh) / (1.0 - thresh) * 0.84) * u_stars;
+            }
+
+            float thresh2 = clamp(1.0 - 0.025 * u_density, 0.90, 0.999);
+            vec3 micro_p = world_dir * 240.0;
+            vec3 micro_id = floor(micro_p);
+            float h2 = fract(sin(dot(micro_id, vec3(93.123, 34.567, 67.891))) * 28461.23);
+            if (h2 > thresh2) {
+                vec3 micro_f = fract(micro_p) - 0.5;
+                float d2 = length(micro_f);
+                float micro_star = smoothstep(0.12, 0.02, d2);
+                scene_color += vec3(0.5, 0.65, 0.9) * micro_star * 0.25 * u_stars;
+            }
         }
     }
 
@@ -231,6 +252,10 @@ void main() {
         let u_show_background_loc = gl.get_uniform_location(&program, "u_show_background");
         let u_aspect_loc = gl.get_uniform_location(&program, "u_aspect");
         let u_time_loc = gl.get_uniform_location(&program, "u_time");
+        let u_stars_loc = gl.get_uniform_location(&program, "u_stars");
+        let u_density_loc = gl.get_uniform_location(&program, "u_density");
+        let u_grid_loc = gl.get_uniform_location(&program, "u_grid");
+        let u_lines_loc = gl.get_uniform_location(&program, "u_lines");
         let u_tex_loc = gl.get_uniform_location(&program, "u_texture");
         let warp = WarpUniforms {
             on: gl.get_uniform_location(&program, "u_warp"),
@@ -310,9 +335,17 @@ void main() {
             u_show_background_loc,
             u_aspect_loc,
             u_time_loc,
+            u_stars_loc,
+            u_density_loc,
+            u_grid_loc,
+            u_lines_loc,
             has_texture: false,
             show_background: true,
             dome_mode: 0, // Default: Planar Screen (3D topologies)
+            stars: 1.0,
+            density: 1.0,
+            grid: 1.0,
+            lines: 1.0,
             texture_size: (0, 0),
             warp,
         })
@@ -450,6 +483,18 @@ void main() {
         if let Some(loc) = self.u_time_loc.as_ref() {
             gl.uniform1f(Some(loc), time_sec);
         }
+        if let Some(loc) = self.u_stars_loc.as_ref() {
+            gl.uniform1f(Some(loc), self.stars);
+        }
+        if let Some(loc) = self.u_density_loc.as_ref() {
+            gl.uniform1f(Some(loc), self.density);
+        }
+        if let Some(loc) = self.u_grid_loc.as_ref() {
+            gl.uniform1f(Some(loc), self.grid);
+        }
+        if let Some(loc) = self.u_lines_loc.as_ref() {
+            gl.uniform1f(Some(loc), self.lines);
+        }
 
         gl.active_texture(WebGl2RenderingContext::TEXTURE0);
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&self.texture));
@@ -491,6 +536,14 @@ void main() {
     pub fn toggle_background(&mut self) -> bool {
         self.show_background = !self.show_background;
         self.show_background
+    }
+
+    /// Sets cosmic environment parameters (stars brightness, star density, dome grid brightness, dome grid line count).
+    pub fn set_environment_params(&mut self, stars: f32, density: f32, grid: f32, lines: f32) {
+        self.stars = stars;
+        self.density = density;
+        self.grid = grid;
+        self.lines = lines;
     }
 }
 
