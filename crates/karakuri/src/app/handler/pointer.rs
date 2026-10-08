@@ -314,7 +314,18 @@ impl App {
                 println!("{line}");
             }
         }
-        if let Acted::Emitted(Some(ref operation @ Operation::SetFavourite { .. })) = acted {
+        if let Acted::Emitted(Some(
+            ref operation @ Operation::SetFavourite {
+                ref id,
+                favourite: is_fav,
+            },
+        )) = acted
+        {
+            if is_fav {
+                self.readout.view.starred.insert(id.clone());
+            } else {
+                self.readout.view.starred.remove(id);
+            }
             if let Some(line) = favourite(
                 &self.store,
                 self.presets.as_ref(),

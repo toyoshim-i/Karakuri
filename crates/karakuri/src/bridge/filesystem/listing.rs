@@ -4,7 +4,7 @@ use super::*;
 ///
 /// Returns an empty list if the store root does not exist or fails to open.
 pub(crate) fn procedures(root: &std::path::Path) -> Vec<ListedProcedure> {
-    if !root.is_dir() {
+    if !karakuri_store::fs::is_dir(root) {
         // Said once by `library` beside it on the same press, so this one is
         // quiet: two lines about one missing store would be one fact said
         // twice.
@@ -209,7 +209,7 @@ pub(crate) struct ListedProcedure {
 }
 
 pub(crate) fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
-    if !root.is_dir() {
+    if !karakuri_store::fs::is_dir(root) {
         println!(
             "library: no store at {}, so the bay lists nothing",
             root.display()
@@ -235,7 +235,7 @@ pub(crate) fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
 
 /// Returns the set of starred Set IDs recorded in `<store>/favourites.json` (ADR-0299).
 pub(crate) fn favourites(root: &std::path::Path) -> std::collections::BTreeSet<String> {
-    if !root.is_dir() {
+    if !karakuri_store::fs::is_dir(root) {
         return std::collections::BTreeSet::new();
     }
     match Store::open(root).and_then(|store| store.favourites()) {

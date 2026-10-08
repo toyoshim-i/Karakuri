@@ -114,7 +114,7 @@ impl Store {
     pub fn put_artifact(&self, source: &[u8]) -> Result<Hash, StoreError> {
         let hash = Hash::of(source);
         let path = self.artifact_path(&hash);
-        if !path.exists() {
+        if !fs::exists(&path) {
             ndjson::write_atomic(&path, source)?;
         }
         Ok(hash)
@@ -141,7 +141,7 @@ impl Store {
     /// until something regenerates it.
     pub fn read_meta(&self, hash: &Hash) -> Result<Vec<Line>, StoreError> {
         let path = self.meta_path(hash);
-        if !path.exists() {
+        if !fs::exists(&path) {
             return Err(StoreError::NotFound(*hash));
         }
         ndjson::read(&path)
@@ -273,7 +273,7 @@ impl Store {
     /// Returns [`StoreError::ProcedureTaken`] if a file with the given name already exists.
     pub fn write_procedure(&self, name: &str, source: &[u8]) -> Result<PathBuf, StoreError> {
         let path = self.procedure_path(name);
-        if path.exists() {
+        if fs::exists(&path) {
             return Err(StoreError::ProcedureTaken(name.to_string()));
         }
         ndjson::write_atomic(&path, source)?;
@@ -292,7 +292,7 @@ impl Store {
             .root
             .join(Store::SANDBOX)
             .join(format!("{name}{}", Store::PROCEDURE_FILE_SUFFIX));
-        if path.exists() {
+        if fs::exists(&path) {
             return Err(StoreError::ProcedureTaken(name.to_string()));
         }
         ndjson::write_atomic(&path, source)?;
@@ -366,8 +366,8 @@ impl Store {
         favourite: bool,
         in_presets: bool,
     ) -> Result<bool, StoreError> {
-        let is_set = self.set_path(id).is_file();
-        let is_procedure = self.procedure_path(id).is_file();
+        let is_set = fs::is_file(self.set_path(id));
+        let is_procedure = fs::is_file(self.procedure_path(id));
         if favourite && !is_set && !is_procedure && !in_presets {
             return Err(StoreError::NoSet(id.to_string()));
         }

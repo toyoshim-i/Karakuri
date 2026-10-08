@@ -4,7 +4,7 @@ use super::*;
 ///
 /// Returns an empty list if the store does not exist or fails to open.
 pub(crate) fn arrangements(root: &std::path::Path) -> Vec<String> {
-    if !root.is_dir() {
+    if !karakuri_store::fs::is_dir(root) {
         return Vec::new();
     }
     match Store::open(root).and_then(|store| store.list_arrangements()) {
@@ -40,10 +40,11 @@ pub(crate) fn favourite(
         ));
     }
     let in_presets = presets.is_some_and(|p| {
-        p.dir.join(format!("{id}.kset")).is_file()
-            || p.dir
-                .join(format!("{id}{}", Store::PROCEDURE_FILE_SUFFIX))
-                .is_file()
+        karakuri_store::fs::is_file(p.dir.join(format!("{id}.kset")))
+            || karakuri_store::fs::is_file(p.dir.join(format!("{id}.kbset")))
+            || karakuri_store::fs::is_file(
+                p.dir.join(format!("{id}{}", Store::PROCEDURE_FILE_SUFFIX)),
+            )
     }) || karakuri_environment::mix::shipped::ALL
         .iter()
         .any(|(name, _)| *name == id);
@@ -173,7 +174,7 @@ pub(crate) fn put_arrangement_back(
     panel: &mut Panel,
     name: &str,
 ) -> (String, bool) {
-    if !root.is_dir() {
+    if !karakuri_store::fs::is_dir(root) {
         return (
             format!(
                 "arrangement: no store at {}, so nothing is filed under `{name}` — and the \

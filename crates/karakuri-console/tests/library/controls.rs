@@ -302,6 +302,17 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
         "a starred row was asked to be starred again"
     );
 
+    // Clicking in padding around the star inside star_hit also claims star toggle.
+    let near = egui::pos2(bay.row(1).min.x + 2.0, bay.row(1).min.y + 2.0);
+    assert_eq!(
+        bay.starred(listed(&mock()), &none, Point::new(near.x, near.y)),
+        Some(Operation::SetFavourite {
+            id: "lattice_veil".to_owned(),
+            favourite: true,
+        }),
+        "star_hit padding did not register click"
+    );
+
     // Row ground outside the star icon does not claim star clicks (claim rule 4).
     let ground = egui::pos2(bay.row(1).max.x - size::LIB_ROW_PAD_X, at.y);
     assert_eq!(

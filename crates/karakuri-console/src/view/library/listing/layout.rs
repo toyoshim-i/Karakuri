@@ -60,6 +60,18 @@ impl LibraryBay {
         )
     }
 
+    /// Returns the interactive hit-test rectangle for the star in row `index`.
+    ///
+    /// Extends horizontally from the row left edge to the start of item text (`named(index)`),
+    /// and vertically across the entire row height for reliable touch, mouse, and laser selection (ADR-0307, P-0090).
+    pub fn star_hit(&self, index: usize) -> Rect {
+        let row = self.row(index);
+        Rect::from_min_max(
+            Pos2::new(row.min.x, row.min.y),
+            Pos2::new(self.named(index), row.max.y),
+        )
+    }
+
     /// X-coordinate where item name text begins for row `index`.
     pub(crate) fn named(&self, index: usize) -> f32 {
         self.star(index).max.x + STAR_GAP
@@ -76,7 +88,7 @@ impl LibraryBay {
         // Star must be hit within the visible list bounds.
         let row = self
             .drawn()
-            .find(|index| self.list.contains(p) && self.star(*index).contains(p))?;
+            .find(|index| self.list.contains(p) && self.star_hit(*index).contains(p))?;
         let id = rows.name(row)?;
         Some(Operation::SetFavourite {
             id: id.to_owned(),
