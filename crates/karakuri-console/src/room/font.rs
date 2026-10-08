@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 /// Candidate system font paths to probe for Japanese / CJK fallback support.
+#[cfg(not(target_arch = "wasm32"))]
 const CJK_FONT_CANDIDATES: &[&str] = &[
     // macOS
     "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
@@ -84,14 +85,17 @@ pub fn add_cjk_font(ctx: &egui::Context, bytes: Vec<u8>) {
 }
 
 fn load_system_cjk_font() -> Option<Vec<u8>> {
-    if let Ok(override_path) = std::env::var("KARAKURI_FONT_PATH") {
-        if let Ok(bytes) = std::fs::read(&override_path) {
-            return Some(bytes);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let Ok(override_path) = std::env::var("KARAKURI_FONT_PATH") {
+            if let Ok(bytes) = std::fs::read(&override_path) {
+                return Some(bytes);
+            }
         }
-    }
-    for path in CJK_FONT_CANDIDATES {
-        if let Ok(bytes) = std::fs::read(path) {
-            return Some(bytes);
+        for path in CJK_FONT_CANDIDATES {
+            if let Ok(bytes) = std::fs::read(path) {
+                return Some(bytes);
+            }
         }
     }
     None
