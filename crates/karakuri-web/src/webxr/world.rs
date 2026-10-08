@@ -83,6 +83,8 @@ precision highp float;
 in vec2 v_uv;
 in vec3 v_world_ray;
 in vec4 v_drawn_clip;
+uniform int u_warp;
+uniform mat4 u_drawn_view;
 uniform int u_eye; // 0 = Left eye, 1 = Right eye
 uniform int u_has_texture; // 1 = Sample SBS texture, 0 = Procedural cyber stereo background
 uniform int u_dome_mode; // 1 = 180 deg Celestial Dome, 2 = 220 deg Wide Dome, 0 = Planar Screen
