@@ -414,7 +414,8 @@ impl VrProjectionRow {
     /// Hit-tests title bar, mode pill, and parameter tracks for VR stage interactions.
     pub fn ask(&self, p: Point) -> Option<VrAsk> {
         let at = Pos2::new(p.x, p.y);
-        if self.mode_pill.contains(at) {
+        let mode_hit = self.mode_pill.expand2(egui::vec2(4.0, 4.0));
+        if mode_hit.contains(at) {
             return Some(VrAsk::CycleMode);
         }
         if self.head.contains(at) {
@@ -422,7 +423,9 @@ impl VrProjectionRow {
         }
         if !self.is_folded {
             for param in &self.params {
-                if param.fader.track.contains(at)
+                let track_hit = param.fader.track.expand2(egui::vec2(0.0, 6.0));
+                if track_hit.contains(at)
+                    || param.fader.knob.expand2(egui::vec2(2.0, 2.0)).contains(at)
                     || param.amount.contains(at)
                     || param.label.contains(at)
                 {

@@ -853,6 +853,16 @@ impl Readout {
                 }
                 view::VrAsk::SetParam { key, value } => {
                     self.view.set_vr_param(key.label(), value);
+                    if let Some(vr) = master.as_ref().and_then(|r| r.vr_stage.as_ref()) {
+                        if let Some(param) = vr.params.iter().find(|p| p.key == key) {
+                            self.vr_drag = Some(crate::readout::VrDrag {
+                                key,
+                                track_min_x: param.fader.track.min.x,
+                                track_width: param.fader.track.width(),
+                                range: param.range,
+                            });
+                        }
+                    }
                     return Acted::Pointed;
                 }
             }

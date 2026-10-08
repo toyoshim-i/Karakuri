@@ -65,6 +65,17 @@ pub(crate) struct Readout {
     /// Kept separate from pattern data so runtime playback state is not serialized
     /// with authored pattern content.
     pub(crate) playhead: karakuri_pattern::Playhead,
+    /// Active VR projection parameter drag gesture, if any.
+    pub(crate) vr_drag: Option<VrDrag>,
+}
+
+/// Active drag tracking for built-in VR projection parameters.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct VrDrag {
+    pub(crate) key: karakuri_console::view::VrParamKey,
+    pub(crate) track_min_x: f32,
+    pub(crate) track_width: f32,
+    pub(crate) range: [f32; 2],
 }
 
 impl Readout {
@@ -83,6 +94,7 @@ impl Readout {
             sequencer: demonstration_banks(),
             // Default playhead initialized at start before first poll.
             playhead: karakuri_pattern::Playhead::default(),
+            vr_drag: None,
         }
     }
 
