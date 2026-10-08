@@ -316,6 +316,14 @@ impl App {
         }
     }
 
+    /// Returns true if the active stereo set in the deck mix is purely Fullscreen topology.
+    pub fn is_fullscreen_stereo(&self) -> bool {
+        self.gfx
+            .as_ref()
+            .map(|g| g.engine.deck.is_fullscreen_stereo())
+            .unwrap_or(false)
+    }
+
     /// Configures and attaches secondary WebXR canvas surface for SBS spatial world rendering.
     #[cfg(target_arch = "wasm32")]
     pub fn attach_xr_surface(&mut self, surface: wgpu::Surface<'static>) {
