@@ -18,23 +18,30 @@ use web_sys::{
 use winit::event::{ElementState, MouseButton};
 use winit::event_loop::EventLoopProxy;
 
-/// Checks whether `immersive-vr` is supported on the current browser.
-pub async fn check_webxr_support() -> bool {
+/// Checks whether `immersive-vr` and `immersive-ar` are supported on the current browser.
+pub async fn check_webxr_support() -> (bool, bool) {
     let Some(window) = web_sys::window() else {
-        return false;
+        return (false, false);
     };
-    let promise = window
-        .navigator()
-        .xr()
-        .is_session_supported(XrSessionMode::ImmersiveVr);
-    wasm_bindgen_futures::JsFuture::from(promise)
+    let xr = window.navigator().xr();
+    let vr_promise = xr.is_session_supported(XrSessionMode::ImmersiveVr);
+    let ar_promise = xr.is_session_supported(XrSessionMode::ImmersiveAr);
+    let vr_supported = wasm_bindgen_futures::JsFuture::from(vr_promise)
         .await
         .map(|v| v.as_bool().unwrap_or(false))
-        .unwrap_or(false)
+        .unwrap_or(false);
+    let ar_supported = wasm_bindgen_futures::JsFuture::from(ar_promise)
+        .await
+        .map(|v| v.as_bool().unwrap_or(false))
+        .unwrap_or(false);
+    (vr_supported, ar_supported)
 }
 
-/// Synchronously initiates an `immersive-vr` session request within the user gesture event context.
-pub fn request_immersive_vr_session() -> Result<js_sys::Promise, String> {
+/// Synchronously initiates an `immersive-vr` or `immersive-ar` session request within the user gesture event context.
+pub fn request_webxr_session(
+    mode: WebXrSessionMode,
+    ar_supported: bool,
+) -> Result<js_sys::Promise, String> {
     let window = web_sys::window().ok_or("No global window")?;
     let xr = window.navigator().xr();
 
@@ -44,15 +51,21 @@ pub fn request_immersive_vr_session() -> Result<js_sys::Promise, String> {
     let has_xrgpu = js_sys::Reflect::has(&window, &"XRGPUBinding".into()).unwrap_or(false);
     web_sys::console::log_1(&format!("WebXR diagnostic: window.XRGPUBinding = {has_xrgpu}").into());
 
+    let session_mode = match mode {
+        WebXrSessionMode::Ar if ar_supported => XrSessionMode::ImmersiveAr,
+        _ => XrSessionMode::ImmersiveVr,
+    };
+
     Ok(xr
-        .request_session_with_options(XrSessionMode::ImmersiveVr, &session_init)
+        .request_session_with_options(session_mode, &session_init)
         .unchecked_into())
 }
 
-/// Initializes an active WebXR `immersive-vr` session from the requested promise.
+/// Initializes an active WebXR session from the requested promise.
 pub async fn start_webxr_session(
     session_promise: js_sys::Promise,
     main_canvas: HtmlCanvasElement,
+    mode: WebXrSessionMode,
     xr_state: Rc<RefCell<WebXrState>>,
     pending_active: Rc<RefCell<Option<bool>>>,
     proxy: EventLoopProxy<()>,
@@ -63,7 +76,7 @@ pub async fn start_webxr_session(
         .map_err(|e| format!("Failed to request WebXR session: {e:?}"))?;
     let session: XrSession = session_val.unchecked_into();
 
-    // Create an offscreen WebGL2 canvas for stereo XR projection
+    // Create an offscreen WebGL2 canvas with alpha enabled for stereo XR projection / MR passthrough
     let document = window.document().ok_or("No document")?;
     let xr_canvas: HtmlCanvasElement = document
         .create_element("canvas")
@@ -74,6 +87,7 @@ pub async fn start_webxr_session(
 
     let gl_opts = js_sys::Object::new();
     js_sys::Reflect::set(&gl_opts, &"xrCompatible".into(), &JsValue::from_bool(true)).unwrap();
+    js_sys::Reflect::set(&gl_opts, &"alpha".into(), &JsValue::from_bool(true)).unwrap();
     let gl: WebGl2RenderingContext = xr_canvas
         .get_context_with_context_options("webgl2", &gl_opts)
         .map_err(|e| format!("{e:?}"))?
@@ -82,6 +96,7 @@ pub async fn start_webxr_session(
 
     let layer_init = XrWebGlLayerInit::new();
     layer_init.set_antialias(true);
+    layer_init.set_alpha(true);
     let xr_gl_layer =
         XrWebGlLayer::new_with_web_gl2_rendering_context_and_layer_init(&session, &gl, &layer_init)
             .map_err(|e| format!("Failed to create XrWebGlLayer: {e:?}"))?;
@@ -129,7 +144,11 @@ pub async fn start_webxr_session(
     on_end.forget();
 
     let renderer = Rc::new(RefCell::new(XrQuadRenderer::new(&gl)?));
-    let world_renderer = Rc::new(RefCell::new(XrWorldRenderer::new(&gl)?));
+    let mut wr = XrWorldRenderer::new(&gl)?;
+    if mode == WebXrSessionMode::Ar {
+        wr.set_dome_mode(3);
+    }
+    let world_renderer = Rc::new(RefCell::new(wr));
     let world_canvas: Option<HtmlCanvasElement> = document
         .get_element_by_id("karakuri-xr-canvas")
         .and_then(|el| el.dyn_into::<HtmlCanvasElement>().ok());
@@ -149,6 +168,7 @@ pub async fn start_webxr_session(
         let name = match m {
             1 => "Celestial Dome (180° Planetarium)",
             2 => "Wide Celestial Dome (220° Horizon)",
+            3 => "MR Passthrough",
             _ => "Planar Cinema Screen",
         };
         web_sys::console::log_1(&format!("WebXR visual mode: {name}").into());
@@ -599,6 +619,7 @@ fn setup_xr_render_loop(
             let name = match new_mode {
                 1 => "Celestial Dome (180° Planetarium)",
                 2 => "Wide Celestial Dome (220° Horizon)",
+                3 => "MR Passthrough",
                 _ => "Planar Cinema Screen",
             };
             web_sys::console::log_1(&format!("WebXR visual mode cycled: {name}").into());
@@ -626,7 +647,12 @@ fn setup_xr_render_loop(
                 layer.framebuffer().as_ref(),
             );
             gl.enable(WebGl2RenderingContext::DEPTH_TEST);
-            gl.clear_color(0.01, 0.01, 0.02, 1.0);
+            let is_passthrough = world_renderer.borrow().dome_mode() == 3;
+            if is_passthrough {
+                gl.clear_color(0.0, 0.0, 0.0, 0.0);
+            } else {
+                gl.clear_color(0.01, 0.01, 0.02, 1.0);
+            }
             gl.clear(
                 WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
             );

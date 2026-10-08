@@ -124,6 +124,26 @@ impl Readout {
         }
     }
 
+    /// Dispatches WebXR mode selector pill interactions, toggling the dropdown menu or selecting VR/MR mode.
+    pub(crate) fn xr_mode_asked(&mut self, ask: view::XrAsk) -> Acted {
+        match ask {
+            view::XrAsk::Toggle => {
+                self.view.xr_menu_open = !self.view.xr_menu_open;
+                Acted::Nothing
+            }
+            view::XrAsk::Select(mode) => {
+                self.view.xr_mode = mode;
+                self.view.xr_menu_open = false;
+                println!("webxr presentation mode: {}", mode.menu_label());
+                Acted::Nothing
+            }
+            view::XrAsk::Shut => {
+                self.view.xr_menu_open = false;
+                Acted::Nothing
+            }
+        }
+    }
+
     /// Dispatches theme selector pill interactions, toggling the dropdown menu or selecting a theme mode.
     pub(crate) fn themed(&mut self, ctx: &egui::Context, ask: view::ThemeAsk) -> Acted {
         match ask {

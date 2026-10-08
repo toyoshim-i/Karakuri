@@ -34,6 +34,8 @@ pub enum ModalOverlay {
     McpServerMenu,
     /// Program bay resolution selection dropdown menu.
     ResolutionMenu,
+    /// Outputs row WebXR mode selection dropdown menu.
+    XrModeMenu,
 }
 
 impl ModalOverlay {
@@ -53,6 +55,7 @@ impl ModalOverlay {
             Self::ThemeMenu => "ThemeMenu",
             Self::McpServerMenu => "McpServerMenu",
             Self::ResolutionMenu => "ResolutionMenu",
+            Self::XrModeMenu => "XrModeMenu",
         }
     }
 }
@@ -98,6 +101,9 @@ impl View {
         }
         if self.resolution_menu_open {
             return Some(ModalOverlay::ResolutionMenu);
+        }
+        if self.xr_menu_open {
+            return Some(ModalOverlay::XrModeMenu);
         }
         None
     }
@@ -147,6 +153,10 @@ impl View {
             }
             ModalOverlay::ResolutionMenu => {
                 self.resolution_menu_open = false;
+                true
+            }
+            ModalOverlay::XrModeMenu => {
+                self.xr_menu_open = false;
                 true
             }
         }

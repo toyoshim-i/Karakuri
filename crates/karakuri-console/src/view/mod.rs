@@ -257,6 +257,8 @@ impl View {
             output_resolution_changed: false,
             resolution_menu_open: false,
             vr_mode: false,
+            xr_mode: XrSessionMode::Vr,
+            xr_menu_open: false,
             ungate_requested: None,
             // Bay opening state defaulted to closed (ADR-0235).
             opening: Open::CLOSED,

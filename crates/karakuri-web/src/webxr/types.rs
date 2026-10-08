@@ -36,10 +36,20 @@ pub struct StereoPose {
     pub eye_size: (u32, u32),
 }
 
+/// Presentation mode of the WebXR session: Immersive VR or Passthrough AR.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WebXrSessionMode {
+    #[default]
+    Vr, // Immersive VR with celestial dome / cosmos background
+    Ar, // Immersive AR with real-world camera passthrough
+}
+
 /// Shared state for WebXR spatial HUD session.
 #[derive(Default)]
 pub struct WebXrState {
     pub is_supported: bool,
+    pub is_ar_supported: bool,
+    pub session_mode: WebXrSessionMode,
     pub is_active: bool,
     pub session: Option<XrSession>,
     pub _ref_space: Option<XrReferenceSpace>,

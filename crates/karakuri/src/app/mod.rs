@@ -29,6 +29,10 @@ mod operations;
 pub(crate) use audio_midi::*;
 pub(crate) use operations::*;
 
+/// Callback invoked when an output plugin sink is toggled, providing the plugin index,
+/// activation state, and current WebXR presentation mode.
+pub type PluginRouteHook = Box<dyn FnMut(u8, bool, karakuri_console::view::XrSessionMode)>;
+
 pub struct App {
     pub(crate) gfx: Option<Gfx>,
     /// Initial material pair requested on the command line, used to seed decks in `resumed`.
@@ -104,8 +108,8 @@ pub struct App {
     pub(crate) midi_request_hook: Option<Box<dyn FnMut()>>,
     /// Optional custom output plugin override: (available, name, on).
     pub(crate) custom_plugin: Option<(bool, Option<&'static str>, bool)>,
-    /// Optional callback invoked when an output plugin sink is toggled.
-    pub(crate) plugin_route_hook: Option<Box<dyn FnMut(u8, bool)>>,
+    /// Optional callback invoked when an output plugin sink is toggled, with the current XrSessionMode.
+    pub(crate) plugin_route_hook: Option<PluginRouteHook>,
     /// Active WebXR stereo camera matrices for Side-by-Side spatial world rendering.
     pub(crate) stereo_matrices: Option<(
         karakuri_engine::StereoMatrices,
@@ -338,18 +342,24 @@ impl App {
     }
 
     /// Registers a callback invoked when an output plugin sink is toggled (e.g. WebXR session).
-    pub fn set_plugin_route_hook<F: FnMut(u8, bool) + 'static>(&mut self, hook: F) {
+    pub fn set_plugin_route_hook<
+        F: FnMut(u8, bool, karakuri_console::view::XrSessionMode) + 'static,
+    >(
+        &mut self,
+        hook: F,
+    ) {
         self.plugin_route_hook = Some(Box::new(hook));
     }
 
     /// Triggers plugin route hook directly using disjoint field borrow.
     pub(crate) fn trigger_plugin_route(
-        hook: &mut Option<Box<dyn FnMut(u8, bool)>>,
+        hook: &mut Option<PluginRouteHook>,
         n: u8,
         on: bool,
+        mode: karakuri_console::view::XrSessionMode,
     ) {
         if let Some(ref mut h) = hook {
-            h(n, on);
+            h(n, on, mode);
         }
     }
 
