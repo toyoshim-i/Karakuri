@@ -360,13 +360,13 @@ mod tests {
             karakuri_store::fs::read_to_string(&target).unwrap(),
             "initial"
         );
-        assert!(!tmp_file.exists());
+        assert!(!karakuri_store::fs::exists(&tmp_file));
 
         write_atomic(&target, b"updated").expect("second write");
         assert_eq!(
             karakuri_store::fs::read_to_string(&target).unwrap(),
             "updated"
         );
-        assert!(!tmp_file.exists());
+        assert!(!karakuri_store::fs::exists(&tmp_file));
     }
 }

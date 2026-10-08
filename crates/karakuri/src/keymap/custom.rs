@@ -195,7 +195,7 @@ impl Keymap {
     /// otherwise falls back to defaults. Prints warnings on collisions.
     pub(crate) fn load_or_default(store: &Path) -> Self {
         let path = store.join("keymaps/default.keymap");
-        if path.is_file() {
+        if fs::is_file(&path) {
             if let Ok(text) = fs::read_to_string(&path) {
                 let (keymap, notes) = Self::parse(&text);
                 for note in notes {
@@ -548,7 +548,7 @@ mod tests {
 
         // Check file was persisted
         let file_path = temp_dir.join("keymaps/default.keymap");
-        assert!(file_path.is_file());
+        assert!(karakuri_store::fs::is_file(&file_path));
         let content = karakuri_store::fs::read_to_string(&file_path).unwrap();
         assert!(content.contains("transport: x global -> tap_beat"));
 

@@ -378,11 +378,11 @@ pub const SHIPPED_MAP: &str = "surface.map";
 /// Resolves the active MIDI map path: operator map in store first, shipped preset second (ADR-0227).
 pub fn map_for(store: &Path, presets: Option<&Path>) -> Option<std::path::PathBuf> {
     let own = store.join(MAPS).join(format!("{DEFAULT_MAP}.{MAP_SUFFIX}"));
-    if own.is_file() {
+    if karakuri_store::fs::is_file(&own) {
         return Some(own);
     }
     let shipped = presets?.join(SHIPPED_MAP);
-    shipped.is_file().then_some(shipped)
+    karakuri_store::fs::is_file(&shipped).then_some(shipped)
 }
 
 /// Updates map text with a newly learned binding, replacing existing mapping in-place
