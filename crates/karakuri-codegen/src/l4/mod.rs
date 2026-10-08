@@ -92,7 +92,7 @@ impl Resolver for L4Resolver {
                 "cam.view_proj".to_string()
             }
             Ambient::PointCoord => match self.block {
-                L4Block::Fragment => "in.point_coord".to_string(),
+                L4Block::Fragment => "point_coord".to_string(),
                 L4Block::Vertex => unreachable!("point_coord is fragment-only"),
             },
             // Bound in the fragment prologue: `eye` straight from the camera,

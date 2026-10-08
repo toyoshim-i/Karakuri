@@ -583,4 +583,173 @@ color = vec4(1.0, 1.0, 1.0, 1.0);
         assert_eq!(derived[6], from[6], "first_vertex");
         assert_eq!(derived[7], from[7], "first_instance");
     }
+
+    #[test]
+    fn stereo_eye_draws_with_vr_projection_modes() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let l1 = karakuri_ir::check::check(
+            &karakuri_ir::parse(
+                r#"
+proc p1 {
+  kind L1
+  topology points
+  capacity [8, 64] = 16
+  param spawn_rate : float [0.0, 40000.0] = 1000.0
+  emit position
+  spawn { position = vec3(0.0, 0.0, 0.0); }
+  element { position = position; }
+}
+"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let l4_checked = karakuri_ir::check::check(
+            &karakuri_ir::parse(
+                r#"
+proc p4 {
+  kind L4
+  blend additive
+  fragment {
+    color = vec4(point_coord.x, point_coord.y, 0.0, 1.0);
+  }
+}
+"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut set =
+            Set::build(&gpu.device, &gpu.queue, &l1, &l4_checked, 16, 3).expect("build set");
+        let (w, h) = (128, 64);
+        set.resize(&gpu.device, w, h);
+        set.prepare(&gpu.queue, 1, &crate::Signals::default());
+
+        let run_mode = |set: &mut Set, mode: f32| -> ([f32; 2], [f32; 2]) {
+            let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("target"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let target_view = target.create_view(&Default::default());
+
+            let matrices = crate::camera::StereoMatrices {
+                view: [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ],
+                proj: [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, -1.0, -1.0],
+                    [0.0, 0.0, -0.2, 0.0],
+                ],
+                vr_config: crate::camera::VrConfig {
+                    mode,
+                    rings: 4.0,
+                    facets: 6.0,
+                    spin: 0.0,
+                    mirror: 1.0,
+                    zoom: 1.0,
+                },
+            };
+
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            set.draw_stereo_eye(
+                &gpu.queue,
+                &mut encoder,
+                &target_view,
+                None,
+                &matrices,
+                true,
+                (0.0, 0.0, w as f32, h as f32),
+            );
+            gpu.queue.submit([encoder.finish()]);
+
+            let bytes_per_row = w * 8;
+            let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("readback target"),
+                size: u64::from(bytes_per_row * h),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let mut enc = gpu.device.create_command_encoder(&Default::default());
+            enc.copy_texture_to_buffer(
+                target.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &readback,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(bytes_per_row),
+                        rows_per_image: Some(h),
+                    },
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+            gpu.queue.submit([enc.finish()]);
+
+            let slice = readback.slice(..);
+            slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
+            let data = slice.get_mapped_range().expect("map");
+            let f16 = |bits: u16| -> f32 {
+                let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
+                let exp = (bits >> 10) & 0x1f;
+                let mant = u32::from(bits & 0x3ff);
+                let v = match exp {
+                    0 => f32::from_bits(mant << 13) * 2.0f32.powi(-112),
+                    0x1f => f32::from_bits(0x7f80_0000 | (mant << 13)),
+                    _ => f32::from_bits(((u32::from(exp) + 112) << 23) | (mant << 13)),
+                };
+                f32::from_bits(v.to_bits() | sign.to_bits())
+            };
+            let h0 = |i: usize| f16(u16::from_le_bytes([data[i], data[i + 1]]));
+            let pixel_4_4 = [
+                h0(4 * 8 + 4 * bytes_per_row as usize),
+                h0(4 * 8 + 4 * bytes_per_row as usize + 2),
+            ];
+            let center = [
+                h0(64 * 8 + 32 * bytes_per_row as usize),
+                h0(64 * 8 + 32 * bytes_per_row as usize + 2),
+            ];
+            drop(data);
+            readback.unmap();
+
+            (pixel_4_4, center)
+        };
+
+        let (p4_0, c0) = run_mode(&mut set, 0.0);
+        let (p4_1, c1) = run_mode(&mut set, 1.0);
+        let (p4_2, c2) = run_mode(&mut set, 2.0);
+
+        assert_ne!(p4_0, p4_1, "Dome mode should reproject corner point_coord");
+        assert_ne!(c0, c1, "Dome mode should reproject center point_coord");
+        assert_ne!(
+            p4_1, p4_2,
+            "Kaleidosky mode should reproject corner point_coord differently than Dome"
+        );
+        assert_ne!(
+            c1, c2,
+            "Kaleidosky mode should reproject center point_coord differently than Dome"
+        );
+    }
 }

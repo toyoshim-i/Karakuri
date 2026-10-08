@@ -29,11 +29,11 @@ pub(crate) struct Camera {
     state: wgpu::Buffer,
     /// Derived camera matrices and basis vectors (`Camera`).
     #[cfg_attr(not(test), allow(dead_code))]
-    derived: wgpu::Buffer,
+    pub(crate) derived: wgpu::Buffer,
     /// Canvas parameters buffer (aspect ratio).
     canvas: wgpu::Buffer,
     /// One WebXR eye's head pose and projection, read by `derive_xr`.
-    xr: wgpu::Buffer,
+    pub(crate) xr: wgpu::Buffer,
     derive: wgpu::ComputePipeline,
     /// [`Camera::record_xr`]'s pass: the camera's own placement composed
     /// with a headset eye.
