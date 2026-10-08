@@ -45,7 +45,7 @@ fn a_row_carries_the_words_of_the_layers_it_implements() {
         names: &names,
         kinds: &kinds,
     };
-    assert_eq!(rows.badges(0), vec!["L1", "L2", "L4"]);
+    assert_eq!(rows.badges(0), vec!["Set", "L1", "L2", "L4"]);
     assert_eq!(rows.badges(2), vec!["L3"]);
     assert!(
         rows.procedure(2),
@@ -87,15 +87,15 @@ fn the_badges_end_where_the_rows_padding_starts() {
     let drawn: Vec<(&str, egui::Rect)> = bay.badges(&ctx, 0, &rows.badges(0)).collect();
     assert_eq!(
         drawn.iter().map(|(word, _)| *word).collect::<Vec<_>>(),
-        vec!["L1", "L2", "L4"]
+        vec!["Set", "L1", "L2", "L4"]
     );
     assert!(
         near(
-            drawn[2].1.max.x,
+            drawn.last().unwrap().1.max.x,
             row.max.x - karakuri_console::room::size::LIB_ROW_PAD_X
         ),
         "the last badge ends at {} in a row ending at {}",
-        drawn[2].1.max.x,
+        drawn.last().unwrap().1.max.x,
         row.max.x
     );
     for pair in drawn.windows(2) {

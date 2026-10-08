@@ -235,6 +235,7 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
         "`SET` on lists {:?}",
         view.library
     );
+    // Multiple kind chips narrow listing by intersection (AND); all enabled elements must be present.
     assert!(view.narrow(
         None,
         LibraryKinds {
@@ -246,8 +247,24 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     listing(&mut view, &root, Some(&presets), None, None);
     assert_eq!(
         view.library.len(),
-        2,
-        "an OR of two lists {:?}",
+        0,
+        "a conjunction of L3 and SET with no matching item lists {:?}",
+        view.library
+    );
+    // When L1 and SET are both on, night01 (having L1) matches.
+    assert!(view.narrow(
+        None,
+        LibraryKinds {
+            l1: true,
+            sets: true,
+            ..LibraryKinds::EVERYTHING
+        }
+    ));
+    listing(&mut view, &root, Some(&presets), None, None);
+    assert_eq!(
+        view.library,
+        vec!["night01".to_owned()],
+        "L1 and SET conjunction lists {:?}",
         view.library
     );
     assert!(view.narrow(None, LibraryKinds::EVERYTHING));

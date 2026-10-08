@@ -76,20 +76,22 @@ impl<'a> Rows<'a> {
     }
 
     /// The words on this row's badges, in the order they are drawn — [`LAYERS`]'
-    /// spelling.
+    /// spelling, prefixed with "Set" for Set rows.
     pub fn badges(&self, row: usize) -> Vec<&'static str> {
         self.kinds
             .get(row)
             .map(|kind| {
-                kind.badges
-                    .iter()
-                    .filter_map(|layer| {
-                        LAYERS
-                            .iter()
-                            .find(|(kind, _)| kind == layer)
-                            .map(|(_, word)| *word)
-                    })
-                    .collect()
+                let mut words = Vec::new();
+                if !kind.procedure {
+                    words.push("Set");
+                }
+                words.extend(kind.badges.iter().filter_map(|layer| {
+                    LAYERS
+                        .iter()
+                        .find(|(kind, _)| kind == layer)
+                        .map(|(_, word)| *word)
+                }));
+                words
             })
             .unwrap_or_default()
     }

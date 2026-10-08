@@ -524,3 +524,23 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
 
     std::fs::remove_dir_all(&root).expect("clean up");
 }
+
+#[test]
+fn all_presets_in_examples_can_be_taken_in() {
+    let root = scratch_dir("all-presets-take-in");
+    let presets = shipped_presets();
+    Store::open(&root).expect("store");
+    let listed = presets_listing(Some(&presets));
+    let mut failures = Vec::new();
+    for preset in listed {
+        if let Err(e) = taking_in(&root, Taking::Presets(Some(&presets)), &preset.id) {
+            failures.push(format!("{}: {e}", preset.id));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "Presets failed take-in:\n{}",
+        failures.join("\n")
+    );
+    std::fs::remove_dir_all(&root).expect("clean up");
+}
