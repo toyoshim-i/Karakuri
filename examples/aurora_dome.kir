@@ -1,0 +1,146 @@
+// A night sky written for the VR Dome projection: two curtains of aurora hang
+// all the way around the horizon, each with a sharp green hem and a long violet
+// fade upward, combed into fine vertical rays that drift and fold. Overhead, a
+// slow mandala of petals and dashed rings turns on the beat, and a sparse field
+// of coloured stars twinkles across the whole canopy.
+//
+// Authored in dome-master space (docs/vr-projection.md): `point_coord` (0.5,
+// 0.5) is the zenith, radius 0.75 is the horizon and radius 1.0 is 30 degrees
+// below it, with the front of the room toward +y. Every pattern is evaluated
+// on the reconstructed sky direction rather than on the raw azimuth, so there
+// is no seam behind the viewer and no pinch at the zenith. On a flat screen it
+// shows as the fisheye disc itself; in WebXR switch the Built-in VR stage to
+// `Dome`. It never reads `ray` or `eye`, which would bypass the dome remap.
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri -- examples/step_grid.kir examples/aurora_dome.kir
+
+proc aurora_dome {
+  kind  L4
+  blend additive
+
+  // How fast the curtains fold and their rays crawl.
+  param drift   : float [0.0, 2.0]    = 0.35
+
+  // Elevation of the lower curtain's hem above the horizon, in radians.
+  param height  : float [0.0, 1.2]    = 0.28
+
+  // How far a curtain fades upward from its hem, in radians.
+  param reach   : float [0.05, 1.0]   = 0.32
+
+  // Fineness of the vertical rays combed into the curtains.
+  param rays    : float [2.0, 48.0]   = 18.0
+
+  // Brightness of the aurora.
+  param glow    : float [0.0, 4.0]    = 1.2
+
+  // Colour at the hem and at the top of a curtain, in linear RGB.
+  param low     : vec3  [0.0, 2.0]    = vec3(0.12, 1.0, 0.45)
+  param high    : vec3  [0.0, 2.0]    = vec3(0.65, 0.18, 1.0)
+
+  // Brightness of the overhead mandala, its angular size in dome radius, and
+  // its number of petals (floored, so the pattern closes around the zenith).
+  param halo    : float [0.0, 2.0]    = 0.6
+  param span    : float [0.05, 0.6]   = 0.26
+  param petals  : float [3.0, 16.0]   = 8.0
+
+  // Twinkling star field: brightness and fraction of sky cells holding a star.
+  param sparkle : float [0.0, 2.0]    = 0.5
+  param density : float [0.0, 1.0]    = 0.35
+
+  // Faint twilight band along the horizon.
+  param dusk    : float [0.0, 1.0]    = 0.25
+
+  // Audio swell: brightens the aurora and the mandala and ripples the hems.
+  // Meant to be bound to a level such as `energy` or `bass`.
+  param pulse   : float [0.0, 2.0]    = 0.0
+
+  fragment {
+    // ---- Dome-master coordinates back to a direction on the sky ----------
+    // `p` is centred on the zenith; the tiny offset keeps atan2 defined there.
+    let p  = point_coord * 2.0 - vec2(1.0);
+    let r  = length(p);
+    let az = atan2(p.x, p.y + 0.000001);
+    let th = r * 2.0943951;
+    let el = 1.5707963 - th;
+    let d  = vec3(sin(th) * sin(az), cos(th), -sin(th) * cos(az));
+    // Unit heading around the horizon: periodic, so noise on it has no seam.
+    let h  = vec2(sin(az), -cos(az));
+    let tt = t * drift;
+
+    // ---- Night sky --------------------------------------------------------
+    let band  = exp(-abs(el) * 7.0);
+    var rgb   = vec3(0.10, 0.05, 0.16) * band * dusk
+              + vec3(0.01, 0.02, 0.05) * smoothstep(0.0, 1.2, el) * dusk;
+
+    // ---- Lower curtain ----------------------------------------------------
+    // The hem rides up and down around the horizon; above it the light fades
+    // exponentially, below it ends in a soft but quick edge.
+    let fold1 = perlin(vec3(h * 1.4, tt * 0.30));
+    let base1 = height + 0.10 * fold1 + 0.03 * pulse * sin(az * 6.0 + t * 4.0);
+    let up1   = el - base1;
+    let hem1  = smoothstep(-0.04, 0.015, up1) * exp(-max(up1, 0.0) / reach);
+    let comb1 = 0.5 + 0.5 * perlin(vec3(h * rays + vec2(fold1 * 1.5), up1 * 1.2 - tt * 0.9));
+    let veil1 = smoothstep(-0.25, 0.45, perlin(vec3(h * 2.2 + vec2(3.1, 0.0), tt * 0.18 + 5.0)));
+    let lum1  = hem1 * (0.25 + 0.75 * comb1 * comb1) * veil1;
+    let col1  = mix(low, high, vec3(smoothstep(0.0, reach * 1.8, up1)));
+    rgb = rgb + col1 * lum1 * (1.0 + 0.8 * exp(-max(up1, 0.0) * 40.0));
+
+    // ---- Upper curtain: higher, thinner, slower, folded the other way ----
+    let fold2 = perlin(vec3(h * 1.1 + vec2(7.3, 2.9), -tt * 0.22 + 11.0));
+    let base2 = height + 0.32 + 0.14 * fold2;
+    let up2   = el - base2;
+    let hem2  = smoothstep(-0.05, 0.02, up2) * exp(-max(up2, 0.0) / (reach * 0.7));
+    let comb2 = 0.5 + 0.5 * perlin(vec3(h * rays * 1.6 - vec2(fold2), up2 * 1.5 - tt * 0.6 + 17.0));
+    let veil2 = smoothstep(-0.1, 0.55, perlin(vec3(h * 1.8 + vec2(-4.2, 1.7), tt * 0.15 + 23.0)));
+    let lum2  = hem2 * (0.2 + 0.8 * comb2 * comb2) * veil2 * 0.6;
+    let col2  = mix(mix(low, high, vec3(0.45)), high, vec3(smoothstep(0.0, reach * 1.2, up2)));
+    rgb = rgb + col2 * lum2;
+
+    // The aurora lives above the ground: fade it out just under the horizon.
+    let sky = smoothstep(-0.12, 0.02, el);
+    rgb = rgb * (glow * (1.0 + pulse) * sky);
+
+    // ---- Overhead mandala -------------------------------------------------
+    let zr  = r / span;
+    let aa  = fwidth(zr) * 1.5 + 0.004;
+    let n   = floor(petals);
+    let a1  = az + beats * 0.125;
+    let a2  = az - beats * 0.0625;
+    // Rose outlines: an outer ring of petals and a counter-turning inner one.
+    let rose1 = abs(cos(a1 * n * 0.5));
+    let rose2 = abs(cos(a2 * n));
+    let line1 = 1.0 - smoothstep(0.0, aa * 2.0, abs(zr - (0.45 + 0.45 * rose1)));
+    let line2 = 1.0 - smoothstep(0.0, aa * 2.0, abs(zr - (0.20 + 0.18 * rose2)));
+    // Dashed rings at the rim and inside, each dash count a multiple of `n`.
+    let dash1 = step(0.5, fract(a2 * n * 2.0 / 6.2831853));
+    let dash2 = step(0.35, fract(a1 * n / 6.2831853));
+    let ring1 = (1.0 - smoothstep(0.0, aa, abs(zr - 1.0))) * dash1;
+    let ring2 = (1.0 - smoothstep(0.0, aa, abs(zr - 1.12))) * dash2 * 0.6;
+    let ring3 = (1.0 - smoothstep(0.0, aa, abs(zr - 0.42))) * 0.5;
+    let core  = exp(-zr * zr * 40.0) * 0.8;
+    let breath = 0.75 + 0.25 * sin(beats * 1.5707963);
+    let lines = (line1 * 0.9 + line2 * 0.7 + ring1 + ring2 + ring3 + core)
+              * (1.0 - smoothstep(1.1, 1.25, zr));
+    let gold  = mix(vec3(1.0, 0.78, 0.42), vec3(0.45, 0.85, 1.0), vec3(smoothstep(0.0, 1.0, zr)));
+    rgb = rgb + gold * lines * halo * breath * (1.0 + 0.6 * pulse);
+
+    // ---- Twinkling stars --------------------------------------------------
+    // Hashed cells in 3D around the sky direction: evenly spread over the
+    // sphere, unlike cells in dome-master space, which crowd at the zenith.
+    let sp   = d * 70.0;
+    let cell = floor(sp);
+    let key  = uint(cell.x + 128.0) + uint(cell.y + 128.0) * 257u + uint(cell.z + 128.0) * 66049u;
+    let jit  = hash3(key);
+    let off  = distance(sp, cell + jit);
+    let has  = step(hash1(key + 7u), density);
+    let tw   = 0.55 + 0.45 * sin(t * (1.5 + 3.0 * jit.x) + jit.y * 6.2831853);
+    let star = has * tw * exp(-off * off * 60.0);
+    let hue  = mix(vec3(0.7, 0.85, 1.0), vec3(1.0, 0.8, 0.6), vec3(jit.z));
+    rgb = rgb + hue * star * sparkle * sky * (1.0 - band * 0.6);
+
+    // ---- Soft edge at the dome rim (30 degrees below the horizon) ---------
+    let rim = 1.0 - smoothstep(0.92, 1.0, r);
+    color = vec4(rgb * rim, 1.0);
+  }
+}
