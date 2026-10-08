@@ -298,10 +298,7 @@ impl HudAnchor {
 pub struct GrabState {
     pub source_index: u32,
     pub initial_ctrl_pos: [f32; 3],
-    pub initial_ctrl_pitch: f32,
     pub initial_anchor_center: [f32; 3],
-    pub initial_tilt: f32,
-    pub current_distance: f32,
 }
 
 pub fn draw_hud_quad(
