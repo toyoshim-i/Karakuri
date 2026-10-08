@@ -70,6 +70,12 @@ Defines how fragment colors combine with underlying surfaces:
 - `weighted`: Order-independent transparency (occludes by alpha `[0.0, 1.0]`).
 - `opaque`: Depth-tested and depth-writing (early-Z occlusion against Depth32 buffer).
 
+### Fullscreen `L4` Procedures & Built-in VR Projection
+An `L4` procedure that declares no `vertex` block acts as a **fullscreen fragment renderer** (e.g. 2D procedural patterns, raymarchers, canvas backgrounds).
+- On 2D screens: Renders across the entire display quad.
+- In WebXR Immersive mode: Automatically projected via **Built-in VR Projection** (`Wall`, `Dome`, or `Kaleidosky`). In `Dome` mode, `in.point_coord` maps the zenith $(0.5, 0.5)$ directly overhead down to $-30^\circ$ below the horizon.
+- For complete coordinate mapping contracts, WGSL examples, and celestial dome shader guidelines, read `karakuri://vr-projection`.
+
 ### `param` (All kinds)
 Declares an interactive, controllable parameter exposed to the console, MIDI, and LLM:
 ```kir

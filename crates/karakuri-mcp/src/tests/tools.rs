@@ -239,3 +239,26 @@ fn an_edge_the_loop_does_not_take_ends_and_says_something_true() {
         "what the loop said did not come back unchanged"
     );
 }
+
+#[test]
+fn vr_projection_resource_is_published_and_readable() {
+    let list = resources();
+    let entries = list.as_array().expect("resources() is array");
+    assert!(
+        entries
+            .iter()
+            .any(|r| r["uri"] == "karakuri://vr-projection"),
+        "karakuri://vr-projection is not listed in resources()"
+    );
+
+    let req = json!({
+        "params": {
+            "uri": "karakuri://vr-projection"
+        }
+    });
+    let res = read_resource(&req).expect("read_resource(karakuri://vr-projection)");
+    let content = res["contents"][0]["text"].as_str().expect("text content");
+    assert!(content.contains("Built-in VR Projection"));
+    assert!(content.contains("Dome"));
+    assert!(content.contains("point_coord"));
+}
