@@ -298,7 +298,38 @@ impl HudAnchor {
 pub struct GrabState {
     pub source_index: u32,
     pub initial_ctrl_pos: [f32; 3],
+    pub initial_ctrl_orient: [f32; 4],
     pub initial_anchor_center: [f32; 3],
+    pub initial_anchor_right: [f32; 3],
+    pub initial_anchor_up: [f32; 3],
+    pub initial_anchor_normal: [f32; 3],
+}
+
+/// Multiplies two unit quaternions: q1 * q2
+#[inline]
+pub fn quat_mul(q1: [f32; 4], q2: [f32; 4]) -> [f32; 4] {
+    let (x1, y1, z1, w1) = (q1[0], q1[1], q1[2], q1[3]);
+    let (x2, y2, z2, w2) = (q2[0], q2[1], q2[2], q2[3]);
+    [
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+    ]
+}
+
+/// Rotates a 3D vector by a unit quaternion: q * v * q^-1
+#[inline]
+pub fn quat_rotate_vec(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
+    let (qx, qy, qz, qw) = (q[0], q[1], q[2], q[3]);
+    let tx = 2.0 * (qy * v[2] - qz * v[1]);
+    let ty = 2.0 * (qz * v[0] - qx * v[2]);
+    let tz = 2.0 * (qx * v[1] - qy * v[0]);
+    [
+        v[0] + qw * tx + (qy * tz - qz * ty),
+        v[1] + qw * ty + (qz * tx - qx * tz),
+        v[2] + qw * tz + (qx * ty - qy * tx),
+    ]
 }
 
 pub fn draw_hud_quad(

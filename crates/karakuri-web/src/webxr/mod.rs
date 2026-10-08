@@ -320,6 +320,7 @@ fn setup_xr_render_loop(
                         let ny = anchor.normal[1];
                         let nz = anchor.normal[2];
 
+                        let mut is_targeting_quad = false;
                         let denom = nx * dx + ny * dy + nz * dz;
                         if denom.abs() > 1e-4 {
                             let t = ((anchor.center[0] - ox) * nx
@@ -344,6 +345,9 @@ fn setup_xr_render_loop(
 
                                 let u = (local_x / QUAD_WIDTH) + 0.5;
                                 let v = (local_y / QUAD_HEIGHT) + 0.5;
+
+                                is_targeting_quad =
+                                    (-0.1..=1.1).contains(&u) && (-0.1..=1.1).contains(&v);
 
                                 if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
                                     hit_cursor = Some((u, v));
@@ -424,32 +428,86 @@ fn setup_xr_render_loop(
                                     if grip_pressed {
                                         match grab_state {
                                             None => {
-                                                grab_state = Some(GrabState {
-                                                    source_index: i,
-                                                    initial_ctrl_pos: [ox, oy, oz],
-                                                    initial_anchor_center: anchor.center,
-                                                });
+                                                let dist_to_center = ((ox - anchor.center[0])
+                                                    .powi(2)
+                                                    + (oy - anchor.center[1]).powi(2)
+                                                    + (oz - anchor.center[2]).powi(2))
+                                                .sqrt();
+                                                let can_grab =
+                                                    is_targeting_quad || dist_to_center < 0.6;
+                                                if can_grab {
+                                                    grab_state = Some(GrabState {
+                                                        source_index: i,
+                                                        initial_ctrl_pos: [ox, oy, oz],
+                                                        initial_ctrl_orient: [qx, qy, qz, qw],
+                                                        initial_anchor_center: anchor.center,
+                                                        initial_anchor_right: anchor.right,
+                                                        initial_anchor_up: anchor.up,
+                                                        initial_anchor_normal: anchor.normal,
+                                                    });
+                                                }
                                             }
                                             Some(gs) if gs.source_index == i => {
-                                                let delta = [
-                                                    ox - gs.initial_ctrl_pos[0],
-                                                    oy - gs.initial_ctrl_pos[1],
-                                                    oz - gs.initial_ctrl_pos[2],
+                                                let q_curr = [qx, qy, qz, qw];
+                                                let q_inv = [
+                                                    -gs.initial_ctrl_orient[0],
+                                                    -gs.initial_ctrl_orient[1],
+                                                    -gs.initial_ctrl_orient[2],
+                                                    gs.initial_ctrl_orient[3],
                                                 ];
+                                                let delta_q = quat_mul(q_curr, q_inv);
+
+                                                let offset_0 = [
+                                                    gs.initial_anchor_center[0]
+                                                        - gs.initial_ctrl_pos[0],
+                                                    gs.initial_anchor_center[1]
+                                                        - gs.initial_ctrl_pos[1],
+                                                    gs.initial_anchor_center[2]
+                                                        - gs.initial_ctrl_pos[2],
+                                                ];
+                                                let offset_rot = quat_rotate_vec(delta_q, offset_0);
                                                 let new_center = [
-                                                    gs.initial_anchor_center[0] + delta[0],
-                                                    gs.initial_anchor_center[1] + delta[1],
-                                                    gs.initial_anchor_center[2] + delta[2],
+                                                    ox + offset_rot[0],
+                                                    oy + offset_rot[1],
+                                                    oz + offset_rot[2],
                                                 ];
-                                                let mut new_model = anchor.model;
-                                                new_model[12] = new_center[0];
-                                                new_model[13] = new_center[1];
-                                                new_model[14] = new_center[2];
+
+                                                let right = quat_rotate_vec(
+                                                    delta_q,
+                                                    gs.initial_anchor_right,
+                                                );
+                                                let up =
+                                                    quat_rotate_vec(delta_q, gs.initial_anchor_up);
+                                                let normal = quat_rotate_vec(
+                                                    delta_q,
+                                                    gs.initial_anchor_normal,
+                                                );
+
+                                                let model = [
+                                                    right[0],
+                                                    right[1],
+                                                    right[2],
+                                                    0.0,
+                                                    up[0],
+                                                    up[1],
+                                                    up[2],
+                                                    0.0,
+                                                    normal[0],
+                                                    normal[1],
+                                                    normal[2],
+                                                    0.0,
+                                                    new_center[0],
+                                                    new_center[1],
+                                                    new_center[2],
+                                                    1.0,
+                                                ];
 
                                                 hud_anchor = Some(HudAnchor {
                                                     center: new_center,
-                                                    model: new_model,
-                                                    ..anchor
+                                                    normal,
+                                                    right,
+                                                    up,
+                                                    model,
                                                 });
                                             }
                                             _ => {}
