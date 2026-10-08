@@ -414,10 +414,6 @@ fn setup_xr_render_loop(
                         }
 
                         // Direct hand grabbing & spatial move with Grip button (Button 1 / Squeeze)
-                        // Features:
-                        // 1. Position tracking following controller movement
-                        // 2. Orientation tracking: Yaws to directly face user, Pitches with wrist tilt
-                        // 3. Distance push/pull with Thumbstick Y while gripping
                         if let Some(gamepad) = source.gamepad() {
                             let buttons = gamepad.buttons();
                             if buttons.length() > 1 {
@@ -425,153 +421,36 @@ fn setup_xr_render_loop(
                                     let btn: web_sys::GamepadButton = btn_val.unchecked_into();
                                     let grip_pressed = btn.pressed();
 
-                                    let (hx, hy, hz) = if let Some(ref p) = pose {
-                                        let hp = p.transform().position();
-                                        (hp.x() as f32, hp.y() as f32, hp.z() as f32)
-                                    } else {
-                                        (0.0, 0.0, 0.0)
-                                    };
-
-                                    let axes = gamepad.axes();
-                                    let stick_y_val = if axes.length() >= 4 {
-                                        js_sys::Reflect::get(&axes, &3.into()).ok()
-                                    } else if axes.length() >= 2 {
-                                        js_sys::Reflect::get(&axes, &1.into()).ok()
-                                    } else {
-                                        None
-                                    };
-
                                     if grip_pressed {
-                                        let current_ctrl_pitch = dy.clamp(-1.0, 1.0).asin();
-
                                         match grab_state {
                                             None => {
-                                                let dx_h = anchor.center[0] - hx;
-                                                let dy_h = anchor.center[1] - hy;
-                                                let dz_h = anchor.center[2] - hz;
-                                                let init_dist =
-                                                    (dx_h * dx_h + dy_h * dy_h + dz_h * dz_h)
-                                                        .sqrt()
-                                                        .max(0.35);
-                                                let init_tilt =
-                                                    anchor.normal[1].atan2(anchor.up[1]);
-
                                                 grab_state = Some(GrabState {
                                                     source_index: i,
                                                     initial_ctrl_pos: [ox, oy, oz],
-                                                    initial_ctrl_pitch: current_ctrl_pitch,
                                                     initial_anchor_center: anchor.center,
-                                                    initial_tilt: init_tilt,
-                                                    current_distance: init_dist,
                                                 });
                                             }
-                                            Some(mut gs) if gs.source_index == i => {
-                                                // 1. Thumbstick Y adjustment: push/pull distance along gaze ray
-                                                if let Some(val) = stick_y_val {
-                                                    if let Some(stick_y) = val.as_f64() {
-                                                        let deadzone = 0.15;
-                                                        let abs_y = stick_y.abs();
-                                                        if abs_y > deadzone {
-                                                            let sign = -stick_y.signum(); // stick forward is negative in WebXR, pushes away
-                                                            let mag = (abs_y - deadzone)
-                                                                / (1.0 - deadzone);
-                                                            let delta_d =
-                                                                (sign * mag * mag * 0.025) as f32;
-                                                            gs.current_distance =
-                                                                (gs.current_distance + delta_d)
-                                                                    .clamp(0.35, 3.5);
-                                                        }
-                                                    }
-                                                }
-
-                                                // 2. Hand movement delta
+                                            Some(gs) if gs.source_index == i => {
                                                 let delta = [
                                                     ox - gs.initial_ctrl_pos[0],
                                                     oy - gs.initial_ctrl_pos[1],
                                                     oz - gs.initial_ctrl_pos[2],
                                                 ];
-                                                let base_target = [
+                                                let new_center = [
                                                     gs.initial_anchor_center[0] + delta[0],
                                                     gs.initial_anchor_center[1] + delta[1],
                                                     gs.initial_anchor_center[2] + delta[2],
                                                 ];
-
-                                                // Direction from head to target
-                                                let to_target = [
-                                                    base_target[0] - hx,
-                                                    base_target[1] - hy,
-                                                    base_target[2] - hz,
-                                                ];
-                                                let target_dist = (to_target[0] * to_target[0]
-                                                    + to_target[1] * to_target[1]
-                                                    + to_target[2] * to_target[2])
-                                                    .sqrt()
-                                                    .max(1e-4);
-                                                let dir_from_head = [
-                                                    to_target[0] / target_dist,
-                                                    to_target[1] / target_dist,
-                                                    to_target[2] / target_dist,
-                                                ];
-
-                                                // Apply distance along gaze vector from head
-                                                let new_center = [
-                                                    hx + dir_from_head[0] * gs.current_distance,
-                                                    hy + dir_from_head[1] * gs.current_distance,
-                                                    hz + dir_from_head[2] * gs.current_distance,
-                                                ];
-
-                                                // 3. Orientation: Yaw to face user, Pitch to follow wrist tilt
-                                                let fwd_x = new_center[0] - hx;
-                                                let fwd_z = new_center[2] - hz;
-                                                let horiz_len = (fwd_x * fwd_x + fwd_z * fwd_z)
-                                                    .sqrt()
-                                                    .max(1e-4);
-                                                let fwd_h =
-                                                    [fwd_x / horiz_len, 0.0, fwd_z / horiz_len];
-
-                                                // Right vector perpendicular to forward (stays horizontal in world space)
-                                                let right = [-fwd_h[2], 0.0, fwd_h[0]];
-
-                                                // Tilt: initial tilt + hand pitch delta
-                                                let delta_pitch =
-                                                    current_ctrl_pitch - gs.initial_ctrl_pitch;
-                                                let tilt = (gs.initial_tilt + delta_pitch)
-                                                    .clamp(-0.35, 1.45);
-                                                let cos_t = tilt.cos();
-                                                let sin_t = tilt.sin();
-
-                                                let up =
-                                                    [fwd_h[0] * sin_t, cos_t, fwd_h[2] * sin_t];
-                                                let normal =
-                                                    [-fwd_h[0] * cos_t, sin_t, -fwd_h[2] * cos_t];
-
-                                                let model = [
-                                                    right[0],
-                                                    right[1],
-                                                    right[2],
-                                                    0.0,
-                                                    up[0],
-                                                    up[1],
-                                                    up[2],
-                                                    0.0,
-                                                    normal[0],
-                                                    normal[1],
-                                                    normal[2],
-                                                    0.0,
-                                                    new_center[0],
-                                                    new_center[1],
-                                                    new_center[2],
-                                                    1.0,
-                                                ];
+                                                let mut new_model = anchor.model;
+                                                new_model[12] = new_center[0];
+                                                new_model[13] = new_center[1];
+                                                new_model[14] = new_center[2];
 
                                                 hud_anchor = Some(HudAnchor {
                                                     center: new_center,
-                                                    normal,
-                                                    right,
-                                                    up,
-                                                    model,
+                                                    model: new_model,
+                                                    ..anchor
                                                 });
-                                                grab_state = Some(gs);
                                             }
                                             _ => {}
                                         }
