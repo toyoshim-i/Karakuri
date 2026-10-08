@@ -67,18 +67,20 @@ Rather than forcing a flat 2D "fullscreen" concept onto 3D reality, Karakuri Imm
   - Particles fly past the performer's head; ribbon trails orbit the performer; grids undulate beneath their feet.
   - Complete 6DoF parallax: leaning in, looking around, or walking reveals new angles of the synthesized geometry.
 
-### Tier 3: Celestial Dome Projection (Sky Dome for Fragment & L5 FX)
+### Tier 3: Built-in VR Projection & Celestial Cosmos
 - **The Problem**:
-  - Fragment-only shaders (raymarchers, 2D procedural patterns, screen-space distortions, L5 Master Chain post-effects) have no native 3D vertices and operate in normalized 2D screen UV space.
-- **The Solution: Dome-Master Projection**:
-  - A large hemisphere or geodesic dome (radius 15–30 m) is rendered in the background, centered on the performer.
-  - The fragment/L5 composite is mapped onto the dome's interior surface using polar fisheye / dome-master projection:
-    $$u = 0.5 + \frac{\theta}{\pi} \cos(\phi), \quad v = 0.5 + \frac{\theta}{\pi} \sin(\phi)$$
-    where $\theta$ is the polar angle from the forward sightline and $\phi$ is the azimuth.
-- **Visual Impact**:
-  - Becomes an expansive planetarium-style background enclosing the entire horizon and zenith.
-  - L5 effects (glitch slices, film grain, strobes, chromatic shifts) pulse across the celestial sphere behind the 3D particles.
-  - Depth buffer testing ensures Tier 2 spatial geometry cleanly occludes the celestial dome.
+  - Fragment-only shaders (raymarchers, 2D procedural patterns, screen-space distortions, L5 Master Chain post-effects) have no native 3D vertices and operate in normalized 2D screen UV space (`point_coord`).
+  - Naively projecting onto viewports creates face-locked visuals, while artificial head-roll can induce motion sickness.
+- **The Solution: Room-Space Built-in VR Projection**:
+  - The WebGPU shader reconstructs rays in headset room space (`cam.room_fwd`, `cam.room_right`, `cam.room_up`), decoupling virtual projection from head roll and procedural turntable camera rotations.
+  - Three distinct projection modes are selectable live from the Master bay:
+    1. **`Wall`**: Giant 16:9 flat screen anchored in front of the performer with bounded FOV and zoom control.
+    2. **`Dome`**: 240° celestial fulldome mapping zenith $(0.5, 0.5)$ overhead down to $-30^\circ$ below the horizon.
+    3. **`Kaleidosky`**: Expansive sky with radial concentric rings (`rings`), azimuthal M-fold rotational symmetry (`facets`), and ping-pong mirroring (`mirror`).
+  - **Celestial Cosmos Environment**:
+    - Underneath the visual performance, a procedural WebGL2 celestial sphere renders equatorial and elevation grid parallels, meridians, and a 3D procedural starfield.
+    - Adjustable in real-time via Master bay parameters: `stars` (brightness), `density` (star count), `grid` (dome line brightness), and `lines` (grid density).
+  - Complete shader authoring conventions and mathematical formulas are documented in [ADR-0388](adr/0388-built-in-vr-projection-modes-and-celestial-dome-specification.md) and [`docs/vr-projection.md`](vr-projection.md).
 
 ---
 
@@ -158,12 +160,18 @@ Each frame executes:
      - Render Tier 1 HUD Quad (placed at `(0.0, -0.2, -0.7)` with -35° pitch).
 3. **Submit**: Present the stereo framebuffer to the WebXR display.
 
-### 4.3 Controller Interaction & Pointer Emulation
-- WebXR `XRInputSource` provides gamepad buttons and ray vectors.
-- Ray intersects the HUD Quad at local coordinate `(u, v)`:
-  - If ray intersects: Emits `CursorMoved { position: (u * w, (1-v) * h) }`.
-  - Trigger press: Emits `MouseInput { state: Pressed, button: Primary }`.
-  - Thumbstick scroll: Emits `MouseWheel { delta }`.
+### 4.3 Controller Interaction, Locomotion & Pointer Emulation
+- **HUD Quad Interaction (Laser Raycast)**:
+  - Controller target ray intersects the HUD Quad at local coordinate `(u, v)`.
+  - Laser intersection emits `CursorMoved { position: (u * w, (1-v) * h) }`.
+  - Trigger squeeze: Emits `MouseInput { state: Pressed, button: Primary }`.
+  - Right thumbstick vertical: Emits `MouseWheel { delta }` for console scrolling.
+- **Controller Locomotion & Turning**:
+  - **Left Thumbstick**: Smooth planar locomotion (forward/backward, strafe left/right) aligned with the player's head facing direction (curved response up to `5.0 m/s`).
+  - **Right Thumbstick (Horizontal)**: Smooth yaw rotation of locomotion facing orientation (`2.0 rad/s`).
+- **Grip Manipulation of HUD Quad**:
+  - Holding the Grip button allows moving and rotating the virtual console in 3D space with 6DoF controller orientation.
+  - While gripping: Thumbstick Y adjusts distance along the controller beam; Thumbstick X scales the HUD quad size (`[0.25, 4.0]`).
 
 ---
 
