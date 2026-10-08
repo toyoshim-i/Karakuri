@@ -22,6 +22,8 @@ pub struct XrQuadRenderer {
 impl XrQuadRenderer {
     pub fn new(gl: &WebGl2RenderingContext) -> Result<Self, String> {
         let vs_source = r#"#version 300 es
+        precision highp float;
+        precision highp int;
         in vec3 a_position;
         in vec2 a_uv;
         uniform mat4 u_mvp;
@@ -34,6 +36,7 @@ impl XrQuadRenderer {
 
         let fs_source = r#"#version 300 es
         precision highp float;
+        precision highp int;
         in vec2 v_uv;
         uniform sampler2D u_texture;
         uniform vec2 u_cursor;
