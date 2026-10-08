@@ -198,12 +198,12 @@ impl FileSystem for MemoryFs {
                 .files
                 .write()
                 .map_err(|_| Error::other("lock poisoned"))?;
-            mem.insert(norm_to.clone(), data);
+            mem.insert(norm_to.clone(), data.clone());
             mem.remove(&norm_from);
         }
         if let Ok(provider_lock) = self.provider.read() {
             if let Some(ref provider) = *provider_lock {
-                provider.persist_rename(&norm_from, &norm_to);
+                provider.persist_rename(&norm_from, &norm_to, &data);
             }
         }
         Ok(())
@@ -337,6 +337,7 @@ mod tests {
     struct TestProvider {
         writes: AtomicUsize,
         removes: AtomicUsize,
+        renames: AtomicUsize,
     }
 
     impl StorageProvider for TestProvider {
@@ -346,8 +347,8 @@ mod tests {
         fn persist_remove(&self, _path: &Path) {
             self.removes.fetch_add(1, Ordering::SeqCst);
         }
-        fn persist_rename(&self, _from: &Path, _to: &Path) {
-            self.removes.fetch_add(1, Ordering::SeqCst);
+        fn persist_rename(&self, _from: &Path, _to: &Path, _bytes: &[u8]) {
+            self.renames.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -356,16 +357,17 @@ mod tests {
         let provider = Arc::new(TestProvider {
             writes: AtomicUsize::new(0),
             removes: AtomicUsize::new(0),
+            renames: AtomicUsize::new(0),
         });
         let fs = MemoryFs::with_provider(provider.clone());
 
         let test_path = Path::new(".karakuri/sets/test.kbset");
-        assert!(!fs.exists(test_path));
+        assert!(fs.metadata(test_path).is_err());
 
         // Write
         fs.write(test_path, b"hello karakuri")
             .expect("write succeeds");
-        assert!(fs.exists(test_path));
+        assert!(fs.metadata(test_path).is_ok());
         assert_eq!(fs.read_to_string(test_path).unwrap(), "hello karakuri");
         assert_eq!(provider.writes.load(Ordering::SeqCst), 1);
 
@@ -378,8 +380,9 @@ mod tests {
         // Rename
         let moved_path = Path::new(".karakuri/sets/moved.kbset");
         fs.rename(dest_path, moved_path).expect("rename succeeds");
-        assert!(!fs.exists(dest_path));
+        assert!(fs.metadata(dest_path).is_err());
         assert_eq!(fs.read_to_string(moved_path).unwrap(), "hello karakuri");
+        assert_eq!(provider.renames.load(Ordering::SeqCst), 1);
 
         // ReadDir
         let dir = Path::new(".karakuri/sets");
@@ -393,8 +396,8 @@ mod tests {
 
         // Remove
         fs.remove_file(test_path).expect("remove succeeds");
-        assert!(!fs.exists(test_path));
-        assert_eq!(provider.removes.load(Ordering::SeqCst), 2); // 1 from rename + 1 from remove_file
+        assert!(fs.metadata(test_path).is_err());
+        assert_eq!(provider.removes.load(Ordering::SeqCst), 1);
     }
 
     #[test]
