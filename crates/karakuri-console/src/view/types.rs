@@ -273,16 +273,16 @@ impl VrProjectionMode {
 
     pub const fn as_f32(self) -> f32 {
         match self {
-            Self::Wall => 0.0,
-            Self::Dome => 1.0,
-            Self::Kaleidosky => 2.0,
+            Self::Wall => 1.0,
+            Self::Dome => 2.0,
+            Self::Kaleidosky => 3.0,
         }
     }
 
     pub fn from_f32(val: f32) -> Self {
-        if val >= 1.5 {
+        if val >= 2.5 {
             Self::Kaleidosky
-        } else if val >= 0.5 {
+        } else if val >= 1.5 {
             Self::Dome
         } else {
             Self::Wall

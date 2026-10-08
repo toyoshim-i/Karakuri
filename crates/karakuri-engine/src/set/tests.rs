@@ -740,16 +740,31 @@ proc p4 {
         let (p4_0, c0) = run_mode(&mut set, 0.0);
         let (p4_1, c1) = run_mode(&mut set, 1.0);
         let (p4_2, c2) = run_mode(&mut set, 2.0);
+        let (p4_3, c3) = run_mode(&mut set, 3.0);
 
-        assert_ne!(p4_0, p4_1, "Dome mode should reproject corner point_coord");
-        assert_ne!(c0, c1, "Dome mode should reproject center point_coord");
+        // Mode 1.0 (Wall): Center ray [0, 0, -1] hits the center of the virtual wall screen.
+        assert!(
+            (c1[0] - 0.5).abs() < 0.05,
+            "Wall center X should be ~0.5, got {}",
+            c1[0]
+        );
+        assert!(
+            (c1[1] - 0.5).abs() < 0.05,
+            "Wall center Y should be ~0.5, got {}",
+            c1[1]
+        );
+
+        assert_ne!(p4_0, p4_1, "Wall mode should reproject corner point_coord");
         assert_ne!(
             p4_1, p4_2,
-            "Kaleidosky mode should reproject corner point_coord differently than Dome"
+            "Dome mode should reproject corner point_coord differently than Wall"
         );
         assert_ne!(
-            c1, c2,
-            "Kaleidosky mode should reproject center point_coord differently than Dome"
+            p4_2, p4_3,
+            "Kaleidosky mode should reproject corner point_coord differently than Dome"
         );
+        assert_ne!(c1, c2, "Dome center differs from Wall center");
+        assert_ne!(c2, c3, "Kaleidosky center differs from Dome center");
+        let _ = c0;
     }
 }
