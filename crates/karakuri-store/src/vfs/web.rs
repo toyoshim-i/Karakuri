@@ -78,6 +78,18 @@ export async function idb_delete(path) {
         req.onerror = (e) => reject(e.target.error);
     });
 }
+
+export async function idb_rename(fromPath, toPath, data) {
+    const db = await getDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        store.put(data, toPath);
+        store.delete(fromPath);
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e.target.error);
+    });
+}
 "#)]
 extern "C" {
     #[wasm_bindgen(catch)]
@@ -88,6 +100,13 @@ extern "C" {
 
     #[wasm_bindgen(catch)]
     fn idb_delete(path: &str) -> Result<js_sys::Promise, JsValue>;
+
+    #[wasm_bindgen(catch)]
+    fn idb_rename(
+        from: &str,
+        to: &str,
+        data: js_sys::Uint8Array,
+    ) -> Result<js_sys::Promise, JsValue>;
 }
 
 /// IndexedDB persistence provider for WebAssembly runtime.
@@ -115,9 +134,11 @@ impl StorageProvider for IndexedDbStorageProvider {
         }
     }
 
-    fn persist_rename(&self, from: &Path, _to: &Path) {
+    fn persist_rename(&self, from: &Path, to: &Path, bytes: &[u8]) {
         let from_str = from.to_string_lossy().to_string();
-        if let Ok(promise) = idb_delete(&from_str) {
+        let to_str = to.to_string_lossy().to_string();
+        let uint8 = js_sys::Uint8Array::from(bytes);
+        if let Ok(promise) = idb_rename(&from_str, &to_str, uint8) {
             wasm_bindgen_futures::spawn_local(async move {
                 let _ = JsFuture::from(promise).await;
             });

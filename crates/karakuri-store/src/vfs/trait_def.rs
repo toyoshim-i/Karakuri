@@ -63,8 +63,8 @@ pub trait StorageProvider: Send + Sync {
     /// Persists deletion of file at `path`.
     fn persist_remove(&self, path: &Path);
 
-    /// Persists file rename or move from `from` to `to`.
-    fn persist_rename(&self, from: &Path, to: &Path);
+    /// Persists file rename or move from `from` to `to` with final contents.
+    fn persist_rename(&self, from: &Path, to: &Path, bytes: &[u8]);
 }
 
 /// Default no-op storage provider (in-memory only).
@@ -73,5 +73,5 @@ pub struct NoopStorageProvider;
 impl StorageProvider for NoopStorageProvider {
     fn persist_write(&self, _path: &Path, _bytes: &[u8]) {}
     fn persist_remove(&self, _path: &Path) {}
-    fn persist_rename(&self, _from: &Path, _to: &Path) {}
+    fn persist_rename(&self, _from: &Path, _to: &Path, _bytes: &[u8]) {}
 }
