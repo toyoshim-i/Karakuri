@@ -1,0 +1,6 @@
+{"t":"set","id":"celestial_mandala","v":1}
+{"t":"part","layer":"L1","path":"halo_points.kir"}
+{"t":"part","layer":"L4","path":"celestial_mandala.kir"}
+{"t":"capacity","layer":"L1","value":256}
+{"t":"bind","layer":"L4","key":"pulse","signal":"energy","curve":"pow2","range":[0.0,1.5]}
+{"t":"bind","layer":"L4","key":"spin","signal":"tempo","curve":"lin","range":[0.1,1.0]}

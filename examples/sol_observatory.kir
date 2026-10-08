@@ -1,0 +1,107 @@
+// An orbital solar observatory and tactical celestial grid projected across the sky dome.
+// A blazing artificial sun hangs at the zenith with undulating coronal plasma prominences,
+// surrounded by calibrated elevation rings (+60 deg, +30 deg, 0 deg horizon) and an
+// azimuthal radar sweep scanning the sky for orbital telemetry.
+//
+// Tailored for the WebXR Built-in VR Dome & Kaleidosky projections (docs/vr-projection.md):
+// - Direct overhead view gazes into the synthetic coronal star.
+// - Accurately visualizes the celestial dome coordinate landmarks in space.
+// - In `Kaleidosky` mode, multiplies the radar and coronal loops into a crystalline sensor array.
+//
+//     cargo run -p karakuri -- examples/plain_points.kir examples/sol_observatory.kir
+
+proc sol_observatory {
+  kind  L4
+  blend additive
+
+  // Rotation speed of the 360-degree azimuthal radar sweep.
+  param sweep   : float [0.0, 3.0]    = 0.6
+
+  // Radius of the coronal sun core at the zenith.
+  param corona  : float [0.05, 0.4]   = 0.16
+
+  // Brightness of the tactical radar and telemetry grid.
+  param grid    : float [0.0, 3.0]    = 1.2
+
+  // Tactical amber / gold display color.
+  param amber   : vec3  [0.0, 2.0]    = vec3(1.0, 0.65, 0.20)
+
+  // Sensor phosphor green / cyan accent color.
+  param phosphor: vec3  [0.0, 2.0]    = vec3(0.20, 1.0, 0.60)
+
+  // Audio flare: erupts solar coronal prominence loops into high sky.
+  param flare   : float [0.0, 2.0]    = 0.0
+
+  // Audio ping: transient pulse flashing the radar sweep line and reticles.
+  param ping    : float [0.0, 2.0]    = 0.0
+
+  fragment {
+    // ---- Polar coordinate transform relative to Zenith (0.5, 0.5) --------
+    let p  = point_coord * 2.0 - vec2(1.0);
+    let r  = length(p);
+    let az = atan2(p.x, p.y + 0.000001);
+
+    let aa = fwidth(r) * 1.5 + 0.003;
+
+    // ---- 1. Zenith Coronal Star Core --------------------------------------
+    // Prominence loops undulating around the sun's circumference
+    let loop1 = 0.04 * sin(az * 7.0 + t * 3.5 + flare * 4.0);
+    let loop2 = 0.02 * cos(az * 13.0 - t * 5.0);
+    let r_sun = corona * (1.0 + 0.4 * flare) + loop1 + loop2;
+
+    // Intense solar disk and burning coronal limb
+    let sun_disk = smoothstep(r_sun + 0.02, r_sun * 0.4, r) * 2.5;
+    let limb     = exp(-abs(r - r_sun) * 24.0) * (1.5 + flare * 2.0);
+
+    // Erupting coronal rays streaming down from the zenith
+    let corona_rays = pow(0.5 + 0.5 * sin(az * 16.0 + t * 2.0), 8.0)
+                    * exp(-max(r - r_sun, 0.0) * 8.0) * (0.8 + flare * 1.5);
+
+    // ---- 2. Calibrated Elevation Radar Rings ------------------------------
+    // High sky ring (+60 deg elevation, r = 0.25)
+    let ring_60 = 1.0 - smoothstep(0.0, aa, abs(r - 0.25));
+    // Mid sky ring (+30 deg elevation, r = 0.50)
+    let ring_30 = 1.0 - smoothstep(0.0, aa, abs(r - 0.50));
+    // Astronomical horizon (0 deg elevation, r = 0.75)
+    let ring_00 = 1.0 - smoothstep(0.0, aa * 1.5, abs(r - 0.75));
+
+    // Concentric dashed degree tick marks on the horizon
+    let tick_az = step(0.70, fract(az * 24.0 / 6.2831853));
+    let tick_sub = (1.0 - smoothstep(0.0, aa, abs(r - 0.72))) * tick_az;
+
+    // ---- 3. Azimuthal Radar Scanner Sweep ---------------------------------
+    // Sweeping beam angle turning with time
+    let sweep_angle = t * sweep * 1.2 + beats * 0.1;
+    let sweep_delta = fract((az - sweep_angle) / 6.2831853);
+
+    // Sharp leading scanner ray with decaying phosphorescent wake
+    let scan_ray   = smoothstep(0.015, 0.0, sweep_delta) * (1.2 + ping * 2.0);
+    let scan_trail = exp(-sweep_delta * 14.0) * 0.45;
+    let radar_beam = (scan_ray + scan_trail) * smoothstep(r_sun, r_sun + 0.05, r);
+
+    // ---- 4. Orbital Telemetry Reticles ------------------------------------
+    // Rotating tracking reticles placed at 4 cardinal mid-sky coordinates
+    let reticle_a = fract((az + t * 0.1) * 4.0 / 6.2831853);
+    let reticle_dot = smoothstep(0.04, 0.0, abs(reticle_a - 0.5))
+                    * smoothstep(0.03, 0.0, abs(r - 0.50)) * (1.0 + ping * 2.5);
+
+    // Digital meridian crosshairs (North-South & East-West)
+    let cross_ns = smoothstep(aa, 0.0, abs(p.x)) * smoothstep(0.2, 0.8, r) * 0.4;
+    let cross_ew = smoothstep(aa, 0.0, abs(p.y)) * smoothstep(0.2, 0.8, r) * 0.4;
+
+    // Combine radar HUD elements
+    let hud_geom = (ring_60 * 0.6 + ring_30 * 0.8 + ring_00 * 1.0 + tick_sub + cross_ns + cross_ew)
+                 + radar_beam * 0.9 + reticle_dot * 1.5;
+
+    // ---- 5. Color Compositing & Horizon Soft Fade -------------------------
+    let col_sun = mix(amber, vec3(1.0, 0.95, 0.8), vec3(smoothstep(0.0, r_sun, r)));
+    let col_hud = mix(phosphor, amber, vec3(smoothstep(0.3, 0.75, r)));
+
+    var rgb = col_sun * (sun_disk + limb + corona_rays)
+            + col_hud * hud_geom * grid;
+
+    // Horizon rim falloff 30 deg below horizon
+    let rim = 1.0 - smoothstep(0.92, 1.0, r);
+    color = vec4(rgb * rim, 1.0);
+  }
+}
