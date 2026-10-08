@@ -130,7 +130,7 @@ pub mod camera {
     /// Byte size of `CameraState`.
     pub const STATE_SIZE: u64 = 48;
     /// Byte size of `Camera`.
-    pub const SIZE: u64 = 144;
+    pub const SIZE: u64 = 192;
 
     /// Host or compute shader camera output representation.
     ///
@@ -160,10 +160,16 @@ struct Camera {
     right: vec3<f32>,
     vr_facets: f32,
     up: vec3<f32>,
-    vr_spin: f32,
+    vr_pad0: f32,
     depth_range: vec2<f32>,
     vr_mirror: f32,
     vr_zoom: f32,
+    room_fwd: vec3<f32>,
+    vr_pad1: f32,
+    room_right: vec3<f32>,
+    vr_pad2: f32,
+    room_up: vec3<f32>,
+    vr_pad3: f32,
 };
 ";
 }

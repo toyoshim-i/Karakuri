@@ -650,7 +650,6 @@ impl App {
                     mode: self.readout.view.vr_projection.mode.as_f32(),
                     rings: self.readout.view.vr_projection.rings,
                     facets: self.readout.view.vr_projection.facets,
-                    spin: self.readout.view.vr_projection.spin,
                     mirror: self.readout.view.vr_projection.mirror,
                     zoom: self.readout.view.vr_projection.zoom,
                 };

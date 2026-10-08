@@ -296,8 +296,6 @@ pub struct VrConfig {
     pub rings: f32,
     /// Azimuthal M-division for radial symmetry in Kaleidosky (default 6.0)
     pub facets: f32,
-    /// Rotation speed around zenith in turns per beat (default 0.05)
-    pub spin: f32,
     /// 1.0 = ping-pong mirror reflection, 0.0 = cyclic repeat (default 1.0)
     pub mirror: f32,
     /// Scale zoom factor (default 1.0)
@@ -310,7 +308,6 @@ impl Default for VrConfig {
             mode: 0.0,
             rings: 4.0,
             facets: 6.0,
-            spin: 0.05,
             mirror: 1.0,
             zoom: 1.0,
         }

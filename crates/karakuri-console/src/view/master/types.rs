@@ -340,25 +340,17 @@ pub enum Added {
 pub enum VrParamKey {
     Rings,
     Facets,
-    Spin,
     Mirror,
     Zoom,
 }
 
 impl VrParamKey {
-    pub const ALL: [Self; 5] = [
-        Self::Rings,
-        Self::Facets,
-        Self::Spin,
-        Self::Mirror,
-        Self::Zoom,
-    ];
+    pub const ALL: [Self; 4] = [Self::Rings, Self::Facets, Self::Mirror, Self::Zoom];
 
     pub const fn label(self) -> &'static str {
         match self {
             Self::Rings => "rings",
             Self::Facets => "facets",
-            Self::Spin => "spin",
             Self::Mirror => "mirror",
             Self::Zoom => "zoom",
         }
@@ -368,7 +360,6 @@ impl VrParamKey {
         match self {
             Self::Rings => [1.0, 16.0],
             Self::Facets => [0.0, 16.0],
-            Self::Spin => [-2.0, 2.0],
             Self::Mirror => [0.0, 1.0],
             Self::Zoom => [0.2, 4.0],
         }
@@ -378,7 +369,6 @@ impl VrParamKey {
         match self {
             Self::Rings => proj.rings,
             Self::Facets => proj.facets,
-            Self::Spin => proj.spin,
             Self::Mirror => proj.mirror,
             Self::Zoom => proj.zoom,
         }
