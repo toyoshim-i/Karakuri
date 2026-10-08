@@ -789,3 +789,85 @@ fn the_press_handler_ungates_overloaded_deck_preview_cell() {
     assert_eq!(acted, Acted::Pointed);
     assert_eq!(readout.view.ungate_requested, Some(1));
 }
+
+#[test]
+fn the_press_handler_dispatches_vr_projection_controls_and_drags() {
+    let mut readout = Readout::new(1280.0, 800.0);
+    let ctx = crate::tests::drawn_once();
+    readout.view.master_out = Some(1.0);
+    readout.view.vr_mode = true;
+    readout.panel.solve();
+
+    let master_row = readout
+        .view
+        .master_row_layout(&ctx, readout.panel.layout())
+        .expect("master row exists");
+    let vr_stage = master_row.vr_stage.expect("vr_stage exists");
+
+    // 1. Initial state
+    assert_eq!(
+        readout.view.vr_projection.mode,
+        karakuri_console::view::VrProjectionMode::Wall
+    );
+
+    // 2. Click mode pill -> cycles to Dome
+    let pill_center = Point::new(vr_stage.mode_pill.center().x, vr_stage.mode_pill.center().y);
+    readout.pointer(&ctx, Pointer::Moved(pill_center));
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(acted, Acted::Pointed);
+    assert_eq!(
+        readout.view.vr_projection.mode,
+        karakuri_console::view::VrProjectionMode::Dome
+    );
+    readout.pointer(&ctx, Pointer::Up);
+
+    // 3. Click again -> cycles to Kaleidosky
+    readout.pointer(&ctx, Pointer::Moved(pill_center));
+    let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(acted, Acted::Pointed);
+    assert_eq!(
+        readout.view.vr_projection.mode,
+        karakuri_console::view::VrProjectionMode::Kaleidosky
+    );
+    readout.pointer(&ctx, Pointer::Up);
+
+    // 4. Test dragging a parameter slider (rings is params[0])
+    let ring_param = &vr_stage.params[0];
+    let track_start = Point::new(
+        ring_param.fader.track.min.x,
+        ring_param.fader.track.center().y,
+    );
+    let track_mid = Point::new(
+        ring_param.fader.track.center().x,
+        ring_param.fader.track.center().y,
+    );
+    let track_end = Point::new(
+        ring_param.fader.track.max.x,
+        ring_param.fader.track.center().y,
+    );
+
+    // Mouse down at track start (should set to low range: 1.0)
+    readout.pointer(&ctx, Pointer::Moved(track_start));
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(acted, Acted::Pointed);
+    assert!(readout.vr_drag.is_some());
+    assert_eq!(readout.view.vr_projection.rings, 1.0);
+
+    // Drag to middle (rings range is 1.0..16.0, mid is ~8.5)
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Moved(track_mid));
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(acted, Acted::Pointed);
+    assert!((readout.view.vr_projection.rings - 8.5).abs() < 0.5);
+
+    // Drag to end (high range: 16.0)
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Moved(track_end));
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(acted, Acted::Pointed);
+    assert_eq!(readout.view.vr_projection.rings, 16.0);
+
+    // Mouse up ends drag
+    readout.pointer(&ctx, Pointer::Up);
+    assert!(readout.vr_drag.is_none());
+}

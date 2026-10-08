@@ -19,10 +19,15 @@ impl Readout {
             _ => self.panel.cursor(),
         };
         // Evaluate claim before acting to preserve drag state consistency across events.
-        let mut claim = claim(&mut self.panel, ctx, &self.view, at);
+        let mut claim = if self.vr_drag.is_some() {
+            Claim::Panel
+        } else {
+            claim(&mut self.panel, ctx, &self.view, at)
+        };
         let mut did = Acted::Nothing;
         if matches!(event, Pointer::Down | Pointer::DoubleDown)
             && !self.panel.dragging()
+            && self.vr_drag.is_none()
             && !self.view.has_modal_overlay()
         {
             if let Some(bay) = karakuri_console::focus::bay_at(self.panel.layout(), at) {
@@ -63,10 +68,18 @@ impl Readout {
             // Update pointer coordinates and emit operation if dragging an active fader.
             (Pointer::Moved(p), _) => {
                 self.panel.set_cursor(p);
-                let fading = matches!(self.panel.in_hand(), Some(InHand::Fader));
-                let operation = self.moved(p);
-                if fading {
-                    did = Acted::Emitted(operation);
+                if let Some(drag) = self.vr_drag {
+                    let along = ((p.x - drag.track_min_x) / drag.track_width).clamp(0.0, 1.0);
+                    let [low, high] = drag.range;
+                    let value = low + (high - low) * along;
+                    self.view.set_vr_param(drag.key.label(), value);
+                    did = Acted::Pointed;
+                } else {
+                    let fading = matches!(self.panel.in_hand(), Some(InHand::Fader));
+                    let operation = self.moved(p);
+                    if fading {
+                        did = Acted::Emitted(operation);
+                    }
                 }
             }
             // Dispatches panel-claimed button-down to controls and focused bay handlers.
@@ -88,7 +101,11 @@ impl Readout {
                 return (claim, did);
             }
             // Resolve drop target for carried items across mixer, program bay, and master chain (ADR-0273).
-            (Pointer::Up, Claim::Panel) => {
+            (Pointer::Up, _) => {
+                self.vr_drag = None;
+                if claim != Claim::Panel {
+                    return (claim, did);
+                }
                 let onto = match self.panel.in_hand() {
                     Some(InHand::Carrying) => mixer_bay(ctx, self.panel.layout(), &self.view.mixer)
                         .as_ref()
@@ -172,7 +189,7 @@ impl Readout {
                     did = self.menued(ask);
                 }
             }
-            (Pointer::Down | Pointer::DoubleDown | Pointer::Up | Pointer::Secondary, _) => {}
+            (Pointer::Down | Pointer::DoubleDown | Pointer::Secondary, _) => {}
         }
         (claim, did)
     }
