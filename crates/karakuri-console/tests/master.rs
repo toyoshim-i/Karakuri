@@ -792,7 +792,7 @@ fn master_vr_projection_stage_lifecycle() {
     let vr = row_vr.vr_stage.as_ref().expect("vr_stage exists");
     assert_eq!(vr.mode, VrProjectionMode::Wall);
     assert!(!vr.is_folded);
-    assert_eq!(vr.params.len(), 5);
+    assert_eq!(vr.params.len(), 4);
 
     // 3. Test fold toggling
     v.toggle_vr_projection_fold();

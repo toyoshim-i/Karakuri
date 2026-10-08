@@ -237,7 +237,6 @@ impl View {
         match key {
             "rings" => self.vr_projection.rings = value,
             "facets" => self.vr_projection.facets = value,
-            "spin" => self.vr_projection.spin = value,
             "mirror" => self.vr_projection.mirror = value,
             "zoom" => self.vr_projection.zoom = value,
             _ => return false,
@@ -304,7 +303,6 @@ pub struct VrProjection {
     pub mode: VrProjectionMode,
     pub rings: f32,
     pub facets: f32,
-    pub spin: f32,
     pub mirror: f32,
     pub zoom: f32,
 }
@@ -315,7 +313,6 @@ impl Default for VrProjection {
             mode: VrProjectionMode::Wall,
             rings: 4.0,
             facets: 6.0,
-            spin: 0.05,
             mirror: 1.0,
             zoom: 1.0,
         }

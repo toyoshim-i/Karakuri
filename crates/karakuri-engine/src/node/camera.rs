@@ -350,12 +350,7 @@ impl Camera {
         for (at, value) in m.view.iter().chain(m.proj.iter()).flatten().enumerate() {
             bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
         }
-        let cfg0 = [
-            m.vr_config.mode,
-            m.vr_config.rings,
-            m.vr_config.facets,
-            m.vr_config.spin,
-        ];
+        let cfg0 = [m.vr_config.mode, m.vr_config.rings, m.vr_config.facets, 0.0];
         let cfg1 = [m.vr_config.mirror, m.vr_config.zoom, 0.0, 0.0];
         for (at, value) in cfg0.iter().chain(cfg1.iter()).enumerate() {
             bytes[128 + at * 4..128 + at * 4 + 4].copy_from_slice(&value.to_le_bytes());

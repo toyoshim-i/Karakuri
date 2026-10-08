@@ -661,7 +661,6 @@ proc p4 {
                     mode,
                     rings: 4.0,
                     facets: 6.0,
-                    spin: 0.0,
                     mirror: 1.0,
                     zoom: 1.0,
                 },
