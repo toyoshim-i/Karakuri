@@ -139,37 +139,45 @@ impl CliSelection {
 
 /// Resolves the file path of `cmd` if found on PATH or as a direct executable file.
 pub fn resolve_executable(cmd: &str) -> Option<std::path::PathBuf> {
-    if cmd.is_empty() {
-        return None;
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = cmd;
+        None
     }
-
-    // Direct path specified with slashes
-    if cmd.contains('/') || (cfg!(windows) && cmd.contains('\\')) {
-        let p = std::path::PathBuf::from(cmd);
-        if is_executable_file(&p) {
-            return Some(p);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if cmd.is_empty() {
+            return None;
         }
-        return None;
-    }
 
-    let path_var = std::env::var_os("PATH")?;
-
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(cmd);
-        if is_executable_file(&candidate) {
-            return Some(candidate);
+        // Direct path specified with slashes
+        if cmd.contains('/') || (cfg!(windows) && cmd.contains('\\')) {
+            let p = std::path::PathBuf::from(cmd);
+            if is_executable_file(&p) {
+                return Some(p);
+            }
+            return None;
         }
-        #[cfg(windows)]
-        {
-            for ext in &["exe", "cmd", "bat"] {
-                let with_ext = dir.join(format!("{cmd}.{ext}"));
-                if is_executable_file(&with_ext) {
-                    return Some(with_ext);
+
+        let path_var = std::env::var_os("PATH")?;
+
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(cmd);
+            if is_executable_file(&candidate) {
+                return Some(candidate);
+            }
+            #[cfg(windows)]
+            {
+                for ext in &["exe", "cmd", "bat"] {
+                    let with_ext = dir.join(format!("{cmd}.{ext}"));
+                    if is_executable_file(&with_ext) {
+                        return Some(with_ext);
+                    }
                 }
             }
         }
+        None
     }
-    None
 }
 
 /// Checks whether `cmd` exists and is executable on the system PATH.
@@ -177,6 +185,7 @@ pub fn is_executable_on_path(cmd: &str) -> bool {
     resolve_executable(cmd).is_some()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn is_executable_file(path: &std::path::Path) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
