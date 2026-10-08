@@ -51,7 +51,7 @@ fn what_one_estimate_costs() {
     // extrapolate. Timed over a whole interval so the answer is what a
     // second of audio costs rather than what the lucky push costs.
     let pushes = (ESTIMATE_INTERVAL_SECONDS / hop).ceil() as u32;
-    let start = std::time::Instant::now();
+    let start = web_time::Instant::now();
     for i in 0..pushes {
         tracker.push((i % 47) as f32 * 0.01);
     }

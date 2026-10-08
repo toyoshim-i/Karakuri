@@ -9,7 +9,7 @@ Usage:
     (default port is 8080)
 """
 
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
 import sys
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         print("Please run `trunk build` first.")
         sys.exit(1)
 
-    server = HTTPServer(("0.0.0.0", PORT), DevServerHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), DevServerHandler)
     print(f"\033[32m=== Karakuri Dev Server & Log Relay running on http://0.0.0.0:{PORT} ===\033[0m")
     print(f"Serving web app from: {DIST_DIR}")
     print(f"Log endpoint: http://0.0.0.0:{PORT}/log (Same-Origin)")

@@ -601,7 +601,7 @@ mod tests {
     fn what_one_hop_of_analysis_costs() {
         let signal = noise(BLOCK * 200, 5);
         let mut analyzer = Analyzer::new(RATE);
-        let start = std::time::Instant::now();
+        let start = web_time::Instant::now();
         let mut sink = 0.0f32;
         for block in signal.chunks_exact(BLOCK) {
             sink += analyzer.analyze(block).novelty;
