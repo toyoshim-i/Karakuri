@@ -61,7 +61,7 @@ fn derive() {
     derived.eye = eye;
     derived.vr_mode = 0.0;
     derived.fwd = f;
-    derived.vr_rings = 4.0;
+    derived.vr_rings = 1.0;
     derived.right = s * (half * canvas.aspect);
     derived.vr_facets = 6.0;
     derived.up = u * half;

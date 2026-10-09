@@ -320,7 +320,7 @@ impl Default for VrProjection {
         Self {
             mode: VrProjectionMode::Wall,
             zoom: 1.0,
-            rings: 4.0,
+            rings: 1.0,
             facets: 6.0,
             mirror: 1.0,
             stars: 1.0,

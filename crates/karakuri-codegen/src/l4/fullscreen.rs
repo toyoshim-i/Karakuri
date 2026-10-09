@@ -141,28 +141,41 @@ pub(super) fn generate_fullscreen(
                 discard;
             }
             let theta = acos(clamp(room_ray.y, -0.5, 1.0));
-            let r = theta / 2.0943951;
-            let a = atan2(room_ray.x, -room_ray.z);
-            let a_norm = (a / 6.2831853 + 0.5) % 1.0;
-
-            let r_scaled = r * cam.vr_rings * 0.5 * max(cam.vr_zoom, 0.01);
-            let r_frac = fract(r_scaled);
-            var r_tiled = r_frac;
-            if cam.vr_mirror >= 0.5 {
-                r_tiled = abs(r_frac * 2.0 - 1.0);
+            var r = (theta / 2.0943951) * max(cam.vr_zoom, 0.01);
+            if r > 1.0 {
+                discard;
             }
 
-            var a_tiled = a_norm;
-            if cam.vr_facets >= 1.0 {
-                let a_scaled = a_norm * cam.vr_facets * 0.5;
-                let a_frac = fract(a_scaled);
+            // Radial concentric ring repeat (when vr_rings > 1.05)
+            if cam.vr_rings > 1.05 {
+                let r_scaled = r * cam.vr_rings * 0.5;
+                let r_frac = fract(r_scaled);
                 if cam.vr_mirror >= 0.5 {
-                    a_tiled = abs(a_frac * 2.0 - 1.0);
+                    r = abs(r_frac * 2.0 - 1.0);
                 } else {
-                    a_tiled = a_frac;
+                    r = r_frac;
                 }
             }
-            point_coord = vec2<f32>(a_tiled, r_tiled);
+
+            // Radial angular kaleidoscope (放射状の分割・ミラー反転)
+            let a = atan2(room_ray.x, -room_ray.z);
+            let facets = max(floor(cam.vr_facets), 1.0);
+            let sector = 6.2831853 / facets;
+            let half_sector = sector * 0.5;
+            // Align petal axis with forward look direction (a = 0)
+            let a_norm = ((a + half_sector) % 6.2831853 + 6.2831853) % 6.2831853;
+            let u = a_norm / sector;
+            let u_frac = fract(u);
+            var a_folded: f32;
+            if cam.vr_mirror >= 0.5 {
+                a_folded = abs(u_frac * 2.0 - 1.0) * half_sector;
+            } else {
+                a_folded = u_frac * sector;
+            }
+
+            // Reconstruct 2D polar projection centered at Zenith (0.5, 0.5)
+            let q = r * vec2<f32>(sin(a_folded), cos(a_folded));
+            point_coord = q * 0.5 + 0.5;
         }
     }
 "#,

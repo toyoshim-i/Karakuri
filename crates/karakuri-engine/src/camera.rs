@@ -306,7 +306,7 @@ impl Default for VrConfig {
     fn default() -> Self {
         Self {
             mode: 0.0,
-            rings: 4.0,
+            rings: 1.0,
             facets: 6.0,
             mirror: 1.0,
             zoom: 1.0,
