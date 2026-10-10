@@ -15,7 +15,9 @@ use crate::transport::{Sync, Transport};
 
 pub mod frame;
 pub mod mixer;
+mod stereo;
 pub mod types;
+mod watchdog;
 
 pub use frame::Frame;
 pub(crate) use frame::{make_slot_target, StagedSlotControl};
@@ -55,6 +57,7 @@ pub struct Deck {
     pub(crate) watchdog_threshold_ms: f32,
     pub(crate) watchdog_warmup: Duration,
     pub(crate) watchdog_sustained: Duration,
+    pub(crate) watchdog_grace_until: Option<Instant>,
     pub(crate) last_frame_at: Option<Instant>,
     pub(crate) last_frame_dt_ms: Option<f32>,
 }
@@ -135,126 +138,12 @@ impl Deck {
             watchdog_threshold_ms: DEFAULT_WATCHDOG_THRESHOLD_MS,
             watchdog_warmup: DEFAULT_WATCHDOG_WARMUP,
             watchdog_sustained: DEFAULT_WATCHDOG_SUSTAINED,
+            watchdog_grace_until: None,
             last_frame_at: None,
             last_frame_dt_ms: None,
         };
         deck.set_measure_size((width, height));
         deck
-    }
-
-    /// Returns the live Set to render for WebXR stereo world display, prioritizing target_slot,
-    /// then Live slots, then the first available slot.
-    fn active_stereo_set_mut(
-        &mut self,
-        target_slot: Option<DeckSlot>,
-    ) -> Option<&mut crate::set::Set> {
-        let slot_idx = if let Some(target) = target_slot {
-            if target.index() < self.slots.len() && !self.slots[target.index()].swap.overloaded() {
-                Some(target.index())
-            } else {
-                None
-            }
-        } else {
-            self.slots
-                .iter()
-                .position(|s| !s.swap.overloaded() && s.online && s.opacity > 0.0)
-                .or_else(|| {
-                    self.slots
-                        .iter()
-                        .position(|s| s.effective == Residency::Live && !s.swap.overloaded())
-                })
-                .or_else(|| (!self.slots.is_empty()).then_some(0))
-        };
-
-        slot_idx.map(|i| self.slots[i].swap.live_mut())
-    }
-
-    /// Returns the viewport of the Set [`Deck::draw_stereo_eye`] would draw.
-    ///
-    /// A stereo eye target must be exactly this size: the Set's own depth,
-    /// weighted-transparency and merge targets are, and a render pass whose
-    /// attachments differ in size is a validation error.
-    pub fn stereo_viewport(&mut self, target_slot: Option<DeckSlot>) -> Option<(u32, u32)> {
-        self.active_stereo_set_mut(target_slot)
-            .map(|set| set.viewport())
-            .or_else(|| (self.width > 0 && self.height > 0).then_some((self.width, self.height)))
-    }
-
-    /// Returns the deck's configured surface dimensions `(width, height)`.
-    pub fn size(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
-
-    /// Records rasterization pass for a single stereo eye into a specified viewport.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_stereo_eye(
-        &mut self,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        depth_view: Option<&wgpu::TextureView>,
-        target_slot: Option<DeckSlot>,
-        matrices: &crate::camera::StereoMatrices,
-        first: bool,
-        viewport: (f32, f32, f32, f32),
-    ) {
-        if let Some(set) = self.active_stereo_set_mut(target_slot) {
-            set.draw_stereo_eye(
-                queue, encoder, target, depth_view, matrices, first, viewport,
-            );
-        }
-    }
-
-    /// The L5 input of the Set [`Deck::draw_stereo_eye`] draws, or `None`
-    /// where it has no L5s; see [`crate::set::Set::l5_input`].
-    pub fn stereo_l5_input(&mut self, target_slot: Option<DeckSlot>) -> Option<&wgpu::TextureView> {
-        self.active_stereo_set_mut(target_slot)?.l5_input()
-    }
-
-    /// Runs that Set's L5s for a stereo eye; see
-    /// [`crate::set::Set::record_l5s_unheld`].
-    pub fn record_stereo_l5s(
-        &mut self,
-        target_slot: Option<DeckSlot>,
-        encoder: &mut wgpu::CommandEncoder,
-        out: &wgpu::TextureView,
-    ) {
-        if let Some(set) = self.active_stereo_set_mut(target_slot) {
-            set.record_l5s_unheld(encoder, out);
-        }
-    }
-
-    /// Returns true if the active stereo set in the deck mix is purely Fullscreen topology.
-    pub fn is_fullscreen_stereo(&self) -> bool {
-        let active_slots: Vec<DeckSlot> = (0..self.slots.len())
-            .map(|i| DeckSlot(i as u8))
-            .filter(|&slot| self.is_in_mix(slot) && !self.overloaded(slot))
-            .collect();
-        if active_slots.is_empty() {
-            let Some(first) = self.slots.first() else {
-                return false;
-            };
-            let topos = first.swap.live().drawn_topologies();
-            return !topos.is_empty()
-                && topos
-                    .iter()
-                    .all(|&t| t == karakuri_ir::Topology::Fullscreen);
-        }
-        let mut has_fullscreen = false;
-        for &slot in &active_slots {
-            let topos = self.slot(slot).live().drawn_topologies();
-            if topos.is_empty() {
-                continue;
-            }
-            for topo in topos {
-                if topo == karakuri_ir::Topology::Fullscreen {
-                    has_fullscreen = true;
-                } else {
-                    return false;
-                }
-            }
-        }
-        has_fullscreen
     }
 
     /// Sets the measurement resolution for all slot build workers and profilers.
@@ -482,84 +371,6 @@ impl Deck {
         slot.requested == Residency::Priming && slot.effective == Residency::Allocated
     }
 
-    /// Returns true if the slot has been stopped by the performance watchdog.
-    pub fn overloaded(&self, slot: DeckSlot) -> bool {
-        self.slots[slot.index()].swap.overloaded()
-    }
-
-    /// Sets whether the specified slot is stopped due to budget overload gating.
-    pub fn set_overloaded(&mut self, slot: DeckSlot, overloaded: bool) {
-        if let Some(s) = self.slots.get_mut(slot.index()) {
-            s.swap.set_overloaded(overloaded);
-        }
-    }
-
-    /// Evaluates runtime performance watchdog against `watchdog_threshold_ms`.
-    ///
-    /// Automatically gates active live slots if the rolling median frame period
-    /// continuously exceeds the overload threshold (e.g. dropping below 20 FPS)
-    /// for at least `watchdog_sustained` (default 1.0 second), after an initial
-    /// startup grace period (`watchdog_warmup`, default 3.0 seconds).
-    /// Halts updates to preserve console responsiveness.
-    /// Returns the index of the gated slot if a gating decision occurred.
-    pub fn watchdog_gate(&mut self) -> Option<usize> {
-        let now = Instant::now();
-        // Warmup grace period: ignore gating during initial startup
-        if now.duration_since(self.started_at) < self.watchdog_warmup {
-            self.overload_since = None;
-            return None;
-        }
-
-        let dt_ms = self
-            .last_frame_at
-            .map(|t| now.duration_since(t).as_secs_f32() * 1000.0);
-        let period = self
-            .last_frame_dt_ms
-            .into_iter()
-            .chain(dt_ms)
-            .chain(self.frame_period_ms())
-            .fold(0.0f32, f32::max);
-        if period <= 0.0 {
-            return None;
-        }
-        if period >= self.watchdog_threshold_ms {
-            let frame_duration = Duration::from_secs_f32(period / 1000.0);
-            let start = *self
-                .overload_since
-                .get_or_insert_with(|| now.checked_sub(frame_duration).unwrap_or(now));
-            if now.duration_since(start) >= self.watchdog_sustained {
-                let to_gate = self
-                    .activation_order
-                    .iter()
-                    .rev()
-                    .copied()
-                    .find(|&slot_idx| {
-                        if let Some(s) = self.slots.get(slot_idx) {
-                            let in_mix = s.online && s.opacity > 0.0;
-                            s.effective == Residency::Live && !s.swap.overloaded() && in_mix
-                        } else {
-                            false
-                        }
-                    })
-                    .or_else(|| {
-                        self.slots.iter().enumerate().rev().find_map(|(i, s)| {
-                            (s.effective == Residency::Live && !s.swap.overloaded()).then_some(i)
-                        })
-                    });
-
-                if let Some(slot_idx) = to_gate {
-                    self.slots[slot_idx].swap.set_overloaded(true);
-                    // Reset overload timer so subsequent gates require another sustained duration
-                    self.overload_since = None;
-                    return Some(slot_idx);
-                }
-            }
-        } else {
-            self.overload_since = None;
-        }
-        None
-    }
-
     /// Requests a residency level for the specified slot.
     pub fn set_residency(&mut self, slot: DeckSlot, residency: Residency) {
         self.slots[slot.index()].requested = residency;
@@ -656,24 +467,6 @@ impl Deck {
     /// Returns the target frame duration budget in milliseconds.
     pub fn frame_budget_ms(&self) -> f32 {
         self.frame_budget_ms
-    }
-
-    /// Sets the frame period threshold in milliseconds for watchdog overload gating.
-    pub fn set_watchdog_threshold_ms(&mut self, threshold_ms: f32) {
-        if threshold_ms.is_finite() && threshold_ms > 0.0 {
-            self.watchdog_threshold_ms = threshold_ms;
-        }
-    }
-
-    /// Returns the frame period threshold in milliseconds for watchdog overload gating.
-    pub fn watchdog_threshold_ms(&self) -> f32 {
-        self.watchdog_threshold_ms
-    }
-
-    /// Configures the warmup grace period and sustained period overrun duration for watchdog gating.
-    pub fn set_watchdog_timing(&mut self, warmup: Duration, sustained: Duration) {
-        self.watchdog_warmup = warmup;
-        self.watchdog_sustained = sustained;
     }
 
     /// Sets the master chain's summed `ops_per_fragment`.

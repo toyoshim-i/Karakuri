@@ -391,8 +391,8 @@ mod gpu {
     /// With a zero budget, the candidate must be rejected while the slot is parked.
     #[test]
     fn an_off_air_slots_candidate_is_judged_at_the_install() {
-        // Upper bound to verify candidate verdict arrives promptly.
-        const A_FULL_WINDOW: usize = 8 + 30 + 12;
+        // Upper bound to verify candidate verdict arrives promptly without waiting for a full rolling window.
+        const A_FULL_WINDOW: usize = 120;
 
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);

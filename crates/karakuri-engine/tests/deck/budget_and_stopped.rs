@@ -582,6 +582,36 @@ mod gpu {
         assert!(deck.overloaded(karakuri_engine::DeckSlot(0)));
     }
 
+    /// Verifies that granting watchdog grace suppresses overload gating across transient hitches.
+    #[test]
+    fn watchdog_suppresses_gating_during_granted_grace_period() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(build(&gpu, SEED_A, CAPACITY))],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_watchdog_threshold_ms(50.0);
+        deck.set_watchdog_timing(Duration::ZERO, Duration::from_millis(50));
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
+
+        // Grant 2 seconds of grace (simulating auxiliary window open / close)
+        deck.grant_watchdog_grace(Duration::from_secs(2));
+
+        // Run a slow frame that sleeps 60 ms
+        let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
+        std::thread::sleep(Duration::from_millis(60));
+        f.render(present.mix_target(), present.size(), 1);
+        f.finish();
+
+        // Gating must NOT trigger during grace period!
+        assert_eq!(deck.watchdog_gate(), None);
+        assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
+    }
+
     /// Verifies that soloing a slot promotes its requested and effective residency
     /// to Live so that it is properly displayed on air.
     #[test]

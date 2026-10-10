@@ -38,11 +38,17 @@ impl App {
                         w.request_redraw();
                     }
                 }
+                gfx.engine
+                    .deck
+                    .grant_watchdog_grace(std::time::Duration::from_secs(2));
                 self.costs.owes();
                 gfx.window.request_redraw();
                 true
             }
             WindowEvent::CloseRequested => {
+                gfx.engine
+                    .deck
+                    .grant_watchdog_grace(std::time::Duration::from_secs(3));
                 if let Some(line) = routed(gfx, event_loop, Output::Projector(0), false) {
                     println!("{line}");
                 }

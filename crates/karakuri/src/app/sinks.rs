@@ -88,6 +88,14 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     pub fn attach_projector(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
         if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(3));
+            for slot in 0..gfx.engine.deck.slot_count() {
+                gfx.engine
+                    .deck
+                    .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+            }
             let caps = surface.get_capabilities(&gfx.gpu.adapter);
             let format = caps
                 .formats
@@ -126,6 +134,14 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     pub fn detach_projector(&mut self) {
         if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(3));
+            for slot in 0..gfx.engine.deck.slot_count() {
+                gfx.engine
+                    .deck
+                    .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+            }
             gfx.projector = None;
             gfx.window.request_redraw();
         }
@@ -136,6 +152,9 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     pub fn resize_projector(&mut self, size: (u32, u32)) {
         if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(2));
             if let Some(projector) = gfx.projector.as_mut() {
                 let at = (size.0.max(1), size.1.max(1));
                 projector.sink.resize(&gfx.gpu.device, at.0, at.1);

@@ -313,9 +313,20 @@ impl App {
             }
             #[cfg(target_arch = "wasm32")]
             if matches!(output, karakuri_operation::Output::Projector(_)) {
+                if let Some(ref mut gfx) = self.gfx {
+                    gfx.engine
+                        .deck
+                        .grant_watchdog_grace(std::time::Duration::from_secs(3));
+                }
                 if let Some(ref mut hook) = self.projector_route_hook {
                     hook(on);
                 }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            if matches!(output, karakuri_operation::Output::Projector(_)) {
+                gfx.engine
+                    .deck
+                    .grant_watchdog_grace(std::time::Duration::from_secs(3));
             }
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(line) = routed(gfx, _event_loop, output, on) {
