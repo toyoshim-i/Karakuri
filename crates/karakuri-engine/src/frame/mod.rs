@@ -171,7 +171,14 @@ impl Sink for WindowSink {
             }
         };
         self.faulted = false;
-        let view = texture.texture.create_view(&Default::default());
+        let view = if let Some(&view_format) = self.config.view_formats.first() {
+            texture.texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(view_format),
+                ..Default::default()
+            })
+        } else {
+            texture.texture.create_view(&Default::default())
+        };
         self.current = Some((texture, view));
         Ok(())
     }

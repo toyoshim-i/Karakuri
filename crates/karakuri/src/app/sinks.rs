@@ -88,15 +88,27 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     pub fn attach_projector(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
         if let Some(ref mut gfx) = self.gfx {
+            let caps = surface.get_capabilities(&gfx.gpu.adapter);
+            let format = caps
+                .formats
+                .iter()
+                .copied()
+                .find(|f| !f.is_srgb())
+                .unwrap_or(caps.formats[0]);
+            let view_formats = if format != gfx.picture_format {
+                vec![gfx.picture_format]
+            } else {
+                vec![]
+            };
             let config = wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: gfx.picture_format,
+                format,
                 color_space: wgpu::SurfaceColorSpace::Auto,
                 width: size.0.max(1),
                 height: size.1.max(1),
                 present_mode: wgpu::PresentMode::Fifo,
-                alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-                view_formats: vec![],
+                alpha_mode: caps.alpha_modes[0],
+                view_formats,
                 desired_maximum_frame_latency: 2,
             };
             surface.configure(&gfx.gpu.device, &config);
