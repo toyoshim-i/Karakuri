@@ -337,20 +337,26 @@ pub(crate) fn listing(
         }
         // Starred sets and procedures intersection (ADR-0299, ADR-0338).
         Scope::MySets => {
+            let is_starred_set =
+                |id: &str| view.starred.contains(id) || view.starred.contains(&format!("set:{id}"));
+            let is_starred_proc = |name: &str| {
+                view.starred.contains(&format!("proc:{name}"))
+                    || (view.starred.contains(name) && !is_starred_set(name))
+            };
             let mut rows: Vec<(String, RowKind, std::time::SystemTime)> = held
                 .iter()
-                .filter(|set| view.starred.contains(&set.id))
+                .filter(|set| is_starred_set(&set.id))
                 .filter(|set| narrows(set, holds.as_deref(), layer))
                 .map(|set| (set.id.clone(), set_row(set), set.written))
                 .chain(
                     kept.iter()
-                        .filter(|kept| view.starred.contains(&kept.name))
+                        .filter(|kept| is_starred_proc(&kept.name))
                         .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
                 )
                 .chain(
                     presets_listing(presets)
                         .into_iter()
-                        .filter(|preset| view.starred.contains(&preset.id))
+                        .filter(|preset| is_starred_set(&preset.id))
                         .map(|preset| {
                             let kind = preset_set_row(&preset.path);
                             let written = karakuri_store::fs::metadata(&preset.path)
@@ -362,7 +368,7 @@ pub(crate) fn listing(
                 .chain(
                     presets_procedures(presets)
                         .into_iter()
-                        .filter(|shipped| view.starred.contains(&shipped.name))
+                        .filter(|shipped| is_starred_proc(&shipped.name))
                         .map(|shipped| {
                             let kind = shipped_row(&shipped);
                             let written = karakuri_store::fs::metadata(&shipped.file)
@@ -374,7 +380,7 @@ pub(crate) fn listing(
                 .chain(
                     karakuri_environment::mix::shipped::ALL
                         .iter()
-                        .filter(|(name, _)| view.starred.contains(*name))
+                        .filter(|(name, _)| is_starred_proc(name))
                         .map(|(name, _)| {
                             (
                                 (*name).to_string(),
@@ -389,7 +395,7 @@ pub(crate) fn listing(
                 .filter(|(_, kind, _)| kinds.matches_row(&kind.badges, kind.procedure))
                 .collect();
             let mut seen = std::collections::BTreeSet::new();
-            rows.retain(|(name, _, _)| seen.insert(name.clone()));
+            rows.retain(|(name, kind, _)| seen.insert((name.clone(), kind.procedure)));
             // Sort by modification time descending, breaking ties alphabetically by name.
             rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
             rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()

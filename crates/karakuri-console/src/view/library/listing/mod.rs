@@ -25,3 +25,22 @@ pub use menu::*;
 pub use reading::*;
 pub(crate) use render::*;
 pub use rows::*;
+
+/// Returns the persistent favourite key stored in `favourites.json` for an item.
+/// Procedures are prefixed with `proc:` to prevent name collisions with Sets.
+pub fn favourite_key(name: &str, is_proc: bool) -> String {
+    if is_proc {
+        format!("proc:{name}")
+    } else {
+        name.to_string()
+    }
+}
+
+/// Checks whether an item is starred in the favourites set, supporting legacy entries.
+pub fn is_starred(starred: &std::collections::BTreeSet<String>, name: &str, is_proc: bool) -> bool {
+    if is_proc {
+        starred.contains(&format!("proc:{name}"))
+    } else {
+        starred.contains(name) || starred.contains(&format!("set:{name}"))
+    }
+}

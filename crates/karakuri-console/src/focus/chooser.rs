@@ -509,16 +509,22 @@ fn state(
         }),
         // -- the Library ---------------------------------------------------
         Control::Scope => Asked::Scope,
-        Control::Star => match view.rows().set(item.unwrap_or(1) - 1) {
-            Some(id) => Asked::Emitted(Operation::SetFavourite {
-                id: id.to_owned(),
-                favourite: !view.starred.contains(id),
-            }),
-            None => Asked::Nothing(
-                "this row is not a Set, so there is nothing to star — a row of history is a \
-                 version",
-            ),
-        },
+        Control::Star => {
+            let row = item.unwrap_or(1) - 1;
+            match view.rows().name(row) {
+                Some(id) => {
+                    let is_proc = view.rows().procedure(row);
+                    let on = crate::view::is_starred(&view.starred, id, is_proc);
+                    Asked::Emitted(Operation::SetFavourite {
+                        id: crate::view::favourite_key(id, is_proc),
+                        favourite: !on,
+                    })
+                }
+                None => {
+                    Asked::Nothing("this row cannot be starred — a row of history is a version")
+                }
+            }
+        }
         // -- the Transport -------------------------------------------------
         Control::Tonemap => match view.look {
             Some(look) => Asked::Emitted(Operation::SetTonemap {

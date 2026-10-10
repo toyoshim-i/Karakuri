@@ -127,7 +127,8 @@ pub(crate) fn row_into(
         false => pal.dim,
     };
     // Star indicator: sun when starred, faint outline when unstarred (ADR-0299, ADR-0338).
-    let on = starred.contains(name);
+    let is_proc = rows.procedure(index);
+    let on = super::is_starred(starred, name, is_proc);
     star_mark(
         &painter,
         bay.star(index).center(),

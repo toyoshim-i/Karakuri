@@ -204,13 +204,13 @@ frag
     listing(&mut view, &store_root, Some(&presets), None, None);
 
     assert!(
-        view.starred.contains("sample_fx"),
-        "starred set should contain sample_fx: {:?}",
+        view.starred.contains("proc:sample_fx"),
+        "starred set should contain proc:sample_fx: {:?}",
         view.starred
     );
     assert!(
-        view.starred.contains("zoom_blur"),
-        "starred set should contain zoom_blur: {:?}",
+        view.starred.contains("proc:zoom_blur"),
+        "starred set should contain proc:zoom_blur: {:?}",
         view.starred
     );
     assert!(
@@ -236,6 +236,118 @@ frag
     assert!(
         !view.library.contains(&"sample_fx".to_owned()),
         "MySets should not list unstarred procedure sample_fx"
+    );
+
+    let _ = std::fs::remove_dir_all(&test_dir);
+}
+
+#[test]
+fn starring_set_and_procedure_with_identical_name_operates_independently() {
+    let test_dir =
+        std::env::temp_dir().join(format!("karakuri_star_collision_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&test_dir);
+    let store_root = test_dir.join("store");
+    let store = karakuri_store::Store::open(&store_root).expect("open store");
+
+    // Write a Set "audio_bloom" and a Procedure "audio_bloom"
+    store
+        .write_set(
+            "audio_bloom",
+            &[karakuri_store::Line::new(karakuri_store::Record::Set {
+                id: "audio_bloom".into(),
+                v: 1,
+            })],
+        )
+        .expect("write set");
+    store
+        .write_procedure(
+            "audio_bloom",
+            b"proc audio_bloom { kind L5 }\nparams\n  f 1.0 [0, 1]\nfrag\n  return texture(src, uv);\n",
+        )
+        .expect("write procedure");
+    drop(store);
+
+    let mut view = View::new(karakuri_console::room::Room::Day);
+    view.scopes = karakuri_console::view::Scope::ALL.to_vec();
+    view.select_scope(karakuri_console::view::Scope::AllSets);
+
+    // 1. Initial listing: both exist under AllSets, neither is starred
+    listing(&mut view, &store_root, None, None, None);
+    assert!(!karakuri_console::view::is_starred(
+        &view.starred,
+        "audio_bloom",
+        false
+    ));
+    assert!(!karakuri_console::view::is_starred(
+        &view.starred,
+        "audio_bloom",
+        true
+    ));
+
+    // 2. Star ONLY the procedure
+    let star_proc_op = Operation::SetFavourite {
+        id: "proc:audio_bloom".to_owned(),
+        favourite: true,
+    };
+    favourite(&store_root, None, Asked::Operator, &star_proc_op).expect("favourite answered");
+
+    // 3. Re-list AllSets and verify only the procedure has star ON
+    listing(&mut view, &store_root, None, None, None);
+    assert!(
+        !karakuri_console::view::is_starred(&view.starred, "audio_bloom", false),
+        "Set audio_bloom should NOT be starred"
+    );
+    assert!(
+        karakuri_console::view::is_starred(&view.starred, "audio_bloom", true),
+        "Procedure audio_bloom SHOULD be starred"
+    );
+
+    // 4. Switch to MySets: only the procedure should be listed
+    assert!(view.select_scope(karakuri_console::view::Scope::MySets));
+    listing(&mut view, &store_root, None, None, None);
+    assert_eq!(view.library, vec!["audio_bloom".to_string()]);
+    assert_eq!(view.kinds.len(), 1);
+    assert!(
+        view.kinds[0].procedure,
+        "only the procedure row should be listed in MySets"
+    );
+
+    // 5. Star the Set as well
+    let star_set_op = Operation::SetFavourite {
+        id: "audio_bloom".to_owned(),
+        favourite: true,
+    };
+    favourite(&store_root, None, Asked::Operator, &star_set_op).expect("favourite answered");
+
+    // 6. Re-list MySets: both Set and Procedure should be listed
+    listing(&mut view, &store_root, None, None, None);
+    assert_eq!(
+        view.kinds.len(),
+        2,
+        "both Set and Procedure should be in MySets"
+    );
+    assert!(
+        view.kinds.iter().any(|k| !k.procedure),
+        "Set should be present"
+    );
+    assert!(
+        view.kinds.iter().any(|k| k.procedure),
+        "Procedure should be present"
+    );
+
+    // 7. Unstar ONLY the procedure
+    let unstar_proc_op = Operation::SetFavourite {
+        id: "proc:audio_bloom".to_owned(),
+        favourite: false,
+    };
+    favourite(&store_root, None, Asked::Operator, &unstar_proc_op).expect("favourite answered");
+
+    // 8. Re-list MySets: only the Set remains
+    listing(&mut view, &store_root, None, None, None);
+    assert_eq!(view.kinds.len(), 1);
+    assert!(
+        !view.kinds[0].procedure,
+        "only the Set row should remain in MySets"
     );
 
     let _ = std::fs::remove_dir_all(&test_dir);

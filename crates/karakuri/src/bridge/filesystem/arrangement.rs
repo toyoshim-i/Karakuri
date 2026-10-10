@@ -39,20 +39,63 @@ pub(crate) fn favourite(
             }
         ));
     }
+    let (is_proc_hint, pure_id) = if let Some(stripped) = id.strip_prefix("proc:") {
+        (Some(true), stripped)
+    } else if let Some(stripped) = id.strip_prefix("set:") {
+        (Some(false), stripped)
+    } else {
+        (None, id.as_str())
+    };
     let in_presets = presets.is_some_and(|p| {
-        karakuri_store::fs::is_file(p.dir.join(format!("{id}.kset")))
-            || karakuri_store::fs::is_file(p.dir.join(format!("{id}.kbset")))
-            || karakuri_store::fs::is_file(
-                p.dir.join(format!("{id}{}", Store::PROCEDURE_FILE_SUFFIX)),
-            )
-    }) || karakuri_environment::mix::shipped::ALL
-        .iter()
-        .any(|(name, _)| *name == id);
-    let wrote =
-        Store::open(root).and_then(|store| store.set_favourite_known(id, *favourite, in_presets));
+        let check_set = is_proc_hint != Some(true)
+            && (karakuri_store::fs::is_file(p.dir.join(format!("{pure_id}.kset")))
+                || karakuri_store::fs::is_file(p.dir.join(format!("{pure_id}.kbset"))));
+        let check_proc = is_proc_hint != Some(false)
+            && karakuri_store::fs::is_file(
+                p.dir
+                    .join(format!("{pure_id}{}", Store::PROCEDURE_FILE_SUFFIX)),
+            );
+        check_set || check_proc
+    }) || (is_proc_hint != Some(false)
+        && karakuri_environment::mix::shipped::ALL
+            .iter()
+            .any(|(name, _)| *name == pure_id));
+    let target_key = match is_proc_hint {
+        Some(true) => format!("proc:{pure_id}"),
+        Some(false) => pure_id.to_string(),
+        None => {
+            let opened = Store::open(root).ok();
+            let is_set = opened.as_ref().is_some_and(|s| s.has_set(pure_id))
+                || presets.is_some_and(|p| {
+                    karakuri_store::fs::is_file(p.dir.join(format!("{pure_id}.kset")))
+                        || karakuri_store::fs::is_file(p.dir.join(format!("{pure_id}.kbset")))
+                });
+            if !is_set {
+                let is_proc = opened.as_ref().is_some_and(|s| s.has_procedure(pure_id))
+                    || presets.is_some_and(|p| {
+                        karakuri_store::fs::is_file(
+                            p.dir
+                                .join(format!("{pure_id}{}", Store::PROCEDURE_FILE_SUFFIX)),
+                        )
+                    })
+                    || karakuri_environment::mix::shipped::ALL
+                        .iter()
+                        .any(|(name, _)| *name == pure_id);
+                if is_proc {
+                    format!("proc:{pure_id}")
+                } else {
+                    pure_id.to_string()
+                }
+            } else {
+                pure_id.to_string()
+            }
+        }
+    };
+    let wrote = Store::open(root)
+        .and_then(|store| store.set_favourite_known(&target_key, *favourite, in_presets));
     Some(match wrote {
         Ok(true) => format!(
-            "star: `{id}` {} — `my sets` is the starred subset of `all`, and this row is {} \
+            "star: `{pure_id}` {} — `my sets` is the starred subset of `all`, and this row is {} \
              it",
             match favourite {
                 true => "is starred",

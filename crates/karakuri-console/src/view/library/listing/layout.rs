@@ -90,9 +90,11 @@ impl LibraryBay {
             .drawn()
             .find(|index| self.list.contains(p) && self.star_hit(*index).contains(p))?;
         let id = rows.name(row)?;
+        let is_proc = rows.procedure(row);
+        let on = super::is_starred(marks, id, is_proc);
         Some(Operation::SetFavourite {
-            id: id.to_owned(),
-            favourite: !marks.contains(id),
+            id: super::favourite_key(id, is_proc),
+            favourite: !on,
         })
     }
 

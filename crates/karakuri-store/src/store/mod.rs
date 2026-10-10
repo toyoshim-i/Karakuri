@@ -81,6 +81,16 @@ impl Store {
             .join(format!("{name}{}", Store::PROCEDURE_FILE_SUFFIX))
     }
 
+    /// Returns whether the store holds a procedure with the given name.
+    pub fn has_procedure(&self, name: &str) -> bool {
+        fs::is_file(self.procedure_path(name))
+    }
+
+    /// Returns whether the store holds a Set with the given ID.
+    pub fn has_set(&self, id: &str) -> bool {
+        fs::is_file(self.set_path(id))
+    }
+
     fn set_path(&self, id: &str) -> PathBuf {
         self.root
             .join("sets")
@@ -366,16 +376,40 @@ impl Store {
         favourite: bool,
         in_presets: bool,
     ) -> Result<bool, StoreError> {
-        let is_set = fs::is_file(self.set_path(id));
-        let is_procedure = fs::is_file(self.procedure_path(id));
-        if favourite && !is_set && !is_procedure && !in_presets {
+        let (resolved_key, exists) = if let Some(pure) = id.strip_prefix("proc:") {
+            let exists = fs::is_file(self.procedure_path(pure)) || in_presets;
+            (format!("proc:{pure}"), exists)
+        } else if let Some(pure) = id.strip_prefix("set:") {
+            let exists = fs::is_file(self.set_path(pure)) || in_presets;
+            (pure.to_string(), exists)
+        } else {
+            let is_set = fs::is_file(self.set_path(id));
+            let is_proc = fs::is_file(self.procedure_path(id));
+            if is_set {
+                (id.to_string(), true)
+            } else if is_proc {
+                (format!("proc:{id}"), true)
+            } else {
+                (id.to_string(), in_presets)
+            }
+        };
+        if favourite && !exists {
             return Err(StoreError::NoSet(id.to_string()));
         }
         let mut ids = self.favourites()?;
         let moved = if favourite {
-            ids.insert(id.to_string())
+            ids.insert(resolved_key)
         } else {
-            ids.remove(id)
+            let removed = ids.remove(&resolved_key);
+            if let Some(pure) = id.strip_prefix("proc:") {
+                if !self.has_set(pure) {
+                    ids.remove(pure) || removed
+                } else {
+                    removed
+                }
+            } else {
+                removed
+            }
         };
         if !moved {
             return Ok(false);

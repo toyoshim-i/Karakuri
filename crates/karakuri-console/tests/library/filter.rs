@@ -135,12 +135,12 @@ fn a_procedure_row_has_a_star_and_loads_one_layer() {
     };
     let none = std::collections::BTreeSet::new();
 
-    // The star on the procedure row requests starring, exactly as the Set row does.
+    // The star on the procedure row requests starring, with proc: prefix distinguishing it from Sets.
     let star = bay.star(2);
     assert_eq!(
         bay.starred(rows, &none, Point::new(star.center().x, star.center().y)),
         Some(Operation::SetFavourite {
-            id: "orbit_wide".to_owned(),
+            id: "proc:orbit_wide".to_owned(),
             favourite: true,
         }),
         "a press on a procedure row's star did not ask for a favourite"

@@ -53,9 +53,9 @@ mod library;
 
 /// Library bay module re-exports (ADR-0121).
 pub use library::{
-    library, load_item, Aim, Block, Chosen, Field, Filters, KindChip, LibraryBay, Load, Menued,
-    Opened, Picked, Pointed, Pointing, Published, Read, Reading, RowItem, RowKind, RowMenu, Rows,
-    Scope, Taken, Target, Wiring, HOLDS_UNSET, LAYERS, SETS_CHIP,
+    favourite_key, is_starred, library, load_item, Aim, Block, Chosen, Field, Filters, KindChip,
+    LibraryBay, Load, Menued, Opened, Picked, Pointed, Pointing, Published, Read, Reading, RowItem,
+    RowKind, RowMenu, Rows, Scope, Taken, Target, Wiring, HOLDS_UNSET, LAYERS, SETS_CHIP,
 };
 
 mod inspector;

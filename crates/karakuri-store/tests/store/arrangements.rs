@@ -408,7 +408,7 @@ fn a_favourites_file_that_is_not_a_list_of_ids_is_an_error() {
     }
 }
 
-/// Verifies that starring a procedure stored in procedures/ is accepted.
+/// Verifies that starring a procedure stored in procedures/ is accepted and kept under `proc:` prefix.
 #[test]
 fn starring_a_procedure_is_accepted() {
     let dir = tempdir().unwrap();
@@ -420,9 +420,55 @@ fn starring_a_procedure_is_accepted() {
     assert!(store.set_favourite("orbit_wide", true).unwrap());
     assert_eq!(
         store.favourites().unwrap().into_iter().collect::<Vec<_>>(),
-        vec!["orbit_wide".to_string()]
+        vec!["proc:orbit_wide".to_string()]
     );
     assert!(!store.set_favourite("orbit_wide", true).unwrap());
     assert!(store.set_favourite("orbit_wide", false).unwrap());
+    assert!(store.favourites().unwrap().is_empty());
+}
+
+/// Verifies that a Set and Procedure with the identical name can be starred and unstarred independently.
+#[test]
+fn set_and_procedure_with_identical_names_have_independent_favourites() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    store
+        .write_set(
+            "audio_bloom",
+            &[Line::new(Record::Set {
+                id: "audio_bloom".into(),
+                v: 1,
+            })],
+        )
+        .unwrap();
+    store
+        .write_procedure("audio_bloom", b"proc audio_bloom { kind L5 }\n")
+        .unwrap();
+
+    // Starring the set does not star the procedure.
+    assert!(store.set_favourite("audio_bloom", true).unwrap());
+    assert_eq!(
+        store.favourites().unwrap().into_iter().collect::<Vec<_>>(),
+        vec!["audio_bloom".to_string()]
+    );
+
+    // Starring the procedure adds its distinct proc: key alongside the set.
+    assert!(store.set_favourite("proc:audio_bloom", true).unwrap());
+    let mut current: Vec<_> = store.favourites().unwrap().into_iter().collect();
+    current.sort();
+    assert_eq!(
+        current,
+        vec!["audio_bloom".to_string(), "proc:audio_bloom".to_string()]
+    );
+
+    // Unstarring the set leaves the procedure starred.
+    assert!(store.set_favourite("audio_bloom", false).unwrap());
+    assert_eq!(
+        store.favourites().unwrap().into_iter().collect::<Vec<_>>(),
+        vec!["proc:audio_bloom".to_string()]
+    );
+
+    // Unstarring the procedure leaves the favourites empty.
+    assert!(store.set_favourite("proc:audio_bloom", false).unwrap());
     assert!(store.favourites().unwrap().is_empty());
 }
