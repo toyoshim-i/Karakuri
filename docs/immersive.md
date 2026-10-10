@@ -10,7 +10,7 @@ Instead of standing in front of a monitor and looking at visual clips, the perfo
 - The performer stands inside a cyberpunk virtual cockpit.
 - Procedural 3D vertices, particle clouds, vector fields, and mesh topologies flow around the performer's body in full 6DoF (six degrees of freedom) stereo space.
 - Fragment shaders and master post-processing effects wrap the entire field of view within a celestial dome.
-- At the performer's fingertips floats a virtual 30-inch control desk displaying the familiar Karakuri 2D console interface, responsive to VR laser raycasts and pinch interactions.
+- At the performer's fingertips floats a virtual 30-inch control desk displaying the familiar Karakuri 2D console interface, responsive to VR laser raycasts and controller interactions.
 
 ```
                                 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -42,13 +42,13 @@ Rather than forcing a flat 2D "fullscreen" concept onto 3D reality, Karakuri Imm
 
 ### Tier 1: Personal Deck HUD (30-Inch Virtual Console)
 - **Position & Dimensions**:
-  - Located ~70 cm in front of the performer, tilted up at 35°–45° for comfortable seated or standing interaction.
-  - Sized at approximately 30 inches diagonal (~70 cm wide × 40 cm tall), matching a physical DJ mixer / synth workspace.
+  - Located ~70 cm in front of the performer, tilted up at 35° for comfortable seated or standing interaction.
+  - Sized at approximately 30 inches diagonal (0.72 m wide × 0.405 m tall, 16:9 widescreen), matching a physical DJ mixer / synth workspace.
 - **Rendering**:
   - The Karakuri 2D console UI (`egui`) is rendered off-screen into an RGBA8Unorm texture target (e.g. 1920×1080).
   - The texture is mapped onto a planar 3D Quad mesh in the virtual scene.
 - **Interaction (UV Raycast Translation)**:
-  - WebXR controller ray (or hand-tracking pointer) calculates ray-plane intersection against the Quad mesh.
+  - WebXR controller ray calculates ray-plane intersection against the Quad mesh.
   - The normalized intersection `(u, v)` coordinates are mapped directly to egui screen-space pixels `(x, y)`:
     $$x = u \times \text{width}, \quad y = (1.0 - v) \times \text{height}$$
   - Standard pointer events (hover, click, drag, scroll) are injected into the existing `winit`/`egui` input queue.
@@ -84,15 +84,17 @@ Rather than forcing a flat 2D "fullscreen" concept onto 3D reality, Karakuri Imm
 
 ---
 
-## 3. Architecture & Plugin Integration
+## 3. Architecture & Output Sink Integration
 
 In alignment with **ADR-0369** (Output plugins sit behind decoupled sink boundaries), Immersive mode is exposed as an output sink:
 
 ```
-Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebXR / Immersive ]
+Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebXR / Immersive ▼ ]
+                                                    ├─ VR (Immersive)
+                                                    └─ MR (Passthrough)
 ```
 
-### Decoupled Immersive Sink Architecture
+### Decoupled Sink Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -100,38 +102,22 @@ Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebXR / Immersive ]
 │  - Mixer & Decks (L1-L4)                                               │
 │  - Master Chain (L5)                                                   │
 │  - Console UI (egui)                                                   │
+│  - Outputs Bay (XrPill: VR / MR Mode Selection)                        │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
-                                    ▼ (Output Plugin Boundary)
+                                    ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                       Immersive Backend (Trait)                        │
-├───────────────────────────────────┬────────────────────────────────────┤
-│                                   │                                    │
-│   Web Target:                     │   Native Target (Future):          │
-│   WebXR Device API                │   OpenXR / SteamVR / visionOS      │
-│   (navigator.xr.requestSession)   │   (Direct3D12 / Vulkan / Metal)    │
-│                                   │                                    │
-└───────────────────────────────────┴────────────────────────────────────┘
+│                     karakuri-web::webxr Subsystem                      │
+│  - WebXR Session Lifecycle (immersive-vr / immersive-ar)               │
+│  - XRWebGLLayer Stereo Presentation                                    │
+│  - 30" Deck HUD Quad Raycast & Pointer Event Translation               │
+│  - Locomotion, Turning & 6DoF HUD Grip Manipulation                    │
+│  - Timewarp Reprojection & Celestial Cosmos Renderer                   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Cross-Platform Abstraction: `ImmersiveBackend`
-To ensure future compatibility with native VR runtimes (OpenXR on Windows/Linux, visionOS on Apple Vision Pro):
-
-```rust
-pub trait ImmersiveBackend: Send + Sync {
-    /// Queries whether the platform runtime has an active VR/AR device.
-    fn is_available(&self) -> bool;
-
-    /// Requests transition into immersive stereo presentation mode.
-    fn request_session(&mut self) -> Result<(), String>;
-
-    /// Polls head and controller poses, returning per-eye view and projection transforms.
-    fn update_poses(&mut self) -> Option<StereoPoses>;
-
-    /// Submits the composited stereo frame (Tier 1 HUD + Tier 2 Geometry + Tier 3 Dome).
-    fn submit_frame(&mut self, eye_textures: StereoViews) -> Result<(), String>;
-}
-```
+- **Outputs Bay Control**: The Outputs bay provides a dedicated WebXR pill with a dropdown menu to select between **VR** (`immersive-vr`) and **MR** (`immersive-ar`).
+- **Mixed Reality (MR) Passthrough**: When MR mode is selected, the session requests `immersive-ar`, and the celestial dome background clears with transparent alpha (`vec4(0.0)`), allowing the real-world passthrough environment to show behind the 3D geometry and floating HUD.
 
 ---
 
@@ -139,62 +125,57 @@ pub trait ImmersiveBackend: Send + Sync {
 
 ### 4.1 Session Lifecycle
 1. User clicks the `[ WebXR ]` pill in the `Outputs` bay.
-2. Under the user gesture context, `karakuri-web` calls:
+2. Under the user gesture context, `karakuri-web` initiates the session request:
    ```javascript
-   navigator.xr.requestSession('immersive-vr', {
-       requiredFeatures: ['local-floor'],
-       optionalFeatures: ['hand-tracking', 'layers']
+   navigator.xr.requestSession(sessionMode, {
+       requiredFeatures: ['local-floor']
    });
    ```
-3. Creates an `XRWebGLLayer` or native WebGPU XR binding (`XRWebGPUBinding` where supported).
+   where `sessionMode` is `'immersive-vr'` or `'immersive-ar'`.
+3. Creates an `XRWebGLLayer` attached to the WebGL2 rendering context.
 4. The Web runtime switches into the stereo frame loop (`XRSession.requestAnimationFrame`).
+5. Headset and system-level session termination (e.g. Meta button quit, session end) are handled via the `end` event listener, cleanly restoring the 2D canvas display.
 
 ### 4.2 Stereo Eye Rendering Pass
 Each frame executes:
-1. **Console HUD Pass**: Renders egui into `hud_texture` (1920×1080).
-2. **L1 Geometry & L5 Dome Passes**:
+1. **Console HUD Pass**: Renders egui into the off-screen `hud_texture` (1920×1080).
+2. **Stereo Presentation Pass**:
    - For each eye (Left / Right):
      - Bind eye-specific view and projection matrices from `XRView`.
-     - Render Tier 3 Celestial Dome (sampled from L5/fragment target).
-     - Render Tier 2 Spatial Geometries with depth testing (`Depth32Float`).
-     - Render Tier 1 HUD Quad (placed at `(0.0, -0.2, -0.7)` with -35° pitch).
-3. **Submit**: Present the stereo framebuffer to the WebXR display.
+     - Render Tier 3 Celestial Dome Background (reprojected via polar dome shader, or transparent in MR mode).
+     - Render Tier 2 Spatial Geometries & Visual Output (WebGPU render target reprojected with timewarp compensation).
+     - Render Tier 1 HUD Quad (placed at `(0.0, -0.2, -0.7)` with -35° pitch, with laser hit-test cursor).
+3. **Submit**: Present the stereo framebuffer to the WebXR display via `XRWebGLLayer`.
 
 ### 4.3 Controller Interaction, Locomotion & Pointer Emulation
 - **HUD Quad Interaction (Laser Raycast)**:
   - Controller target ray intersects the HUD Quad at local coordinate `(u, v)`.
   - Laser intersection emits `CursorMoved { position: (u * w, (1-v) * h) }`.
-  - Trigger squeeze: Emits `MouseInput { state: Pressed, button: Primary }`.
+  - Trigger squeeze (Button 0): Emits `MouseInput { state: Pressed/Released, button: Primary }`.
   - Right thumbstick vertical: Emits `MouseWheel { delta }` for console scrolling.
 - **Controller Locomotion & Turning**:
   - **Left Thumbstick**: Smooth planar locomotion (forward/backward, strafe left/right) aligned with the player's head facing direction (curved response up to `5.0 m/s`).
   - **Right Thumbstick (Horizontal)**: Smooth yaw rotation of locomotion facing orientation (`2.0 rad/s`).
 - **Grip Manipulation of HUD Quad**:
-  - Holding the Grip button allows moving and rotating the virtual console in 3D space with 6DoF controller orientation.
+  - Holding the Grip button (Button 1 / Squeeze) allows grabbing, moving, and rotating the virtual console in 3D space with 6DoF controller orientation.
   - While gripping: Thumbstick Y adjusts distance along the controller beam; Thumbstick X scales the HUD quad size (`[0.25, 4.0]`).
+- **Recenter**:
+  - Recenter is handled natively by the VR/MR headset system menu (e.g. Meta button long-press on Meta Quest), maintaining system standard ergonomics without redundant application-level keybindings.
 
 ---
 
-## 5. Phased Implementation Plan
+## 5. Implementation Summary
 
-### Phase 1: WebXR Foundation & Virtual 30" HUD (~3 days)
-- Add `Outputs::Immersive` toggle pill to console Outputs bay.
-- Implement WebXR feature detection (`navigator.xr.isSessionSupported('immersive-vr')`).
-- Implement `requestSession('immersive-vr')` activation.
-- Render the 30-inch virtual console quad at `(0, -0.2, -0.7)` meters using an off-screen egui texture.
-- Map controller raycast intersections to egui mouse clicks and drag events.
+All core capabilities defined in this specification are fully implemented in `crates/karakuri-web/src/webxr/` and integrated with `karakuri-console`:
 
-### Phase 2: Stereo Camera & 3D Spatial Geometry (~3-4 days)
-- Adapt `karakuri-engine` camera parameters to accept external view/projection matrix overrides.
-- Connect WebXR stereo eye matrices (`eye.transform.matrix`, `eye.projectionMatrix`) to the rendering pipeline.
-- Verify `topology triangles`, `grid`, and `ribbon` procedures render stereoscopically with 6DoF head-tracking parallax.
-
-### Phase 3: Celestial Dome Projection for Fragment/L5 (~2-3 days)
-- Implement geodesic background dome mesh (180°–220° field of view).
-- Implement polar fisheye texture coordinate mapping in WGSL.
-- Composite L5 Master Chain output onto the dome mesh behind Tier 2 geometry.
-
-### Phase 4: Ergonomic Controls & Calibration (~2 days)
-- HUD positioning sliders (distance, elevation, tilt angle).
-- Passthrough toggle for MR headsets (Quest 3, Vision Pro) using `sessionMode = 'immersive-ar'`.
-- Recenter gesture (long-press thumbstick / home button).
+| Feature Area | Implementation Component | Status |
+|---|---|---|
+| **Outputs Bay Integration** | `XrPill` in `karakuri-console/src/view/outputs.rs` with VR / MR dropdown | Complete |
+| **WebXR Session Management** | `request_webxr_session`, `start_webxr_session`, `immersive-vr` & `immersive-ar` | Complete |
+| **30" Deck HUD Quad** | Off-screen egui texture, UV raycasting, pointer event translation (`hud.rs`) | Complete |
+| **Stereo 3D Geometry** | Stereo eye view/projection matrices, timewarp reprojection (`world.rs`) | Complete |
+| **Built-in VR Projection** | `Wall`, `Dome`, `Kaleidosky` in `fullscreen.rs`, Room-Space ray basis | Complete |
+| **Celestial Cosmos** | Procedural starfield, equatorial/elevation parallels, meridians (`world.rs`) | Complete |
+| **Locomotion & Turning** | Left stick smooth locomotion (5.0 m/s), Right stick smooth yaw (2.0 rad/s) | Complete |
+| **6DoF HUD Manipulation** | Grip grab/reposition/rotate, stick distance, stick scale `[0.25, 4.0]` | Complete |
+| **Mixed Reality (MR)** | `immersive-ar` mode, transparent dome clear (`vec4(0.0)`) for passthrough | Complete |
