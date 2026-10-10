@@ -59,6 +59,8 @@ pub struct WebApp {
     webxr_state: Rc<RefCell<crate::webxr::WebXrState>>,
     pending_webxr_support: Rc<RefCell<Option<bool>>>,
     pending_webxr_active: Rc<RefCell<Option<bool>>>,
+    pending_projector: Rc<RefCell<Option<crate::projector::ProjectorAction>>>,
+    projector_window: Option<web_sys::Window>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
     /// Where the head was when the WebXR session began, in the headset's
@@ -315,6 +317,15 @@ impl WebApp {
             vr_flow_for_hook(xr_mode);
         });
 
+        // Set up Projector popout window hook when operator toggles Projector chip
+        let pending_projector: Rc<RefCell<Option<crate::projector::ProjectorAction>>> =
+            Rc::new(RefCell::new(None));
+        let pending_proj_hook = pending_projector.clone();
+        let proxy_proj = proxy.clone();
+        app.set_projector_route_hook(move |on| {
+            crate::projector::handle_route_hook(on, &proxy_proj, &pending_proj_hook);
+        });
+
         Self {
             app,
             proxy,
@@ -329,6 +340,8 @@ impl WebApp {
             webxr_state,
             pending_webxr_support,
             pending_webxr_active,
+            pending_projector,
+            projector_window: None,
             initialized: false,
             ime_overlay: None,
             xr_rig_origin: None,
@@ -601,6 +614,17 @@ impl ApplicationHandler<()> for WebApp {
                     window.id(),
                     WindowEvent::Resized(target_size),
                 );
+                window.request_redraw();
+            }
+        }
+
+        if let Some(action) = self.pending_projector.borrow_mut().take() {
+            crate::projector::handle_projector_action(
+                &mut self.app,
+                &mut self.projector_window,
+                action,
+            );
+            if let Some(ref window) = self.window {
                 window.request_redraw();
             }
         }

@@ -54,8 +54,8 @@ pub(crate) fn missed(outcome: &wgpu::CurrentSurfaceTexture) -> Option<Missed> {
 pub(crate) struct Projector {
     /// Held because the surface borrows it for `'static` and because the window is
     /// what a close event and a resize arrive on. Read by [`App::window_event`],
-    /// which routes by [`WindowId`].
-    pub(crate) window: Arc<Window>,
+    /// which routes by [`WindowId`]. `None` on web/auxiliary canvas surfaces.
+    pub(crate) window: Option<Arc<Window>>,
     pub(crate) sink: WindowSink,
     /// Inner size in physical pixels, cached to avoid per-frame platform queries.
     pub(crate) size: (u32, u32),

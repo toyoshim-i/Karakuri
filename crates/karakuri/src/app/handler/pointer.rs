@@ -8,6 +8,7 @@ use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 
 use super::super::*;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::app::operations::routed;
 
 impl App {
@@ -206,7 +207,7 @@ impl App {
     fn handle_left_mouse_input(
         &mut self,
         gfx: &mut Gfx,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         event: &WindowEvent,
         state: ElementState,
     ) {
@@ -310,7 +311,14 @@ impl App {
                     self.readout.view.xr_mode,
                 );
             }
-            if let Some(line) = routed(gfx, event_loop, output, on) {
+            #[cfg(target_arch = "wasm32")]
+            if matches!(output, karakuri_operation::Output::Projector(_)) {
+                if let Some(ref mut hook) = self.projector_route_hook {
+                    hook(on);
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(line) = routed(gfx, _event_loop, output, on) {
                 println!("{line}");
             }
         }

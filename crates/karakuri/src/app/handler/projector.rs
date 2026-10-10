@@ -20,7 +20,12 @@ impl App {
         let Some(gfx) = self.gfx.as_mut() else {
             return false;
         };
-        if !gfx.projector.as_ref().is_some_and(|p| p.window.id() == id) {
+        if !gfx
+            .projector
+            .as_ref()
+            .and_then(|p| p.window.as_ref())
+            .is_some_and(|w| w.id() == id)
+        {
             return false;
         }
         match event {
@@ -29,7 +34,9 @@ impl App {
                 if let Some(projector) = gfx.projector.as_mut() {
                     projector.sink.resize(&gfx.gpu.device, at.0, at.1);
                     projector.size = at;
-                    projector.window.request_redraw();
+                    if let Some(ref w) = projector.window {
+                        w.request_redraw();
+                    }
                 }
                 self.costs.owes();
                 gfx.window.request_redraw();

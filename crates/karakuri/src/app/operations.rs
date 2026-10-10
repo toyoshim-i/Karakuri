@@ -5,13 +5,17 @@ use karakuri_console::focus;
 use karakuri_console::repaint::{Change, Repaint};
 pub(crate) use karakuri_console::view::TextInputKind;
 use karakuri_console::view::View;
+#[cfg(not(target_arch = "wasm32"))]
 use karakuri_engine::WindowSink;
 use karakuri_operation::{Operation, Output};
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 use web_time::Instant;
 use winit::event_loop::ActiveEventLoop;
+#[cfg(not(target_arch = "wasm32"))]
 use winit::window::Window;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::CANVAS;
 
 /// Opens or closes the projector window, configuring a [`WindowSink`] using the shared adapter format (ADR-0247, P-0064, P-0083, P-0094).
@@ -21,73 +25,81 @@ pub(crate) fn routed(
     output: Output,
     on: bool,
 ) -> Option<String> {
-    let n = match output {
-        // The console's, and it is already done by the time this is asked.
-        Output::Program => return None,
-        Output::Projector(n) => n,
-        Output::Plugin(n) => return route_plugin(gfx, n, on),
-    };
-    if !on {
-        return Some(match gfx.projector.take() {
-            Some(_) => format!("outputs: projector {n} is off — the window is closed"),
-            None => format!("outputs: projector {n} was already off"),
-        });
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (gfx, event_loop, output, on);
+        None
     }
-    if gfx.projector.is_some() {
-        return Some(format!("outputs: projector {n} is already on"));
-    }
-    let attrs = Window::default_attributes()
-        .with_title("Karakuri — projector")
-        // Session canvas inner size (ADR-0246).
-        .with_inner_size(winit::dpi::LogicalSize::new(CANVAS.0, CANVAS.1));
-    #[cfg(target_os = "macos")]
-    let attrs = {
-        use winit::platform::macos::WindowAttributesExtMacOS;
-        attrs.with_tabbing_identifier("projector")
-    };
-    let window = match event_loop.create_window(attrs) {
-        Ok(window) => Arc::new(window),
-        // Log error and report refusal instead of panicking across the winit boundary (ADR-0168).
-        Err(e) => return Some(format!("outputs: the projector window did not open: {e}")),
-    };
-    // Create surface on the adapter's parent GPU instance (ADR-0324).
-    let surface = match gfx.gpu.instance.create_surface(window.clone()) {
-        Ok(surface) => surface,
-        Err(e) => return Some(format!("outputs: the projector has no surface: {e}")),
-    };
-    let caps = surface.get_capabilities(&gfx.gpu.adapter);
-    if !caps.formats.contains(&gfx.picture_format) {
-        return Some(format!(
-            "outputs: the projector window cannot be opened — the present pass draws {:?} \
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let n = match output {
+            // The console's, and it is already done by the time this is asked.
+            Output::Program => return None,
+            Output::Projector(n) => n,
+            Output::Plugin(n) => return route_plugin(gfx, n, on),
+        };
+        if !on {
+            return Some(match gfx.projector.take() {
+                Some(_) => format!("outputs: projector {n} is off — the window is closed"),
+                None => format!("outputs: projector {n} was already off"),
+            });
+        }
+        if gfx.projector.is_some() {
+            return Some(format!("outputs: projector {n} is already on"));
+        }
+        let attrs = Window::default_attributes()
+            .with_title("Karakuri — projector")
+            // Session canvas inner size (ADR-0246).
+            .with_inner_size(winit::dpi::LogicalSize::new(CANVAS.0, CANVAS.1));
+        #[cfg(target_os = "macos")]
+        let attrs = {
+            use winit::platform::macos::WindowAttributesExtMacOS;
+            attrs.with_tabbing_identifier("projector")
+        };
+        let window = match event_loop.create_window(attrs) {
+            Ok(window) => Arc::new(window),
+            // Log error and report refusal instead of panicking across the winit boundary (ADR-0168).
+            Err(e) => return Some(format!("outputs: the projector window did not open: {e}")),
+        };
+        // Create surface on the adapter's parent GPU instance (ADR-0324).
+        let surface = match gfx.gpu.instance.create_surface(window.clone()) {
+            Ok(surface) => surface,
+            Err(e) => return Some(format!("outputs: the projector has no surface: {e}")),
+        };
+        let caps = surface.get_capabilities(&gfx.gpu.adapter);
+        if !caps.formats.contains(&gfx.picture_format) {
+            return Some(format!(
+                "outputs: the projector window cannot be opened — the present pass draws {:?} \
              and this surface offers {:?}. A second format would want a second present \
              pipeline, which is what one render scaled into every output exists to avoid",
-            gfx.picture_format, caps.formats
-        ));
+                gfx.picture_format, caps.formats
+            ));
+        }
+        let size = window.inner_size();
+        let size = (size.width.max(1), size.height.max(1));
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: gfx.picture_format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
+            width: size.0,
+            height: size.1,
+            // Fifo presentation mode matching console window (ADR-0171).
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+        surface.configure(&gfx.gpu.device, &config);
+        gfx.projector = Some(Projector {
+            window: Some(window),
+            sink: WindowSink::new(surface, config),
+            size,
+        });
+        Some(format!(
+            "outputs: projector {n} is on — a window at {} x {}, and the frame is composited at the          largest enabled output",
+            size.0, size.1
+        ))
     }
-    let size = window.inner_size();
-    let size = (size.width.max(1), size.height.max(1));
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: gfx.picture_format,
-        color_space: wgpu::SurfaceColorSpace::Auto,
-        width: size.0,
-        height: size.1,
-        // Fifo presentation mode matching console window (ADR-0171).
-        present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: caps.alpha_modes[0],
-        view_formats: vec![],
-        desired_maximum_frame_latency: 2,
-    };
-    surface.configure(&gfx.gpu.device, &config);
-    gfx.projector = Some(Projector {
-        window,
-        sink: WindowSink::new(surface, config),
-        size,
-    });
-    Some(format!(
-        "outputs: projector {n} is on — a window at {} x {}, and the frame is composited at the          largest enabled output",
-        size.0, size.1
-    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -103,6 +115,7 @@ pub(crate) fn is_plugin_available(gfx: &Gfx, n: u8) -> bool {
         .is_some_and(|p| p.supports_surface(REQUIRED_SURFACE))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn route_plugin(gfx: &mut Gfx, n: u8, on: bool) -> Option<String> {
     if !on {
         return Some(match gfx.plugin.take() {

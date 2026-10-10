@@ -676,7 +676,9 @@ impl App {
         if live || building {
             gfx.window.request_redraw();
             if let Some(projector) = &gfx.projector {
-                projector.window.request_redraw();
+                if let Some(ref window) = projector.window {
+                    window.request_redraw();
+                }
             }
         }
     }
