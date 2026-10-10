@@ -320,6 +320,11 @@ impl Period {
         sorted.sort_by(|a, b| a.partial_cmp(b).expect("frame intervals are finite"));
         Some(sorted[PERIOD_FRAMES / 2])
     }
+
+    /// Resets the rolling frame samples and window state.
+    pub(crate) fn reset(&mut self) {
+        *self = Period::new();
+    }
 }
 
 /// Packs `(width, height)` dimensions into a single `u64` for atomic storage.

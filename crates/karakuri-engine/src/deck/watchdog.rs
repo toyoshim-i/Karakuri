@@ -32,6 +32,9 @@ impl Deck {
         self.overload_since = None;
         self.last_frame_dt_ms = None;
         self.last_frame_at = Some(Instant::now());
+        for slot in &mut self.slots {
+            slot.swap.reset_period();
+        }
     }
 
     /// Evaluates runtime performance watchdog against `watchdog_threshold_ms`.
@@ -56,6 +59,20 @@ impl Deck {
             self.overload_since = None;
             self.last_frame_dt_ms = None;
             self.last_frame_at = Some(now);
+            for slot in &mut self.slots {
+                slot.swap.reset_period();
+            }
+            return None;
+        } else if self.watchdog_grace_until.is_some() {
+            // Grace period just expired on this frame: clear grace state and reset counters
+            // so post-grace evaluation begins from clean steady-state frames.
+            self.watchdog_grace_until = None;
+            self.overload_since = None;
+            self.last_frame_dt_ms = None;
+            self.last_frame_at = Some(now);
+            for slot in &mut self.slots {
+                slot.swap.reset_period();
+            }
             return None;
         }
 
@@ -97,6 +114,14 @@ impl Deck {
                     });
 
                 if let Some(slot_idx) = to_gate {
+                    eprintln!(
+                        "Watchdog overload gating slot {slot_idx}: period={period:.1}ms (last_dt={:?}ms, dt={:?}ms, rolling_median={:?}ms) >= threshold={:.1}ms, sustained for {:?}",
+                        self.last_frame_dt_ms,
+                        dt_ms,
+                        self.frame_period_ms(),
+                        self.watchdog_threshold_ms,
+                        now.duration_since(start)
+                    );
                     self.slots[slot_idx].swap.set_overloaded(true);
                     // Reset overload timer so subsequent gates require another sustained duration
                     self.overload_since = None;

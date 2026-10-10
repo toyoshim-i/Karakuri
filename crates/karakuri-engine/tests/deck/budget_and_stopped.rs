@@ -612,6 +612,46 @@ mod gpu {
         assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
     }
 
+    /// Verifies that when grace expires, steady-state clean frames do not trip the watchdog.
+    #[test]
+    fn watchdog_does_not_gate_after_grace_period_expires_when_frames_are_normal() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(build(&gpu, SEED_A, CAPACITY))],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_watchdog_threshold_ms(50.0);
+        deck.set_watchdog_timing(Duration::ZERO, Duration::from_millis(50));
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
+
+        // Grant 50 ms of grace
+        deck.grant_watchdog_grace(Duration::from_millis(50));
+
+        // Run a slow frame that sleeps 60 ms during grace
+        let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
+        std::thread::sleep(Duration::from_millis(60));
+        f.render(present.mix_target(), present.size(), 1);
+        f.finish();
+
+        // Gating suppressed during grace
+        assert_eq!(deck.watchdog_gate(), None);
+
+        // Grace expires (we slept 60 ms >= 50 ms). Run the boundary / transition frame.
+        assert_eq!(deck.watchdog_gate(), None);
+
+        // Subsequent normal fast frames must NOT be marked overloaded!
+        let mut f2 = deck.begin_frame(&gpu.device, &gpu.queue);
+        f2.render(present.mix_target(), present.size(), 1);
+        f2.finish();
+
+        assert_eq!(deck.watchdog_gate(), None);
+        assert!(!deck.overloaded(karakuri_engine::DeckSlot(0)));
+    }
+
     /// Verifies that soloing a slot promotes its requested and effective residency
     /// to Live so that it is properly displayed on air.
     #[test]

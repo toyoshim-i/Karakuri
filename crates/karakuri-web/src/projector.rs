@@ -167,13 +167,19 @@ pub fn open_projector_window(
 ) -> Result<(), String> {
     let window = web_sys::window().ok_or("No global window found")?;
 
+    let setup_done = std::rc::Rc::new(std::cell::Cell::new(false));
+    let setup_done_ready = setup_done.clone();
+    let setup_done_load = setup_done.clone();
+
     // Expose callback on parent window so projector.html can signal readiness on DOMContentLoaded
     let proxy_cb = proxy.clone();
     let pending_cb = pending_action.clone();
     let on_ready =
         Closure::<dyn FnMut(web_sys::Window)>::wrap(Box::new(move |child_win: web_sys::Window| {
-            if let Err(e) = setup_projector_canvas(&child_win, proxy_cb.clone(), &pending_cb) {
-                log::warn!("Karakuri Web: Failed to setup projector canvas on ready: {e}");
+            if !setup_done_ready.replace(true) {
+                if let Err(e) = setup_projector_canvas(&child_win, proxy_cb.clone(), &pending_cb) {
+                    log::warn!("Karakuri Web: Failed to setup projector canvas on ready: {e}");
+                }
             }
         }));
     let _ = js_sys::Reflect::set(
@@ -196,8 +202,10 @@ pub fn open_projector_window(
     // If window was already open and loaded, setup canvas immediately
     if let Some(doc) = popout.document() {
         if doc.get_element_by_id("karakuri-projector-canvas").is_some() {
-            let _ = setup_projector_canvas(&popout, proxy.clone(), &pending_action);
-            return Ok(());
+            if !setup_done.replace(true) {
+                let _ = setup_projector_canvas(&popout, proxy.clone(), &pending_action);
+                return Ok(());
+            }
         }
     }
 
@@ -206,8 +214,11 @@ pub fn open_projector_window(
     let proxy_load = proxy.clone();
     let pending_load = pending_action.clone();
     let on_load = Closure::<dyn FnMut()>::wrap(Box::new(move || {
-        if let Err(e) = setup_projector_canvas(&popout_load, proxy_load.clone(), &pending_load) {
-            log::warn!("Karakuri Web: Failed to setup projector canvas on load: {e}");
+        if !setup_done_load.replace(true) {
+            if let Err(e) = setup_projector_canvas(&popout_load, proxy_load.clone(), &pending_load)
+            {
+                log::warn!("Karakuri Web: Failed to setup projector canvas on load: {e}");
+            }
         }
     }));
     let _ = popout.add_event_listener_with_callback("load", on_load.as_ref().unchecked_ref());

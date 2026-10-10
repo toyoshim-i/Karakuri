@@ -244,6 +244,11 @@ impl HotSwap {
         self.period.median_ms()
     }
 
+    /// Resets the rolling median frame period measurement.
+    pub fn reset_period(&mut self) {
+        self.period.reset();
+    }
+
     /// Returns the probe measurement of the live Set, if measured.
     pub fn measured_cost(&self) -> Option<Measurement> {
         self.cost
