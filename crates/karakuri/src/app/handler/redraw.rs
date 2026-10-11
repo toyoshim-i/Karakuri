@@ -433,6 +433,7 @@ impl App {
                 projector,
                 plugin,
                 cast_sink,
+                pip_sink,
                 ..
             } = &mut *gfx;
             let gpu = &*gpu;
@@ -517,46 +518,22 @@ impl App {
             present.set_chain_online(&online);
             let textures_delta = &mut output.textures_delta;
             let cost = &mut cost;
-            // Collect picture and active auxiliary sinks into fixed array for `compose` (ADR-0171).
-            let mut one: [&mut dyn Sink; 1];
-            let mut two: [&mut dyn Sink; 2];
-            let mut three: [&mut dyn Sink; 3];
-            let mut four: [&mut dyn Sink; 4];
-            let sinks: &mut [&mut dyn Sink] =
-                match (projector.as_mut(), plugin.as_mut(), cast_sink.as_mut()) {
-                    (Some(p), Some(pl), Some(c)) => {
-                        four = [picture, &mut p.sink, pl, c];
-                        &mut four
-                    }
-                    (Some(p), Some(pl), None) => {
-                        three = [picture, &mut p.sink, pl];
-                        &mut three
-                    }
-                    (Some(p), None, Some(c)) => {
-                        three = [picture, &mut p.sink, c];
-                        &mut three
-                    }
-                    (None, Some(pl), Some(c)) => {
-                        three = [picture, pl, c];
-                        &mut three
-                    }
-                    (Some(p), None, None) => {
-                        two = [picture, &mut p.sink];
-                        &mut two
-                    }
-                    (None, Some(pl), None) => {
-                        two = [picture, pl];
-                        &mut two
-                    }
-                    (None, None, Some(c)) => {
-                        two = [picture, c];
-                        &mut two
-                    }
-                    (None, None, None) => {
-                        one = [picture];
-                        &mut one
-                    }
-                };
+            // Collect picture and active auxiliary sinks for `compose` (ADR-0171).
+            let mut sinks_vec: Vec<&mut dyn Sink> = Vec::with_capacity(5);
+            sinks_vec.push(picture);
+            if let Some(p) = projector.as_mut() {
+                sinks_vec.push(&mut p.sink);
+            }
+            if let Some(pip) = pip_sink.as_mut() {
+                sinks_vec.push(pip);
+            }
+            if let Some(pl) = plugin.as_mut() {
+                sinks_vec.push(pl);
+            }
+            if let Some(c) = cast_sink.as_mut() {
+                sinks_vec.push(c);
+            }
+            let sinks: &mut [&mut dyn Sink] = &mut sinks_vec[..];
             compose(
                 gpu,
                 deck,

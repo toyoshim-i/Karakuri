@@ -18,6 +18,14 @@ const PROGRAM_VIEW: &str = "program view";
 /// Projector output sink label.
 const PROJECTOR: &str = "projector";
 
+/// Document Picture-in-Picture output sink label.
+const PIP: &str = "pip";
+
+#[cfg(target_arch = "wasm32")]
+const PIP_ABSENT: &str = "pip · no support";
+#[cfg(not(target_arch = "wasm32"))]
+const PIP_ABSENT: &str = "pip · web only";
+
 /// Default labels for plugin sinks when no plugin provider is loaded.
 #[cfg(target_arch = "wasm32")]
 const PLUGIN_0_NAME: &str = "WebXR";
@@ -184,8 +192,8 @@ pub struct Outputs {
     pub id: NodeId,
     /// Whether the picture is on screen — `layout.visible(id)`, read here.
     pub on: bool,
-    /// Auxiliary sink chips (projector and plugin sinks) in left-to-right order.
-    pub more: [SinkChip; 3],
+    /// Auxiliary sink chips (projector, pip, and plugin sinks) in left-to-right order.
+    pub more: [SinkChip; 4],
     /// WebXR presentation mode pill next to WebXR sink chip, if available.
     pub xr_pill: Option<XrPill>,
 }
@@ -213,6 +221,12 @@ impl Outputs {
         self
     }
 
+    /// Configures Document Picture-in-Picture state on the second auxiliary sink.
+    pub fn told_pip(mut self, pip: bool) -> Outputs {
+        self.more[1].on = pip;
+        self
+    }
+
     /// Say whether an output plugin sink is active and whether it is available on this machine.
     pub fn told_plugin(self, index: usize, on: bool, present: bool) -> Outputs {
         self.told_plugin_name(index, on, present, None)
@@ -226,7 +240,7 @@ impl Outputs {
         present: bool,
         name: Option<&'static str>,
     ) -> Outputs {
-        if let Some(chip) = self.more.get_mut(index + 1) {
+        if let Some(chip) = self.more.get_mut(index + 2) {
             chip.on = on;
             chip.present = present;
             if index == 0 {
@@ -307,6 +321,7 @@ pub fn outputs_with_plugin_name(
         ctx,
         layout,
         open,
+        false,
         plugin_available,
         plugin_name,
         false,
@@ -322,6 +337,7 @@ pub fn outputs_with_plugin_details(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     open: Open,
+    pip_available: bool,
     plugin_available: bool,
     plugin_name: Option<&'static str>,
     plugin_1_available: bool,
@@ -341,29 +357,31 @@ pub fn outputs_with_plugin_details(
     let opened = open.holds(Class::InputsAndOutputs);
     let pill = pill_width(ctx, mcp_word(opened));
 
+    let pip_name = if pip_available { PIP } else { PIP_ABSENT };
     let custom_0_name = plugin_name.unwrap_or(PLUGIN_0_NAME);
     let custom_1_name = plugin_1_name.unwrap_or(PLUGIN_1_NAME);
 
-    // Measure label widths for all four sink chips.
-    let widths: [f32; 4] = std::array::from_fn(|i| {
+    // Measure label widths for all five sink chips.
+    let widths: [f32; 5] = std::array::from_fn(|i| {
         let word = match i {
             0 => PROGRAM_VIEW,
             1 => PROJECTOR,
-            2 => {
+            2 => pip_name,
+            3 => {
                 if plugin_available {
                     custom_0_name
                 } else {
                     PLUGIN_SINKS[0]
                 }
             }
-            3 => {
+            4 => {
                 if plugin_1_available {
                     custom_1_name
                 } else {
                     PLUGIN_SINKS[1]
                 }
             }
-            n => PLUGIN_SINKS[n - 2],
+            n => PLUGIN_SINKS[n - 3],
         };
         ctx.fonts_mut(|f| {
             f.layout_no_wrap(
@@ -409,34 +427,37 @@ pub fn outputs_with_plugin_details(
             more: std::array::from_fn(|i| SinkChip {
                 output: match i {
                     0 => Output::Projector(0),
-                    n => Output::Plugin(n as u8 - 1),
+                    1 => Output::Pip,
+                    n => Output::Plugin(n as u8 - 2),
                 },
                 chip: chips[i + 1].0,
                 dot: chips[i + 1].1,
                 on: false,
                 present: match i {
                     0 => true,
-                    1 => plugin_available,
-                    2 => plugin_1_available,
+                    1 => pip_available,
+                    2 => plugin_available,
+                    3 => plugin_1_available,
                     _ => false,
                 },
                 name: match i {
                     0 => PROJECTOR,
-                    1 => {
+                    1 => pip_name,
+                    2 => {
                         if plugin_available {
                             custom_0_name
                         } else {
                             PLUGIN_SINKS[0]
                         }
                     }
-                    2 => {
+                    3 => {
                         if plugin_1_available {
                             custom_1_name
                         } else {
                             PLUGIN_SINKS[1]
                         }
                     }
-                    n => PLUGIN_SINKS[n - 1],
+                    n => PLUGIN_SINKS[n - 2],
                 },
             }),
             xr_pill,
@@ -449,7 +470,7 @@ struct OutputsRow {
     label: Rect,
     mcp: Rect,
     /// The capsule and its dot, per chip, left to right.
-    chips: [(Rect, Rect); 4],
+    chips: [(Rect, Rect); 5],
     xr_pill: Option<XrPill>,
 }
 
@@ -458,7 +479,7 @@ fn outputs_row(
     viewport: Rect,
     label_w: f32,
     pill_w: f32,
-    name_w: [f32; 4],
+    name_w: [f32; 5],
     xr_info: Option<(XrSessionMode, bool, f32)>,
 ) -> Option<OutputsRow> {
     let mid = row.center().y;
@@ -473,10 +494,10 @@ fn outputs_row(
     );
     // Layout chips horizontally left-to-right from the MCP pill.
     let mut x = mcp.max.x;
-    let mut chips: [(Rect, Rect); 4] = [(Rect::ZERO, Rect::ZERO); 4];
+    let mut chips: [(Rect, Rect); 5] = [(Rect::ZERO, Rect::ZERO); 5];
     let mut xr_pill: Option<XrPill> = None;
 
-    for i in 0..4 {
+    for i in 0..5 {
         let chip = Rect::from_min_size(
             Pos2::new(x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
             egui::vec2(
@@ -491,8 +512,8 @@ fn outputs_row(
         );
         chips[i] = (chip, dot);
 
-        // After chip 2 (WebXR plugin), insert WebXR presentation mode pill if configured.
-        if i == 2 {
+        // After chip 3 (WebXR plugin), insert WebXR presentation mode pill if configured.
+        if i == 3 {
             if let Some((mode, open, text_w)) = xr_info {
                 let pill_w = size::PILL_PAD_X * 2.0 + text_w + size::SINK_GAP + CHEVRON_W;
                 let pill_rect = Rect::from_min_size(
@@ -547,7 +568,7 @@ fn outputs_row(
     }
 
     // Require all chips to fit within the row bounds without wrapping.
-    match row.contains_rect(chips[3].0) {
+    match row.contains_rect(chips[4].0) {
         true => Some(OutputsRow {
             label,
             mcp,
@@ -693,7 +714,7 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     chip_into(row.sink, row.dot, PROGRAM_VIEW, row.on, true);
     for (i, c) in row.more.iter().enumerate() {
         chip_into(c.chip, c.dot, c.name, c.on, c.present);
-        if i == 1 {
+        if i == 2 {
             if let Some(ref xr_pill) = row.xr_pill {
                 xr_pill_into(ui, pal, xr_pill, false);
             }

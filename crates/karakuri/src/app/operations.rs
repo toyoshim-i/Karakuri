@@ -35,6 +35,7 @@ pub(crate) fn routed(
         let n = match output {
             // The console's, and it is already done by the time this is asked.
             Output::Program => return None,
+            Output::Pip => return None,
             Output::Projector(n) => n,
             Output::Plugin(n) => return route_plugin(gfx, n, on),
         };

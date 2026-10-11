@@ -38,6 +38,10 @@ pub struct View {
     pub theme_menu_open: bool,
     /// Whether the external projector window is open (ADR-0156).
     pub projector: bool,
+    /// Whether the Document Picture-in-Picture window is open.
+    pub pip: bool,
+    /// Whether Document Picture-in-Picture is supported on this platform/browser.
+    pub pip_available: bool,
     /// Whether plugin sink 0 (Syphon) is active.
     pub plugin: bool,
     /// Whether plugin sink 0 is available on this machine.

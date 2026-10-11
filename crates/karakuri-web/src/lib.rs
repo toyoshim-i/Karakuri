@@ -15,6 +15,8 @@ pub mod ime_overlay;
 #[cfg(target_arch = "wasm32")]
 pub mod midi;
 #[cfg(target_arch = "wasm32")]
+pub mod pip;
+#[cfg(target_arch = "wasm32")]
 pub mod projector;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod webmcp;

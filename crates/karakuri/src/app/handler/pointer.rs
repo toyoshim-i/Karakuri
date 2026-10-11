@@ -322,6 +322,17 @@ impl App {
                     hook(on);
                 }
             }
+            #[cfg(target_arch = "wasm32")]
+            if matches!(output, karakuri_operation::Output::Pip) {
+                if let Some(ref mut gfx) = self.gfx {
+                    gfx.engine
+                        .deck
+                        .grant_watchdog_grace(std::time::Duration::from_secs(3));
+                }
+                if let Some(ref mut hook) = self.pip_route_hook {
+                    hook(on);
+                }
+            }
             #[cfg(not(target_arch = "wasm32"))]
             if matches!(output, karakuri_operation::Output::Projector(_)) {
                 gfx.engine

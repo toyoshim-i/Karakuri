@@ -61,6 +61,8 @@ pub struct WebApp {
     pending_webxr_active: Rc<RefCell<Option<bool>>>,
     pending_projector: Rc<RefCell<Option<crate::projector::ProjectorAction>>>,
     projector_window: Option<web_sys::Window>,
+    pending_pip: Rc<RefCell<Option<crate::pip::PipAction>>>,
+    pip_window: Option<web_sys::Window>,
     pending_cast: Rc<RefCell<Option<crate::cast::CastAction>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
@@ -338,6 +340,17 @@ impl WebApp {
             crate::projector::handle_route_hook(on, &proxy_proj, &pending_proj_hook);
         });
 
+        // Set up Document Picture-in-Picture floating window hook when operator toggles PiP chip
+        let pending_pip: Rc<RefCell<Option<crate::pip::PipAction>>> = Rc::new(RefCell::new(None));
+        let pending_pip_hook = pending_pip.clone();
+        let proxy_pip = proxy.clone();
+        app.set_pip_route_hook(move |on| {
+            crate::pip::handle_route_hook(on, &proxy_pip, &pending_pip_hook);
+        });
+
+        let pip_available = crate::pip::is_pip_available();
+        app.set_pip_override(pip_available, false);
+
         Self {
             app,
             proxy,
@@ -354,6 +367,8 @@ impl WebApp {
             pending_webxr_active,
             pending_projector,
             projector_window: None,
+            pending_pip,
+            pip_window: None,
             pending_cast,
             initialized: false,
             ime_overlay: None,
@@ -637,6 +652,13 @@ impl ApplicationHandler<()> for WebApp {
                 &mut self.projector_window,
                 action,
             );
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+
+        if let Some(action) = self.pending_pip.borrow_mut().take() {
+            crate::pip::handle_pip_action(&mut self.app, &mut self.pip_window, action);
             if let Some(ref window) = self.window {
                 window.request_redraw();
             }

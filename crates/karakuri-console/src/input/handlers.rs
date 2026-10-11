@@ -40,6 +40,7 @@ pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
         ctx,
         panel.layout(),
         view.opening,
+        view.pip_available,
         view.plugin_available,
         view.plugin_name,
         view.plugin_1_available,
@@ -48,7 +49,9 @@ pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
         view.xr_menu_open,
     )
     .map(|row| {
-        row.told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name)
+        row.told(view.projector)
+            .told_pip(view.pip)
+            .told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name)
             .told_plugin_name(
                 1,
                 view.plugin_1,

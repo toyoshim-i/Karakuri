@@ -47,10 +47,10 @@ fn webxr_mode_pill_and_dropdown_lifecycle() {
     assert!(box_of.contains_rect(xr_pill.pill));
     assert!(near(
         xr_pill.pill.min.x,
-        row.more[1].chip.max.x + size::OUTPUTS_GAP
+        row.more[2].chip.max.x + size::OUTPUTS_GAP
     ));
     assert!(near(
-        row.more[2].chip.min.x,
+        row.more[3].chip.min.x,
         xr_pill.pill.max.x + size::OUTPUTS_GAP
     ));
 

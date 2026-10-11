@@ -672,12 +672,14 @@ fn a_chip_asks_for_the_output_it_names() {
         })
     );
 
-    // Uninstalled plugin sink chips remain inert and emit no route operations.
+    // Uninstalled / unavailable auxiliary sink chips remain inert and emit no route operations.
     for chip in &row.more[1..] {
         assert!(!chip.present, "{} is drawn as an absent sink", chip.name);
         assert_eq!(chip.route(), None);
         assert!(
-            chip.name.contains("no plugin"),
+            chip.name.contains("no plugin")
+                || chip.name.contains("web only")
+                || chip.name.contains("no support"),
             "an absent sink says so in the chip: `{}`",
             chip.name
         );
@@ -705,13 +707,13 @@ fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
     assert_eq!(row.chip_at(at(row.label.center())), None);
     assert_eq!(row.chip_at(at(row.mcp.center())), None);
     // Nor is the ground past the last chip.
-    let past = egui::pos2(row.more[2].chip.max.x + 20.0, row.sink.center().y);
+    let past = egui::pos2(row.more[3].chip.max.x + 20.0, row.sink.center().y);
     assert_eq!(row.chip_at(at(past)), None);
 }
 
 /// Chips are laid out horizontally with `.outputs` gaps and remain bounded by the row.
 #[test]
-fn the_four_chips_are_one_gap_apart_and_all_inside_the_row() {
+fn the_five_chips_are_one_gap_apart_and_all_inside_the_row() {
     let (panel, ctx) = console(PLAUSIBLE);
     let region = rect_of(panel.layout(), "outputs");
     let row = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sinks");

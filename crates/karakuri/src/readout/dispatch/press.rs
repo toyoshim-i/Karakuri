@@ -779,6 +779,7 @@ impl Readout {
             ctx,
             self.panel.layout(),
             self.view.opening,
+            self.view.pip_available,
             self.view.plugin_available,
             self.view.plugin_name,
             self.view.plugin_1_available,
@@ -788,6 +789,7 @@ impl Readout {
         )
         .map(|row| {
             row.told(self.view.projector)
+                .told_pip(self.view.pip)
                 .told_plugin_name(
                     0,
                     self.view.plugin,

@@ -7,19 +7,22 @@ pub enum Output {
     Program,
     /// Windowed projector display output indexed by window instance.
     Projector(u8),
+    /// Document Picture-in-Picture floating preview monitor.
+    Pip,
     /// External sink provided by an output plugin (e.g. Syphon, NDI).
     Plugin(u8),
 }
 
 impl Output {
     /// Standard built-in output targets.
-    pub const ALL: [Output; 2] = [Output::Program, Output::Projector(0)];
+    pub const ALL: [Output; 3] = [Output::Program, Output::Projector(0), Output::Pip];
 
     /// Returns the human-readable identifier for this output target.
     pub fn name(self) -> String {
         match self {
             Output::Program => "program view".to_owned(),
             Output::Projector(n) => format!("projector {n}"),
+            Output::Pip => "pip".to_owned(),
             Output::Plugin(n) => format!("plugin {n}"),
         }
     }

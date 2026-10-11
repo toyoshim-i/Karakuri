@@ -84,6 +84,11 @@ impl App {
         self.projector_route_hook = Some(Box::new(hook));
     }
 
+    /// Sets callback invoked when Document Picture-in-Picture is toggled on wasm32.
+    pub fn set_pip_route_hook<F: FnMut(bool) + 'static>(&mut self, hook: F) {
+        self.pip_route_hook = Some(Box::new(hook));
+    }
+
     /// Attaches an external projector surface on wasm32 (e.g. from an auxiliary window canvas).
     #[cfg(target_arch = "wasm32")]
     pub fn attach_projector(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
@@ -216,5 +221,88 @@ impl App {
             gfx.window.request_redraw();
         }
         self.readout.view.plugin_1 = false;
+    }
+
+    /// Sets Document Picture-in-Picture state (available and active toggle).
+    pub fn set_pip_override(&mut self, available: bool, on: bool) {
+        self.readout.view.pip_available = available;
+        self.readout.view.pip = on;
+        if let Some(ref gfx) = self.gfx {
+            gfx.window.request_redraw();
+        }
+    }
+
+    /// Attaches a Document Picture-in-Picture surface on wasm32.
+    #[cfg(target_arch = "wasm32")]
+    pub fn attach_pip_surface(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
+        if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(3));
+            for slot in 0..gfx.engine.deck.slot_count() {
+                gfx.engine
+                    .deck
+                    .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+            }
+            let caps = surface.get_capabilities(&gfx.gpu.adapter);
+            let format = caps
+                .formats
+                .iter()
+                .copied()
+                .find(|f| !f.is_srgb())
+                .unwrap_or(caps.formats[0]);
+            let view_formats = if format != gfx.picture_format {
+                vec![gfx.picture_format]
+            } else {
+                vec![]
+            };
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format,
+                color_space: wgpu::SurfaceColorSpace::Auto,
+                width: size.0.max(1),
+                height: size.1.max(1),
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode: caps.alpha_modes[0],
+                view_formats,
+                desired_maximum_frame_latency: 2,
+            };
+            surface.configure(&gfx.gpu.device, &config);
+            gfx.pip_sink = Some(karakuri_engine::WindowSink::new(surface, config));
+            self.readout.view.pip = true;
+            gfx.window.request_redraw();
+        }
+    }
+
+    /// Detaches the PiP surface on wasm32 and turns off the PiP chip.
+    #[cfg(target_arch = "wasm32")]
+    pub fn detach_pip_surface(&mut self) {
+        if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(3));
+            for slot in 0..gfx.engine.deck.slot_count() {
+                gfx.engine
+                    .deck
+                    .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+            }
+            gfx.pip_sink = None;
+            gfx.window.request_redraw();
+        }
+        self.readout.view.pip = false;
+    }
+
+    /// Resizes the PiP surface on wasm32 when the floating window is resized.
+    #[cfg(target_arch = "wasm32")]
+    pub fn resize_pip_surface(&mut self, size: (u32, u32)) {
+        if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(2));
+            if let Some(sink) = gfx.pip_sink.as_mut() {
+                sink.resize(&gfx.gpu.device, size.0.max(1), size.1.max(1));
+                gfx.window.request_redraw();
+            }
+        }
     }
 }

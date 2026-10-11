@@ -185,6 +185,8 @@ impl View {
             theme_menu_open: false,
             // Projector window initially inactive.
             projector: false,
+            pip: false,
+            pip_available: false,
             plugin: false,
             plugin_available: false,
             plugin_name: None,

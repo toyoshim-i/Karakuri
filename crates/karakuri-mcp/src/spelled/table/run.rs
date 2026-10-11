@@ -28,24 +28,31 @@ pub(crate) const RUN: &[Spelled] = &[
                         .to_string()
                 })
             };
-            let output = match named {
-                "program" if numbered => {
-                    return Err(
-                        "`with.index` is given with `program`, and the picture in the Program \
+            let output =
+                match named {
+                    "program" if numbered => {
+                        return Err(
+                            "`with.index` is given with `program`, and the picture in the Program \
                          bay is one output with no number — say `program` on its own"
+                                .to_string(),
+                        )
+                    }
+                    "program" => karakuri_operation::Output::Program,
+                    "pip" if numbered => return Err(
+                        "`with.index` is given with `pip`, and the floating Picture-in-Picture \
+                         monitor is one output with no number — say `pip` on its own"
                             .to_string(),
-                    )
-                }
-                "program" => karakuri_operation::Output::Program,
-                "projector" => karakuri_operation::Output::Projector(index(with)?),
-                "plugin" => karakuri_operation::Output::Plugin(index(with)?),
-                said => {
-                    return Err(format!(
-                        "`with.output` is `{said}`, and an output is one of: program, \
-                         projector, plugin"
-                    ))
-                }
-            };
+                    ),
+                    "pip" => karakuri_operation::Output::Pip,
+                    "projector" => karakuri_operation::Output::Projector(index(with)?),
+                    "plugin" => karakuri_operation::Output::Plugin(index(with)?),
+                    said => {
+                        return Err(format!(
+                            "`with.output` is `{said}`, and an output is one of: program, \
+                         projector, pip, plugin"
+                        ))
+                    }
+                };
             Ok(Operation::RouteFrame {
                 output,
                 on: bool_of(with, "on")?,

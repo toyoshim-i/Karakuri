@@ -80,8 +80,10 @@ impl View {
         let phase = self.phase;
         // Bay drawer opening state snapshot.
         let opening = self.opening;
-        // Projector and plugin sink states.
+        // Projector, PiP, and plugin sink states.
         let projector = self.projector;
+        let pip = self.pip;
+        let pip_available = self.pip_available;
         let plugin = self.plugin;
         let plugin_available = self.plugin_available;
         let plugin_name = self.plugin_name;
@@ -166,6 +168,7 @@ impl View {
                             ui.ctx(),
                             panel.layout(),
                             opening,
+                            pip_available,
                             plugin_available,
                             plugin_name,
                             plugin_1_available,
@@ -175,6 +178,7 @@ impl View {
                         )
                         .map(|r| {
                             r.told(projector)
+                                .told_pip(pip)
                                 .told_plugin_name(0, plugin, plugin_available, plugin_name)
                                 .told_plugin_name(1, plugin_1, plugin_1_available, plugin_1_name)
                         }) {
