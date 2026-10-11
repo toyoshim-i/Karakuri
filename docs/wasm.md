@@ -175,16 +175,20 @@ Rather than running duplicate state machines via `BroadcastChannel` or copying h
 
 ---
 
-#### 3.5.2 Plugin Sink 1: Low-Latency WebRTC & Cast Streaming
-Corresponding to native desktop Syphon/Spout plugin sinks (ADR-0369), Web Karakuri provides native real-time video distribution for broadcasting and remote collaboration:
+#### 3.5.2 Plugin Sink 1: Low-Latency Wireless Cast Streaming (Presentation API + WebRTC)
+Corresponding to native desktop Syphon/Spout/NDI plugin sinks (ADR-0369), Web Karakuri provides serverless, ultra-low-latency wireless video distribution to smart TVs, Chromecast dongles, and remote screens:
 
-1. **Canvas MediaStream Capture**:
-   - Captures the composited master program canvas via `canvas.captureStream(60)`.
-2. **WebRTC Direct Ingestion (WHIP / P2P)**:
-   - Feeds the stream into an `RTCPeerConnection` using WHIP (WebRTC-HTTP Ingestion Protocol) or direct P2P.
-   - Allows direct ingestion into OBS Studio (via Browser / WebRTC source), Discord, or remote VJ streaming relays with ultra-low glass-to-glass latency (< 50 ms).
-3. **Wireless Casting (Google Cast / AirPlay)**:
-   - Transmits live performance video wirelessly to smart displays and wireless projectors in club settings where HDMI cabling is impractical.
+1. **Clean Offscreen 1080p Canvas (`#karakuri-cast-canvas`)**:
+   - The engine binds a secondary `wgpu::Surface` to an offscreen full-HD canvas (`#karakuri-cast-canvas`, 1920×1080).
+   - In every render frame, `compose` writes the uncompressed clean program video (no egui console UI overlays) to the cast surface.
+2. **In-Band Signaling over Presentation API (`PresentationRequest`)**:
+   - The operator activates `[ Cast ]` (the 4th chip in the Outputs bay).
+   - The browser opens the native device selector dialog for W3C **Presentation API** (`new PresentationRequest(['receiver.html'])`).
+   - The receiver screen (TV, Chromecast, secondary browser) loads `receiver.html`—a zero-dependency lightweight HTML5 shell containing a single fullscreen `<video>` element with hardware acceleration.
+   - The controller and receiver use the established `PresentationConnection` message channel to exchange SDP offer/answer descriptors and ICE candidates in-band. **No external WebSocket signaling server or cloud relay is required.**
+3. **Hardware-Accelerated WebRTC P2P Stream (`canvas.captureStream(60)`)**:
+   - Captured frames stream directly over local Wi-Fi via `RTCPeerConnection` to the receiver with glass-to-glass latency under 50 ms.
+   - The receiver plays the stream on its native `<video>` tag, fully bypassing the need for WebGPU support on the TV hardware.
 
 ---
 
@@ -255,8 +259,8 @@ When `WebXR` is toggled:
 - Multi-window WebGPU Projector popout with shared GPU device & zero-copy surface (Completed)
 - Transient watchdog grace & rolling median reset on window transitions (Completed)
 - WebXR Spatial World & Side-by-Side Stereo Canvas Projection (Completed)
-- WebRTC low-latency streaming sink (canvas.captureStream / WHIP) (Remaining)
-- Presentation API pairing for wireless/remote cast displays (Remaining)
+- Wireless Presentation Cast with WebRTC P2P direct streaming (Completed)
+- Document Picture-in-Picture [ Float ] Preview Monitor (Upcoming)
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
 │ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (Upcoming)
@@ -283,4 +287,4 @@ When `WebXR` is toggled:
 | **MIDI Input** | midir (CoreMIDI / WinMM / ALSA) | midir (Web MIDI API) | Native browser USB MIDI device support |
 | **File Storage** | `std::fs` under `~/.karakuri/store` | `karakuri_store::fs` + IndexedDB write-through | Sandboxed persistent VFS (ADR-0386) |
 | **Projector Output**| `winit` secondary fullscreen window  | Same-origin popout (`projector.html`) with direct WebGPU surface sharing & Watchdog grace | Zero-copy multi-window GPU rendering, zero IPC latency |
-| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows)     | WebRTC (WHIP) & WebXR Immersive (Spatial HUD)  | Browser-native broadcasting & spatial 6DoF |
+| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows) / NDI | WebXR (VR/MR) & Wireless Cast (Presentation API + WebRTC P2P) | Browser-native spatial 6DoF and zero-backend wireless projection |
