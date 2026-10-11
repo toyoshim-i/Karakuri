@@ -765,4 +765,100 @@ impl App {
     pub fn view_mut(&mut self) -> &mut karakuri_console::view::View {
         &mut self.readout.view
     }
+
+    /// Exports the currently running Set on the active deck as a self-contained `.kbset` NDJSON bundle string.
+    pub fn export_active_set_bundle(&mut self) -> Result<(String, String), String> {
+        let Some(ref gfx) = self.gfx else {
+            return Err("Graphics engine is not initialized".into());
+        };
+        let store =
+            karakuri_store::Store::open(&self.store).map_err(|e| format!("opening store: {e}"))?;
+
+        let target_deck = usize::from(self.readout.view.target_deck());
+        let count = gfx.engine.deck.slot_count();
+        let slot = if target_deck < count { target_deck } else { 0 };
+
+        let active_id = self
+            .readout
+            .view
+            .aimed
+            .clone()
+            .or_else(|| gfx.engine.aimed.get(slot).and_then(|a| a.at.set.clone()));
+
+        let id = match active_id {
+            Some(id) if store.read_set(&id).is_ok() => id,
+            _ => {
+                // If not yet saved or read, save current playing state under a clean stamped name
+                let id = format!("set_{}", karakuri_environment::history::stamped_id());
+                let Some(nodes) = self.keeping.playing.at(slot) else {
+                    return Err("No active playing nodes in slot".into());
+                };
+                let sources = karakuri_environment::setfile::Sources(
+                    nodes.iter().map(crate::bridge::copied).collect(),
+                );
+                let values = crate::playing_values(
+                    gfx.engine
+                        .deck
+                        .slot(karakuri_engine::DeckSlot(slot as u8))
+                        .set(),
+                    &gfx.engine.edges,
+                );
+                let mut saving_values = values;
+                saving_values.nodes = sources.into_nodes(&store)?;
+                karakuri_environment::setfile::save(
+                    &store,
+                    karakuri_environment::Asked::Operator,
+                    &id,
+                    saving_values.saving(),
+                )?;
+                id
+            }
+        };
+
+        let lines = karakuri_environment::setfile::bundle(&store, &id)?;
+        let ndjson = lines
+            .iter()
+            .map(|l| l.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        Ok((id, ndjson))
+    }
+
+    /// Unbundles and imports a self-contained `.kbset` NDJSON bundle string and loads it onto Deck A.
+    pub fn import_and_load_bundle(&mut self, ndjson: &str) -> Result<String, String> {
+        let store =
+            karakuri_store::Store::open(&self.store).map_err(|e| format!("opening store: {e}"))?;
+        let lines: Vec<karakuri_store::ndjson::Line> = ndjson
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .enumerate()
+            .map(|(i, line)| {
+                let rec: karakuri_store::record::Record = serde_json::from_str(line)
+                    .map_err(|e| format!("parsing bundle line {}: {e}", i + 1))?;
+                Ok(karakuri_store::ndjson::Line::new(rec))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+
+        let set_id = karakuri_environment::setfile::unbundle(
+            &store,
+            karakuri_environment::setfile::CameFrom::Somebody,
+            &lines,
+        )?;
+        if let Some(ref mut gfx) = self.gfx {
+            if let Some(aim) = gfx.engine.aimed.get_mut(0) {
+                let _ = crate::loading(&gfx.store, 0, crate::slot_salt(0), aim, &set_id);
+            }
+            if let Some(name) = gfx.material.get_mut(0) {
+                name.clear();
+                name.push_str(&set_id);
+            }
+            self.readout.view.aimed = Some(set_id.clone());
+            self.readout
+                .view
+                .select_scope(karakuri_console::view::Scope::AllSets);
+            gfx.window.request_redraw();
+        }
+        Ok(set_id)
+    }
 }

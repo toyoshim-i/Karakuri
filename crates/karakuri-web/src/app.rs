@@ -67,6 +67,8 @@ pub struct WebApp {
     pending_pip: Rc<RefCell<Option<crate::pip::PipAction>>>,
     pip_window: Option<web_sys::Window>,
     pending_cast: Rc<RefCell<Option<crate::cast::CastAction>>>,
+    pending_share: Rc<RefCell<bool>>,
+    pending_import: Rc<RefCell<Option<String>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
     /// Where the head was when the WebXR session began, in the headset's
@@ -373,6 +375,8 @@ impl WebApp {
             pending_pip,
             pip_window: None,
             pending_cast,
+            pending_share: Rc::new(RefCell::new(false)),
+            pending_import: Rc::new(RefCell::new(None)),
             initialized: false,
             ime_overlay: None,
             xr_rig_origin: None,
@@ -559,6 +563,35 @@ impl ApplicationHandler<()> for WebApp {
                 log::warn!("Karakuri Web: Failed to initialize IME overlay: {e:?}");
             }
         }
+
+        let share_trigger = self.pending_share.clone();
+        let share_proxy = self.proxy.clone();
+        let trigger_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+            *share_trigger.borrow_mut() = true;
+            let _ = share_proxy.send_event(());
+        });
+        let _ = js_sys::Reflect::set(
+            &dom_window,
+            &wasm_bindgen::JsValue::from_str("__karakuri_trigger_share"),
+            trigger_cb.as_ref().unchecked_ref(),
+        );
+        trigger_cb.forget();
+
+        let pending_import = self.pending_import.clone();
+        let import_proxy = self.proxy.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            match crate::share::load_url_hash_set().await {
+                Ok(Some(ndjson)) => {
+                    log::info!("Karakuri Web: Found Set bundle in URL hash, queueing import");
+                    *pending_import.borrow_mut() = Some(ndjson);
+                    let _ = import_proxy.send_event(());
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    log::warn!("Karakuri Web: Error reading Set from URL hash: {e}");
+                }
+            }
+        });
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
@@ -686,6 +719,46 @@ impl ApplicationHandler<()> for WebApp {
             }
             if let Some(ref window) = self.window {
                 window.request_redraw();
+            }
+        }
+
+        if let Some(ndjson) = self.pending_import.borrow_mut().take() {
+            log::info!("Karakuri Web: Importing Set from URL hash...");
+            match self.app.import_and_load_bundle(&ndjson) {
+                Ok(set_id) => {
+                    log::info!("Karakuri Web: Successfully imported and loaded Set '{set_id}' from URL hash");
+                }
+                Err(e) => {
+                    log::error!("Karakuri Web: Failed to import Set from URL hash: {e}");
+                }
+            }
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+
+        let trigger_share = {
+            let mut b = self.pending_share.borrow_mut();
+            if *b {
+                *b = false;
+                true
+            } else {
+                false
+            }
+        };
+        if trigger_share {
+            log::info!("Karakuri Web: Exporting active Set for share...");
+            match self.app.export_active_set_bundle() {
+                Ok((id, ndjson)) => {
+                    wasm_bindgen_futures::spawn_local(async move {
+                        if let Err(e) = crate::share::execute_web_share(&id, &ndjson).await {
+                            log::warn!("Karakuri Web: Share failed or cancelled: {e}");
+                        }
+                    });
+                }
+                Err(e) => {
+                    log::error!("Karakuri Web: Failed to export Set bundle: {e}");
+                }
             }
         }
 

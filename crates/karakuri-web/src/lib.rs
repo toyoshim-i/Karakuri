@@ -18,6 +18,8 @@ pub mod midi;
 pub mod pip;
 #[cfg(target_arch = "wasm32")]
 pub mod projector;
+#[cfg(target_arch = "wasm32")]
+pub mod share;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod webmcp;
 #[cfg(target_arch = "wasm32")]
