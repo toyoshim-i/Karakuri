@@ -192,11 +192,26 @@ Corresponding to native desktop Syphon/Spout/NDI plugin sinks (ADR-0369), Web Ka
 
 ---
 
-#### 3.5.3 Plugin Sink 2: WebXR Immersive Spatial Mode (Virtual Cockpit)
+#### 3.5.3 Document Picture-in-Picture: Always-On-Top Floating Monitor
+For multitasking, coding, and live control where the operator works across different browser tabs or external applications, Karakuri Web integrates the W3C **Document Picture-in-Picture API**:
+
+1. **Always-On-Top Floating Window (`window.documentPictureInPicture`)**:
+   - The operator toggles `[ pip ]` (the 3rd chip in the Outputs bay).
+   - In Chromium browsers (Chrome/Edge 111+), the browser opens an OS-level always-on-top window (`requestWindow({ width: 640, height: 360 })`) that stays floating above all other desktop applications.
+   - An offscreen canvas (`#karakuri-pip-canvas`) inside the floating window document binds directly to a secondary `wgpu::Surface` using the parent window's shared `Gpu::instance()`.
+2. **Dynamic DPR & Resizing**:
+   - The PiP canvas dynamically tracks window drag-resizing and Retina/DPR changes.
+   - `WindowSink` cleanly letterboxes the composed clean program video (no egui UI overlays) into the floating monitor with zero memory copying or CPU overhead.
+3. **Lifecycle Synchronization**:
+   - Window closure (via OS titlebar close button, navigation, or un-toggling `[ pip ]`) triggers the `pagehide` event and automatically synchronizes the Outputs chip state.
+
+---
+
+#### 3.5.4 Plugin Sink 2: WebXR Immersive Spatial Mode (Virtual Cockpit)
 Corresponding to spatial XR headsets (Meta Quest, Apple Vision Pro, PCVR), Karakuri Web integrates a dedicated spatial performance mode:
 
 ```
-Outputs Bay: [ Monitor ] [ Projector ] [ WebRTC ] [ WebXR ]
+Outputs Bay: [ program view ] [ projector ] [ pip ] [ WebXR ] [ Cast ]
 ```
 
 When `WebXR` is toggled:
@@ -255,15 +270,15 @@ When `WebXR` is toggled:
 - Full persistence across browser sessions for sets, procedures, and MIDI/key mappings
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (In Progress)
+│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (Completed)
 - Multi-window WebGPU Projector popout with shared GPU device & zero-copy surface (Completed)
 - Transient watchdog grace & rolling median reset on window transitions (Completed)
 - WebXR Spatial World & Side-by-Side Stereo Canvas Projection (Completed)
 - Wireless Presentation Cast with WebRTC P2P direct streaming (Completed)
-- Document Picture-in-Picture [ Float ] Preview Monitor (Upcoming)
+- Document Picture-in-Picture [ pip ] always-on-top floating preview monitor (Completed)
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (Upcoming)
+│ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (In Progress)
 - Bundle import/export UI (.kbset file upload & Blob download)
 - Offline PWA manifest & service worker caching
 - Headset / touch & pointer interaction audit
@@ -287,4 +302,5 @@ When `WebXR` is toggled:
 | **MIDI Input** | midir (CoreMIDI / WinMM / ALSA) | midir (Web MIDI API) | Native browser USB MIDI device support |
 | **File Storage** | `std::fs` under `~/.karakuri/store` | `karakuri_store::fs` + IndexedDB write-through | Sandboxed persistent VFS (ADR-0386) |
 | **Projector Output**| `winit` secondary fullscreen window  | Same-origin popout (`projector.html`) with direct WebGPU surface sharing & Watchdog grace | Zero-copy multi-window GPU rendering, zero IPC latency |
+| **PiP Monitor**    | N/A (Desktop window management)     | Document Picture-in-Picture API (`window.documentPictureInPicture`) | Always-on-top OS-level floating monitor across applications |
 | **Plugin Sinks**   | Syphon (macOS) / Spout (Windows) / NDI | WebXR (VR/MR) & Wireless Cast (Presentation API + WebRTC P2P) | Browser-native spatial 6DoF and zero-backend wireless projection |
