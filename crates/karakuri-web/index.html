@@ -542,7 +542,12 @@
           const b64 = compressed ? uint8ToBase64Url(compressed) : '';
           const originBase = window.location.origin + window.location.pathname;
           let currentShareUrl = originBase + '#set=' + b64;
-          const isLarge = currentShareUrl.length > 1200;
+          // Twitter shortens valid URLs up to ~4,000 characters using t.co (costing 23 chars).
+          // Exceeding 3,800 chars risks surpassing Twitter's link entity limits.
+          const isLarge = currentShareUrl.length > 3800;
+
+          // Always set and display the initial share URL
+          updateShareUrl(currentShareUrl);
 
           if (storageBox) {
             storageBox.style.display = isLarge ? 'block' : 'none';
@@ -558,10 +563,6 @@
               const u = new URL(newUrl);
               window.history.replaceState(null, '', u.hash);
             } catch (_) {}
-          }
-
-          if (!isLarge) {
-            updateShareUrl(currentShareUrl);
           }
 
           if (gistTokenInput) {
@@ -826,17 +827,17 @@
   <div id="karakuri-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:rgba(200,30,30,0.92);color:#fff;padding:8px 12px;font-family:monospace;font-size:12px;z-index:99999;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:none;align-items:center;justify-content:space-between;">
     <span id="karakuri-error-text" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px;"></span>
     <div style="display:flex;gap:6px;">
-      <button onclick="document.getElementById('karakuri-log-drawer').style.display='flex';" style="background:rgba(255,255,255,0.2);border:none;color:#fff;padding:3px 8px;border-radius:3px;font-size:11px;cursor:pointer;">Logs</button>
-      <button onclick="document.getElementById('karakuri-error-banner').style.display='none';" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0 4px;">✕</button>
+      <button title="Open on-screen console diagnostic log drawer" onclick="document.getElementById('karakuri-log-drawer').style.display='flex';" style="background:rgba(255,255,255,0.2);border:none;color:#fff;padding:3px 8px;border-radius:3px;font-size:11px;cursor:pointer;">Logs</button>
+      <button title="Dismiss error banner" onclick="document.getElementById('karakuri-error-banner').style.display='none';" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0 4px;">✕</button>
     </div>
   </div>
 
   <!-- Floating Control Buttons at Bottom-Right -->
   <div style="position:fixed;bottom:8px;right:8px;z-index:99990;display:flex;gap:6px;">
-    <button id="karakuri-share-btn" onclick="if(window.__karakuri_trigger_share) window.__karakuri_trigger_share();" style="background:rgba(25,25,35,0.7);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:monospace;font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;">
+    <button id="karakuri-share-btn" title="Share active Set (Deck A) on 𝕏 with a 5-second clean visual loop video" onclick="if(window.__karakuri_trigger_share) window.__karakuri_trigger_share();" style="background:rgba(25,25,35,0.7);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:monospace;font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;">
       <span>𝕏</span> Share
     </button>
-    <button id="karakuri-log-toggle" onclick="const d = document.getElementById('karakuri-log-drawer'); d.style.display = (d.style.display === 'flex' ? 'none' : 'flex');" style="background:rgba(25,25,35,0.6);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);font-family:monospace;font-size:10px;padding:3px 7px;border-radius:4px;cursor:pointer;user-select:none;">
+    <button id="karakuri-log-toggle" title="Toggle on-screen console diagnostic log drawer" onclick="const d = document.getElementById('karakuri-log-drawer'); d.style.display = (d.style.display === 'flex' ? 'none' : 'flex');" style="background:rgba(25,25,35,0.6);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);font-family:monospace;font-size:10px;padding:3px 7px;border-radius:4px;cursor:pointer;user-select:none;">
       ⚡ Logs
     </button>
   </div>
@@ -848,7 +849,7 @@
         <h3 id="karakuri-share-title" style="margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;">
           <span>𝕏</span> Share Set
         </h3>
-        <button onclick="document.getElementById('karakuri-share-modal').style.display='none';" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+        <button title="Close share dialog" onclick="document.getElementById('karakuri-share-modal').style.display='none';" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
       </div>
 
       <!-- Video Preview & Recording Status -->
@@ -863,19 +864,19 @@
       <!-- Cloud Storage Selection (for large sets) -->
       <div id="karakuri-storage-selection-box" style="display:none;margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;">
         <div style="margin-bottom:8px;color:#f39c12;line-height:1.4;">
-          ⚠️ Shaders exceed inline link length limit (~1,200 chars). Save to storage for a short URL:
+          ⚠️ Shaders exceed inline link length limit (~4,000 chars for 𝕏). Save to cloud storage for a short URL:
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <!-- Cloudflare Worker Option -->
-          <button id="karakuri-save-cf-btn" style="background:#2980b9;color:#fff;border:none;padding:7px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <button id="karakuri-save-cf-btn" title="Upload Set bundle to Cloudflare KV public storage and generate a short URL" style="background:#2980b9;color:#fff;border:none;padding:7px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
             ☁️ Save to Public Storage (Cloudflare KV)
           </button>
           <div id="karakuri-turnstile-container" style="display:flex;justify-content:center;"></div>
 
           <!-- GitHub Gist Option -->
           <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;">
-            <input id="karakuri-gist-token" type="password" placeholder="GitHub Personal Access Token (gist scope)" style="width:100%;box-sizing:border-box;background:#0a0b0e;border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:monospace;font-size:10px;padding:5px 8px;border-radius:4px;margin-bottom:6px;" />
-            <button id="karakuri-save-gist-btn" style="width:100%;background:#333;color:#fff;border:1px solid rgba(255,255,255,0.2);padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+            <input id="karakuri-gist-token" type="password" title="GitHub Personal Access Token (with 'gist' scope)" placeholder="GitHub Personal Access Token (gist scope)" style="width:100%;box-sizing:border-box;background:#0a0b0e;border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:monospace;font-size:10px;padding:5px 8px;border-radius:4px;margin-bottom:6px;" />
+            <button id="karakuri-save-gist-btn" title="Save Set bundle as a public GitHub Gist under your account and generate a short URL" style="width:100%;background:#333;color:#fff;border:1px solid rgba(255,255,255,0.2);padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
               🐙 Save to My GitHub Gist
             </button>
           </div>
@@ -887,7 +888,7 @@
         <div style="font-size:11px;color:#888;margin-bottom:4px;">Share URL:</div>
         <div style="display:flex;gap:6px;">
           <div id="karakuri-share-url-preview" style="flex:1;background:#0a0b0e;border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:6px 8px;font-family:monospace;font-size:10px;color:#3498db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:all;"></div>
-          <button id="karakuri-share-copy-btn" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap;">
+          <button id="karakuri-share-copy-btn" title="Copy share URL to clipboard" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap;">
             📋 Copy
           </button>
         </div>
@@ -895,10 +896,10 @@
 
       <!-- 2-Step Share on X Flow -->
       <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">
-        <button id="karakuri-share-dl-btn" disabled style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
+        <button id="karakuri-share-dl-btn" disabled title="Step 1: Download 5-second clean loop video (MP4/WebM) to your device" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
           <span>⬇</span> Step 1: Download Loop Video (5s)
         </button>
-        <button id="karakuri-share-open-x-btn" disabled style="background:#1d9bf0;color:#fff;border:none;padding:9px 14px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
+        <button id="karakuri-share-open-x-btn" disabled title="Step 2: Open 𝕏 post composer with Set URL and tags; attach downloaded video to post" style="background:#1d9bf0;color:#fff;border:none;padding:9px 14px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
           <span>𝕏</span> Step 2: Open 𝕏 Post Composer
         </button>
         <div style="font-size:10px;color:#7f8c8d;text-align:center;line-height:1.4;">
@@ -913,9 +914,9 @@
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(25,26,36,0.9);border-bottom:1px solid rgba(255,255,255,0.08);">
       <span style="font-weight:bold;color:#f1f2f6;">Karakuri Console Logs</span>
       <div style="display:flex;gap:6px;">
-        <button onclick="navigator.clipboard.writeText(window.__karakuri_get_logs()).then(() => alert('Logs copied!'));" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;">Copy</button>
-        <button onclick="document.getElementById('karakuri-log-list').innerHTML=''; logHistory.length=0;" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;">Clear</button>
-        <button onclick="document.getElementById('karakuri-log-drawer').style.display='none';" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0 4px;">✕</button>
+        <button title="Copy all console diagnostic logs to clipboard" onclick="navigator.clipboard.writeText(window.__karakuri_get_logs()).then(() => alert('Logs copied!'));" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;">Copy</button>
+        <button title="Clear log drawer history" onclick="document.getElementById('karakuri-log-list').innerHTML=''; logHistory.length=0;" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;">Clear</button>
+        <button title="Close console log drawer" onclick="document.getElementById('karakuri-log-drawer').style.display='none';" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0 4px;">✕</button>
       </div>
     </div>
     <div id="karakuri-log-list" style="flex:1;overflow-y:auto;padding:8px 10px;user-select:text;-webkit-user-select:text;"></div>
