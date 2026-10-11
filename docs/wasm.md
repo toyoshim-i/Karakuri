@@ -11,7 +11,7 @@ Unlike native desktop Karakuri, which relies on host operating system facilities
 1. **WebGPU-Native Procedural Shader Pipeline**: Karakuri IR (`.kir`) compiles to WGSL via `karakuri-codegen`, matching WebGPU's native shader language without any transpile step.
 2. **In-Process Agent Harness & Direct Tool Execution**: Eliminates the PTY process manager and TCP-based MCP server in favor of an internal, in-memory agent runner connecting directly to OpenAI-compatible LLM endpoints.
 3. **Web Audio & Web MIDI Buses**: Retains real-time audio FFT spectral analysis and hardware controller mappings via Web Audio API and Web MIDI API.
-4. **Decoupled Multi-Window Projector**: Replaces OS texture sharing with multi-window Canvas synchronization (`BroadcastChannel`) or the HTML5 Fullscreen API.
+4. **Zero-Copy Multi-Window Projector**: Replaces OS texture sharing with direct same-origin multi-window WebGPU surface attachment on a shared GPU adapter/device, featuring transient Watchdog grace handling.
 
 ---
 
@@ -34,13 +34,13 @@ Unlike native desktop Karakuri, which relies on host operating system facilities
 │   │   engine + wgpu WebGPU target) │   │ (wasm-bindgen-futures)    │   │
 │   └───────┬──────────────┬─────────┘   └─────────────┬─────────────┘   │
 │           │              │                           │                 │
-│     [State Sync]    [Frame Sink]              [Fetch Stream]           │
+│   [Direct Surface]  [Frame Sink]              [Fetch Stream]           │
 │           │              │                           │                 │
 │           ▼              ▼                           ▼                 │
 │   ┌──────────────┐ ┌──────────────┐    ┌───────────────────────────┐   │
 │   │ Projector    │ │ Plugin Sinks │    │ OpenAI-Compatible API     │   │
 │   │ Secondary Win│ │ ├─ WebRTC    │    │ (Ollama, LMStudio, Cloud) │   │
-│   │ (State Sync) │ │ └─ WebXR XR  │    │                           │   │
+│   │(Shared GpuCtx)││ └─ WebXR XR  │    │                           │   │
 │   └──────────────┘ └──────────────┘    └───────────────────────────┘   │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
@@ -152,19 +152,26 @@ Web browsers run inside a sandboxed multi-process security model and do not expo
 
 ---
 
-#### 3.5.1 Projector: Deterministic State Synchronization (再生という名の再生性)
-Rather than copying heavy uncompressed 4K video framebuffers across browser windows (which induces PCIe/RAM bus saturation and framerate throttling):
+#### 3.5.1 Projector: Direct Zero-Copy WebGPU Multi-Window Surface Sharing
+Rather than running duplicate state machines via `BroadcastChannel` or copying heavy uncompressed 4K video framebuffers across browser windows (which induces PCIe/RAM bus saturation and framerate throttling):
 
-1. **Secondary Window via `window.open` or Presentation API**:
+1. **Same-Origin Popout Window (`projector.html`)**:
    - The operator activates `[ Projector ]` in the Outputs bay.
-   - The browser opens a clean popout window (`projector.html`) or requests a wireless presentation display via the W3C **Presentation API** (`navigator.presentation.request()`).
-2. **Deterministic State Synchronization (`BroadcastChannel`)**:
-   - Instead of streaming pixel bytes, the console broadcasts lightweight frame metadata: `(timestamp, current_step, slot_assignments, active_transitions, master_chain_params)`.
-   - Following **P-0092** (*"The same inputs produce the same frame"*), the secondary window executes its own identical WebGPU render pipeline.
-3. **Key Advantages**:
+   - The browser opens a clean popout window via `window.open('projector.html', 'KarakuriProjector', 'width=1920,height=1080,...')`.
+   - Loading a dedicated same-origin target (`projector.html`) ensures that the `window.opener` relationship remains intact without cross-origin isolation breakage.
+2. **Direct WebGPU Surface Attachment (`Gpu::instance().create_surface`)**:
+   - The main thread creates a secondary `wgpu::Surface` bound directly to the popout canvas (`#projector-canvas`).
+   - Both the primary console window and the projector popout window share the exact same `wgpu::Instance`, `wgpu::Device`, and `wgpu::Queue`.
+   - In every render frame, `App::render` acquires a swapchain texture from the projector surface and encodes a zero-copy blit/render pass directly into the main command encoder.
+3. **Transient Watchdog Grace (`grant_watchdog_grace`)**:
+   - Browser window creation, destruction, and resize operations incur transient compositor hitches (often 50–200ms) while the browser allocates new display swapchains.
+   - Without compensation, Karakuri's 60fps overload watchdog (`BudgetWatchdog`) would register these transient hitches as shader pipeline stalls and gate/stop visual execution.
+   - Karakuri Web invokes `engine.grant_watchdog_grace(Duration::from_millis(500))`, which resets the rolling median frame duration filter (`Period::reset`) and exempts the transition window from overload tripping.
+4. **Key Advantages**:
+   - **Zero IPC & Zero Copy**: Zero message serialization, zero state divergence, and zero duplicate GPU memory allocations.
+   - **True Zero-Latency Frame Parity**: Projector output is 100% synchronized with console mixer faders, audio FFT analysis, and prompt actions down to the exact WebGPU presentation frame.
    - **Resolution Independence**: The console preview can run on a 1080p laptop while the projector window renders at native 4K (3840×2160) on the venue screen without overhead.
-   - **Zero Transfer Overhead**: Zero gigabytes of pixel copies per second; latency is strictly bound to sub-millisecond postMessage dispatch.
-   - **Refresh Rate Decoupling**: 60 Hz venue projector and 120 Hz laptop display advance independently without frame tearing.
+   - **Refresh Rate Decoupling**: The venue projector and laptop display swapchains are driven seamlessly by the unified WebGPU pipeline.
 
 ---
 
@@ -244,10 +251,19 @@ When `WebXR` is toggled:
 - Full persistence across browser sessions for sets, procedures, and MIDI/key mappings
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (~1-2 weeks)  │
-│ - Projector popout with BroadcastChannel / Presentation API sync       │
-│ - WebRTC low-latency streaming sink (canvas.captureStream / WHIP)      │
-│ - WebXR Immersive mode: 30" Deck HUD + 3D World Geometry + Sky Dome   │
+│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (In Progress)
+- Multi-window WebGPU Projector popout with shared GPU device & zero-copy surface (Completed)
+- Transient watchdog grace & rolling median reset on window transitions (Completed)
+- WebXR Spatial World & Side-by-Side Stereo Canvas Projection (Completed)
+- WebRTC low-latency streaming sink (canvas.captureStream / WHIP) (Remaining)
+- Presentation API pairing for wireless/remote cast displays (Remaining)
+├────────────────────────────────────┬───────────────────────────────────┤
+│                                    ▼                                   │
+│ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (Upcoming)
+- Bundle import/export UI (.kbset file upload & Blob download)
+- Offline PWA manifest & service worker caching
+- Headset / touch & pointer interaction audit
+- Long-session memory and WebGPU resource profiling
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -266,5 +282,5 @@ When `WebXR` is toggled:
 | **Audio Input** | cpal (CoreAudio / WASAPI / ALSA) | cpal (Web Audio API) | Native browser microphone & audio support |
 | **MIDI Input** | midir (CoreMIDI / WinMM / ALSA) | midir (Web MIDI API) | Native browser USB MIDI device support |
 | **File Storage** | `std::fs` under `~/.karakuri/store` | `karakuri_store::fs` + IndexedDB write-through | Sandboxed persistent VFS (ADR-0386) |
-| **Projector Output**| `winit` secondary fullscreen window  | Popout Window / Presentation API state sync    | Full 4K GPU rendering without frame copies|
-| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows)     | WebRTC (WHIP) & WebXR Immersive (Spatial HUD)  | Browser-native broadcasting & spatial 6DoF|
+| **Projector Output**| `winit` secondary fullscreen window  | Same-origin popout (`projector.html`) with direct WebGPU surface sharing & Watchdog grace | Zero-copy multi-window GPU rendering, zero IPC latency |
+| **Plugin Sinks**   | Syphon (macOS) / Spout (Windows)     | WebRTC (WHIP) & WebXR Immersive (Spatial HUD)  | Browser-native broadcasting & spatial 6DoF |
