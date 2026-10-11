@@ -299,6 +299,16 @@ impl App {
         if matches!(acted, Acted::MidiRequest) {
             self.on_midi_requested();
         }
+        if matches!(acted, Acted::ShareRequest) {
+            if let Some(ref mut hook) = self.share_hook {
+                hook();
+            }
+        }
+        if matches!(acted, Acted::LogToggleRequest) {
+            if let Some(ref mut hook) = self.log_toggle_hook {
+                hook();
+            }
+        }
         if let Acted::Emitted(Some(Operation::AttachBeatSource { .. })) = acted {
             self.on_audio_requested();
         }

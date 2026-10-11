@@ -21,6 +21,19 @@ const PROJECTOR: &str = "Projector";
 /// Document Picture-in-Picture output sink label.
 const PIP: &str = "Picture-in-Picture";
 
+/// Share pill label.
+pub const SHARE_LABEL: &str = "share";
+
+/// Diagnostic logs toggle pill label.
+pub const LOGS_LABEL: &str = "logs";
+
+/// Interactive actions on pills in the Outputs row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputAction {
+    Share,
+    Logs,
+}
+
 #[cfg(target_arch = "wasm32")]
 const PIP_ABSENT: &str = "Picture-in-Picture · no support";
 #[cfg(not(target_arch = "wasm32"))]
@@ -196,6 +209,10 @@ pub struct Outputs {
     pub more: [SinkChip; 4],
     /// WebXR presentation mode pill next to WebXR sink chip, if available.
     pub xr_pill: Option<XrPill>,
+    /// Share action pill at right end of Outputs row.
+    pub share: Option<Rect>,
+    /// Diagnostic logs toggle pill at right end of Outputs row.
+    pub logs: Option<Rect>,
 }
 
 impl Outputs {
@@ -271,6 +288,18 @@ impl Outputs {
             return Some(Output::Program);
         }
         self.more.iter().find(|c| c.hit(p)).map(|c| c.output)
+    }
+
+    /// Hit-tests action pills (share, logs) in the Outputs row.
+    pub fn action_at(&self, p: karakuri_layout::Point) -> Option<OutputAction> {
+        let at = Pos2::new(p.x, p.y);
+        if self.share.is_some_and(|r| r.contains(at)) {
+            return Some(OutputAction::Share);
+        }
+        if self.logs.is_some_and(|r| r.contains(at)) {
+            return Some(OutputAction::Logs);
+        }
+        None
     }
 }
 
@@ -410,12 +439,34 @@ pub fn outputs_with_plugin_details(
         None
     };
 
-    outputs_row(row, viewport, label, pill, widths, xr_info).map(
+    let share_w = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            SHARE_LABEL.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::PILL_PAD_X * 2.0;
+
+    let logs_w = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            LOGS_LABEL.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::PILL_PAD_X * 2.0;
+
+    outputs_row(row, viewport, label, pill, widths, share_w, logs_w, xr_info).map(
         |OutputsRow {
              label,
              mcp,
              chips,
              xr_pill,
+             share,
+             logs,
          }| Outputs {
             label,
             mcp,
@@ -461,6 +512,8 @@ pub fn outputs_with_plugin_details(
                 },
             }),
             xr_pill,
+            share,
+            logs,
         },
     )
 }
@@ -472,14 +525,19 @@ struct OutputsRow {
     /// The capsule and its dot, per chip, left to right.
     chips: [(Rect, Rect); 5],
     xr_pill: Option<XrPill>,
+    share: Option<Rect>,
+    logs: Option<Rect>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn outputs_row(
     row: Rect,
     viewport: Rect,
     label_w: f32,
     pill_w: f32,
     name_w: [f32; 5],
+    share_w: f32,
+    logs_w: f32,
     xr_info: Option<(XrSessionMode, bool, f32)>,
 ) -> Option<OutputsRow> {
     let mid = row.center().y;
@@ -567,13 +625,32 @@ fn outputs_row(
         }
     }
 
-    // Require all chips to fit within the row bounds without wrapping.
-    match row.contains_rect(chips[4].0) {
+    let right = row.max.x - size::OUTPUTS_PAD_X;
+    let logs_pill = Rect::from_min_size(
+        Pos2::new(right - logs_w, mid - size::PILL_H * 0.5),
+        vec2(logs_w, size::PILL_H),
+    );
+    let share_pill = Rect::from_min_size(
+        Pos2::new(
+            logs_pill.min.x - size::OUTPUTS_GAP - share_w,
+            mid - size::PILL_H * 0.5,
+        ),
+        vec2(share_w, size::PILL_H),
+    );
+
+    // Require all chips and right-aligned action pills to fit within the row bounds without wrapping.
+    match row.contains_rect(chips[4].0)
+        && row.contains_rect(logs_pill)
+        && row.contains_rect(share_pill)
+        && share_pill.min.x >= x + size::OUTPUTS_GAP
+    {
         true => Some(OutputsRow {
             label,
             mcp,
             chips,
             xr_pill,
+            share: Some(share_pill),
+            logs: Some(logs_pill),
         }),
         false => None,
     }
@@ -719,5 +796,11 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
                 xr_pill_into(ui, pal, xr_pill, false);
             }
         }
+    }
+    if let Some(share) = row.share {
+        pill_into(ui, pal, share, SHARE_LABEL, false);
+    }
+    if let Some(logs) = row.logs {
+        pill_into(ui, pal, logs, LOGS_LABEL, false);
     }
 }

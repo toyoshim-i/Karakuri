@@ -775,7 +775,7 @@ impl Readout {
         ctx: &egui::Context,
         at: Point,
     ) -> Acted {
-        let sink = karakuri_console::view::outputs_with_plugin_details(
+        let outputs_row = karakuri_console::view::outputs_with_plugin_details(
             ctx,
             self.panel.layout(),
             self.view.opening,
@@ -802,8 +802,16 @@ impl Readout {
                     self.view.plugin_1_available,
                     self.view.plugin_1_name,
                 )
-        })
-        .and_then(|row| row.chip_at(at).map(|output| (row, output)));
+        });
+        if let Some(ref row) = outputs_row {
+            if let Some(action) = row.action_at(at) {
+                return match action {
+                    view::OutputAction::Share => Acted::ShareRequest,
+                    view::OutputAction::Logs => Acted::LogToggleRequest,
+                };
+            }
+        }
+        let sink = outputs_row.and_then(|row| row.chip_at(at).map(|output| (row, output)));
         let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
         let adding = self.view.chain_choices();
         let master = self.view.master_row_layout(ctx, self.panel.layout());

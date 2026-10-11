@@ -59,7 +59,11 @@ pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
                 view.plugin_1_name,
             )
     })
-    .is_some_and(|row| row.chip_at(p).is_some() || row.xr_pill.is_some_and(|pill| pill.hit(p)))
+    .is_some_and(|row| {
+        row.chip_at(p).is_some()
+            || row.xr_pill.is_some_and(|pill| pill.hit(p))
+            || row.action_at(p).is_some()
+    })
 }
 
 /// Hit-tests the audio-in pill in the top row.

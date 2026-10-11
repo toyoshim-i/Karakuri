@@ -6,23 +6,85 @@ use karakuri_operation::{Layer, Operation, Output};
 use crate::panel::Panel;
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, keep_pill, library, look, mcp_pill, mixer,
-    outputs, program_bay, program_head, sequencer, staging, tracker_group, transition, transport,
-    Field, KindChip, Scope, View,
+    program_bay, program_head, sequencer, staging, tracker_group, transition, transport, Field,
+    KindChip, Scope, View,
 };
 
 // Hit-test derivations per tipped control, refining `crate::input` probes to identify
 // specific sub-controls without diverging from frame layout.
 
+fn view_outputs(panel: &Panel, ctx: &egui::Context, view: &View) -> Option<crate::view::Outputs> {
+    crate::view::outputs_with_plugin_details(
+        ctx,
+        panel.layout(),
+        view.opening,
+        view.pip_available,
+        view.plugin_available,
+        view.plugin_name,
+        view.plugin_1_available,
+        view.plugin_1_name,
+        view.xr_mode,
+        view.xr_menu_open,
+    )
+    .map(|row| {
+        row.told(view.projector)
+            .told_pip(view.pip)
+            .told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name)
+            .told_plugin_name(
+                1,
+                view.plugin_1,
+                view.plugin_1_available,
+                view.plugin_1_name,
+            )
+    })
+}
+
 pub(crate) fn on_program_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    outputs(ctx, panel.layout(), view.opening)
+    view_outputs(panel, ctx, view)
         .and_then(|row| row.chip_at(p))
         .is_some_and(|out| out == Output::Program)
 }
 
 pub(crate) fn on_projector_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    outputs(ctx, panel.layout(), view.opening)
+    view_outputs(panel, ctx, view)
         .and_then(|row| row.chip_at(p))
         .is_some_and(|out| matches!(out, Output::Projector(_)))
+}
+
+pub(crate) fn on_pip_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view_outputs(panel, ctx, view)
+        .and_then(|row| row.chip_at(p))
+        .is_some_and(|out| matches!(out, Output::Pip))
+}
+
+pub(crate) fn on_xr_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view_outputs(panel, ctx, view)
+        .and_then(|row| row.chip_at(p))
+        .is_some_and(|out| matches!(out, Output::Plugin(0)))
+}
+
+pub(crate) fn on_xr_pill(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view_outputs(panel, ctx, view)
+        .and_then(|row| row.xr_pill)
+        .is_some_and(|pill| pill.hit(p))
+}
+
+pub(crate) fn on_cast_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view_outputs(panel, ctx, view)
+        .and_then(|row| row.chip_at(p))
+        .is_some_and(|out| matches!(out, Output::Plugin(1)))
+}
+
+pub(crate) fn on_share(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view_outputs(panel, ctx, view)
+        .and_then(|row| row.share)
+        .is_some_and(|rect| rect.contains(Pos2::new(p.x, p.y)))
+}
+
+pub(crate) fn on_logs(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view_outputs(panel, ctx, view)
+        .and_then(|row| row.logs)
+        .is_some_and(|rect| rect.contains(Pos2::new(p.x, p.y)))
 }
 
 pub(crate) fn on_audio(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
@@ -250,11 +312,31 @@ pub(crate) fn on_rend(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
     })
 }
 
-pub(crate) fn on_param(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
-    view.inspector.iter().enumerate().any(|(index, pane)| {
+pub(crate) fn on_param(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    let in_inspector = view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
             .is_some_and(|at| at.owns(pane, p))
-    })
+    });
+    if in_inspector {
+        return true;
+    }
+    view.master_row_layout(ctx, panel.layout())
+        .is_some_and(|master| {
+            let at = Pos2::new(p.x, p.y);
+            master.slots.iter().any(|slot| {
+                slot.params.iter().any(|param| {
+                    param.fader.track.contains(at)
+                        || param.label.contains(at)
+                        || param.amount.contains(at)
+                })
+            }) || master.vr_stage.as_ref().is_some_and(|vr| {
+                vr.params.iter().any(|param| {
+                    param.fader.track.contains(at)
+                        || param.label.contains(at)
+                        || param.amount.contains(at)
+                })
+            })
+        })
 }
 
 pub(crate) fn on_publish(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {

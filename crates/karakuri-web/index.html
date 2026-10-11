@@ -832,16 +832,6 @@
     </div>
   </div>
 
-  <!-- Floating Control Buttons at Bottom-Right -->
-  <div style="position:fixed;bottom:8px;right:8px;z-index:99990;display:flex;gap:6px;">
-    <button id="karakuri-share-btn" title="Share active Set (Deck A) on 𝕏 with a 5-second clean visual loop video" onclick="if(window.__karakuri_trigger_share) window.__karakuri_trigger_share();" style="background:rgba(25,25,35,0.7);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:monospace;font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;">
-      <span>𝕏</span> Share
-    </button>
-    <button id="karakuri-log-toggle" title="Toggle on-screen console diagnostic log drawer" onclick="const d = document.getElementById('karakuri-log-drawer'); d.style.display = (d.style.display === 'flex' ? 'none' : 'flex');" style="background:rgba(25,25,35,0.6);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);font-family:monospace;font-size:10px;padding:3px 7px;border-radius:4px;cursor:pointer;user-select:none;">
-      ⚡ Logs
-    </button>
-  </div>
-
   <!-- Share & Loop Video Modal Dialog -->
   <div id="karakuri-share-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:99998;align-items:center;justify-content:center;padding:16px;">
     <div style="background:#181920;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:16px;max-width:420px;width:100%;color:#fff;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.8);position:relative;max-height:90vh;overflow-y:auto;">

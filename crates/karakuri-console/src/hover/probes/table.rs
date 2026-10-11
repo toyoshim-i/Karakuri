@@ -27,6 +27,60 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
                 },
                 at: on_projector_sink,
             },
+            Tipped {
+                control: "the picture-in-picture window",
+                cites: Cite {
+                    class: "sink on",
+                    text: "Picture-in-Picture",
+                    nth: 0,
+                },
+                at: on_pip_sink,
+            },
+            Tipped {
+                control: "the webxr output",
+                cites: Cite {
+                    class: "sink on",
+                    text: "WebXR",
+                    nth: 0,
+                },
+                at: on_xr_sink,
+            },
+            Tipped {
+                control: "the webxr mode selector",
+                cites: Cite {
+                    class: "pill",
+                    text: "Wall &#9662;",
+                    nth: 0,
+                },
+                at: on_xr_pill,
+            },
+            Tipped {
+                control: "the cast output",
+                cites: Cite {
+                    class: "sink on tip-right",
+                    text: "Cast",
+                    nth: 0,
+                },
+                at: on_cast_sink,
+            },
+            Tipped {
+                control: "the share action",
+                cites: Cite {
+                    class: "pill",
+                    text: "share",
+                    nth: 0,
+                },
+                at: on_share,
+            },
+            Tipped {
+                control: "the diagnostic logs drawer",
+                cites: Cite {
+                    class: "pill",
+                    text: "logs",
+                    nth: 0,
+                },
+                at: on_logs,
+            },
         ],
     ),
     (

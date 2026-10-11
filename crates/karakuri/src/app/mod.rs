@@ -115,6 +115,10 @@ pub struct App {
     pub(crate) projector_route_hook: Option<Box<dyn FnMut(bool)>>,
     /// Optional callback invoked when Document Picture-in-Picture is toggled on wasm32.
     pub(crate) pip_route_hook: Option<Box<dyn FnMut(bool)>>,
+    /// Optional callback invoked when Share pill is pressed.
+    pub(crate) share_hook: Option<Box<dyn FnMut()>>,
+    /// Optional callback invoked when Logs pill is pressed.
+    pub(crate) log_toggle_hook: Option<Box<dyn FnMut()>>,
     /// Active WebXR stereo camera matrices for Side-by-Side spatial world rendering.
     pub(crate) stereo_matrices: Option<(
         karakuri_engine::StereoMatrices,
@@ -289,6 +293,8 @@ impl App {
             plugin_route_hook: None,
             projector_route_hook: None,
             pip_route_hook: None,
+            share_hook: None,
+            log_toggle_hook: None,
             stereo_matrices: None,
             stereo_drawn: false,
             stereo_eye_size: None,
@@ -414,6 +420,8 @@ impl App {
             Acted::Pointed => otherwise,
             Acted::AudioRequest => otherwise,
             Acted::MidiRequest => otherwise,
+            Acted::ShareRequest => otherwise,
+            Acted::LogToggleRequest => otherwise,
             Acted::McpServer(_) => Repaint::Now,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {

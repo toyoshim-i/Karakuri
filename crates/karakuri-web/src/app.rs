@@ -357,6 +357,32 @@ impl WebApp {
         let pip_available = crate::pip::is_pip_available();
         app.set_pip_override(pip_available, false);
 
+        let pending_share = Rc::new(RefCell::new(false));
+        let share_trigger = pending_share.clone();
+        let share_proxy = proxy.clone();
+        app.set_share_hook(move || {
+            *share_trigger.borrow_mut() = true;
+            let _ = share_proxy.send_event(());
+        });
+
+        app.set_log_toggle_hook(move || {
+            use wasm_bindgen::JsCast;
+            if let Some(w) = web_sys::window() {
+                if let Some(doc) = w.document() {
+                    if let Some(el) = doc.get_element_by_id("karakuri-log-drawer") {
+                        if let Some(html_el) = el.dyn_ref::<web_sys::HtmlElement>() {
+                            let cur = html_el
+                                .style()
+                                .get_property_value("display")
+                                .unwrap_or_default();
+                            let next = if cur == "flex" { "none" } else { "flex" };
+                            let _ = html_el.style().set_property("display", next);
+                        }
+                    }
+                }
+            }
+        });
+
         Self {
             app,
             proxy,
@@ -377,7 +403,7 @@ impl WebApp {
             pip_window: None,
             pending_cast,
             pending_recorder: Rc::new(RefCell::new(None)),
-            pending_share: Rc::new(RefCell::new(false)),
+            pending_share,
             pending_import: Rc::new(RefCell::new(None)),
             initialized: false,
             ime_overlay: None,

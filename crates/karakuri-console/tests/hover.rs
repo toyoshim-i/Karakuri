@@ -127,10 +127,9 @@ fn a_row_with_no_tips_is_one_the_mock_is_silent_about() {
 
 /// Counts expected hover tooltip entries for rows where control count and tooltip count differ.
 const UNEVEN: [(&str, &str, usize); 8] = [
-    // One kind of control and four chips drawn: the page tips all four sinks
-    // and the two plugin chips switch nothing, so `Outputs::chip_at` answers
-    // `None` on them and there is nothing for a cite to resolve against.
-    ("the Outputs row's sinks", "two of the four chips answer", 2),
+    // Sinks and output actions: program view, projector, pip, webxr, webxr mode,
+    // cast, share, and logs.
+    ("the Outputs row's sinks", "sinks and output actions", 8),
     // Effect rows are deferred to milestone M5.16 pass 2b (ADR-0340).
     (
         "the Master bay's five",

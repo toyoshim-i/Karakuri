@@ -188,7 +188,7 @@ fn text_of(inner: &str) -> String {
 }
 
 /// Named HTML entities supported from the manual markup.
-const NAMED: [(&str, &str); 15] = [
+const NAMED: [(&str, &str); 16] = [
     ("&mdash;", "\u{2014}"),
     ("&ndash;", "\u{2013}"),
     ("&middot;", "\u{00b7}"),
@@ -202,6 +202,7 @@ const NAMED: [(&str, &str); 15] = [
     ("&lowast;", "\u{2217}"),
     ("&rsquo;", "\u{2019}"),
     ("&nbsp;", "\u{00a0}"),
+    ("&deg;", "\u{00b0}"),
     ("&lt;", "<"),
     ("&gt;", ">"),
 ];

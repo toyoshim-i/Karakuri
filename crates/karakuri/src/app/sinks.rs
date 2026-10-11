@@ -89,6 +89,16 @@ impl App {
         self.pip_route_hook = Some(Box::new(hook));
     }
 
+    /// Sets callback invoked when Share pill is pressed in Outputs row.
+    pub fn set_share_hook<F: FnMut() + 'static>(&mut self, hook: F) {
+        self.share_hook = Some(Box::new(hook));
+    }
+
+    /// Sets callback invoked when Logs pill is pressed in Outputs row.
+    pub fn set_log_toggle_hook<F: FnMut() + 'static>(&mut self, hook: F) {
+        self.log_toggle_hook = Some(Box::new(hook));
+    }
+
     /// Attaches an external projector surface on wasm32 (e.g. from an auxiliary window canvas).
     #[cfg(target_arch = "wasm32")]
     pub fn attach_projector(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {

@@ -39,6 +39,10 @@ pub(crate) enum Acted {
     AudioRequest,
     /// User interaction requesting MIDI surface connection or scanning (e.g. for Web MIDI permission).
     MidiRequest,
+    /// User interaction requesting share recording and export dialog.
+    ShareRequest,
+    /// User interaction requesting on-screen console diagnostic log drawer toggle.
+    LogToggleRequest,
 }
 
 /// Action to control the MCP server lifecycle and address binding from UI controls.
