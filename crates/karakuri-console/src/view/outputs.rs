@@ -19,17 +19,31 @@ const PROGRAM_VIEW: &str = "program view";
 const PROJECTOR: &str = "projector";
 
 /// Default labels for plugin sinks when no plugin provider is loaded.
-#[cfg(target_os = "macos")]
+#[cfg(target_arch = "wasm32")]
+const PLUGIN_0_NAME: &str = "WebXR";
+#[cfg(all(not(target_arch = "wasm32"), target_os = "macos"))]
 const PLUGIN_0_NAME: &str = "Syphon";
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
 const PLUGIN_0_NAME: &str = "Spout";
 
-#[cfg(target_os = "macos")]
+#[cfg(target_arch = "wasm32")]
+const PLUGIN_1_NAME: &str = "Cast";
+#[cfg(not(target_arch = "wasm32"))]
+const PLUGIN_1_NAME: &str = "NDI";
+
+#[cfg(target_arch = "wasm32")]
+const PLUGIN_0_ABSENT: &str = "WebXR · no session";
+#[cfg(all(not(target_arch = "wasm32"), target_os = "macos"))]
 const PLUGIN_0_ABSENT: &str = "Syphon · no plugin";
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
 const PLUGIN_0_ABSENT: &str = "Spout · no plugin";
 
-const PLUGIN_SINKS: [&str; 2] = [PLUGIN_0_ABSENT, "NDI · no plugin"];
+#[cfg(target_arch = "wasm32")]
+const PLUGIN_1_ABSENT: &str = "Cast · no receiver";
+#[cfg(not(target_arch = "wasm32"))]
+const PLUGIN_1_ABSENT: &str = "NDI · no plugin";
+
+const PLUGIN_SINKS: [&str; 2] = [PLUGIN_0_ABSENT, PLUGIN_1_ABSENT];
 
 /// User interaction outcome from pressing inside WebXR mode pill or menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,6 +235,12 @@ impl Outputs {
                     (true, None) => PLUGIN_0_NAME,
                     (false, _) => PLUGIN_SINKS[0],
                 };
+            } else if index == 1 {
+                chip.name = match (present, name) {
+                    (true, Some(n)) => n,
+                    (true, None) => PLUGIN_1_NAME,
+                    (false, _) => PLUGIN_SINKS[1],
+                };
             }
         }
         self
@@ -283,6 +303,32 @@ pub fn outputs_with_plugin_name(
     xr_mode: XrSessionMode,
     xr_menu_open: bool,
 ) -> Option<Outputs> {
+    outputs_with_plugin_details(
+        ctx,
+        layout,
+        open,
+        plugin_available,
+        plugin_name,
+        false,
+        None,
+        xr_mode,
+        xr_menu_open,
+    )
+}
+
+/// The Outputs row laid out with full details for multiple plugin sinks.
+#[allow(clippy::too_many_arguments)]
+pub fn outputs_with_plugin_details(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    open: Open,
+    plugin_available: bool,
+    plugin_name: Option<&'static str>,
+    plugin_1_available: bool,
+    plugin_1_name: Option<&'static str>,
+    xr_mode: XrSessionMode,
+    xr_menu_open: bool,
+) -> Option<Outputs> {
     // Defer layout until egui completes its initial pass and fonts become valid.
     if ctx.cumulative_pass_nr() == 0 {
         return None;
@@ -296,6 +342,7 @@ pub fn outputs_with_plugin_name(
     let pill = pill_width(ctx, mcp_word(opened));
 
     let custom_0_name = plugin_name.unwrap_or(PLUGIN_0_NAME);
+    let custom_1_name = plugin_1_name.unwrap_or(PLUGIN_1_NAME);
 
     // Measure label widths for all four sink chips.
     let widths: [f32; 4] = std::array::from_fn(|i| {
@@ -307,6 +354,13 @@ pub fn outputs_with_plugin_name(
                     custom_0_name
                 } else {
                     PLUGIN_SINKS[0]
+                }
+            }
+            3 => {
+                if plugin_1_available {
+                    custom_1_name
+                } else {
+                    PLUGIN_SINKS[1]
                 }
             }
             n => PLUGIN_SINKS[n - 2],
@@ -363,6 +417,7 @@ pub fn outputs_with_plugin_name(
                 present: match i {
                     0 => true,
                     1 => plugin_available,
+                    2 => plugin_1_available,
                     _ => false,
                 },
                 name: match i {
@@ -372,6 +427,13 @@ pub fn outputs_with_plugin_name(
                             custom_0_name
                         } else {
                             PLUGIN_SINKS[0]
+                        }
+                    }
+                    2 => {
+                        if plugin_1_available {
+                            custom_1_name
+                        } else {
+                            PLUGIN_SINKS[1]
                         }
                     }
                     n => PLUGIN_SINKS[n - 1],

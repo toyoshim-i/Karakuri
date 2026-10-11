@@ -4,8 +4,9 @@ use karakuri_operation::gate::Class;
 use crate::panel::Panel;
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
-    library, look, map_pill, mcp_pill, mixer, outputs_with_plugin_name, program_bay, program_head,
-    sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, View, REGIONS,
+    library, look, map_pill, mcp_pill, mixer, outputs_with_plugin_details, program_bay,
+    program_head, sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, View,
+    REGIONS,
 };
 
 /// Hit-tests Sequencer bay controls (cells, labels, minus button, mode pill)
@@ -35,16 +36,26 @@ pub(super) fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: P
 /// Hit-tests active sinks in the Outputs row. Plugin chips return `false`
 /// so pointer events fall through to underlying layers.
 pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    outputs_with_plugin_name(
+    outputs_with_plugin_details(
         ctx,
         panel.layout(),
         view.opening,
         view.plugin_available,
         view.plugin_name,
+        view.plugin_1_available,
+        view.plugin_1_name,
         view.xr_mode,
         view.xr_menu_open,
     )
-    .map(|row| row.told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name))
+    .map(|row| {
+        row.told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name)
+            .told_plugin_name(
+                1,
+                view.plugin_1,
+                view.plugin_1_available,
+                view.plugin_1_name,
+            )
+    })
     .is_some_and(|row| row.chip_at(p).is_some() || row.xr_pill.is_some_and(|pill| pill.hit(p)))
 }
 

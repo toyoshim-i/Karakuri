@@ -188,6 +188,9 @@ impl View {
             plugin: false,
             plugin_available: false,
             plugin_name: None,
+            plugin_1: false,
+            plugin_1_available: false,
+            plugin_1_name: None,
             picture: None,
             previews: [None; DECKS],
             // Overloaded state per deck, initialized to false.

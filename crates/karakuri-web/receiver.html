@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Karakuri Cast Receiver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #aaa;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #cast-video {
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+    #status-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      background: rgba(17, 17, 22, 0.85);
+      padding: 24px 32px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    #status-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    #status-msg {
+      font-size: 0.9rem;
+      color: #888;
+    }
+    .streaming #status-overlay {
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <video id="cast-video" autoplay playsinline muted></video>
+  <div id="status-overlay">
+    <div id="status-title">Karakuri Cast Receiver</div>
+    <div id="status-msg">Waiting for presentation connection...</div>
+  </div>
+
+  <script>
+    const video = document.getElementById('cast-video');
+    const overlay = document.getElementById('status-overlay');
+    const statusMsg = document.getElementById('status-msg');
+
+    function updateStatus(text, streaming = false) {
+      if (statusMsg) statusMsg.textContent = text;
+      if (streaming) {
+        document.body.classList.add('streaming');
+      } else {
+        document.body.classList.remove('streaming');
+      }
+    }
+
+    function setupConnection(connection) {
+      updateStatus("Establishing WebRTC connection...");
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      pc.ontrack = (event) => {
+        video.srcObject = event.streams[0];
+        video.play().catch(e => console.warn("Video autoplay prevented:", e));
+        updateStatus("Streaming", true);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate && connection.state === 'connected') {
+          connection.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+        }
+      };
+
+      connection.onmessage = async (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            connection.send(JSON.stringify({ type: 'answer', sdp: answer }));
+          } else if (msg.type === 'candidate') {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          }
+        } catch (err) {
+          console.error("Cast receiver message error:", err);
+        }
+      };
+
+      connection.onclose = () => {
+        pc.close();
+        updateStatus("Presentation closed. Waiting for new stream...", false);
+      };
+
+      connection.onterminate = () => {
+        pc.close();
+        updateStatus("Presentation terminated.", false);
+      };
+    }
+
+    if (navigator.presentation && navigator.presentation.receiver) {
+      navigator.presentation.receiver.connectionList
+        .then((list) => {
+          list.connections.forEach(setupConnection);
+          list.onconnectionavailable = (event) => {
+            setupConnection(event.connection);
+          };
+        })
+        .catch((err) => {
+          updateStatus("Receiver initialization error: " + err, false);
+        });
+    } else {
+      updateStatus("Presentation Receiver API is not supported on this browser", false);
+    }
+
+    // Toggle fullscreen on double-click or 'F' key
+    window.addEventListener('dblclick', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'F') {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    });
+  </script>
+</body>
+</html>

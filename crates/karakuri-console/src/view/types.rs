@@ -44,6 +44,12 @@ pub struct View {
     pub plugin_available: bool,
     /// Discovered display name of plugin sink 0, if available (e.g. "Spout", "Syphon").
     pub plugin_name: Option<&'static str>,
+    /// Whether plugin sink 1 (Cast on wasm, NDI on desktop) is active.
+    pub plugin_1: bool,
+    /// Whether plugin sink 1 is available on this machine.
+    pub plugin_1_available: bool,
+    /// Discovered display name of plugin sink 1, if available (e.g. "Cast", "NDI").
+    pub plugin_1_name: Option<&'static str>,
     /// Texture to render in the Program bay for this frame, or `None` if engine-less.
     /// Updated per frame by the device owner (ADR-0156).
     pub picture: Option<Picture>,

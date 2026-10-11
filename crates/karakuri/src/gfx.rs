@@ -108,6 +108,9 @@ pub(crate) struct Gfx {
     pub(crate) config: wgpu::SurfaceConfiguration,
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) xr_surface: Option<wgpu::Surface<'static>>,
+    /// WebRTC / Presentation Cast sink targeting an offscreen full-res canvas.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) cast_sink: Option<karakuri_engine::WindowSink>,
     /// The XR canvas's configured size: two eyes side by side once the
     /// headset has said how big an eye is, [`XR_CANVAS`] until then.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]

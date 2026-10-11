@@ -432,6 +432,7 @@ impl App {
                 engine,
                 projector,
                 plugin,
+                cast_sink,
                 ..
             } = &mut *gfx;
             let gpu = &*gpu;
@@ -520,24 +521,42 @@ impl App {
             let mut one: [&mut dyn Sink; 1];
             let mut two: [&mut dyn Sink; 2];
             let mut three: [&mut dyn Sink; 3];
-            let sinks: &mut [&mut dyn Sink] = match (projector.as_mut(), plugin.as_mut()) {
-                (Some(p), Some(pl)) => {
-                    three = [picture, &mut p.sink, pl];
-                    &mut three
-                }
-                (Some(p), None) => {
-                    two = [picture, &mut p.sink];
-                    &mut two
-                }
-                (None, Some(pl)) => {
-                    two = [picture, pl];
-                    &mut two
-                }
-                (None, None) => {
-                    one = [picture];
-                    &mut one
-                }
-            };
+            let mut four: [&mut dyn Sink; 4];
+            let sinks: &mut [&mut dyn Sink] =
+                match (projector.as_mut(), plugin.as_mut(), cast_sink.as_mut()) {
+                    (Some(p), Some(pl), Some(c)) => {
+                        four = [picture, &mut p.sink, pl, c];
+                        &mut four
+                    }
+                    (Some(p), Some(pl), None) => {
+                        three = [picture, &mut p.sink, pl];
+                        &mut three
+                    }
+                    (Some(p), None, Some(c)) => {
+                        three = [picture, &mut p.sink, c];
+                        &mut three
+                    }
+                    (None, Some(pl), Some(c)) => {
+                        three = [picture, pl, c];
+                        &mut three
+                    }
+                    (Some(p), None, None) => {
+                        two = [picture, &mut p.sink];
+                        &mut two
+                    }
+                    (None, Some(pl), None) => {
+                        two = [picture, pl];
+                        &mut two
+                    }
+                    (None, None, Some(c)) => {
+                        two = [picture, c];
+                        &mut two
+                    }
+                    (None, None, None) => {
+                        one = [picture];
+                        &mut one
+                    }
+                };
             compose(
                 gpu,
                 deck,

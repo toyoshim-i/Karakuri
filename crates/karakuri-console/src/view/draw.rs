@@ -85,6 +85,9 @@ impl View {
         let plugin = self.plugin;
         let plugin_available = self.plugin_available;
         let plugin_name = self.plugin_name;
+        let plugin_1 = self.plugin_1;
+        let plugin_1_available = self.plugin_1_available;
+        let plugin_1_name = self.plugin_1_name;
 
         // Resolution tracking across closure boundary.
         let output_resolutions = self.output_resolutions.as_slice();
@@ -159,22 +162,21 @@ impl View {
                     // Outputs control bay.
                     Kind::Outputs => {
                         bay_card(ui, &pal, rect);
-                        if let Some(row) = outputs_with_plugin_name(
+                        if let Some(row) = outputs_with_plugin_details(
                             ui.ctx(),
                             panel.layout(),
                             opening,
                             plugin_available,
                             plugin_name,
+                            plugin_1_available,
+                            plugin_1_name,
                             xr_mode,
                             xr_menu_open,
                         )
                         .map(|r| {
-                            r.told(projector).told_plugin_name(
-                                0,
-                                plugin,
-                                plugin_available,
-                                plugin_name,
-                            )
+                            r.told(projector)
+                                .told_plugin_name(0, plugin, plugin_available, plugin_name)
+                                .told_plugin_name(1, plugin_1, plugin_1_available, plugin_1_name)
                         }) {
                             outputs::outputs_into(ui, &pal, &row);
                         }

@@ -775,22 +775,31 @@ impl Readout {
         ctx: &egui::Context,
         at: Point,
     ) -> Acted {
-        let sink = outputs_with_plugin_name(
+        let sink = karakuri_console::view::outputs_with_plugin_details(
             ctx,
             self.panel.layout(),
             self.view.opening,
             self.view.plugin_available,
             self.view.plugin_name,
+            self.view.plugin_1_available,
+            self.view.plugin_1_name,
             self.view.xr_mode,
             self.view.xr_menu_open,
         )
         .map(|row| {
-            row.told(self.view.projector).told_plugin_name(
-                0,
-                self.view.plugin,
-                self.view.plugin_available,
-                self.view.plugin_name,
-            )
+            row.told(self.view.projector)
+                .told_plugin_name(
+                    0,
+                    self.view.plugin,
+                    self.view.plugin_available,
+                    self.view.plugin_name,
+                )
+                .told_plugin_name(
+                    1,
+                    self.view.plugin_1,
+                    self.view.plugin_1_available,
+                    self.view.plugin_1_name,
+                )
         })
         .and_then(|row| row.chip_at(at).map(|output| (row, output)));
         let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);

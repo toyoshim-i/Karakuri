@@ -61,6 +61,7 @@ pub struct WebApp {
     pending_webxr_active: Rc<RefCell<Option<bool>>>,
     pending_projector: Rc<RefCell<Option<crate::projector::ProjectorAction>>>,
     projector_window: Option<web_sys::Window>,
+    pending_cast: Rc<RefCell<Option<crate::cast::CastAction>>>,
     initialized: bool,
     ime_overlay: Option<crate::ime_overlay::ImeOverlay>,
     /// Where the head was when the WebXR session began, in the headset's
@@ -311,11 +312,22 @@ impl WebApp {
             )
         };
 
-        // Set up WebXR session request hook when operator clicks WebXR plugin chip
+        // Set up WebXR and Cast session request hook when operator clicks plugin chips
+        let pending_cast: Rc<RefCell<Option<crate::cast::CastAction>>> =
+            Rc::new(RefCell::new(None));
+        let pending_cast_hook = pending_cast.clone();
+        let proxy_cast = proxy.clone();
         let vr_flow_for_hook = Rc::clone(&start_vr_flow);
-        app.set_plugin_route_hook(move |_n, _on, xr_mode| {
-            vr_flow_for_hook(xr_mode);
+        app.set_plugin_route_hook(move |n, on, xr_mode| {
+            if n == 0 {
+                vr_flow_for_hook(xr_mode);
+            } else if n == 1 {
+                crate::cast::handle_cast_toggle(on, &proxy_cast, &pending_cast_hook);
+            }
         });
+
+        let cast_available = crate::cast::is_presentation_available();
+        app.set_cast_override(cast_available, false);
 
         // Set up Projector popout window hook when operator toggles Projector chip
         let pending_projector: Rc<RefCell<Option<crate::projector::ProjectorAction>>> =
@@ -342,6 +354,7 @@ impl WebApp {
             pending_webxr_active,
             pending_projector,
             projector_window: None,
+            pending_cast,
             initialized: false,
             ime_overlay: None,
             xr_rig_origin: None,
@@ -624,6 +637,20 @@ impl ApplicationHandler<()> for WebApp {
                 &mut self.projector_window,
                 action,
             );
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+
+        if let Some(action) = self.pending_cast.borrow_mut().take() {
+            match action {
+                crate::cast::CastAction::Attach(surface) => {
+                    self.app.attach_cast_surface(surface, (1920, 1080));
+                }
+                crate::cast::CastAction::Detach => {
+                    self.app.detach_cast_surface();
+                }
+            }
             if let Some(ref window) = self.window {
                 window.request_redraw();
             }
