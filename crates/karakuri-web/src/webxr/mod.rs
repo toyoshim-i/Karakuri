@@ -18,12 +18,9 @@ use web_sys::{
 use winit::event::{ElementState, MouseButton};
 use winit::event_loop::EventLoopProxy;
 
-#[wasm_bindgen(inline_js = r#"
-export function is_webxr_supported() {
-    return typeof navigator !== 'undefined' && 'xr' in navigator && !!navigator.xr;
-}
-"#)]
+#[wasm_bindgen]
 extern "C" {
+    #[wasm_bindgen(js_namespace = __karakuri)]
     pub fn is_webxr_supported() -> bool;
 }
 

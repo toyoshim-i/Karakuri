@@ -7,56 +7,12 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use winit::event_loop::EventLoopProxy;
 
-#[wasm_bindgen(inline_js = r##"
-export function is_pip_available() {
-    return typeof window !== 'undefined' &&
-           'documentPictureInPicture' in window &&
-           window.documentPictureInPicture != null &&
-           typeof window.documentPictureInPicture.requestWindow === 'function';
-}
-
-export async function open_pip_window(width, height) {
-    if (!is_pip_available()) {
-        throw new Error("Document Picture-in-Picture API is not available in this browser");
-    }
-    const pipWin = await window.documentPictureInPicture.requestWindow({
-        width: width || 640,
-        height: height || 360,
-    });
-
-    const doc = pipWin.document;
-    doc.title = "Karakuri — Floating Monitor";
-
-    const style = doc.createElement('style');
-    style.textContent = `
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #0c0e12;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-        }
-    `;
-    doc.head.appendChild(style);
-
-    const canvas = doc.createElement('canvas');
-    canvas.id = 'karakuri-pip-canvas';
-    doc.body.appendChild(canvas);
-
-    return pipWin;
-}
-"##)]
+#[wasm_bindgen]
 extern "C" {
+    #[wasm_bindgen(js_namespace = __karakuri)]
     pub fn is_pip_available() -> bool;
+
+    #[wasm_bindgen(js_namespace = __karakuri)]
     fn open_pip_window(width: u32, height: u32) -> js_sys::Promise;
 }
 

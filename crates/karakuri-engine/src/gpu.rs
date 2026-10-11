@@ -34,7 +34,7 @@ impl Gpu {
         instance: wgpu::Instance,
         compatible_surface: Option<&wgpu::Surface<'_>>,
     ) -> Result<Gpu, GpuError> {
-        let adapter = instance
+        let adapter = match instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 force_fallback_adapter: false,
@@ -42,7 +42,19 @@ impl Gpu {
                 // Disable limit bucketing to preserve the device's native limits.
                 apply_limit_buckets: false,
             })
-            .await?;
+            .await
+        {
+            Ok(adapter) => adapter,
+            Err(e) => instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::None,
+                    force_fallback_adapter: false,
+                    compatible_surface,
+                    apply_limit_buckets: false,
+                })
+                .await
+                .map_err(|_| e)?,
+        };
 
         // Query timestamp support: TIMESTAMP_QUERY permits pass-level timestamps,
         // while TIMESTAMP_QUERY_INSIDE_ENCODERS permits encoder-level timestamps.

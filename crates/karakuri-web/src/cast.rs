@@ -7,104 +7,13 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use winit::event_loop::EventLoopProxy;
 
-#[wasm_bindgen(inline_js = r##"
-export function is_presentation_available() {
-    return typeof window !== 'undefined' &&
-           typeof window.PresentationRequest !== 'undefined' &&
-           navigator && typeof navigator.presentation !== 'undefined';
-}
-
-let activeSession = null;
-
-export async function start_presentation_cast(on_close_cb) {
-    if (!is_presentation_available()) {
-        throw new Error("Presentation API is not available in this browser");
-    }
-    const canvas = document.getElementById('karakuri-cast-canvas');
-    if (!canvas) {
-        throw new Error("karakuri-cast-canvas element not found");
-    }
-    const stream = canvas.captureStream(60);
-    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-    const receiverUrl = isHttps
-        ? 'receiver.html'
-        : 'https://toyoshim-i.github.io/Karakuri/demo/receiver.html';
-    const request = new PresentationRequest([receiverUrl]);
-
-    let connection;
-    try {
-        connection = await request.start();
-    } catch (err) {
-        console.warn("Karakuri Web: Cast start dismissed or failed:", err);
-        throw err;
-    }
-
-    const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
-
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-    pc.onicecandidate = (event) => {
-        if (event.candidate && connection.state === 'connected') {
-            connection.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
-        }
-    };
-
-    connection.onmessage = async (event) => {
-        try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'answer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-            } else if (msg.type === 'candidate') {
-                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-            }
-        } catch (e) {
-            console.error("Karakuri Web: Cast sender error handling message:", e);
-        }
-    };
-
-    const closeHandler = () => {
-        stop_presentation_cast();
-        if (typeof on_close_cb === 'function') {
-            on_close_cb();
-        }
-    };
-
-    connection.onclose = closeHandler;
-    connection.onterminate = closeHandler;
-
-    const sendOffer = async () => {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        connection.send(JSON.stringify({ type: 'offer', sdp: offer }));
-    };
-
-    if (connection.state === 'connected') {
-        await sendOffer();
-    } else {
-        connection.onconnect = async () => {
-            await sendOffer();
-        };
-    }
-
-    activeSession = { connection, pc };
-    return true;
-}
-
-export function stop_presentation_cast() {
-    if (activeSession) {
-        try {
-            if (activeSession.pc) activeSession.pc.close();
-            if (activeSession.connection) activeSession.connection.terminate();
-        } catch (_) {}
-        activeSession = null;
-    }
-}
-"##)]
+#[wasm_bindgen]
 extern "C" {
+    #[wasm_bindgen(js_namespace = __karakuri)]
     pub fn is_presentation_available() -> bool;
+    #[wasm_bindgen(js_namespace = __karakuri)]
     pub fn start_presentation_cast(on_close_cb: &js_sys::Function) -> js_sys::Promise;
+    #[wasm_bindgen(js_namespace = __karakuri)]
     pub fn stop_presentation_cast();
 }
 

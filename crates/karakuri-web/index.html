@@ -157,16 +157,163 @@
       });
 
       // Early capability detection
-      window.addEventListener('DOMContentLoaded', () => {
-        if (typeof navigator !== 'undefined' && !navigator.gpu) {
-          const warnMsg = 'WebGPU is not available in this browser. On iOS: Settings > Safari > Advanced > Feature Flags > WebGPU, or verify device compatibility.';
-          console.error(warnMsg);
+      window.addEventListener('DOMContentLoaded', async () => {
+        if (typeof navigator !== 'undefined') {
+          if (!navigator.gpu) {
+            console.error('WebGPU is not supported in this browser (navigator.gpu is missing). On iOS Safari: Settings > Safari > Advanced > Feature Flags > WebGPU.');
+          } else {
+            try {
+              const adapter = await navigator.gpu.requestAdapter();
+              if (!adapter) {
+                console.error('WebGPU is supported by the browser, but no compatible GPU adapter was found. On Android Chrome: check chrome://gpu (WebGPU status) or test by enabling chrome://flags/#enable-unsafe-webgpu.');
+              } else {
+                const info = adapter.info || (await adapter.requestAdapterInfo?.()) || {};
+                console.log(`[WebGPU] Adapter detected: vendor=${info.vendor || 'default'}, architecture=${info.architecture || 'unknown'}, device=${info.device || 'unknown'}, description=${info.description || ''}`);
+              }
+            } catch (e) {
+              console.warn('WebGPU diagnostic check error:', e);
+            }
+          }
         }
       });
 
-      window.__karakuri_get_logs = function() {
-        return logHistory.map(e => `[${e.time}] [${e.level.toUpperCase()}] ${e.msg}`).join('\n');
+      let castActiveSession = null;
+
+      window.__karakuri = {
+        get_logs: function() {
+          return logHistory.map(e => `[${e.time}] [${e.level.toUpperCase()}] ${e.msg}`).join('\n');
+        },
+        is_webxr_supported: function() {
+          return typeof navigator !== 'undefined' && 'xr' in navigator && !!navigator.xr;
+        },
+        is_web_midi_available: function() {
+          return typeof navigator !== 'undefined' &&
+                 'requestMIDIAccess' in navigator &&
+                 typeof navigator.requestMIDIAccess === 'function';
+        },
+        is_pip_available: function() {
+          return typeof window !== 'undefined' &&
+                 'documentPictureInPicture' in window &&
+                 window.documentPictureInPicture != null &&
+                 typeof window.documentPictureInPicture.requestWindow === 'function';
+        },
+        open_pip_window: async function(width, height) {
+          if (!window.__karakuri.is_pip_available()) {
+            throw new Error("Document Picture-in-Picture API is not available in this browser");
+          }
+          const pipWin = await window.documentPictureInPicture.requestWindow({
+            width: width || 640,
+            height: height || 360,
+          });
+          const doc = pipWin.document;
+          doc.title = "Karakuri — Floating Monitor";
+          const style = doc.createElement('style');
+          style.textContent = `
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body {
+              width: 100%; height: 100%; overflow: hidden;
+              background-color: #0c0e12; display: flex;
+              align-items: center; justify-content: center;
+            }
+            canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+          `;
+          doc.head.appendChild(style);
+          const canvas = doc.createElement('canvas');
+          canvas.id = 'karakuri-pip-canvas';
+          doc.body.appendChild(canvas);
+          return pipWin;
+        },
+        is_presentation_available: function() {
+          return typeof window !== 'undefined' &&
+                 typeof window.PresentationRequest !== 'undefined' &&
+                 typeof navigator !== 'undefined' &&
+                 typeof navigator.presentation !== 'undefined';
+        },
+        start_presentation_cast: async function(on_close_cb) {
+          if (!window.__karakuri.is_presentation_available()) {
+            throw new Error("Presentation API is not available in this browser");
+          }
+          const canvas = document.getElementById('karakuri-cast-canvas');
+          if (!canvas) {
+            throw new Error("karakuri-cast-canvas element not found");
+          }
+          const stream = canvas.captureStream(60);
+          const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+          const receiverUrl = isHttps
+            ? 'receiver.html'
+            : 'https://toyoshim-i.github.io/Karakuri/demo/receiver.html';
+          const request = new PresentationRequest([receiverUrl]);
+
+          let connection;
+          try {
+            connection = await request.start();
+          } catch (err) {
+            console.warn("Karakuri Web: Cast start dismissed or failed:", err);
+            throw err;
+          }
+
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          });
+
+          stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+          pc.onicecandidate = (event) => {
+            if (event.candidate && connection.state === 'connected') {
+              connection.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+            }
+          };
+
+          connection.onmessage = async (event) => {
+            try {
+              const msg = JSON.parse(event.data);
+              if (msg.type === 'answer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+              } else if (msg.type === 'candidate') {
+                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+              }
+            } catch (e) {
+              console.error("Karakuri Web: Cast sender error handling message:", e);
+            }
+          };
+
+          const closeHandler = () => {
+            window.__karakuri.stop_presentation_cast();
+            if (typeof on_close_cb === 'function') on_close_cb();
+          };
+
+          connection.onclose = closeHandler;
+          connection.onterminate = closeHandler;
+
+          const sendOffer = async () => {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            connection.send(JSON.stringify({ type: 'offer', sdp: offer }));
+          };
+
+          if (connection.state === 'connected') {
+            await sendOffer();
+          } else {
+            connection.onconnect = async () => {
+              await sendOffer();
+            };
+          }
+
+          castActiveSession = { connection, pc };
+          return true;
+        },
+        stop_presentation_cast: function() {
+          if (castActiveSession) {
+            try {
+              if (castActiveSession.pc) castActiveSession.pc.close();
+              if (castActiveSession.connection) castActiveSession.connection.terminate();
+            } catch (_) {}
+            castActiveSession = null;
+          }
+        },
       };
+
+      window.__karakuri_get_logs = window.__karakuri.get_logs;
     })();
   </script>
   <link rel="rust" data-trunk href="Cargo.toml" />

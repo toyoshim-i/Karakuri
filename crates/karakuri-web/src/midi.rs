@@ -19,14 +19,9 @@ pub struct WebMidiSession {
     _input_closures: Vec<Closure<dyn FnMut(web_sys::Event)>>,
 }
 
-#[wasm_bindgen(inline_js = r#"
-export function is_web_midi_available() {
-    return typeof navigator !== 'undefined' &&
-           'requestMIDIAccess' in navigator &&
-           typeof navigator.requestMIDIAccess === 'function';
-}
-"#)]
+#[wasm_bindgen]
 extern "C" {
+    #[wasm_bindgen(js_namespace = __karakuri)]
     pub fn is_web_midi_available() -> bool;
 }
 
