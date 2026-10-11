@@ -25,7 +25,11 @@ export async function start_presentation_cast(on_close_cb) {
         throw new Error("karakuri-cast-canvas element not found");
     }
     const stream = canvas.captureStream(60);
-    const request = new PresentationRequest(['receiver.html']);
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const receiverUrl = isHttps
+        ? 'receiver.html'
+        : 'https://toyoshim-i.github.io/Karakuri/demo/receiver.html';
+    const request = new PresentationRequest([receiverUrl]);
 
     let connection;
     try {
