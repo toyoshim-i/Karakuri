@@ -237,6 +237,54 @@ When `WebXR` is toggled:
 
 ---
 
+### 3.7 Social Sharing, Stateless Permalinks & Media Capture
+
+Sharing live procedural shader sets on social platforms (e.g. X / Twitter) traditionally requires either a cloud database to store user state or manual screen recording with third-party software. Karakuri Web implements a **100% serverless, zero-backend sharing pipeline** combining stateless URL hashes, in-browser video recording, and a hybrid social dispatch architecture:
+
+#### 3.7.1 Stateless Set Permalinks via URL Hash (`#set=...`)
+1. **Zero-Backend Serialization & Compression**:
+   - The active Set (slot assignments, `.kir` shader code, parameter maps, and topology) is serialized into standard `.kbset` ndjson.
+   - The payload is compressed in-memory using **Deflate/zlib** and encoded as **URL-safe Base64** (`#set=<base64url>`).
+   - Standard sets compress from 5–15 KB of raw text down to **1–3 KB**, easily fitting within browser URL length limits (tens of kilobytes) while remaining completely transparent to web servers.
+2. **Client-Side Immunity to HTTP 414 (URI Too Long)**:
+   - Because the payload resides entirely in the URL hash fragment (`window.location.hash`), it is never transmitted over HTTP request headers, ensuring perfect compatibility with static hosts like GitHub Pages.
+3. **Startup Hydration**:
+   - On page load, `karakuri-web` inspects `window.location.hash`.
+   - If `#set=` is detected, it asynchronously decodes and inflates the bundle, injects the `.kir` artifacts into the in-memory virtual filesystem, and triggers slot compilation and playback immediately without requiring any user sign-in or database lookup.
+
+#### 3.7.2 End-to-End Social Sharing Workflow (X / Social Media)
+Attaching video content directly to a tweet via external web links presents hard platform boundaries on the modern web:
+- **Web Intent Limitations**: Standard web intents (`x.com/intent/post`) only accept query parameters for text, URLs, and hashtags (`?text=...&url=...`); browser security policies prevent passing local file attachments or video blobs via URL parameters.
+- **Clipboard API Restrictions**: `navigator.clipboard.write()` supports plain text and images (`image/png`), but browsers disallow `video/mp4` and `video/webm` MIME types on clipboard write.
+- **Player Card Sandboxing**: While `twitter:card = player` metadata exists, modern X requires manual domain whitelisting (now largely unavailable to independent developers), does not grant `webgpu` permissions inside iframes, and falls back to static links on mobile apps.
+
+To provide a seamless, high-engagement sharing experience despite these constraints, Karakuri Web uses a **two-tier hybrid dispatch architecture**:
+
+1. **In-Browser Video Capture (`captureStream` + `MediaRecorder`)**:
+   - The operator clicks "Share to X".
+   - The engine taps the clean Program View canvas via `canvas.captureStream(30)` or WebCodecs, recording a lightweight 5–10 second looping video (`video/mp4` or `video/webm`).
+2. **Tier A: Web Share API (Mobile / Native OS Share Target — Zero Friction)**:
+   - On mobile devices (iOS / Android) and supporting desktop OSes, the browser invokes:
+     ```javascript
+     const file = new File([videoBlob], 'karakuri_preview.mp4', { type: 'video/mp4' });
+     if (navigator.canShare && navigator.canShare({ files: [file] })) {
+       await navigator.share({
+         files: [file],
+         text: 'Created with Karakuri #Karakuri',
+         url: permalinkUrlWithHash,
+       });
+     }
+     ```
+   - The native OS share sheet opens; selecting the X app immediately launches the X tweet composer with the **video file, description, and permalink pre-attached** ready for one-tap posting.
+3. **Tier B: Desktop Fallback (Auto-Download + Web Intent + Drag-and-Drop Guidance)**:
+   - When `navigator.canShare({ files })` is unavailable (e.g. desktop web browsers):
+     - The permalink with `#set=...` is copied to the operator's clipboard.
+     - The generated preview video is triggered for instant browser download.
+     - A new tab is opened to `https://x.com/intent/post?text=...&url=...` with the pre-filled post text and permalink.
+     - An in-console floating overlay guides the operator to drag-and-drop the downloaded video file into the open X composer window.
+
+---
+
 ## 4. Implementation Roadmap & Phases
 
 ```
@@ -283,6 +331,14 @@ When `WebXR` is toggled:
 - Offline PWA manifest & service worker caching
 - Headset / touch & pointer interaction audit
 - Long-session memory and WebGPU resource profiling
+├────────────────────────────────────┬───────────────────────────────────┤
+│                                    ▼                                   │
+│ Phase 7: Social Sharing, Permalinks & Media Capture (Planned)
+- Stateless Set permalink generation with Deflate compression & Base64URL URL Hash (#set=...)
+- Startup URL hash hydration and automatic background Set decoding & compilation
+- In-browser Program View video loop recording via Canvas captureStream() / MediaRecorder
+- Hybrid social sharing workflow: Web Share API (navigator.share with video File) for mobile X app and auto-download + Web Intent drag-and-drop overlay for desktop
+- Open Graph and Twitter Card fallback metadata (summary_large_image / player)
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -304,3 +360,4 @@ When `WebXR` is toggled:
 | **Projector Output**| `winit` secondary fullscreen window  | Same-origin popout (`projector.html`) with direct WebGPU surface sharing & Watchdog grace | Zero-copy multi-window GPU rendering, zero IPC latency |
 | **PiP Monitor**    | N/A (Desktop window management)     | Document Picture-in-Picture API (`window.documentPictureInPicture`) | Always-on-top OS-level floating monitor across applications |
 | **Plugin Sinks**   | Syphon (macOS) / Spout (Windows) / NDI | WebXR (VR/MR) & Wireless Cast (Presentation API + WebRTC P2P) | Browser-native spatial 6DoF and zero-backend wireless projection |
+| **Social & Permalinks** | Manual file save / CLI export | URL Hash (`#set=...` Deflate+Base64URL) + Web Share API / MediaRecorder | 100% serverless stateless sharing without backend database; native mobile video injection |
