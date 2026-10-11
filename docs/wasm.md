@@ -196,14 +196,14 @@ Corresponding to native desktop Syphon/Spout/NDI plugin sinks (ADR-0369), Web Ka
 For multitasking, coding, and live control where the operator works across different browser tabs or external applications, Karakuri Web integrates the W3C **Document Picture-in-Picture API**:
 
 1. **Always-On-Top Floating Window (`window.documentPictureInPicture`)**:
-   - The operator toggles `[ pip ]` (the 3rd chip in the Outputs bay).
+   - The operator toggles `[ Picture-in-Picture ]` (the 3rd chip in the Outputs bay).
    - In Chromium browsers (Chrome/Edge 111+), the browser opens an OS-level always-on-top window (`requestWindow({ width: 640, height: 360 })`) that stays floating above all other desktop applications.
    - An offscreen canvas (`#karakuri-pip-canvas`) inside the floating window document binds directly to a secondary `wgpu::Surface` using the parent window's shared `Gpu::instance()`.
 2. **Dynamic DPR & Resizing**:
    - The PiP canvas dynamically tracks window drag-resizing and Retina/DPR changes.
    - `WindowSink` cleanly letterboxes the composed clean program video (no egui UI overlays) into the floating monitor with zero memory copying or CPU overhead.
 3. **Lifecycle Synchronization**:
-   - Window closure (via OS titlebar close button, navigation, or un-toggling `[ pip ]`) triggers the `pagehide` event and automatically synchronizes the Outputs chip state.
+   - Window closure (via OS titlebar close button, navigation, or un-toggling `[ Picture-in-Picture ]`) triggers the `pagehide` event and automatically synchronizes the Outputs chip state.
 
 ---
 
@@ -211,7 +211,7 @@ For multitasking, coding, and live control where the operator works across diffe
 Corresponding to spatial XR headsets (Meta Quest, Apple Vision Pro, PCVR), Karakuri Web integrates a dedicated spatial performance mode:
 
 ```
-Outputs Bay: [ program view ] [ projector ] [ pip ] [ WebXR ] [ Cast ]
+Outputs Bay: [ Program View ] [ Projector ] [ Picture-in-Picture ] [ WebXR ] [ Cast ]
 ```
 
 When `WebXR` is toggled:
@@ -275,7 +275,7 @@ When `WebXR` is toggled:
 - Transient watchdog grace & rolling median reset on window transitions (Completed)
 - WebXR Spatial World & Side-by-Side Stereo Canvas Projection (Completed)
 - Wireless Presentation Cast with WebRTC P2P direct streaming (Completed)
-- Document Picture-in-Picture [ pip ] always-on-top floating preview monitor (Completed)
+- Document Picture-in-Picture [ Picture-in-Picture ] always-on-top floating preview monitor (Completed)
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
 │ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (In Progress)

@@ -13,18 +13,18 @@ const OUTPUTS_LABEL: &str = "Outputs";
 
 /// The one sink the console has, and the manual's name for it: *"The picture in
 /// the Program bay is a sink like any other and is the first row."*
-const PROGRAM_VIEW: &str = "program view";
+const PROGRAM_VIEW: &str = "Program View";
 
 /// Projector output sink label.
-const PROJECTOR: &str = "projector";
+const PROJECTOR: &str = "Projector";
 
 /// Document Picture-in-Picture output sink label.
-const PIP: &str = "pip";
+const PIP: &str = "Picture-in-Picture";
 
 #[cfg(target_arch = "wasm32")]
-const PIP_ABSENT: &str = "pip · no support";
+const PIP_ABSENT: &str = "Picture-in-Picture · no support";
 #[cfg(not(target_arch = "wasm32"))]
-const PIP_ABSENT: &str = "pip · web only";
+const PIP_ABSENT: &str = "Picture-in-Picture · web only";
 
 /// Default labels for plugin sinks when no plugin provider is loaded.
 #[cfg(target_arch = "wasm32")]
