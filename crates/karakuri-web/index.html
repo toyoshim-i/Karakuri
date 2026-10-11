@@ -131,11 +131,17 @@
       }
 
       const origLog = console.log;
+      const origInfo = console.info;
       const origWarn = console.warn;
       const origError = console.error;
+      const origDebug = console.debug;
 
       console.log = function(...args) {
         origLog.apply(console, args);
+        sendLog('info', args);
+      };
+      console.info = function(...args) {
+        if (origInfo) origInfo.apply(console, args);
         sendLog('info', args);
       };
       console.warn = function(...args) {
@@ -145,6 +151,10 @@
       console.error = function(...args) {
         origError.apply(console, args);
         sendLog('error', args);
+      };
+      console.debug = function(...args) {
+        if (origDebug) origDebug.apply(console, args);
+        sendLog('debug', args);
       };
 
       window.addEventListener('error', (e) => {
@@ -178,8 +188,102 @@
       });
 
       let castActiveSession = null;
+      let idbPromise = null;
+
+      function getIdb() {
+        if (!idbPromise) {
+          idbPromise = new Promise((resolve, reject) => {
+            if (typeof indexedDB === 'undefined' || !indexedDB) {
+              return reject(new Error("IndexedDB is not available"));
+            }
+            const req = indexedDB.open("karakuri_vfs", 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("files")) {
+                db.createObjectStore("files");
+              }
+            };
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e.target.error);
+            req.onblocked = () => reject(new Error("IndexedDB open blocked"));
+          });
+        }
+        return idbPromise;
+      }
 
       window.__karakuri = {
+        idb_load_all: async function() {
+          try {
+            if (typeof indexedDB === 'undefined' || !indexedDB) return [];
+            const db = await Promise.race([
+              getIdb(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("IDB open timeout")), 1200))
+            ]);
+            return await new Promise((resolve) => {
+              const timer = setTimeout(() => resolve([]), 1200);
+              try {
+                const tx = db.transaction("files", "readonly");
+                const store = tx.objectStore("files");
+                const req = store.openCursor();
+                const results = [];
+                req.onsuccess = (e) => {
+                  const cursor = e.target.result;
+                  if (cursor) {
+                    results.push({ path: cursor.key, data: cursor.value });
+                    cursor.continue();
+                  } else {
+                    clearTimeout(timer);
+                    resolve(results);
+                  }
+                };
+                req.onerror = () => { clearTimeout(timer); resolve([]); };
+              } catch (_) {
+                clearTimeout(timer);
+                resolve([]);
+              }
+            });
+          } catch (e) {
+            console.warn("Karakuri VFS: IndexedDB load skipped:", e);
+            return [];
+          }
+        },
+        idb_save: async function(path, data) {
+          try {
+            const db = await getIdb();
+            return await new Promise((resolve, reject) => {
+              const tx = db.transaction("files", "readwrite");
+              const store = tx.objectStore("files");
+              const req = store.put(data, path);
+              req.onsuccess = () => resolve();
+              req.onerror = (e) => reject(e.target.error);
+            });
+          } catch (_) {}
+        },
+        idb_delete: async function(path) {
+          try {
+            const db = await getIdb();
+            return await new Promise((resolve, reject) => {
+              const tx = db.transaction("files", "readwrite");
+              const store = tx.objectStore("files");
+              const req = store.delete(path);
+              req.onsuccess = () => resolve();
+              req.onerror = (e) => reject(e.target.error);
+            });
+          } catch (_) {}
+        },
+        idb_rename: async function(fromPath, toPath, data) {
+          try {
+            const db = await getIdb();
+            return await new Promise((resolve, reject) => {
+              const tx = db.transaction("files", "readwrite");
+              const store = tx.objectStore("files");
+              store.put(data, toPath);
+              store.delete(fromPath);
+              tx.oncomplete = () => resolve();
+              tx.onerror = (e) => reject(e.target.error);
+            });
+          } catch (_) {}
+        },
         get_logs: function() {
           return logHistory.map(e => `[${e.time}] [${e.level.toUpperCase()}] ${e.msg}`).join('\n');
         },

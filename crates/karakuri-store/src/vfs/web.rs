@@ -15,93 +15,18 @@ use super::memory::MemoryFs;
 use super::trait_def::StorageProvider;
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen(inline_js = r#"
-const DB_NAME = "karakuri_vfs";
-const STORE_NAME = "files";
-let dbPromise = null;
-
-function getDb() {
-    if (!dbPromise) {
-        dbPromise = new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, 1);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    db.createObjectStore(STORE_NAME);
-                }
-            };
-            req.onsuccess = (e) => resolve(e.target.result);
-            req.onerror = (e) => reject(e.target.error);
-        });
-    }
-    return dbPromise;
-}
-
-export async function idb_load_all() {
-    const db = await getDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.openCursor();
-        const results = [];
-        req.onsuccess = (e) => {
-            const cursor = e.target.result;
-            if (cursor) {
-                results.push({ path: cursor.key, data: cursor.value });
-                cursor.continue();
-            } else {
-                resolve(results);
-            }
-        };
-        req.onerror = (e) => reject(e.target.error);
-    });
-}
-
-export async function idb_save(path, data) {
-    const db = await getDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.put(data, path);
-        req.onsuccess = () => resolve();
-        req.onerror = (e) => reject(e.target.error);
-    });
-}
-
-export async function idb_delete(path) {
-    const db = await getDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.delete(path);
-        req.onsuccess = () => resolve();
-        req.onerror = (e) => reject(e.target.error);
-    });
-}
-
-export async function idb_rename(fromPath, toPath, data) {
-    const db = await getDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        store.put(data, toPath);
-        store.delete(fromPath);
-        tx.oncomplete = () => resolve();
-        tx.onerror = (e) => reject(e.target.error);
-    });
-}
-"#)]
+#[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(catch)]
+    #[wasm_bindgen(js_namespace = __karakuri, catch)]
     fn idb_load_all() -> Result<js_sys::Promise, JsValue>;
 
-    #[wasm_bindgen(catch)]
+    #[wasm_bindgen(js_namespace = __karakuri, catch)]
     fn idb_save(path: &str, data: js_sys::Uint8Array) -> Result<js_sys::Promise, JsValue>;
 
-    #[wasm_bindgen(catch)]
+    #[wasm_bindgen(js_namespace = __karakuri, catch)]
     fn idb_delete(path: &str) -> Result<js_sys::Promise, JsValue>;
 
-    #[wasm_bindgen(catch)]
+    #[wasm_bindgen(js_namespace = __karakuri, catch)]
     fn idb_rename(
         from: &str,
         to: &str,

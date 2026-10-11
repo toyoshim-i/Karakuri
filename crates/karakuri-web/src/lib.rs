@@ -35,13 +35,17 @@ pub async fn start() {
     log::info!("Karakuri Web starting up...");
 
     let mem_fs = karakuri_store::fs::default_memory_fs();
+    log::info!("Karakuri Web: Hydrating VFS from IndexedDB...");
     karakuri_store::vfs::hydrate_web_fs(&mem_fs).await;
+    log::info!("Karakuri Web: VFS ready");
 
     use app::WebApp;
     use winit::event_loop::EventLoop;
     use winit::platform::web::EventLoopExtWebSys;
 
+    log::info!("Karakuri Web: Creating Winit event loop...");
     let event_loop: EventLoop<()> = EventLoop::new().expect("event loop");
     let proxy = event_loop.create_proxy();
+    log::info!("Karakuri Web: Spawning WebApp...");
     event_loop.spawn_app(WebApp::new(proxy));
 }

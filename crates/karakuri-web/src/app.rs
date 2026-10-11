@@ -476,6 +476,7 @@ impl ApplicationHandler<()> for WebApp {
 
         let physical_w = (logical_w * dpr).max(1.0) as u32;
         let physical_h = (logical_h * dpr).max(1.0) as u32;
+        log::info!("Karakuri Web: Window resumed (viewport: {logical_w}x{logical_h}, dpr: {dpr}, canvas: {physical_w}x{physical_h})");
         canvas.set_width(physical_w);
         canvas.set_height(physical_h);
 
@@ -562,7 +563,9 @@ impl ApplicationHandler<()> for WebApp {
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
         if let Some((window, surface, gpu)) = self.pending_gpu.borrow_mut().take() {
+            log::info!("Karakuri Web: Attaching GPU to App...");
             self.app.attach_gfx(window.clone(), surface, gpu);
+            log::info!("Karakuri Web: GPU attached, requesting initial redraw");
             if let Some(xr_surf) = self.pending_xr_surface.borrow_mut().take() {
                 self.app.attach_xr_surface(xr_surf);
                 log::info!("Karakuri Web: Attached secondary WebXR surface successfully");
@@ -743,6 +746,13 @@ impl ApplicationHandler<()> for WebApp {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        if matches!(event, WindowEvent::RedrawRequested) {
+            static FIRST_DRAW: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if !FIRST_DRAW.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log::info!("Karakuri Web: First RedrawRequested event received");
+            }
+        }
         self.app.on_window_event(event_loop, id, event);
         self.note_stereo_drawn();
     }

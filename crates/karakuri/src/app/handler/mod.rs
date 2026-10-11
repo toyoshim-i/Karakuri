@@ -192,6 +192,11 @@ impl App {
         if caps.usages.contains(wgpu::TextureUsages::COPY_SRC) {
             usage |= wgpu::TextureUsages::COPY_SRC;
         }
+        let view_formats = if format != picture_format {
+            vec![picture_format]
+        } else {
+            vec![]
+        };
         let config = wgpu::SurfaceConfiguration {
             usage,
             format,
@@ -200,7 +205,7 @@ impl App {
             height: size.height.max(1),
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: caps.alpha_modes[0],
-            view_formats: vec![],
+            view_formats,
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&gpu.device, &config);
