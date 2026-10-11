@@ -18,8 +18,20 @@ use web_sys::{
 use winit::event::{ElementState, MouseButton};
 use winit::event_loop::EventLoopProxy;
 
+#[wasm_bindgen(inline_js = r#"
+export function is_webxr_supported() {
+    return typeof navigator !== 'undefined' && 'xr' in navigator && !!navigator.xr;
+}
+"#)]
+extern "C" {
+    pub fn is_webxr_supported() -> bool;
+}
+
 /// Checks whether `immersive-vr` and `immersive-ar` are supported on the current browser.
 pub async fn check_webxr_support() -> (bool, bool) {
+    if !is_webxr_supported() {
+        return (false, false);
+    }
     let Some(window) = web_sys::window() else {
         return (false, false);
     };
@@ -42,6 +54,9 @@ pub fn request_webxr_session(
     mode: WebXrSessionMode,
     ar_supported: bool,
 ) -> Result<js_sys::Promise, String> {
+    if !is_webxr_supported() {
+        return Err("WebXR is not supported on this device/browser".to_string());
+    }
     let window = web_sys::window().ok_or("No global window")?;
     let xr = window.navigator().xr();
 

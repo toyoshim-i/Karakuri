@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 use wasm_bindgen::closure::Closure;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{MidiAccess, MidiInput, MidiOutput};
@@ -18,10 +19,24 @@ pub struct WebMidiSession {
     _input_closures: Vec<Closure<dyn FnMut(web_sys::Event)>>,
 }
 
+#[wasm_bindgen(inline_js = r#"
+export function is_web_midi_available() {
+    return typeof navigator !== 'undefined' &&
+           'requestMIDIAccess' in navigator &&
+           typeof navigator.requestMIDIAccess === 'function';
+}
+"#)]
+extern "C" {
+    pub fn is_web_midi_available() -> bool;
+}
+
 /// Attempts to request Web MIDI access and connect the first available MIDI input (and optional output).
 pub async fn start_web_midi(
     waker: EventLoopProxy<()>,
 ) -> Result<(Surface, WebMidiSession), String> {
+    if !is_web_midi_available() {
+        return Err("Web MIDI API is not supported in this browser".to_string());
+    }
     let window = web_sys::window().ok_or("no window available")?;
     let navigator = window.navigator();
 

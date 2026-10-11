@@ -25,6 +25,9 @@ fn spawn_web_midi_scan(
     midi_scanning: Rc<RefCell<bool>>,
     proxy: EventLoopProxy<()>,
 ) {
+    if !crate::midi::is_web_midi_available() {
+        return;
+    }
     if *midi_scanning.borrow() {
         return;
     }
@@ -493,20 +496,25 @@ impl ApplicationHandler<()> for WebApp {
         resize_cb.forget();
 
         let instance = Gpu::instance();
-        let surface = instance
-            .create_surface(window.clone())
-            .expect("create WebGPU surface");
+        let surface = match instance.create_surface(window.clone()) {
+            Ok(s) => s,
+            Err(err) => {
+                log::error!("Karakuri Web: Failed to create WebGPU surface: {err:?}");
+                return;
+            }
+        };
         // Initialize secondary WebGPU surface on offscreen Canvas for WebXR stereo world rendering
-        // Note: Using wgpu::SurfaceTarget::Canvas directly without creating a winit Window,
-        // which completely eliminates any ResizeObserver or event loop conflicts.
-        let xr_canvas_elem: Option<web_sys::HtmlCanvasElement> = document
-            .get_element_by_id("karakuri-xr-canvas")
-            .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok());
-        if let Some(xr_c) = xr_canvas_elem {
-            xr_c.set_width(1920);
-            xr_c.set_height(1080);
-            if let Ok(xr_surf) = instance.create_surface(wgpu::SurfaceTarget::Canvas(xr_c)) {
-                *self.pending_xr_surface.borrow_mut() = Some(xr_surf);
+        // only when WebXR is actually supported on the device/browser.
+        if crate::webxr::is_webxr_supported() {
+            let xr_canvas_elem: Option<web_sys::HtmlCanvasElement> = document
+                .get_element_by_id("karakuri-xr-canvas")
+                .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok());
+            if let Some(xr_c) = xr_canvas_elem {
+                xr_c.set_width(1920);
+                xr_c.set_height(1080);
+                if let Ok(xr_surf) = instance.create_surface(wgpu::SurfaceTarget::Canvas(xr_c)) {
+                    *self.pending_xr_surface.borrow_mut() = Some(xr_surf);
+                }
             }
         }
 

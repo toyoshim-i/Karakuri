@@ -11,6 +11,7 @@ use winit::event_loop::EventLoopProxy;
 export function is_pip_available() {
     return typeof window !== 'undefined' &&
            'documentPictureInPicture' in window &&
+           window.documentPictureInPicture != null &&
            typeof window.documentPictureInPicture.requestWindow === 'function';
 }
 
