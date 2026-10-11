@@ -840,11 +840,61 @@ impl App {
             })
             .collect::<Result<Vec<_>, String>>()?;
 
-        let set_id = karakuri_environment::setfile::unbundle(
+        let set_id = match karakuri_environment::setfile::unbundle(
             &store,
             karakuri_environment::setfile::CameFrom::Somebody,
             &lines,
-        )?;
+        ) {
+            Ok(id) => id,
+            Err(e) => {
+                // If unbundle refused because the set is already present in this store,
+                // ensure all inlined sources are stored and proceed to load the set onto Deck A.
+                let target_id = lines.iter().find_map(|l| match l.record() {
+                    karakuri_store::record::Record::Set { id, .. } => Some(id.clone()),
+                    _ => None,
+                });
+                if let Some(ref tid) = target_id {
+                    let held = store
+                        .list_sets()
+                        .map_err(|err| format!("listing sets: {err}"))?;
+                    if held.iter().any(|entry| &entry.id == tid) {
+                        let mut inlined: std::collections::BTreeMap<
+                            karakuri_store::hash::Hash,
+                            std::collections::BTreeMap<u32, String>,
+                        > = std::collections::BTreeMap::new();
+                        for line in &lines {
+                            if let karakuri_store::record::Record::Src { hash, line, s } =
+                                line.record()
+                            {
+                                inlined.entry(*hash).or_default().insert(*line, s.clone());
+                            }
+                        }
+                        for (hash, run) in &inlined {
+                            let text = run.values().cloned().collect::<Vec<_>>().join("\n");
+                            let actual = karakuri_store::hash::Hash::of(text.as_bytes());
+                            if actual == *hash {
+                                let _ = store.put_artifact(text.as_bytes());
+                                if let Ok(checked) = karakuri_environment::compile::check(&text) {
+                                    let _ = karakuri_environment::meta::put_meta(
+                                        &store,
+                                        hash,
+                                        &karakuri_environment::meta::card(hash, &checked),
+                                    );
+                                }
+                            }
+                        }
+                        println!(
+                            "Karakuri: Set `{tid}` already exists in this store; proceeding to load onto Deck A."
+                        );
+                        tid.clone()
+                    } else {
+                        return Err(e);
+                    }
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         if let Some(ref mut gfx) = self.gfx {
             if let Some(aim) = gfx.engine.aimed.get_mut(0) {
                 let _ = crate::loading(&gfx.store, 0, crate::slot_salt(0), aim, &set_id);
