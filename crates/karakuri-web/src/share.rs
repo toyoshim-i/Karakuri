@@ -28,6 +28,55 @@ pub async fn load_url_hash_set() -> Result<Option<String>, String> {
     }
 }
 
+pub enum RecorderAction {
+    Attach(wgpu::Surface<'static>),
+    Detach,
+}
+
+pub fn start_recorder(
+    proxy: &winit::event_loop::EventLoopProxy<()>,
+    pending: &std::rc::Rc<std::cell::RefCell<Option<RecorderAction>>>,
+) {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return,
+    };
+    let doc = match window.document() {
+        Some(d) => d,
+        None => return,
+    };
+    let canvas_el = match doc.get_element_by_id("karakuri-recorder-canvas") {
+        Some(el) => el,
+        None => {
+            log::error!("Karakuri Web: #karakuri-recorder-canvas element not found");
+            return;
+        }
+    };
+    let canvas: web_sys::HtmlCanvasElement = wasm_bindgen::JsCast::unchecked_into(canvas_el);
+    canvas.set_width(1280);
+    canvas.set_height(720);
+
+    let instance = karakuri_engine::Gpu::instance();
+    let surface = match instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas)) {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("Karakuri Web: Failed to create surface for recorder canvas: {e:?}");
+            return;
+        }
+    };
+
+    *pending.borrow_mut() = Some(RecorderAction::Attach(surface));
+    let _ = proxy.send_event(());
+}
+
+pub fn stop_recorder(
+    proxy: &winit::event_loop::EventLoopProxy<()>,
+    pending: &std::rc::Rc<std::cell::RefCell<Option<RecorderAction>>>,
+) {
+    *pending.borrow_mut() = Some(RecorderAction::Detach);
+    let _ = proxy.send_event(());
+}
+
 /// Triggers video capture, URL hash generation, and social sharing.
 pub async fn execute_web_share(id: &str, ndjson: &str) -> Result<(), String> {
     let promise = match share_set_with_video(id, ndjson) {

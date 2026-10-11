@@ -67,6 +67,7 @@ pub struct WebApp {
     pending_pip: Rc<RefCell<Option<crate::pip::PipAction>>>,
     pip_window: Option<web_sys::Window>,
     pending_cast: Rc<RefCell<Option<crate::cast::CastAction>>>,
+    pending_recorder: Rc<RefCell<Option<crate::share::RecorderAction>>>,
     pending_share: Rc<RefCell<bool>>,
     pending_import: Rc<RefCell<Option<String>>>,
     initialized: bool,
@@ -375,6 +376,7 @@ impl WebApp {
             pending_pip,
             pip_window: None,
             pending_cast,
+            pending_recorder: Rc::new(RefCell::new(None)),
             pending_share: Rc::new(RefCell::new(false)),
             pending_import: Rc::new(RefCell::new(None)),
             initialized: false,
@@ -577,6 +579,30 @@ impl ApplicationHandler<()> for WebApp {
         );
         trigger_cb.forget();
 
+        let rec_start_pending = self.pending_recorder.clone();
+        let rec_start_proxy = self.proxy.clone();
+        let start_rec_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+            crate::share::start_recorder(&rec_start_proxy, &rec_start_pending);
+        });
+        let _ = js_sys::Reflect::set(
+            &dom_window,
+            &wasm_bindgen::JsValue::from_str("__karakuri_start_recording"),
+            start_rec_cb.as_ref().unchecked_ref(),
+        );
+        start_rec_cb.forget();
+
+        let rec_stop_pending = self.pending_recorder.clone();
+        let rec_stop_proxy = self.proxy.clone();
+        let stop_rec_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+            crate::share::stop_recorder(&rec_stop_proxy, &rec_stop_pending);
+        });
+        let _ = js_sys::Reflect::set(
+            &dom_window,
+            &wasm_bindgen::JsValue::from_str("__karakuri_stop_recording"),
+            stop_rec_cb.as_ref().unchecked_ref(),
+        );
+        stop_rec_cb.forget();
+
         let pending_import = self.pending_import.clone();
         let import_proxy = self.proxy.clone();
         wasm_bindgen_futures::spawn_local(async move {
@@ -715,6 +741,20 @@ impl ApplicationHandler<()> for WebApp {
                 }
                 crate::cast::CastAction::Detach => {
                     self.app.detach_cast_surface();
+                }
+            }
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
+        }
+
+        if let Some(action) = self.pending_recorder.borrow_mut().take() {
+            match action {
+                crate::share::RecorderAction::Attach(surface) => {
+                    self.app.attach_recorder_surface(surface, (1280, 720));
+                }
+                crate::share::RecorderAction::Detach => {
+                    self.app.detach_recorder_surface();
                 }
             }
             if let Some(ref window) = self.window {

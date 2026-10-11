@@ -378,6 +378,7 @@ impl App {
             xr_surface: None,
             cast_sink: None,
             pip_sink: None,
+            recorder_sink: None,
             xr_canvas: crate::gfx::XR_CANVAS,
             stereo_target: None,
             picture_format,

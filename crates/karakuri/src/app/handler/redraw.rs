@@ -434,6 +434,7 @@ impl App {
                 plugin,
                 cast_sink,
                 pip_sink,
+                recorder_sink,
                 ..
             } = &mut *gfx;
             let gpu = &*gpu;
@@ -519,7 +520,7 @@ impl App {
             let textures_delta = &mut output.textures_delta;
             let cost = &mut cost;
             // Collect picture and active auxiliary sinks for `compose` (ADR-0171).
-            let mut sinks_vec: Vec<&mut dyn Sink> = Vec::with_capacity(5);
+            let mut sinks_vec: Vec<&mut dyn Sink> = Vec::with_capacity(6);
             sinks_vec.push(picture);
             if let Some(p) = projector.as_mut() {
                 sinks_vec.push(&mut p.sink);
@@ -532,6 +533,9 @@ impl App {
             }
             if let Some(c) = cast_sink.as_mut() {
                 sinks_vec.push(c);
+            }
+            if let Some(r) = recorder_sink.as_mut() {
+                sinks_vec.push(r);
             }
             let sinks: &mut [&mut dyn Sink] = &mut sinks_vec[..];
             compose(

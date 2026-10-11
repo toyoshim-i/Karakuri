@@ -467,59 +467,48 @@
           try {
             const hash = window.location.hash;
             if (!hash) return null;
+            // 1. Check for remote external URL (#url=... or #load=...)
+            const urlMatch = hash.match(/[#&](?:url|load)=([^&]+)/);
+            if (urlMatch) {
+              const targetUrl = decodeURIComponent(urlMatch[1]);
+              console.log("Karakuri Web: Fetching remote Set bundle from:", targetUrl);
+              const res = await fetch(targetUrl);
+              if (!res.ok) {
+                throw new Error(`HTTP ${res.status} ${res.statusText}`);
+              }
+              return await res.text();
+            }
+
+            // 2. Check for self-contained compressed bundle (#set=...)
             const match = hash.match(/[#&]set=([^&]+)/);
-            if (!match) return null;
-            const rawVal = decodeURIComponent(match[1]);
-            const bytes = base64UrlToUint8(rawVal);
-            const text = await decompressDeflate(bytes);
-            return text;
+            if (match) {
+              const rawVal = decodeURIComponent(match[1]);
+              const bytes = base64UrlToUint8(rawVal);
+              return await decompressDeflate(bytes);
+            }
+            return null;
           } catch (err) {
-            console.error("Karakuri Web: Failed to decompress Set from URL hash:", err);
+            console.error("Karakuri Web: Failed to load Set from URL hash:", err);
             return null;
           }
         },
         share_set_with_video: async function(id, ndjson) {
-          let compressed;
-          try {
-            compressed = await compressDeflate(ndjson);
-          } catch (err) {
-            console.error("Karakuri Web: Deflate compression failed:", err);
-            alert("Failed to compress Set bundle: " + err);
-            return;
-          }
-
-          const b64 = uint8ToBase64Url(compressed);
-          const permalink = new URL(window.location.href);
-          permalink.hash = 'set=' + b64;
-          const urlStr = permalink.toString();
-
-          try {
-            window.history.replaceState(null, '', '#' + 'set=' + b64);
-          } catch (_) {}
-
           const modal = document.getElementById('karakuri-share-modal');
           const title = document.getElementById('karakuri-share-title');
-          const warning = document.getElementById('karakuri-share-warning');
-          const warningLen = document.getElementById('karakuri-share-warning-len');
           const video = document.getElementById('karakuri-share-video');
           const recIndicator = document.getElementById('karakuri-share-recording-indicator');
           const statusText = document.getElementById('karakuri-share-status');
-          const actionBtn = document.getElementById('karakuri-share-action-btn');
-          const copyBtn = document.getElementById('karakuri-share-copy-btn');
           const dlBtn = document.getElementById('karakuri-share-dl-btn');
+          const openXBtn = document.getElementById('karakuri-share-open-x-btn');
+          const copyBtn = document.getElementById('karakuri-share-copy-btn');
+          const storageBox = document.getElementById('karakuri-storage-selection-box');
+          const cfBtn = document.getElementById('karakuri-save-cf-btn');
+          const gistBtn = document.getElementById('karakuri-save-gist-btn');
+          const gistTokenInput = document.getElementById('karakuri-gist-token');
+          const urlPreview = document.getElementById('karakuri-share-url-preview');
 
           if (title) title.textContent = `𝕏 Share: ${id}`;
           if (modal) modal.style.display = 'flex';
-
-          const MAX_X_LEN = 4000;
-          if (urlStr.length > MAX_X_LEN) {
-            if (warning && warningLen) {
-              warningLen.textContent = urlStr.length;
-              warning.style.display = 'block';
-            }
-          } else {
-            if (warning) warning.style.display = 'none';
-          }
 
           if (video) {
             video.pause();
@@ -528,33 +517,191 @@
             video.style.display = 'none';
           }
           if (recIndicator) recIndicator.style.display = 'flex';
-          if (actionBtn) {
-            actionBtn.disabled = true;
-            actionBtn.style.opacity = '0.6';
-          }
           if (dlBtn) {
             dlBtn.disabled = true;
-            dlBtn.style.color = '#888';
+            dlBtn.style.opacity = '0.5';
+            dlBtn.innerHTML = '<span>⬇</span> Step 1: Download Loop Video (5s)';
+            dlBtn.style.background = 'rgba(255,255,255,0.08)';
+            dlBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+          }
+          if (openXBtn) {
+            openXBtn.disabled = true;
+            openXBtn.style.opacity = '0.5';
+          }
+          if (copyBtn) {
+            copyBtn.textContent = '📋 Copy';
+          }
+
+          let compressed;
+          try {
+            compressed = await compressDeflate(ndjson);
+          } catch (e) {
+            console.warn("Deflate failed:", e);
+          }
+
+          const b64 = compressed ? uint8ToBase64Url(compressed) : '';
+          const originBase = window.location.origin + window.location.pathname;
+          let currentShareUrl = originBase + '#set=' + b64;
+          const isLarge = currentShareUrl.length > 1200;
+
+          if (storageBox) {
+            storageBox.style.display = isLarge ? 'block' : 'none';
+          }
+          if (urlPreview) {
+            urlPreview.textContent = currentShareUrl;
+          }
+
+          function updateShareUrl(newUrl) {
+            currentShareUrl = newUrl;
+            if (urlPreview) urlPreview.textContent = newUrl;
+            try {
+              const u = new URL(newUrl);
+              window.history.replaceState(null, '', u.hash);
+            } catch (_) {}
+          }
+
+          if (!isLarge) {
+            updateShareUrl(currentShareUrl);
+          }
+
+          if (gistTokenInput) {
+            gistTokenInput.value = localStorage.getItem('karakuri_github_token') || '';
           }
 
           if (copyBtn) {
-            copyBtn.textContent = '📋 Copy Link';
             copyBtn.onclick = async () => {
               try {
-                await navigator.clipboard.writeText(urlStr);
+                await navigator.clipboard.writeText(currentShareUrl);
                 copyBtn.textContent = 'Copied!';
-                setTimeout(() => { copyBtn.textContent = '📋 Copy Link'; }, 2000);
+                setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 2000);
               } catch (_) {
-                prompt("Copy this URL:", urlStr);
+                prompt("Copy URL:", currentShareUrl);
               }
             };
           }
 
+          // Cloudflare Public Storage Endpoint
+          const CF_WORKER_ENDPOINT = 'https://karakuri-share.toyoshim.workers.dev/set';
+          const TURNSTILE_SITE_KEY = '0x4AAAAAAFT4RLDUbpS_Jxq7';
+          let turnstileWidgetId = null;
+
+          if (cfBtn) {
+            cfBtn.disabled = false;
+            cfBtn.textContent = '☁️ Save to Public Storage (Cloudflare KV)';
+            cfBtn.onclick = async () => {
+              cfBtn.disabled = true;
+              cfBtn.textContent = 'Saving...';
+              try {
+                let token = '';
+                if (window.turnstile) {
+                  const container = document.getElementById('karakuri-turnstile-container');
+                  if (container) {
+                    token = await new Promise((resolve) => {
+                      if (turnstileWidgetId !== null) {
+                        try { window.turnstile.remove(turnstileWidgetId); } catch(_) {}
+                      }
+                      turnstileWidgetId = window.turnstile.render(container, {
+                        sitekey: TURNSTILE_SITE_KEY,
+                        callback: (t) => resolve(t),
+                        'error-callback': () => resolve(''),
+                      });
+                    });
+                  }
+                }
+
+                const res = await fetch(CF_WORKER_ENDPOINT, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'text/plain',
+                    'CF-Turnstile-Token': token,
+                  },
+                  body: ndjson,
+                });
+
+                if (!res.ok) {
+                  const errText = await res.text();
+                  throw new Error(`Upload failed (${res.status}): ${errText}`);
+                }
+
+                const data = await res.json();
+                const shareLink = originBase + '#url=' + encodeURIComponent(data.rawUrl);
+                updateShareUrl(shareLink);
+                cfBtn.textContent = '✅ Saved to Public Storage!';
+                if (storageBox) storageBox.style.display = 'none';
+              } catch (err) {
+                console.error("Cloudflare upload error:", err);
+                alert("Failed to save to public storage: " + err.message);
+                cfBtn.disabled = false;
+                cfBtn.textContent = '☁️ Save to Public Storage (Cloudflare KV)';
+              }
+            };
+          }
+
+          // GitHub Gist Endpoint
+          if (gistBtn) {
+            gistBtn.disabled = false;
+            gistBtn.textContent = '🐙 Save to My GitHub Gist';
+            gistBtn.onclick = async () => {
+              const token = gistTokenInput ? gistTokenInput.value.trim() : '';
+              if (!token) {
+                alert("Please enter a GitHub Personal Access Token (with 'gist' scope).");
+                if (gistTokenInput) gistTokenInput.focus();
+                return;
+              }
+              try {
+                localStorage.setItem('karakuri_github_token', token);
+              } catch (_) {}
+
+              gistBtn.disabled = true;
+              gistBtn.textContent = 'Saving to Gist...';
+              try {
+                const res = await fetch('https://api.github.com/gists', {
+                  method: 'POST',
+                  headers: {
+                    'Accept': 'application/vnd.github+json',
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    description: `Karakuri Set - ${id}`,
+                    public: true,
+                    files: {
+                      [`${id}.kbset`]: { content: ndjson }
+                    }
+                  })
+                });
+
+                if (!res.ok) {
+                  const errData = await res.json().catch(() => ({}));
+                  throw new Error(`GitHub API ${res.status}: ${errData.message || res.statusText}`);
+                }
+
+                const data = await res.json();
+                const fileObj = data.files[`${id}.kbset`];
+                const rawUrl = fileObj ? fileObj.raw_url : Object.values(data.files)[0].raw_url;
+                const shareLink = originBase + '#url=' + encodeURIComponent(rawUrl);
+                updateShareUrl(shareLink);
+                gistBtn.textContent = '✅ Saved to GitHub Gist!';
+                if (storageBox) storageBox.style.display = 'none';
+              } catch (err) {
+                console.error("Gist save error:", err);
+                alert("Failed to save to Gist: " + err.message);
+                gistBtn.disabled = false;
+                gistBtn.textContent = '🐙 Save to My GitHub Gist';
+              }
+            };
+          }
+
+          // Start clean visual recording
           let videoBlob = null;
           let videoUrl = null;
           let videoFile = null;
-          const canvas = document.getElementById('karakuri-canvas');
 
+          if (window.__karakuri_start_recording) {
+            window.__karakuri_start_recording();
+          }
+
+          const canvas = document.getElementById('karakuri-recorder-canvas');
           if (canvas && typeof canvas.captureStream === 'function' && typeof MediaRecorder !== 'undefined') {
             try {
               const stream = canvas.captureStream(30);
@@ -580,14 +727,14 @@
               };
 
               let secondsLeft = 5;
-              if (statusText) statusText.textContent = `Recording 5s loop (${secondsLeft}s)...`;
+              if (statusText) statusText.textContent = `Recording visual loop (${secondsLeft}s)...`;
               const countdown = setInterval(() => {
                 secondsLeft--;
                 if (secondsLeft > 0) {
-                  if (statusText) statusText.textContent = `Recording 5s loop (${secondsLeft}s)...`;
+                  if (statusText) statusText.textContent = `Recording visual loop (${secondsLeft}s)...`;
                 } else {
                   clearInterval(countdown);
-                  if (statusText) statusText.textContent = `Processing video...`;
+                  if (statusText) statusText.textContent = `Encoding video...`;
                 }
               }, 1000);
 
@@ -607,6 +754,10 @@
               await recPromise;
               clearInterval(countdown);
 
+              if (window.__karakuri_stop_recording) {
+                window.__karakuri_stop_recording();
+              }
+
               const actualMime = mimeType || 'video/webm';
               videoBlob = new Blob(chunks, { type: actualMime });
               videoUrl = URL.createObjectURL(videoBlob);
@@ -620,64 +771,40 @@
               }
               if (recIndicator) recIndicator.style.display = 'none';
 
+              // Enable Step 1 Download button
               if (dlBtn) {
                 dlBtn.disabled = false;
-                dlBtn.style.color = '#fff';
+                dlBtn.style.opacity = '1.0';
                 dlBtn.onclick = () => {
                   const a = document.createElement('a');
                   a.href = videoUrl;
                   a.download = videoFile.name;
                   a.click();
+                  dlBtn.innerHTML = '<span>✅</span> Step 1: Video Downloaded';
+                  dlBtn.style.background = 'rgba(46, 204, 113, 0.2)';
+                  dlBtn.style.borderColor = '#2ecc71';
                 };
               }
             } catch (vErr) {
-              console.warn("Karakuri Web: Video recording failed:", vErr);
+              console.warn("Recording error:", vErr);
+              if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
               if (recIndicator) recIndicator.style.display = 'none';
-              if (statusText) statusText.textContent = 'Video recording unavailable';
+              if (statusText) statusText.textContent = 'Recording not available';
             }
           } else {
+            if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
             if (recIndicator) recIndicator.style.display = 'none';
             if (statusText) statusText.textContent = 'Video capture not supported';
           }
 
-          if (actionBtn) {
-            actionBtn.disabled = false;
-            actionBtn.style.opacity = '1.0';
-            actionBtn.onclick = async () => {
+          // Enable Step 2 Open X button (NO SURPRISE DOWNLOAD)
+          if (openXBtn) {
+            openXBtn.disabled = false;
+            openXBtn.style.opacity = '1.0';
+            openXBtn.onclick = () => {
               const tweetText = `Visual loop created with Karakuri! #Karakuri #WebGPU\n`;
-              let sharedViaNative = false;
-
-              if (videoFile && navigator.canShare) {
-                const sharePayload = {
-                  title: `Karakuri - ${id}`,
-                  text: tweetText,
-                  url: urlStr,
-                  files: [videoFile],
-                };
-                if (navigator.canShare(sharePayload)) {
-                  try {
-                    await navigator.share(sharePayload);
-                    sharedViaNative = true;
-                  } catch (sErr) {
-                    if (sErr.name === 'AbortError') return;
-                    console.warn("navigator.share with files rejected, trying fallback:", sErr);
-                  }
-                }
-              }
-
-              if (!sharedViaNative) {
-                if (videoFile && videoUrl) {
-                  const a = document.createElement('a');
-                  a.href = videoUrl;
-                  a.download = videoFile.name;
-                  a.click();
-                }
-                try {
-                  await navigator.clipboard.writeText(urlStr);
-                } catch (_) {}
-                const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(urlStr)}`;
-                window.open(intentUrl, '_blank');
-              }
+              const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(currentShareUrl)}`;
+              window.open(intentUrl, '_blank');
             };
           }
         },
@@ -686,11 +813,15 @@
       window.__karakuri_get_logs = window.__karakuri.get_logs;
     })();
   </script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <link rel="rust" data-trunk href="Cargo.toml" />
   <link rel="copy-file" data-trunk href="projector.html" />
   <link rel="copy-file" data-trunk href="receiver.html" />
 </head>
 <body>
+  <!-- Clean Visual Recorder Canvas (1280x720) without Console UI Overlays -->
+  <canvas id="karakuri-recorder-canvas" width="1280" height="720" style="position:fixed;left:0;top:0;width:1280px;height:720px;opacity:0.001;pointer-events:none;z-index:-3;"></canvas>
+
   <!-- On-Screen Error Notification Banner -->
   <div id="karakuri-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:rgba(200,30,30,0.92);color:#fff;padding:8px 12px;font-family:monospace;font-size:12px;z-index:99999;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:none;align-items:center;justify-content:space-between;">
     <span id="karakuri-error-text" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px;"></span>
@@ -712,7 +843,7 @@
 
   <!-- Share & Loop Video Modal Dialog -->
   <div id="karakuri-share-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:99998;align-items:center;justify-content:center;padding:16px;">
-    <div style="background:#181920;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:16px;max-width:380px;width:100%;color:#fff;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.8);position:relative;">
+    <div style="background:#181920;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:16px;max-width:420px;width:100%;color:#fff;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.8);position:relative;max-height:90vh;overflow-y:auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <h3 id="karakuri-share-title" style="margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;">
           <span>𝕏</span> Share Set
@@ -720,32 +851,58 @@
         <button onclick="document.getElementById('karakuri-share-modal').style.display='none';" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
       </div>
 
-      <!-- Warning notice if URL is too large -->
-      <div id="karakuri-share-warning" style="display:none;margin-bottom:12px;padding:8px 10px;background:rgba(243,156,18,0.15);border:1px solid rgba(243,156,18,0.4);border-radius:4px;font-size:11px;color:#f39c12;line-height:1.4;">
-        ⚠️ This Set URL is long (<span id="karakuri-share-warning-len"></span> chars) and may exceed X's limit (~4,000 chars).
-      </div>
-
       <!-- Video Preview & Recording Status -->
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0d0e12;border-radius:6px;min-height:140px;margin-bottom:14px;overflow:hidden;position:relative;">
-        <video id="karakuri-share-video" autoplay loop muted playsinline style="display:none;width:100%;max-height:180px;object-fit:contain;background:#000;"></video>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0d0e12;border-radius:6px;min-height:140px;margin-bottom:12px;overflow:hidden;position:relative;">
+        <video id="karakuri-share-video" autoplay loop muted playsinline style="display:none;width:100%;max-height:180px;object-fit:contain;background:#000;border-radius:4px;"></video>
         <div id="karakuri-share-recording-indicator" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;text-align:center;">
           <div style="width:20px;height:20px;border-radius:50%;background:#e74c3c;animation:karakuri-pulse 1s infinite alternate;"></div>
-          <span id="karakuri-share-status" style="font-size:12px;color:#ccc;">Recording 5s video loop...</span>
+          <span id="karakuri-share-status" style="font-size:12px;color:#ccc;">Recording visual loop (5s)...</span>
         </div>
       </div>
 
-      <!-- Actions -->
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <button id="karakuri-share-action-btn" disabled style="background:#1d9bf0;color:#fff;border:none;padding:9px 14px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.6;">
-          <span>𝕏</span> Share on X
+      <!-- Cloud Storage Selection (for large sets) -->
+      <div id="karakuri-storage-selection-box" style="display:none;margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;">
+        <div style="margin-bottom:8px;color:#f39c12;line-height:1.4;">
+          ⚠️ Shaders exceed inline link length limit (~1,200 chars). Save to storage for a short URL:
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <!-- Cloudflare Worker Option -->
+          <button id="karakuri-save-cf-btn" style="background:#2980b9;color:#fff;border:none;padding:7px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+            ☁️ Save to Public Storage (Cloudflare KV)
+          </button>
+          <div id="karakuri-turnstile-container" style="display:flex;justify-content:center;"></div>
+
+          <!-- GitHub Gist Option -->
+          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;">
+            <input id="karakuri-gist-token" type="password" placeholder="GitHub Personal Access Token (gist scope)" style="width:100%;box-sizing:border-box;background:#0a0b0e;border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:monospace;font-size:10px;padding:5px 8px;border-radius:4px;margin-bottom:6px;" />
+            <button id="karakuri-save-gist-btn" style="width:100%;background:#333;color:#fff;border:1px solid rgba(255,255,255,0.2);padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+              🐙 Save to My GitHub Gist
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share URL Preview & Copy -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:#888;margin-bottom:4px;">Share URL:</div>
+        <div style="display:flex;gap:6px;">
+          <div id="karakuri-share-url-preview" style="flex:1;background:#0a0b0e;border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:6px 8px;font-family:monospace;font-size:10px;color:#3498db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:all;"></div>
+          <button id="karakuri-share-copy-btn" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap;">
+            📋 Copy
+          </button>
+        </div>
+      </div>
+
+      <!-- 2-Step Share on X Flow -->
+      <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">
+        <button id="karakuri-share-dl-btn" disabled style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
+          <span>⬇</span> Step 1: Download Loop Video (5s)
         </button>
-        <div style="display:flex;gap:8px;">
-          <button id="karakuri-share-copy-btn" style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:7px 10px;border-radius:6px;font-size:12px;cursor:pointer;">
-            📋 Copy Link
-          </button>
-          <button id="karakuri-share-dl-btn" disabled style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#888;padding:7px 10px;border-radius:6px;font-size:12px;cursor:pointer;">
-            ⬇ Save Video
-          </button>
+        <button id="karakuri-share-open-x-btn" disabled style="background:#1d9bf0;color:#fff;border:none;padding:9px 14px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
+          <span>𝕏</span> Step 2: Open 𝕏 Post Composer
+        </button>
+        <div style="font-size:10px;color:#7f8c8d;text-align:center;line-height:1.4;">
+          Attach the downloaded video in the 𝕏 composer to share your visual loop!
         </div>
       </div>
     </div>

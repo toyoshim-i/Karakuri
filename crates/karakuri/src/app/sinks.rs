@@ -305,4 +305,46 @@ impl App {
             }
         }
     }
+
+    /// Attaches an offscreen clean visual recorder surface on wasm32 for video loop capture without UI overlays.
+    #[cfg(target_arch = "wasm32")]
+    pub fn attach_recorder_surface(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
+        if let Some(ref mut gfx) = self.gfx {
+            let caps = surface.get_capabilities(&gfx.gpu.adapter);
+            let format = caps
+                .formats
+                .iter()
+                .copied()
+                .find(|f| !f.is_srgb())
+                .unwrap_or(caps.formats[0]);
+            let view_formats = if format != gfx.picture_format {
+                vec![gfx.picture_format]
+            } else {
+                vec![]
+            };
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format,
+                color_space: wgpu::SurfaceColorSpace::Auto,
+                width: size.0.max(1),
+                height: size.1.max(1),
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode: caps.alpha_modes[0],
+                view_formats,
+                desired_maximum_frame_latency: 2,
+            };
+            surface.configure(&gfx.gpu.device, &config);
+            gfx.recorder_sink = Some(karakuri_engine::WindowSink::new(surface, config));
+            gfx.window.request_redraw();
+        }
+    }
+
+    /// Detaches the offscreen recorder surface on wasm32 after video capture completes.
+    #[cfg(target_arch = "wasm32")]
+    pub fn detach_recorder_surface(&mut self) {
+        if let Some(ref mut gfx) = self.gfx {
+            gfx.recorder_sink = None;
+            gfx.window.request_redraw();
+        }
+    }
 }
