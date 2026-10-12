@@ -183,3 +183,125 @@ fn ir_spec_builtins_match_compiler_signatures() {
         "expected at least 30 builtins tested from §5, found {tested_builtins}"
     );
 }
+
+#[test]
+fn all_refusal_and_diagnostic_codes_have_documentation_pages() {
+    use karakuri_ir::error::codes;
+    use karakuri_operation::RefusalCode;
+
+    let engine = crate::resources::doc_engine();
+    let all_codes: Vec<&str> = RefusalCode::ALL
+        .iter()
+        .map(|c| c.as_str())
+        .chain(codes::ALL.iter().copied())
+        .collect();
+    let missing = engine.missing_pages(&all_codes);
+    assert!(
+        missing.is_empty(),
+        "The following refusal or diagnostic codes lack documentation pages in docs/agent/rules/: {missing:#?}"
+    );
+}
+
+#[test]
+fn no_raw_kir_e_literals_remain_outside_code_definitions() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_crates = manifest_dir.parent().expect("crates dir");
+    let mut violations = Vec::new();
+
+    fn scan_dir(dir: &Path, violations: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                if name != "target" && !name.starts_with('.') {
+                    scan_dir(&path, violations);
+                }
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let path_str = path.to_string_lossy();
+                // Exclude this test file itself
+                if path_str.ends_with("crates/karakuri-mcp/src/tests/doc_specs.rs") {
+                    continue;
+                }
+                let Ok(content) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                for (line_no, line) in content.lines().enumerate() {
+                    if line.contains("\"KIR-E") {
+                        // Only allowed in crates/karakuri-ir/src/error.rs inside pub mod codes definitions
+                        if path_str.ends_with("crates/karakuri-ir/src/error.rs")
+                            && line.trim().starts_with("pub const E")
+                        {
+                            continue;
+                        }
+                        violations.push(format!("{path_str}:{}: {line}", line_no + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    scan_dir(workspace_crates, &mut violations);
+    assert!(
+        violations.is_empty(),
+        "Raw KIR-E string literals found outside codes definitions:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn refusal_and_diagnostic_reports_include_mcp_doc_read_hints() {
+    use karakuri_ir::error::codes;
+    use karakuri_operation::RefusalCode;
+
+    let detail = karakuri_operation::RefusalDetail {
+        code: RefusalCode::SlotInMix,
+        message: "target slot is active in live mix".to_string(),
+        slot: Some(1),
+        deck: Some(1),
+        lane: None,
+        class: None,
+        policy: None,
+        in_mix: Some(true),
+    };
+    let payload = crate::tools::refusal_payload(&detail);
+    let val: serde_json::Value = serde_json::from_str(&payload).expect("json payload");
+    assert_eq!(
+        val["hint"].as_str(),
+        Some("Help: call tool 'doc_read {\"id\": \"SLOT_IN_MIX\"}'")
+    );
+
+    let res = crate::tools::tool_result(Err(payload));
+    let serialized = serde_json::to_value(&res).expect("tool_result json");
+    let text = serialized["content"][0]["text"].as_str().expect("text");
+    assert!(text.contains("Help: call tool 'doc_read {\"id\": \"SLOT_IN_MIX\"}'"));
+
+    // Also verify diagnostic report hint attachment
+    let diag_report = karakuri_ir::DiagnosticReport {
+        diagnostics: vec![karakuri_ir::Diagnostic::new(
+            codes::E100_PARSE,
+            "syntax error",
+            Some(1),
+            Some(1),
+            None,
+        )],
+        success: false,
+        hint: None,
+    };
+    let diag_res = crate::tools::tool_result(Err(serde_json::to_string(&diag_report).unwrap()));
+    let diag_val = serde_json::to_value(&diag_res).expect("diag tool_result json");
+    let expected_hint = format!(
+        "Help: call tool 'doc_read {{\"id\": \"{}\"}}'",
+        codes::E100_PARSE
+    );
+    assert_eq!(
+        diag_val["structuredContent"]["report"]["hint"].as_str(),
+        Some(expected_hint.as_str())
+    );
+    assert_eq!(
+        diag_val["structuredContent"]["report"]["diagnostics"][0]["hint"].as_str(),
+        Some(expected_hint.as_str())
+    );
+}

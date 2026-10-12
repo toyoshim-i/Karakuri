@@ -212,10 +212,13 @@ fn a_save_for_a_slot_that_does_not_exist_is_refused_here() {
     });
     let (failed, said) = call(server.port, "save_set", json!({"slot":7}));
     assert!(failed, "{said}");
-    assert_eq!(
-        said,
-        karakuri_environment::no_such_slot(7, 1),
-        "a bad slot was not refused in the words every other surface refuses it in"
+    assert!(
+        said.starts_with(&karakuri_environment::no_such_slot(7, 1)),
+        "a bad slot was not refused in the words every other surface refuses it in: {said}"
+    );
+    assert!(
+        said.contains("SLOT_UNALLOCATED"),
+        "refusal did not mention SLOT_UNALLOCATED doc hint: {said}"
     );
     assert!(
         !said.contains("the loop"),
@@ -230,7 +233,14 @@ fn a_save_for_a_slot_that_does_not_exist_is_refused_here() {
         json!({"slot":7,"layer":"L1"}),
     );
     assert!(failed, "{said}");
-    assert_eq!(said, karakuri_environment::no_such_slot(7, 1));
+    assert!(
+        said.starts_with(&karakuri_environment::no_such_slot(7, 1)),
+        "read_procedure bad slot was not refused as expected: {said}"
+    );
+    assert!(
+        said.contains("SLOT_UNALLOCATED"),
+        "read_procedure refusal did not mention SLOT_UNALLOCATED doc hint: {said}"
+    );
 }
 
 /// Verifies that null ID is treated as omitted/default rather than a type mismatch.

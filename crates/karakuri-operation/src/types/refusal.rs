@@ -18,6 +18,14 @@ pub enum RefusalCode {
 }
 
 impl RefusalCode {
+    pub const ALL: &'static [RefusalCode] = &[
+        RefusalCode::SlotInMix,
+        RefusalCode::SlotPolicyOff,
+        RefusalCode::SlotUnallocated,
+        RefusalCode::BayClosed,
+        RefusalCode::LaneHeld,
+    ];
+
     pub const fn as_str(&self) -> &'static str {
         match self {
             RefusalCode::SlotInMix => "SLOT_IN_MIX",

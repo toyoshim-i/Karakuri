@@ -289,7 +289,10 @@ fn a_refused_write_returns_the_diagnostics_as_content() {
             .expect("structured report");
     assert!(!report.success);
     assert!(!report.diagnostics.is_empty());
-    assert_eq!(report.diagnostics[0].code, "KIR-E100-PARSE");
+    assert_eq!(
+        report.diagnostics[0].code,
+        karakuri_ir::error::codes::E100_PARSE
+    );
 }
 
 #[test]
@@ -331,7 +334,10 @@ fn check_procedure_returns_structured_diagnostics() {
         serde_json::from_value(res_broken["structuredContent"]["report"].clone()).expect("report");
     assert!(!report_broken.success);
     assert_eq!(report_broken.diagnostics.len(), 1);
-    assert_eq!(report_broken.diagnostics[0].code, "KIR-E102-UNKNOWN-KIND");
+    assert_eq!(
+        report_broken.diagnostics[0].code,
+        karakuri_ir::error::codes::E102_UNKNOWN_KIND
+    );
     assert_eq!(report_broken.diagnostics[0].line, Some(2));
     assert!(report_broken.diagnostics[0].remedy.is_some());
 }

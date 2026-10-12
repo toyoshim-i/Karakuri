@@ -3,19 +3,102 @@ use serde::{Deserialize, Serialize};
 
 use crate::span::{line_col, line_text, Span};
 
+pub mod codes {
+    // Stage::Parse (100 series)
+    pub const E100_PARSE: &str = "KIR-E100-PARSE";
+    pub const E100_COMPILE_FAILED: &str = "KIR-E100-COMPILE-FAILED";
+    pub const E101_UNTERMINATED_BLOCK: &str = "KIR-E101-UNTERMINATED-BLOCK";
+    pub const E102_UNKNOWN_KIND: &str = "KIR-E102-UNKNOWN-KIND";
+    pub const E103_UNKNOWN_TOPOLOGY: &str = "KIR-E103-UNKNOWN-TOPOLOGY";
+    pub const E104_UNKNOWN_BLEND: &str = "KIR-E104-UNKNOWN-BLEND";
+    pub const E105_PARAM_SYNTAX: &str = "KIR-E105-PARAM-SYNTAX";
+    pub const E106_MALFORMED_SWIZZLE: &str = "KIR-E106-MALFORMED-SWIZZLE";
+    pub const E107_WHILE_NOT_SUPPORTED: &str = "KIR-E107-WHILE-NOT-SUPPORTED";
+    pub const E108_FOR_BOUND: &str = "KIR-E108-FOR-BOUND";
+
+    // Stage::Type (200 series)
+    pub const E200_TYPE: &str = "KIR-E200-TYPE";
+    pub const E201_UNDECLARED_NAME: &str = "KIR-E201-UNDECLARED-NAME";
+    pub const E202_INVALID_SWIZZLE: &str = "KIR-E202-INVALID-SWIZZLE";
+    pub const E203_TYPE_MISMATCH: &str = "KIR-E203-TYPE-MISMATCH";
+
+    // Stage::Contract (300 series)
+    pub const E101_UNDECLARED_PARAM: &str = "KIR-E101-UNDECLARED-PARAM";
+    pub const E300_CONTRACT: &str = "KIR-E300-CONTRACT";
+    pub const E300_LAYER_MISMATCH: &str = "KIR-E300-LAYER-MISMATCH";
+    pub const E302_USES_CONTRACT: &str = "KIR-E302-USES-CONTRACT";
+    pub const E303_AMPLIFY_CONTRACT: &str = "KIR-E303-AMPLIFY-CONTRACT";
+    pub const E304_BLEND_CONTRACT: &str = "KIR-E304-BLEND-CONTRACT";
+    pub const E305_TOPOLOGY_CONTRACT: &str = "KIR-E305-TOPOLOGY-CONTRACT";
+    pub const E306_CAPACITY_CONTRACT: &str = "KIR-E306-CAPACITY-CONTRACT";
+    pub const E307_SEED_CONTRACT: &str = "KIR-E307-SEED-CONTRACT";
+    pub const E308_TEXTURE_CONTRACT: &str = "KIR-E308-TEXTURE-CONTRACT";
+    pub const E309_CAMERA_CONTRACT: &str = "KIR-E309-CAMERA-CONTRACT";
+    pub const E310_MISSING_OUTPUT: &str = "KIR-E310-MISSING-OUTPUT";
+
+    // Stage::Cost (400 series)
+    pub const E400_COST_EXCEEDED: &str = "KIR-E400-COST-EXCEEDED";
+    pub const E401_EVAL_COST_EXCEEDED: &str = "KIR-E401-EVAL-COST-EXCEEDED";
+    pub const E402_ELEMENT_COST_EXCEEDED: &str = "KIR-E402-ELEMENT-COST-EXCEEDED";
+    pub const E403_SPAWN_COST_EXCEEDED: &str = "KIR-E403-SPAWN-COST-EXCEEDED";
+
+    // Stage::Store / Tool (500 series)
+    pub const E501_STORE_OPEN_FAILED: &str = "KIR-E501-STORE-OPEN-FAILED";
+    pub const E502_SET_READ_FAILED: &str = "KIR-E502-SET-READ-FAILED";
+
+    pub const ALL: &[&str] = &[
+        E100_PARSE,
+        E100_COMPILE_FAILED,
+        E101_UNTERMINATED_BLOCK,
+        E102_UNKNOWN_KIND,
+        E103_UNKNOWN_TOPOLOGY,
+        E104_UNKNOWN_BLEND,
+        E105_PARAM_SYNTAX,
+        E106_MALFORMED_SWIZZLE,
+        E107_WHILE_NOT_SUPPORTED,
+        E108_FOR_BOUND,
+        E200_TYPE,
+        E201_UNDECLARED_NAME,
+        E202_INVALID_SWIZZLE,
+        E203_TYPE_MISMATCH,
+        E101_UNDECLARED_PARAM,
+        E300_CONTRACT,
+        E300_LAYER_MISMATCH,
+        E302_USES_CONTRACT,
+        E303_AMPLIFY_CONTRACT,
+        E304_BLEND_CONTRACT,
+        E305_TOPOLOGY_CONTRACT,
+        E306_CAPACITY_CONTRACT,
+        E307_SEED_CONTRACT,
+        E308_TEXTURE_CONTRACT,
+        E309_CAMERA_CONTRACT,
+        E310_MISSING_OUTPUT,
+        E400_COST_EXCEEDED,
+        E401_EVAL_COST_EXCEEDED,
+        E402_ELEMENT_COST_EXCEEDED,
+        E403_SPAWN_COST_EXCEEDED,
+        E501_STORE_OPEN_FAILED,
+        E502_SET_READ_FAILED,
+    ];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
-    pub code: String,    // e.g. "KIR-E101-UNDECLARED-PARAM"
+    pub code: String,    // Machine-readable diagnostic code
     pub message: String, // Human-readable summary
     pub line: Option<usize>,
     pub column: Option<usize>,
     pub remedy: Option<String>, // Actionable suggestion for LLM self-healing
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DiagnosticReport {
     pub diagnostics: Vec<Diagnostic>,
     pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 pub type CheckError = IrError;
@@ -34,6 +117,7 @@ impl Diagnostic {
             line,
             column,
             remedy,
+            hint: None,
         }
     }
 
@@ -42,23 +126,23 @@ impl Diagnostic {
         match err.stage {
             Stage::Parse => {
                 if msg.contains("unterminated") {
-                    "KIR-E101-UNTERMINATED-BLOCK".to_string()
+                    codes::E101_UNTERMINATED_BLOCK.to_string()
                 } else if msg.contains("unknown kind") {
-                    "KIR-E102-UNKNOWN-KIND".to_string()
+                    codes::E102_UNKNOWN_KIND.to_string()
                 } else if msg.contains("unknown topology") {
-                    "KIR-E103-UNKNOWN-TOPOLOGY".to_string()
+                    codes::E103_UNKNOWN_TOPOLOGY.to_string()
                 } else if msg.contains("unknown blend") {
-                    "KIR-E104-UNKNOWN-BLEND".to_string()
+                    codes::E104_UNKNOWN_BLEND.to_string()
                 } else if msg.contains("range") || msg.contains("param") {
-                    "KIR-E105-PARAM-SYNTAX".to_string()
+                    codes::E105_PARAM_SYNTAX.to_string()
                 } else if msg.contains("swizzle") {
-                    "KIR-E106-MALFORMED-SWIZZLE".to_string()
+                    codes::E106_MALFORMED_SWIZZLE.to_string()
                 } else if msg.contains("while") {
-                    "KIR-E107-WHILE-NOT-SUPPORTED".to_string()
+                    codes::E107_WHILE_NOT_SUPPORTED.to_string()
                 } else if msg.contains("for") {
-                    "KIR-E108-FOR-BOUND".to_string()
+                    codes::E108_FOR_BOUND.to_string()
                 } else {
-                    "KIR-E100-PARSE".to_string()
+                    codes::E100_PARSE.to_string()
                 }
             }
             Stage::Type => {
@@ -66,49 +150,49 @@ impl Diagnostic {
                     || msg.contains("undefined")
                     || msg.contains("unknown name")
                 {
-                    "KIR-E201-UNDECLARED-NAME".to_string()
+                    codes::E201_UNDECLARED_NAME.to_string()
                 } else if msg.contains("swizzle") {
-                    "KIR-E202-INVALID-SWIZZLE".to_string()
+                    codes::E202_INVALID_SWIZZLE.to_string()
                 } else if msg.contains("int and float") || msg.contains("type mismatch") {
-                    "KIR-E203-TYPE-MISMATCH".to_string()
+                    codes::E203_TYPE_MISMATCH.to_string()
                 } else {
-                    "KIR-E200-TYPE".to_string()
+                    codes::E200_TYPE.to_string()
                 }
             }
             Stage::Contract => {
                 if msg.contains("undeclared") || msg.contains("param") {
-                    "KIR-E101-UNDECLARED-PARAM".to_string()
+                    codes::E101_UNDECLARED_PARAM.to_string()
                 } else if msg.contains("uses") {
-                    "KIR-E302-USES-CONTRACT".to_string()
+                    codes::E302_USES_CONTRACT.to_string()
                 } else if msg.contains("amplify") {
-                    "KIR-E303-AMPLIFY-CONTRACT".to_string()
+                    codes::E303_AMPLIFY_CONTRACT.to_string()
                 } else if msg.contains("blend") {
-                    "KIR-E304-BLEND-CONTRACT".to_string()
+                    codes::E304_BLEND_CONTRACT.to_string()
                 } else if msg.contains("topology") {
-                    "KIR-E305-TOPOLOGY-CONTRACT".to_string()
+                    codes::E305_TOPOLOGY_CONTRACT.to_string()
                 } else if msg.contains("capacity") {
-                    "KIR-E306-CAPACITY-CONTRACT".to_string()
+                    codes::E306_CAPACITY_CONTRACT.to_string()
                 } else if msg.contains("seed") {
-                    "KIR-E307-SEED-CONTRACT".to_string()
+                    codes::E307_SEED_CONTRACT.to_string()
                 } else if msg.contains("texture") {
-                    "KIR-E308-TEXTURE-CONTRACT".to_string()
+                    codes::E308_TEXTURE_CONTRACT.to_string()
                 } else if msg.contains("camera") {
-                    "KIR-E309-CAMERA-CONTRACT".to_string()
+                    codes::E309_CAMERA_CONTRACT.to_string()
                 } else if msg.contains("required") || msg.contains("missing") {
-                    "KIR-E310-MISSING-OUTPUT".to_string()
+                    codes::E310_MISSING_OUTPUT.to_string()
                 } else {
-                    "KIR-E300-CONTRACT".to_string()
+                    codes::E300_CONTRACT.to_string()
                 }
             }
             Stage::Cost => {
                 if msg.contains("evaluation") {
-                    "KIR-E401-EVAL-COST-EXCEEDED".to_string()
+                    codes::E401_EVAL_COST_EXCEEDED.to_string()
                 } else if msg.contains("element") {
-                    "KIR-E402-ELEMENT-COST-EXCEEDED".to_string()
+                    codes::E402_ELEMENT_COST_EXCEEDED.to_string()
                 } else if msg.contains("spawn") {
-                    "KIR-E403-SPAWN-COST-EXCEEDED".to_string()
+                    codes::E403_SPAWN_COST_EXCEEDED.to_string()
                 } else {
-                    "KIR-E400-COST-EXCEEDED".to_string()
+                    codes::E400_COST_EXCEEDED.to_string()
                 }
             }
         }
@@ -123,6 +207,7 @@ impl Diagnostic {
             line: Some(pos.line as usize),
             column: Some(pos.col as usize),
             remedy: err.hint.clone(),
+            hint: None,
         }
     }
 
@@ -150,6 +235,7 @@ impl DiagnosticReport {
         Self {
             diagnostics: Vec::new(),
             success: true,
+            hint: None,
         }
     }
 
@@ -157,6 +243,7 @@ impl DiagnosticReport {
         Self {
             diagnostics,
             success: false,
+            hint: None,
         }
     }
 
@@ -167,6 +254,7 @@ impl DiagnosticReport {
                 .map(|e| Diagnostic::from_ir_error(e, src))
                 .collect(),
             success: errors.is_empty(),
+            hint: None,
         }
     }
 
@@ -293,14 +381,14 @@ mod tests {
         assert_eq!(report.diagnostics.len(), 2);
 
         let d1 = &report.diagnostics[0];
-        assert_eq!(d1.code, "KIR-E102-UNKNOWN-KIND");
+        assert_eq!(d1.code, codes::E102_UNKNOWN_KIND);
         assert!(d1.message.contains("parse: unknown kind `L9`"));
         assert_eq!(d1.line, Some(2));
         assert_eq!(d1.column, Some(8));
         assert_eq!(d1.remedy.as_deref(), Some("v0.2 defines `L1` and `L4`"));
 
         let d2 = &report.diagnostics[1];
-        assert_eq!(d2.code, "KIR-E201-UNDECLARED-NAME");
+        assert_eq!(d2.code, codes::E201_UNDECLARED_NAME);
         assert_eq!(d2.line, Some(3));
 
         // Test serde serialization / deserialization round trip

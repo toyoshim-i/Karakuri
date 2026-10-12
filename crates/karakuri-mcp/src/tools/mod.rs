@@ -336,39 +336,85 @@ pub(crate) fn audited<'a>(
 
 /// Serialise a [`RefusalDetail`] into a JSON string for structured envelope reporting.
 pub(crate) fn refusal_payload(detail: &RefusalDetail) -> String {
+    let hint =
+        crate::resources::doc_engine().hint(detail.code.as_str(), agent_man::RenderMode::Mcp);
     json!({
         "code": detail.code.as_str(),
         "message": detail.message,
         "slot": detail.slot,
         "policy": detail.policy.map(|p| p.name()),
         "in_mix": detail.in_mix,
+        "hint": hint,
     })
     .to_string()
 }
 
 /// Formats a tool execution outcome into agent-man's ToolResult with structuredContent.
 pub(crate) fn tool_result(outcome: Result<String, String>) -> ToolResult {
+    let engine = crate::resources::doc_engine();
     match outcome {
         Ok(text) => {
-            if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
-                ToolResult::structured(text, json!({ "report": report }))
+            if let Ok(mut report) = serde_json::from_str::<DiagnosticReport>(&text) {
+                for d in &mut report.diagnostics {
+                    if let Some(h) = engine.hint(&d.code, agent_man::RenderMode::Mcp) {
+                        d.hint = Some(h);
+                    }
+                }
+                if let Some(first_d) = report.diagnostics.first() {
+                    report.hint = first_d.hint.clone();
+                }
+                let mut content_text = text.clone();
+                if let Some(h) = &report.hint {
+                    content_text = format!("{content_text}\n\n{h}");
+                }
+                ToolResult::structured(content_text, json!({ "report": report }))
             } else {
                 ToolResult::text(text)
             }
         }
         Err(text) => {
-            if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
-                ToolResult::error_structured(text, json!({ "report": report }))
-            } else if let Ok(val) = serde_json::from_str::<Value>(&text) {
-                if let Some(refusal) = val.get("refusal") {
+            if let Ok(mut report) = serde_json::from_str::<DiagnosticReport>(&text) {
+                for d in &mut report.diagnostics {
+                    if let Some(h) = engine.hint(&d.code, agent_man::RenderMode::Mcp) {
+                        d.hint = Some(h);
+                    }
+                }
+                if let Some(first_d) = report.diagnostics.first() {
+                    report.hint = first_d.hint.clone();
+                }
+                let mut content_text = text.clone();
+                if let Some(h) = &report.hint {
+                    content_text = format!("{content_text}\n\n{h}");
+                }
+                ToolResult::error_structured(content_text, json!({ "report": report }))
+            } else if let Ok(mut val) = serde_json::from_str::<Value>(&text) {
+                if let Some(refusal) = val.get_mut("refusal") {
+                    let code = refusal.get("code").and_then(Value::as_str);
+                    let hint = code.and_then(|c| engine.hint(c, agent_man::RenderMode::Mcp));
+                    if let Some(h) = &hint {
+                        refusal["hint"] = json!(h);
+                    }
                     let msg = refusal
                         .get("message")
                         .and_then(Value::as_str)
                         .unwrap_or(&text);
-                    ToolResult::error_structured(msg, json!({ "refusal": refusal }))
+                    let full_msg = match &hint {
+                        Some(h) => format!("{msg}\n\n{h}"),
+                        None => msg.to_string(),
+                    };
+                    ToolResult::error_structured(full_msg, json!({ "refusal": refusal }))
                 } else if val.get("code").is_some() && val.get("message").is_some() {
+                    let code = val.get("code").and_then(Value::as_str);
+                    let hint = code.and_then(|c| engine.hint(c, agent_man::RenderMode::Mcp));
+                    if let Some(h) = &hint {
+                        val["hint"] = json!(h);
+                    }
                     let msg = val.get("message").and_then(Value::as_str).unwrap_or(&text);
-                    ToolResult::error_structured(msg, json!({ "refusal": val }))
+                    let full_msg = match &hint {
+                        Some(h) => format!("{msg}\n\n{h}"),
+                        None => msg.to_string(),
+                    };
+                    ToolResult::error_structured(full_msg, json!({ "refusal": val }))
                 } else {
                     ToolResult::error(text)
                 }

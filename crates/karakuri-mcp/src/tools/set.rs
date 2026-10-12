@@ -16,34 +16,36 @@ pub fn check_set_configuration(store_path: &std::path::Path, id: &str) -> Diagno
         Ok(s) => s,
         Err(e) => {
             return DiagnosticReport {
-                diagnostics: vec![Diagnostic {
-                    code: "KIR-E501-STORE-OPEN-FAILED".to_string(),
-                    message: format!("cannot open store at `{}`: {e}", store_path.display()),
-                    line: None,
-                    column: None,
-                    remedy: Some(
+                diagnostics: vec![Diagnostic::new(
+                    karakuri_ir::error::codes::E501_STORE_OPEN_FAILED,
+                    format!("cannot open store at `{}`: {e}", store_path.display()),
+                    None,
+                    None,
+                    Some(
                         "Verify the store directory path exists and has correct permissions."
                             .to_string(),
                     ),
-                }],
+                )],
                 success: false,
+                hint: None,
             };
         }
     };
     match store.read_set(id) {
         Ok(_) => DiagnosticReport::ok(),
         Err(e) => DiagnosticReport {
-            diagnostics: vec![Diagnostic {
-                code: "KIR-E502-SET-READ-FAILED".to_string(),
-                message: format!("failed to read set `{id}`: {e}"),
-                line: None,
-                column: None,
-                remedy: Some(
+            diagnostics: vec![Diagnostic::new(
+                karakuri_ir::error::codes::E502_SET_READ_FAILED,
+                format!("failed to read set `{id}`: {e}"),
+                None,
+                None,
+                Some(
                     "Check that the set ID is correctly spelled and saved in the library."
                         .to_string(),
                 ),
-            }],
+            )],
             success: false,
+            hint: None,
         },
     }
 }

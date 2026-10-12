@@ -28,6 +28,7 @@ pub fn check_procedure(source: &str) -> DiagnosticReport {
     DiagnosticReport {
         diagnostics,
         success,
+        hint: None,
     }
 }
 
@@ -81,36 +82,38 @@ pub(crate) fn write_procedure(
     }
     let checked = karakuri_environment::compile::check(source).map_err(|e| {
         let fallback = DiagnosticReport {
-            diagnostics: vec![Diagnostic {
-                code: "KIR-E100-COMPILE-FAILED".to_string(),
-                message: format!("compile: {e}"),
-                line: None,
-                column: None,
-                remedy: None,
-            }],
+            diagnostics: vec![Diagnostic::new(
+                karakuri_ir::error::codes::E100_COMPILE_FAILED,
+                format!("compile: {e}"),
+                None,
+                None,
+                None,
+            )],
             success: false,
+            hint: None,
         };
         serde_json::to_string_pretty(&fallback).unwrap_or(e)
     })?;
     // Ensure the declared procedure kind matches the target layer.
     if checked.kind != layer {
         let report = DiagnosticReport {
-            diagnostics: vec![Diagnostic {
-                code: "KIR-E300-LAYER-MISMATCH".to_string(),
-                message: format!(
+            diagnostics: vec![Diagnostic::new(
+                karakuri_ir::error::codes::E300_LAYER_MISMATCH,
+                format!(
                     "this is a {:?} procedure and it was addressed to slot {slot}'s {name} — \
                      the two layers are not interchangeable, and what a file is is the `kind` \
                      line inside it",
                     checked.kind
                 ),
-                line: None,
-                column: None,
-                remedy: Some(format!(
+                None,
+                None,
+                Some(format!(
                     "Change `kind {:?}` to match `{name}` or address the appropriate slot layer.",
                     checked.kind
                 )),
-            }],
+            )],
             success: false,
+            hint: None,
         };
         return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
     }

@@ -253,17 +253,17 @@ fn an_operate_on_a_closed_class_is_refused_with_the_gates_sentence() {
         .expect("a call is answered");
     let result = &reply["result"];
     assert_eq!(result["isError"], json!(true));
-    assert_eq!(
-        result["content"][0]["text"].as_str().expect("text"),
-        gate::refusal(
-            &Operation::SetGain {
-                deck: 0,
-                gain: 0.25
-            },
-            Standing::Closed(Class::MixFaders)
-        )
-        .expect("a refusal")
-    );
+    let expected = gate::refusal(
+        &Operation::SetGain {
+            deck: 0,
+            gain: 0.25,
+        },
+        Standing::Closed(Class::MixFaders),
+    )
+    .expect("a refusal");
+    let text = result["content"][0]["text"].as_str().expect("text");
+    assert!(text.starts_with(&expected));
+    assert!(text.contains("Help: call tool 'doc_read {\"id\": \"BAY_CLOSED\"}'"));
 }
 
 /// Verifies that invalid or unpermitted operation names are rejected with actionable suggestions.
