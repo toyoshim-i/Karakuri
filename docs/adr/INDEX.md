@@ -415,6 +415,7 @@ number; new records continue from the end.
 | [ADR-0387](0387-universal-console-gui-component-architecture-and-multi-modal-pointer-invariance.md) | Universal Console GUI component architecture and multi-modal pointer invariance | 2026-10-07 | accepted |
 | [ADR-0388](0388-built-in-vr-projection-modes-and-celestial-dome-specification.md) | Built-in VR projection modes and celestial dome shader specification | 2026-10-08 | accepted |
 | [ADR-0389](0389-social-sharing-remote-storage-and-clean-loop-video-capture.md) | Social sharing of Set bundles, remote cloud storage, and clean loop video capture | 2026-10-11 | accepted |
+| [ADR-0390](0390-agent-man-mcp-engine-migration-and-structured-content.md) | Migrate MCP engine to agent-man and standardize structuredContent | 2026-10-12 | accepted |
 
 
 ## Retired numbers

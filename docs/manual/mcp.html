@@ -181,111 +181,14 @@
   </section>
 
   <section>
-    <h2>Complete MCP Tool Catalog &amp; Permission Matrix</h2>
+    <h2>MCP Tool Architecture &amp; Governance</h2>
     <p>
-      Karakuri publishes 14 high-level MCP tools. Every tool is either a non-destructive read,
+      Karakuri registers its tool suite via the <code>agent-man</code> documentation and tool engine,
+      making all tools dynamically discoverable through standard MCP <code>tools/list</code> and documented
+      in-depth via <code>doc_read</code>. Every tool is either a non-destructive read,
       a statically checked file mutation guarded by the Inspector slot policy, or an operational
-      action governed by the bay gate:
+      action governed by the console bay gate.
     </p>
-
-    <div class="table-wrap">
-      <table class="matrix">
-        <thead>
-          <tr>
-            <th>Tool Name</th>
-            <th>Category</th>
-            <th>Governing Gate</th>
-            <th>Allowance Condition / Refusal</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>get_permissions</code></td>
-            <td>Discovery</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Returns bay open/closed states and per-slot policies.</td>
-          </tr>
-          <tr>
-            <td><code>read_slot</code></td>
-            <td>Inspection</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Reads all active procedural layers (L1&ndash;L5) for a slot.</td>
-          </tr>
-          <tr>
-            <td><code>read_procedure</code></td>
-            <td>Inspection</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Reads the <code>.kir</code> shader source of a single node.</td>
-          </tr>
-          <tr>
-            <td><code>read_set</code></td>
-            <td>Inspection</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Reads Set configuration, knob mappings, and declarations.</td>
-          </tr>
-          <tr>
-            <td><code>list_sets</code></td>
-            <td>Inspection</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Catalogs stored Sets with optional layer/name filters.</td>
-          </tr>
-          <tr>
-            <td><code>walk_history</code></td>
-            <td>Inspection</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Lists past compiled versions and revisions for a Set.</td>
-          </tr>
-          <tr>
-            <td><code>swap_outcome</code></td>
-            <td>Inspection</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Polls the outcome and GPU cost verdict of recent swaps.</td>
-          </tr>
-          <tr>
-            <td><code>check_procedure</code></td>
-            <td>Validation</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Pure static syntax/type checker; touches no GPU state.</td>
-          </tr>
-          <tr>
-            <td><code>check_set</code></td>
-            <td>Validation</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Always permitted. Validates Set asset dependencies without activating.</td>
-          </tr>
-          <tr>
-            <td><code>write_procedure</code></td>
-            <td>Authoring</td>
-            <td><span class="tag slot">Inspector Slot</span></td>
-            <td>Guarded by target slot policy: rejected if <code>Auto</code> in mix or <code>Off</code>.</td>
-          </tr>
-          <tr>
-            <td><code>copy_slot</code></td>
-            <td>Authoring</td>
-            <td><span class="tag slot">Inspector Slot</span></td>
-            <td>Guarded by destination slot policy. Staged via atomic rename (<code>.tmp</code>).</td>
-          </tr>
-          <tr>
-            <td><code>wire_input</code></td>
-            <td>Graph</td>
-            <td><span class="tag slot">Inspector Slot</span></td>
-            <td>Guarded by target slot policy. Rewires modulation edges between nodes.</td>
-          </tr>
-          <tr>
-            <td><code>save_set</code></td>
-            <td>Storage</td>
-            <td><span class="tag open">Open</span></td>
-            <td>Writes active slot state to <code>&lt;store&gt;/sandbox/</code> (never overwrites library).</td>
-          </tr>
-          <tr>
-            <td><code>operate</code></td>
-            <td>Execution</td>
-            <td><span class="tag bay">Bay Class</span> / <span class="tag slot">Slot</span></td>
-            <td>Dispatches vocabulary operations; verified against the corresponding bay or slot gate.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
     <h3>The M7 Co-Performance Tool Suite</h3>
     <p>
@@ -352,12 +255,14 @@
         "text": "deck 1 is protected by mcp policy: auto (currently in live mix)"
       }
     ],
-    "refusal": {
-      "code": "SLOT_IN_MIX",
-      "slot": 0,
-      "policy": "auto",
-      "in_mix": true,
-      "message": "deck 1 is protected by mcp policy: auto (currently in live mix)"
+    "structuredContent": {
+      "refusal": {
+        "code": "SLOT_IN_MIX",
+        "slot": 0,
+        "policy": "auto",
+        "in_mix": true,
+        "message": "deck 1 is protected by mcp policy: auto (currently in live mix)"
+      }
     }
   }
 }</code></pre>
