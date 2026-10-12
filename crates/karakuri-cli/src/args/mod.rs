@@ -145,4 +145,8 @@ pub(crate) enum ParseOutcome {
         store: PathBuf,
         file: PathBuf,
     },
+    /// `--guide [TOPIC]`: render interactive documentation guide.
+    Guide(Option<String>),
+    /// `--explain CODE`: explain diagnostic rule or topic code.
+    Explain(String),
 }

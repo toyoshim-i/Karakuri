@@ -1,3 +1,9 @@
+---
+id: vr-projection
+title: Built-in VR Projection and Celestial Dome Shader Specification
+summary: Specification of WebXR projection modes (Wall, Dome, Kaleidosky), celestial dome coordinate mapping, and dome shader authoring.
+---
+
 # Karakuri Built-in VR Projection & Celestial Dome Shader Specification
 
 ---
@@ -68,12 +74,12 @@ To resolve this, Karakuri implements **Built-in VR Projection** directly inside 
 
 ## 3. Coordinate Spaces & Mathematical Contracts
 
-### 3.1 Input UV Coordinates (`in.point_coord`)
+### 3.1 Input UV Coordinates (`point_coord`)
 
-In `.kir` and WGSL fragment shaders, fullscreen procedures receive `in.point_coord : vec2<f32>` in the range $[0.0, 1.0]^2$.
+In `.kir` procedures, fullscreen fragment blocks receive `point_coord : vec2` in the range $[0.0, 1.0]^2$ (lowered to `in.point_coord : vec2<f32>` in generated WGSL).
 
 #### In `Dome` & `Kaleidosky` Modes:
-The engine remaps `in.point_coord` from the 3D room ray:
+The engine remaps `point_coord` from the 3D room ray:
 $$\theta = \arccos(\text{clamp}(y_{\text{room}}, -0.5, 1.0)) \in [0, 2\pi/3]$$
 $$r = \frac{\theta}{2\pi / 3} \times \text{zoom} \in [0.0, 1.0]$$
 $$a = \operatorname{atan2}(x_{\text{room}}, -z_{\text{room}}) \in [-\pi, \pi]$$
@@ -81,7 +87,7 @@ $$\vec{q} = r \begin{pmatrix} \sin(a) \\ \cos(a) \end{pmatrix}$$
 $$\text{point\_coord} = \vec{q} \times 0.5 + 0.5$$
 
 #### Key Coordinate Landmarks in Dome Space:
-| Landmark | Polar Position | `in.point_coord` |
+| Landmark | Polar Position | `point_coord` |
 |---|---|---|
 | **Zenith (真上・天頂)** | $r = 0.0$ | `vec2(0.5, 0.5)` (Center of UV space) |
 | **Mid-Sky ($+45^\circ$)** | $r \approx 0.375$ | Circle of radius $0.1875$ around center |

@@ -43,6 +43,32 @@ pub(crate) fn parse_args() -> Args {
                 std::process::exit(1);
             }
         },
+        Ok(ParseOutcome::Guide(topic)) => {
+            let engine = karakuri_mcp::doc_engine();
+            match engine.guide(topic.as_deref(), agent_doc::RenderMode::Terminal) {
+                Ok(said) => {
+                    print!("{said}");
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("karakuri-cli: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Ok(ParseOutcome::Explain(code)) => {
+            let engine = karakuri_mcp::doc_engine();
+            match engine.explain(&code, agent_doc::RenderMode::Terminal) {
+                Ok(said) => {
+                    print!("{said}");
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("karakuri-cli: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         Err(message) => fail(&message),
     }
 }
@@ -352,10 +378,21 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
     let mut package: Option<String> = None;
     let mut take_in: Option<PathBuf> = None;
     let mut positional = Vec::new();
-    let mut it = args;
+    let mut it = args.peekable();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--help" | "-h" => return Ok(ParseOutcome::Help),
+            "--guide" => {
+                let topic = match it.peek() {
+                    Some(next) if !next.starts_with('-') => Some(it.next().unwrap()),
+                    _ => None,
+                };
+                return Ok(ParseOutcome::Guide(topic));
+            }
+            "--explain" => {
+                let code = value_for("--explain", &mut it)?;
+                return Ok(ParseOutcome::Explain(code));
+            }
             "--set" => {
                 let value = value_for("--set", &mut it)?;
                 // Parse L1 simulation followed by one or more L4 renderers.

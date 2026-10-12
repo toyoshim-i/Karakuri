@@ -34,6 +34,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agent-doc"
+version = "0.3.1"
+source = "git+https://github.com/toyoshim-i/agent-doc.git#14bc224e04398fb83a8a46fe0b7f01137edc3716"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1463,6 +1473,7 @@ dependencies = [
 name = "karakuri-cli"
 version = "0.1.0"
 dependencies = [
+ "agent-doc",
  "karakuri-audio",
  "karakuri-engine",
  "karakuri-environment",
@@ -1564,6 +1575,7 @@ dependencies = [
 name = "karakuri-mcp"
 version = "0.1.0"
 dependencies = [
+ "agent-doc",
  "karakuri-engine",
  "karakuri-environment",
  "karakuri-ir",

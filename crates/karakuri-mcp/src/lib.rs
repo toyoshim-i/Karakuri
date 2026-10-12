@@ -15,6 +15,7 @@ mod tests;
 pub use in_process::{in_process, InProcessMcp};
 pub use karakuri_ir::{Diagnostic, DiagnosticReport};
 pub use protocol::PROTOCOL;
+pub use resources::doc_engine;
 pub use server::{serve, serve_at, Pending};
 pub use state::{Event, News, Pointed, Reply, Reporter, SaveRequest, Slots, WireRequest};
 pub use tools::{check_procedure, check_set_configuration, checked_id, OperateRequest, LISTED};

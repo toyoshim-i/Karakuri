@@ -1,32 +1,5 @@
 use std::path::Path;
 
-/// Extract all ```` ```kir ```` code blocks from a markdown string along with their 1-based start line.
-fn extract_kir_blocks(markdown: &str) -> Vec<(usize, String)> {
-    let mut blocks = Vec::new();
-    let mut in_kir = false;
-    let mut current_block = String::new();
-    let mut start_line = 0;
-
-    for (idx, line) in markdown.lines().enumerate() {
-        let trimmed = line.trim();
-        if !in_kir {
-            if trimmed == "```kir" {
-                in_kir = true;
-                current_block.clear();
-                start_line = idx + 1;
-            }
-        } else if trimmed == "```" {
-            in_kir = false;
-            blocks.push((start_line, current_block.clone()));
-            current_block.clear();
-        } else {
-            current_block.push_str(line);
-            current_block.push('\n');
-        }
-    }
-    blocks
-}
-
 /// Extract environment variable (ambient) names and types from §4 of ir-spec.md.
 fn extract_ambient_table(markdown: &str) -> Vec<(String, String)> {
     let mut entries = Vec::new();
@@ -78,42 +51,34 @@ fn minimal_procedure_for_ambient(name: &str) -> String {
     }
 }
 
-fn check_doc_file(relative_path: &str) {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir
-        .parent()
-        .expect("crates/")
-        .parent()
-        .expect("workspace root");
-    let file_path = workspace_root.join(relative_path);
-    let content = std::fs::read_to_string(&file_path)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", file_path.display()));
-
-    let blocks = extract_kir_blocks(&content);
+#[test]
+fn documentation_kir_code_blocks_are_valid_procedures() {
+    let engine = crate::resources::doc_engine();
+    let blocks = engine.code_blocks("kir");
     assert!(
         !blocks.is_empty(),
-        "no ```kir blocks found in {}",
-        file_path.display()
+        "no ```kir code blocks found in registered pages"
     );
 
-    for (start_line, code) in blocks {
-        let report = crate::check_procedure(&code);
+    for block in blocks {
+        let report = crate::check_procedure(&block.source);
         assert!(
             report.success,
             "Failed checking kir block in {} at line {}:\n---\n{}\n---\nDiagnostics:\n{:#?}",
-            relative_path, start_line, code, report.diagnostics
+            block.path, block.line, block.source, report.diagnostics
         );
     }
 }
 
 #[test]
-fn ir_spec_code_blocks_are_valid_procedures() {
-    check_doc_file("docs/ir-spec.md");
-}
-
-#[test]
-fn vr_projection_code_blocks_are_valid_procedures() {
-    check_doc_file("docs/vr-projection.md");
+fn documentation_has_no_broken_links() {
+    let engine = crate::resources::doc_engine();
+    let broken = engine.broken_links();
+    assert!(
+        broken.is_empty(),
+        "Found broken links in documentation:\n{:#?}",
+        broken
+    );
 }
 
 #[test]
@@ -124,14 +89,14 @@ fn ir_spec_environment_table_entries_are_valid_ambients() {
         .expect("crates/")
         .parent()
         .expect("workspace root");
-    let file_path = workspace_root.join("docs/ir-spec.md");
+    let file_path = workspace_root.join("docs/agent/ir-spec.md");
     let content = std::fs::read_to_string(&file_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", file_path.display()));
 
     let ambients = extract_ambient_table(&content);
     assert!(
         !ambients.is_empty(),
-        "no ambient table entries found in docs/ir-spec.md"
+        "no ambient table entries found in docs/agent/ir-spec.md"
     );
 
     for (name, ty) in ambients {
@@ -151,4 +116,70 @@ fn ir_spec_environment_table_entries_are_valid_ambients() {
             report.diagnostics
         );
     }
+}
+
+#[test]
+fn ir_spec_builtins_match_compiler_signatures() {
+    use karakuri_ir::builtin::Builtin;
+
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir
+        .parent()
+        .expect("crates/")
+        .parent()
+        .expect("workspace root");
+    let file_path = workspace_root.join("docs/agent/ir-spec.md");
+    let content = std::fs::read_to_string(&file_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", file_path.display()));
+
+    let mut in_s5 = false;
+    let mut tested_builtins = 0;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## 5. Built-in Functions") {
+            in_s5 = true;
+            continue;
+        }
+        if in_s5 && trimmed.starts_with("## ") {
+            break;
+        }
+        if in_s5 && trimmed.starts_with("- **") {
+            let mut cursor = trimmed;
+            while let Some(open) = cursor.find('`') {
+                let rest = &cursor[open + 1..];
+                let Some(close) = rest.find('`') else { break };
+                let item = &rest[..close];
+                cursor = &rest[close + 1..];
+
+                let (name, arity) = if let Some((fn_name, args_part)) = item.split_once('(') {
+                    let fn_name = fn_name.trim();
+                    let args_str = args_part.trim_end_matches(')').trim();
+                    let count = if args_str.is_empty() {
+                        0
+                    } else {
+                        args_str.split(',').count()
+                    };
+                    (fn_name, Some(count))
+                } else {
+                    (item.trim(), None)
+                };
+
+                let builtin = Builtin::from_name(name)
+                    .unwrap_or_else(|| panic!("builtin `{name}` in §5 not found in Builtin::ALL"));
+
+                if let Some(expected_args) = arity {
+                    let actual_args = builtin.signature().args.len();
+                    assert_eq!(
+                        actual_args, expected_args,
+                        "builtin `{name}` has {actual_args} arguments in signature, but doc specifies {expected_args}"
+                    );
+                }
+                tested_builtins += 1;
+            }
+        }
+    }
+    assert!(
+        tested_builtins >= 30,
+        "expected at least 30 builtins tested from §5, found {tested_builtins}"
+    );
 }

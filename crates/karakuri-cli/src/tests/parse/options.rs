@@ -232,3 +232,25 @@ fn tonemap_every_documented_name_is_accepted() {
         assert_eq!(args.look.op, op, "{name}");
     }
 }
+
+// -- --guide and --explain ---------------------------------------------
+
+#[test]
+fn guide_and_explain_flags_parse_to_expected_outcomes() {
+    match parse_args_from(["--guide".to_string()].into_iter()) {
+        Ok(ParseOutcome::Guide(topic)) => assert_eq!(topic, None),
+        _ => panic!("expected Guide(None)"),
+    }
+
+    match parse_args_from(["--guide".to_string(), "ir-spec".to_string()].into_iter()) {
+        Ok(ParseOutcome::Guide(topic)) => assert_eq!(topic, Some("ir-spec".to_string())),
+        _ => panic!("expected Guide(Some(ir-spec))"),
+    }
+
+    match parse_args_from(["--explain".to_string(), "ir-spec".to_string()].into_iter()) {
+        Ok(ParseOutcome::Explain(code)) => assert_eq!(code, "ir-spec"),
+        _ => panic!("expected Explain(ir-spec)"),
+    }
+
+    assert!(parse_args_from(["--explain".to_string()].into_iter()).is_err());
+}

@@ -1,72 +1,45 @@
-// -- resources -------------------------------------------------------------
-
-use super::*;
+use agent_doc::DocEngine;
 use serde_json::{json, Value};
+
+use crate::operations;
 
 /// The one path this server serves. Everything else is a 404, which is what
 /// tells a client probing for authorization metadata that there is none.
 pub(crate) const ENDPOINT: &str = "/";
 
-pub(crate) const SPEC: &str = "karakuri://ir-spec";
-pub(crate) const VOCABULARY: &str = "karakuri://ir-vocabulary";
-pub(crate) const OPERATIONS: &str = "karakuri://operations";
-pub(crate) const VR_PROJECTION: &str = "karakuri://vr-projection";
+pub const SPEC: &str = "karakuri://doc/ir-spec";
+pub const VOCABULARY: &str = "karakuri://doc/ir-vocabulary";
+pub const OPERATIONS: &str = "karakuri://doc/operations";
+pub const VR_PROJECTION: &str = "karakuri://doc/vr-projection";
+
+/// Builds the documentation engine loaded with all static and generated Karakuri documentation.
+pub fn doc_engine() -> DocEngine {
+    let mut engine = DocEngine::new("karakuri-cli")
+        .with_scheme("karakuri")
+        .with_version(env!("CARGO_PKG_VERSION"))
+        .with_subcommands("--guide", "--explain");
+    engine.add_pages(include!(concat!(env!("OUT_DIR"), "/agent_doc_pages.rs")));
+    engine.add_page("docs/agent/ir-vocabulary.md", &vocabulary());
+    engine.add_page("docs/agent/operations.md", &operations());
+    engine
+}
 
 pub(crate) fn resources() -> Value {
-    json!([
-        {
-            "uri": SPEC,
-            "name": "The IR specification",
-            "description":
-                "The language a procedure is written in, in full, with the reasoning. \
-                 Read this before writing a procedure for the first time.",
-            "mimeType": "text/markdown",
-        },
-        {
-            "uri": VOCABULARY,
-            "name": "Built-in functions the checker accepts",
-            "description":
-                "Every built-in with its signature, generated from the checker's own \
-                 table rather than written down beside it. Prose drifts from code; this \
-                 cannot, because the same list is what rejects a procedure.",
-            "mimeType": "text/markdown",
-        },
-        {
-            "uri": OPERATIONS,
-            "name": "Operations `operate` takes",
-            "description":
-                "Every operation this instrument can be asked for by name, with the shape \
-                 of each payload and one call that names it — generated from the same \
-                 table the tool accepts against. Read this before calling `operate`.",
-            "mimeType": "text/markdown",
-        },
-        {
-            "uri": VR_PROJECTION,
-            "name": "Built-in VR Projection and Celestial Dome Shader Specification",
-            "description":
-                "Specification of VR projection modes (Wall, Dome, Kaleidosky), \
-                 celestial dome coordinate spaces (point_coord, ray), parameters, \
-                 and guidelines for authoring VR and sky dome shaders.",
-            "mimeType": "text/markdown",
-        },
-    ])
+    serde_json::to_value(doc_engine().mcp_list_resources()).unwrap_or_default()
 }
 
 pub(crate) fn read_resource(request: &Value) -> Result<Value, String> {
     let uri = request
         .get("params")
         .and_then(|p| p.get("uri"))
+        .or_else(|| request.get("uri"))
         .and_then(Value::as_str)
         .ok_or("no uri")?;
-    let text = match uri {
-        SPEC => include_str!("../../../docs/ir-spec.md").to_string(),
-        VOCABULARY => vocabulary(),
-        OPERATIONS => operations(),
-        VR_PROJECTION => include_str!("../../../docs/vr-projection.md").to_string(),
-        other => return Err(format!("no resource `{other}`")),
-    };
+    let contents = doc_engine()
+        .mcp_read_resource(uri)
+        .map_err(|e| e.to_string())?;
     Ok(json!({
-        "contents": [{ "uri": uri, "mimeType": "text/markdown", "text": text }],
+        "contents": [contents],
     }))
 }
 
@@ -75,7 +48,12 @@ pub(crate) fn vocabulary() -> String {
     use karakuri_ir::builtin::Builtin;
     use karakuri_ir::{Blend, Output, Topology};
     let mut out = String::from(
-        "# Built-in functions\n\n\
+        "---\n\
+         id: ir-vocabulary\n\
+         title: Built-in functions the checker accepts\n\
+         summary: Every built-in with its signature, generated from the checker's own table rather than written down beside it.\n\
+         ---\n\n\
+         # Built-in functions\n\n\
          Generated from the checker's own table, so this is exactly what will be \
          accepted.\n\n\
          `Same` means the argument takes the shape of the others; `Scalar` is a single \

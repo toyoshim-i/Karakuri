@@ -55,6 +55,9 @@ fn a_schema_states_the_constraints_its_tool_enforces() {
                 "`{name}`'s `{counted}` counts from 0 and the schema does not say so"
             );
         }
+        if name == "doc_read" {
+            continue;
+        }
         let Some(schema) = properties.get("id") else {
             continue;
         };
@@ -247,16 +250,16 @@ fn vr_projection_resource_is_published_and_readable() {
     assert!(
         entries
             .iter()
-            .any(|r| r["uri"] == "karakuri://vr-projection"),
-        "karakuri://vr-projection is not listed in resources()"
+            .any(|r| r["uri"] == "karakuri://doc/vr-projection"),
+        "karakuri://doc/vr-projection is not listed in resources()"
     );
 
     let req = json!({
         "params": {
-            "uri": "karakuri://vr-projection"
+            "uri": "karakuri://doc/vr-projection"
         }
     });
-    let res = read_resource(&req).expect("read_resource(karakuri://vr-projection)");
+    let res = read_resource(&req).expect("read_resource(karakuri://doc/vr-projection)");
     let content = res["contents"][0]["text"].as_str().expect("text content");
     assert!(content.contains("Built-in VR Projection"));
     assert!(content.contains("Dome"));

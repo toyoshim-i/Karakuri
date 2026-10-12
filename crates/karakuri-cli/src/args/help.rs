@@ -193,6 +193,8 @@ options:
                                       deck unless --set says otherwise
   --watch               recompile and swap the slot whose files changed
   --budget-ms MS        frame budget a swapped-in Set is held to
+  --guide [TOPIC]       browse interactive documentation or view a topic
+  --explain CODE        explain diagnostic code or topic by exact name
   -h, --help            this
 
 --render and --seq render the mix, which is what the window shows.

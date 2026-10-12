@@ -221,42 +221,18 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             serde_json::to_string_pretty(&resp).unwrap_or_default()
         )));
     }
-    if name == "list_resources" {
-        let resp = crate::resources::resources();
-        return Ok(Called::Answered(Ok(
-            serde_json::to_string_pretty(&resp).unwrap_or_default()
-        )));
-    }
-    if name == "read_resource" {
-        let uri = match args.get("uri").and_then(Value::as_str) {
-            Some(u) => u,
-            None => {
-                return Ok(Called::Answered(Err(
-                    "`uri` is required and is a string".into()
-                )))
+    if name == "doc_list" || name == "doc_read" {
+        return match crate::resources::doc_engine().mcp_call_tool(name, args.clone()) {
+            Ok(result) => {
+                let text = result
+                    .content
+                    .iter()
+                    .map(|c| c.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                Ok(Called::Answered(Ok(text)))
             }
-        };
-        let req = json!({
-            "params": {
-                "uri": uri
-            }
-        });
-        return match crate::resources::read_resource(&req) {
-            Ok(res) => {
-                if let Some(text) = res
-                    .get("contents")
-                    .and_then(|c| c.get(0))
-                    .and_then(|c| c.get("text"))
-                    .and_then(Value::as_str)
-                {
-                    Ok(Called::Answered(Ok(text.to_string())))
-                } else {
-                    Ok(Called::Answered(Ok(
-                        serde_json::to_string_pretty(&res).unwrap_or_default()
-                    )))
-                }
-            }
-            Err(e) => Ok(Called::Answered(Err(e))),
+            Err(e) => Ok(Called::Answered(Err(e.to_string()))),
         };
     }
     if name == "copy_slot" {

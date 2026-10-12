@@ -421,40 +421,30 @@ pub(crate) fn tools() -> Value {
             },
         },
         {
-            "name": "list_resources",
-            "description":
-                "Lists all available reference documentation, language specifications, \
-                 and operation manuals (e.g. karakuri://operations, karakuri://ir-spec, \
-                 karakuri://ir-vocabulary, karakuri://vr-projection). Call this to discover reference URIs.",
+            "name": "doc_list",
+            "description": "List all available documentation topics and summaries",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
             },
         },
         {
-            "name": "read_resource",
+            "name": "doc_read",
             "description":
-                "Reads the full content of a Karakuri reference resource by URI. \
-                 Available URIs include: \
-                 - `karakuri://operations`: Supported command names, payloads, and parameter schemas for the `operate` tool. \
-                 - `karakuri://ir-spec`: Complete .kir shading language specification, grammar, semantics, and examples. \
-                 - `karakuri://ir-vocabulary`: Built-in function signatures and geometry topologies. \
-                 - `karakuri://vr-projection`: Built-in VR projection modes (Wall, Dome, Kaleidosky) and celestial dome shader specification.",
+                "Read documentation page by ID or extract a specific section by anchor",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "uri": {
+                    "id": {
                         "type": "string",
-                        "description": "the URI of the resource to read",
-                        "enum": [
-                            "karakuri://operations",
-                            "karakuri://ir-spec",
-                            "karakuri://ir-vocabulary",
-                            "karakuri://vr-projection",
-                        ],
+                        "description": "Documentation page ID",
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": "Optional section anchor",
                     },
                 },
-                "required": ["uri"],
+                "required": ["id"],
             },
         },
     ])

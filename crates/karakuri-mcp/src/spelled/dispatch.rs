@@ -125,7 +125,12 @@ pub(crate) fn operate_tool() -> Value {
 /// than written down beside it.
 pub(crate) fn operations() -> String {
     let mut out = String::from(
-        "# Operations `operate` takes\n\n\
+        "---\n\
+         id: operations\n\
+         title: Operations `operate` takes\n\
+         summary: Every operation this instrument can be asked for by name, with the shape of each payload and one call that names it.\n\
+         ---\n\n\
+         # Operations `operate` takes\n\n\
          Generated from this server's own table, so this is exactly what will be \
          accepted. Each heading is the name to put in `operation`, and the schema under \
          it is the `with` object.\n\n\

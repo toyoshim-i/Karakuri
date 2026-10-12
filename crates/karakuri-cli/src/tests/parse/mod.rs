@@ -9,6 +9,8 @@ pub(crate) fn parse(args: &[&str]) -> Result<Args, String> {
         Ok(ParseOutcome::ListSets(_)) => panic!("expected Args, got --list-sets"),
         Ok(ParseOutcome::Package { .. }) => panic!("expected Args, got --package"),
         Ok(ParseOutcome::TakeIn { .. }) => panic!("expected Args, got --take-in"),
+        Ok(ParseOutcome::Guide(_)) => panic!("expected Args, got --guide"),
+        Ok(ParseOutcome::Explain(_)) => panic!("expected Args, got --explain"),
         Err(e) => Err(e),
     }
 }

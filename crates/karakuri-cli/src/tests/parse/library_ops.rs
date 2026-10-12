@@ -22,8 +22,11 @@ fn list_sets_prints_and_is_never_a_run() {
                  default material and open a window to print a directory"
             ),
             Ok(ParseOutcome::Help) => panic!("{spelling:?} came back as --help"),
-            Ok(ParseOutcome::Package { .. }) | Ok(ParseOutcome::TakeIn { .. }) => {
-                panic!("{spelling:?} came back as a transfer")
+            Ok(ParseOutcome::Package { .. })
+            | Ok(ParseOutcome::TakeIn { .. })
+            | Ok(ParseOutcome::Guide(_))
+            | Ok(ParseOutcome::Explain(_)) => {
+                panic!("{spelling:?} came back as a transfer or doc query")
             }
             Err(e) => panic!("{spelling:?} was refused: {e}"),
         }
@@ -82,6 +85,8 @@ fn named(outcome: &Result<ParseOutcome, String>) -> String {
         Ok(ParseOutcome::ListSets(_)) => "--list-sets".to_string(),
         Ok(ParseOutcome::Package { .. }) => "--package".to_string(),
         Ok(ParseOutcome::TakeIn { .. }) => "--take-in".to_string(),
+        Ok(ParseOutcome::Guide(_)) => "--guide".to_string(),
+        Ok(ParseOutcome::Explain(_)) => "--explain".to_string(),
         Err(e) => format!("a refusal: {e}"),
     }
 }

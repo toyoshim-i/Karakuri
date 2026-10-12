@@ -1,3 +1,9 @@
+---
+id: ir-spec
+title: Karakuri IR Specification
+summary: Specification of the .kir plain-text shader procedure language, execution algebra, type contracts, ambients, and built-in functions.
+---
+
 # Karakuri IR Specification (v0.2)
 
 Extension `.kir`. Plain text. Written by LLMs, validated by the compiler, lowered to WGSL.
@@ -78,7 +84,7 @@ Defines how fragment colors combine with underlying surfaces:
 An `L4` procedure that declares no `vertex` block acts as a **fullscreen fragment renderer** (e.g. 2D procedural patterns, raymarchers, canvas backgrounds). Fullscreen procedures cannot declare `consumes` because there are no elements to read from.
 - On 2D screens: Renders across the entire display quad.
 - In WebXR Immersive mode: Automatically projected via **Built-in VR Projection** (`Wall`, `Dome`, or `Kaleidosky`). In `Dome` mode, `point_coord` maps the zenith $(0.5, 0.5)$ directly overhead down to $-30^\circ$ below the horizon.
-- For complete coordinate mapping contracts, WGSL examples, and celestial dome shader guidelines, read `karakuri://vr-projection`.
+- For complete coordinate mapping contracts, WGSL examples, and celestial dome shader guidelines, read [VR Projection](vr-projection).
 
 ### `param` (All kinds)
 Declares an interactive, controllable parameter exposed to the console, MIDI, and LLM:
@@ -137,12 +143,13 @@ Available implicitly inside execution blocks as ambient values:
 | `ray` | `vec3` | World-space unit ray direction (fullscreen L4 fragment) |
 
 *Signals*: Dynamic control signals (such as audio FFT bands or MIDI CC values) are not directly readable from IR. Instead, declare an interactive `param` and bind the signal to that parameter in the Set configuration.
+*VR Projection*: In WebXR immersive mode, fullscreen fragment procedures render to the virtual screen or dome. See [VR Projection](vr-projection) for coordinate mapping and projection modes.
 
 ---
 
 ## 5. Built-in Functions
 
-Function signatures and shapes are strictly defined by the compiler checker. The complete generated reference is published at `karakuri://ir-vocabulary` (see `crates/karakuri-ir/src/builtin.rs`).
+Function signatures and shapes are strictly defined by the compiler checker. The complete generated reference is published at [IR Vocabulary](ir-vocabulary) (see `crates/karakuri-ir/src/builtin.rs`).
 
 Commonly used built-in functions:
 - **Math**: `min`, `max`, `clamp`, `abs`, `sign`, `floor`, `ceil`, `fract`, `mod`, `sqrt`, `pow`, `exp`, `log`, `step`, `smoothstep`, `mix`.
