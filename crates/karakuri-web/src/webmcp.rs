@@ -55,7 +55,20 @@ pub fn setup_webmcp(mcp: InProcessMcp, waker: EventLoopProxy<()>) -> Result<(), 
         timeout: Duration::from_secs(10),
     };
     let engine = Rc::new((*mcp.engine()).clone());
-    webmcp::install(engine, options)?;
+    let installed = webmcp::install(engine, options)?;
+    if installed.model_context {
+        log::info!(
+            "WebMCP: Successfully registered {} tools to document.modelContext",
+            installed.registered
+        );
+        for (name, reason) in &installed.refused {
+            log::warn!("WebMCP: Failed to register tool `{name}`: {reason}");
+        }
+    } else {
+        log::info!(
+            "WebMCP: document.modelContext not present in this browser; accessible via window.__karakuri_mcp"
+        );
+    }
     Ok(())
 }
 

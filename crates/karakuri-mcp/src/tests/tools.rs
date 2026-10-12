@@ -78,6 +78,39 @@ fn engine_check_tools_passes() {
     assert!(errors.is_empty(), "check_tools failed: {errors:?}");
 }
 
+#[test]
+fn write_and_check_procedure_examples_are_valid_kir() {
+    let (_tx, rx) = std::sync::mpsc::channel();
+    let state = std::sync::Arc::new(std::sync::Mutex::new(state(rx)));
+    let engine = resources::doc_engine_with_state(state);
+
+    for tool_name in ["write_procedure", "check_procedure"] {
+        let tool = engine
+            .tools
+            .iter()
+            .find(|t| t.name == tool_name)
+            .unwrap_or_else(|| panic!("tool `{tool_name}` not found"));
+        assert!(
+            !tool.examples.is_empty(),
+            "tool `{tool_name}` has no examples"
+        );
+        for example in &tool.examples {
+            let source = example
+                .get("source")
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| {
+                    panic!("example for `{tool_name}` missing string `source`: {example:?}")
+                });
+            let report = crate::check_procedure(source);
+            assert!(
+                report.success,
+                "tool `{tool_name}` example source is not valid .kir:\n---\n{source}\n---\nDiagnostics:\n{:#?}",
+                report.diagnostics
+            );
+        }
+    }
+}
+
 /// Verifies that `save_set` description mentions all elements it persists.
 #[test]
 fn save_set_names_everything_it_writes() {
@@ -236,24 +269,19 @@ fn an_edge_the_loop_does_not_take_ends_and_says_something_true() {
 
 #[test]
 fn vr_projection_resource_is_published_and_readable() {
-    let list = crate::resources::resources();
-    let entries = list.as_array().expect("resources() is array");
+    let engine = crate::resources::doc_engine();
+    let resources = engine.mcp_list_resources();
     assert!(
-        entries
+        resources
             .iter()
-            .any(|r| r["uri"] == "karakuri://doc/vr-projection"),
+            .any(|r| r.uri == "karakuri://doc/vr-projection"),
         "karakuri://doc/vr-projection is not listed in resources()"
     );
 
-    let req = json!({
-        "params": {
-            "uri": "karakuri://doc/vr-projection"
-        }
-    });
-    let res =
-        crate::resources::read_resource(&req).expect("read_resource(karakuri://doc/vr-projection)");
-    let content = res["contents"][0]["text"].as_str().expect("text content");
-    assert!(content.contains("Built-in VR Projection"));
-    assert!(content.contains("Dome"));
-    assert!(content.contains("point_coord"));
+    let content = engine
+        .mcp_read_resource("karakuri://doc/vr-projection")
+        .expect("mcp_read_resource(karakuri://doc/vr-projection)");
+    assert!(content.text.contains("Built-in VR Projection"));
+    assert!(content.text.contains("Dome"));
+    assert!(content.text.contains("point_coord"));
 }

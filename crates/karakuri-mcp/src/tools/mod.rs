@@ -216,20 +216,6 @@ pub(crate) fn dispatch_tool(name: &str, args: &Value, state: &mut State) -> Resu
             serde_json::to_string_pretty(&resp).unwrap_or_default()
         )));
     }
-    if name == "doc_list" || name == "doc_read" {
-        return match crate::resources::doc_engine().mcp_call_tool(name, args.clone()) {
-            Ok(result) => {
-                let text = result
-                    .content
-                    .iter()
-                    .map(|c| c.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                Ok(Called::Answered(Ok(text)))
-            }
-            Err(e) => Ok(Called::Answered(Err(e.to_string()))),
-        };
-    }
     if name == "copy_slot" {
         let from_slot = match args
             .get("from_slot")

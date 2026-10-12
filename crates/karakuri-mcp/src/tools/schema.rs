@@ -58,7 +58,7 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
         .param("source", ParamType::String, "the whole procedure source", true)
         .see("swap-lifecycle")
-        .example(json!({ "slot": 0, "layer": "L1", "source": "kind L1\nvoid main() {}" }))
+        .example(json!({ "slot": 0, "layer": "L1", "source": "proc spark {\n  kind L1\n  topology points\n  capacity [1, 64] = 16\n  element {\n    let x = 1.0;\n  }\n}" }))
         .handler(tool_handler("write_procedure", state.clone()))
         .build(),
 
@@ -185,7 +185,7 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         )
         .param("source", ParamType::String, "the .kir shader source code to validate", true)
         .see("ir-spec")
-        .example(json!({ "source": "kind L1\nvoid main() {}" }))
+        .example(json!({ "source": "proc spark {\n  kind L1\n  topology points\n  capacity [1, 64] = 16\n  element {\n    let x = 1.0;\n  }\n}" }))
         .handler(tool_handler("check_procedure", state.clone()))
         .build(),
 

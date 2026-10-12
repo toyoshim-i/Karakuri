@@ -1,6 +1,4 @@
 use agent_man::DocEngine;
-#[cfg(test)]
-use serde_json::{json, Value};
 
 use crate::operations;
 
@@ -30,27 +28,6 @@ pub(crate) fn doc_engine_with_state(
         let _ = engine.register_tool(tool);
     }
     engine
-}
-
-#[cfg(test)]
-pub(crate) fn resources() -> Value {
-    serde_json::to_value(doc_engine().mcp_list_resources()).unwrap_or_default()
-}
-
-#[cfg(test)]
-pub(crate) fn read_resource(request: &Value) -> Result<Value, String> {
-    let uri = request
-        .get("params")
-        .and_then(|p| p.get("uri"))
-        .or_else(|| request.get("uri"))
-        .and_then(Value::as_str)
-        .ok_or("no uri")?;
-    let contents = doc_engine()
-        .mcp_read_resource(uri)
-        .map_err(|e| e.to_string())?;
-    Ok(json!({
-        "contents": [contents],
-    }))
 }
 
 /// Renders built-in language functions, topologies, and outputs as markdown reference.
