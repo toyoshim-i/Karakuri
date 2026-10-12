@@ -118,6 +118,16 @@ impl Reporter {
         self.shutdown
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
+
+    /// Returns a handle to the server's shutdown flag.
+    pub fn shutdown_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.shutdown.clone()
+    }
+
+    /// Returns whether shutdown has been requested.
+    pub fn is_shutdown(&self) -> bool {
+        self.shutdown.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 impl Drop for Reporter {

@@ -16,6 +16,14 @@ pub use std::sync::mpsc;
 pub struct Server {
     pub port: u16,
     pub dir: tempfile::TempDir,
+    pub shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// Helper returning the store directory within a test temporary directory.
@@ -196,9 +204,14 @@ pub fn start_chain() -> Server {
         policies(),
     )
     .expect("serve");
+    let shutdown = reporter.shutdown_handle();
     let port = reporter.port();
     stand_in(reporter, no_loop);
-    Server { port, dir }
+    Server {
+        port,
+        dir,
+        shutdown,
+    }
 }
 
 pub fn start(watching: bool) -> Server {
@@ -226,17 +239,27 @@ pub fn started(watching: bool) -> (Server, Reporter) {
         policies(),
     )
     .expect("serve");
+    let shutdown = reporter.shutdown_handle();
     let port = reporter.port();
-    (Server { port, dir }, reporter)
+    (
+        Server {
+            port,
+            dir,
+            shutdown,
+        },
+        reporter,
+    )
 }
 
 /// Spawns a background thread acting as a mock render loop to process [`SaveRequest`]s from the server.
 pub fn stand_in(reporter: Reporter, answer: impl Fn(SaveRequest) + Send + 'static) {
-    std::thread::spawn(move || loop {
-        for request in reporter.saves() {
-            answer(request);
+    std::thread::spawn(move || {
+        while !reporter.is_shutdown() {
+            for request in reporter.saves() {
+                answer(request);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
         }
-        std::thread::sleep(std::time::Duration::from_millis(2));
     });
 }
 
@@ -262,22 +285,15 @@ pub fn post(port: u16, body: &str) -> (u16, String) {
     )
 }
 
-pub fn raw(port: u16, request: &str) -> (u16, String) {
-    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+fn raw_once(port: u16, request: &str) -> std::io::Result<(u16, String)> {
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .ok();
-    stream.write_all(request.as_bytes()).expect("write");
+    stream.write_all(request.as_bytes())?;
     let mut reader = BufReader::new(stream);
     let mut status_line = String::new();
-    // Name specified to clarify timeout failure diagnostics.
-    // A connection held up by another one reaches the client's own read
-    // timeout and comes out here, and `expect("status")` reported that as an
-    // errno rather than as what it is.
-    reader.read_line(&mut status_line).expect(
-        "no status line: the server did not answer this connection within the \
-                 client's read timeout",
-    );
+    reader.read_line(&mut status_line)?;
     let status: u16 = status_line
         .split_whitespace()
         .nth(1)
@@ -286,7 +302,7 @@ pub fn raw(port: u16, request: &str) -> (u16, String) {
     let mut length = 0usize;
     loop {
         let mut header = String::new();
-        reader.read_line(&mut header).expect("header");
+        reader.read_line(&mut header)?;
         let header = header.trim_end();
         if header.is_empty() {
             break;
@@ -298,8 +314,30 @@ pub fn raw(port: u16, request: &str) -> (u16, String) {
         }
     }
     let mut body = vec![0u8; length];
-    std::io::Read::read_exact(&mut reader, &mut body).expect("body");
-    (status, String::from_utf8_lossy(&body).into_owned())
+    std::io::Read::read_exact(&mut reader, &mut body)?;
+    Ok((status, String::from_utf8_lossy(&body).into_owned()))
+}
+
+pub fn raw(port: u16, request: &str) -> (u16, String) {
+    let mut last = (0, String::new());
+    for _ in 0..5 {
+        match raw_once(port, request) {
+            Ok((status, body)) => {
+                if (status == 400 && body.contains("request line too long"))
+                    || (status == 0 && body.is_empty())
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                    last = (status, body);
+                    continue;
+                }
+                return (status, body);
+            }
+            Err(_) => {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+    }
+    last
 }
 
 pub fn call(port: u16, name: &str, args: Value) -> (bool, String) {
@@ -315,13 +353,15 @@ pub fn call(port: u16, name: &str, args: Value) -> (bool, String) {
 }
 
 pub fn call_raw(port: u16, name: &str, args: Value) -> Value {
-    let (_, body) = post(
+    let (status, body) = post(
         port,
         &json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
                 "params":{"name":name,"arguments":args}})
         .to_string(),
     );
-    serde_json::from_str(&body).expect("json")
+    serde_json::from_str(&body).unwrap_or_else(|e| {
+        panic!("call `{name}` on port {port} returned status {status}, body `{body}`: {e}")
+    })
 }
 
 // -- the listing -----------------------------------------------------
@@ -427,20 +467,22 @@ pub fn wiring_loop(
 ) -> std::sync::Arc<std::sync::Mutex<Vec<(usize, karakuri_engine::set::Edge)>>> {
     let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let kept = seen.clone();
-    std::thread::spawn(move || loop {
-        for request in reporter.saves() {
-            no_loop(request);
+    std::thread::spawn(move || {
+        while !reporter.is_shutdown() {
+            for request in reporter.saves() {
+                no_loop(request);
+            }
+            for request in reporter.wires() {
+                let WireRequest { slot, edge, reply } = request;
+                let said = format!(
+                    "slot {slot}: `{}.{}` is bound to `{}`, and the slot is rebuilding",
+                    edge.node, edge.slot, edge.to
+                );
+                kept.lock().expect("seen").push((slot, edge));
+                reply.settled(Ok(said));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
         }
-        for request in reporter.wires() {
-            let WireRequest { slot, edge, reply } = request;
-            let said = format!(
-                "slot {slot}: `{}.{}` is bound to `{}`, and the slot is rebuilding",
-                edge.node, edge.slot, edge.to
-            );
-            kept.lock().expect("seen").push((slot, edge));
-            reply.settled(Ok(said));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
     });
     seen
 }
@@ -473,7 +515,15 @@ pub fn wired(
         policies(),
     )
     .expect("serve");
+    let shutdown = reporter.shutdown_handle();
     let port = reporter.port();
     let seen = wiring_loop(reporter);
-    (Server { port, dir }, seen)
+    (
+        Server {
+            port,
+            dir,
+            shutdown,
+        },
+        seen,
+    )
 }

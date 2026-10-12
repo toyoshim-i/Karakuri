@@ -141,6 +141,7 @@ fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
     let server = Server {
         port: reporter.port(),
         dir,
+        shutdown: reporter.shutdown_handle(),
     };
     stand_in(reporter, |request| {
         let SaveRequest { slot, id, reply } = request;
