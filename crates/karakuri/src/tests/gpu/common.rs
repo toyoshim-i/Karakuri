@@ -101,7 +101,7 @@ pub(super) fn call(port: u16, name: &str, args: serde_json::Value) -> (bool, Str
     let reply: serde_json::Value = serde_json::from_slice(&body).expect("the answer is not JSON");
     let result = &reply["result"];
     (
-        result["isError"].as_bool().unwrap_or(true),
+        result["isError"].as_bool().unwrap_or(false),
         result["content"][0]["text"]
             .as_str()
             .unwrap_or("")

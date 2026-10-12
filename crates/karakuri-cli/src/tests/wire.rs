@@ -309,7 +309,7 @@ mod wire_tests {
             serde_json::from_slice(&body).expect("the server answered something that is not JSON");
         let result = &reply["result"];
         (
-            result["isError"].as_bool().unwrap_or(true),
+            result["isError"].as_bool().unwrap_or(false),
             result["content"][0]["text"]
                 .as_str()
                 .unwrap_or("")
