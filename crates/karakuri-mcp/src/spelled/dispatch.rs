@@ -80,46 +80,6 @@ pub(crate) fn operated(args: &Value, slots: &Slots) -> Result<Operation, String>
     make(&payload(args), slots)
 }
 
-/// Generates the MCP JSON Schema for the `operate` tool.
-pub(crate) fn operate_tool() -> Value {
-    let names: Vec<&'static str> = operable().iter().map(|row| row.title()).collect();
-    json!({
-        "name": "operate",
-        "description":
-            "Ask for one operation of this instrument by its own name. The names are the \
-             headings of `docs/manual/operations.html`, which is the one vocabulary every \
-             surface routes into — the panel, the keyboard, a MIDI map and this server all \
-             name the same things, so an operation asked for here is performed where a hand \
-             on the panel would have performed it, on the next frame. Read \
-             `karakuri://operations` for the payload each name takes.\n\n\
-             Operations that could stop a performance are refused until the operator opens \
-             their class at the panel. The refusal says which class it is in and where the \
-             operator opens it, so it can be handed to the person sitting there. The list \
-             above never shortens: an operation is connected whether or not its class is \
-             open, and the answer is a refusal rather than a missing tool.\n\n\
-             The seven tools beside this one are not spelled here. Each of them does \
-             something only this server can do, and `operate` names the tool instead.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "operation": {
-                    "type": "string",
-                    "enum": names,
-                    "description": "the operation's own heading, verbatim",
-                },
-                "with": {
-                    "type": "object",
-                    "description":
-                        "the payload, whose shape follows the operation — \
-                         `karakuri://operations` has one schema per name. Absent where the \
-                         operation takes none",
-                },
-            },
-            "required": ["operation"],
-        },
-    })
-}
-
 /// Every operation this surface takes, with its payload's shape — the
 /// curriculum a client reads before it calls, generated from [`SPELLED`] rather
 /// than written down beside it.

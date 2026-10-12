@@ -1,11 +1,8 @@
 use agent_man::DocEngine;
+#[cfg(test)]
 use serde_json::{json, Value};
 
 use crate::operations;
-
-/// The one path this server serves. Everything else is a 404, which is what
-/// tells a client probing for authorization metadata that there is none.
-pub(crate) const ENDPOINT: &str = "/";
 
 pub const SPEC: &str = "karakuri://doc/ir-spec";
 pub const VOCABULARY: &str = "karakuri://doc/ir-vocabulary";
@@ -14,7 +11,7 @@ pub const VR_PROJECTION: &str = "karakuri://doc/vr-projection";
 
 /// Builds the documentation engine loaded with all static and generated Karakuri documentation.
 pub fn doc_engine() -> DocEngine {
-    let mut engine = DocEngine::new("karakuri-cli")
+    let mut engine = DocEngine::new("karakuri")
         .with_scheme("karakuri")
         .with_version(env!("CARGO_PKG_VERSION"))
         .with_subcommands("--guide", "--explain");
@@ -24,10 +21,23 @@ pub fn doc_engine() -> DocEngine {
     engine
 }
 
+/// Builds the documentation engine loaded with documentation and registered tools for the given state.
+pub(crate) fn doc_engine_with_state(
+    state: std::sync::Arc<std::sync::Mutex<crate::State>>,
+) -> DocEngine {
+    let mut engine = doc_engine();
+    for tool in crate::tools::build_tools(state) {
+        let _ = engine.register_tool(tool);
+    }
+    engine
+}
+
+#[cfg(test)]
 pub(crate) fn resources() -> Value {
     serde_json::to_value(doc_engine().mcp_list_resources()).unwrap_or_default()
 }
 
+#[cfg(test)]
 pub(crate) fn read_resource(request: &Value) -> Result<Value, String> {
     let uri = request
         .get("params")

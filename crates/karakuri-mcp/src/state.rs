@@ -67,6 +67,8 @@ pub struct Reporter {
     pub(crate) dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
     pub(crate) shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) addr: std::net::SocketAddr,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) server: Option<agent_man::mcp::HttpServer>,
 }
 
 impl Reporter {
@@ -109,6 +111,10 @@ impl Reporter {
 
     /// Signals the background listener thread to stop accepting connections and terminate.
     pub fn shutdown(&self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(ref s) = self.server {
+            s.shutdown();
+        }
         self.shutdown
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
@@ -337,12 +343,6 @@ pub(crate) fn absent(layer: Kind) -> &'static str {
     }
 }
 
-/// Maximum allowed request body size (1 MB).
-pub(crate) const MAX_BODY: usize = 1 << 20;
-
-/// Inactivity timeout before closing a connection.
-pub(crate) const IDLE: std::time::Duration = std::time::Duration::from_secs(30);
-
 /// Maximum queued swap events before older ones are dropped.
 pub(crate) const QUEUED: usize = 256;
 
@@ -356,10 +356,12 @@ pub(crate) const MAX_ID: usize = 64;
 pub(crate) const ID_PATTERN: &str = "^[A-Za-z0-9_-]+$";
 
 /// Timeout waiting for a save operation outcome.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) const SAVE_REPLY: std::time::Duration =
     std::time::Duration::from_secs(karakuri_environment::SAVE_WAIT.as_secs() + 5);
 
 /// Timeout waiting for an input wire operation outcome.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) const WIRE_REPLY: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Server runtime state shared across requests.

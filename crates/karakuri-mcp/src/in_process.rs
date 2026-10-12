@@ -1,60 +1,57 @@
 //! In-process MCP dispatching for WebAssembly, tests, and in-memory agent harnesses.
 
-use serde_json::{json, Value};
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::server::dispatch;
+use agent_man::mcp::{HandlerResult, ToolResult};
+use agent_man::DocEngine;
+use serde_json::{json, Value};
+
+use crate::resources::doc_engine_with_state;
 use crate::*;
 
 /// In-process handle to the Karakuri MCP engine.
 #[derive(Clone)]
 pub struct InProcessMcp {
+    pub(crate) engine: Arc<DocEngine>,
+    #[allow(dead_code)]
     pub(crate) state: Arc<Mutex<State>>,
 }
 
 impl InProcessMcp {
     /// Returns the registered MCP tools schema.
     pub fn tools(&self) -> Value {
-        tools()
+        serde_json::to_value(self.engine.mcp_list_tools()).unwrap_or_default()
     }
 
     /// Returns the registered MCP resources schema.
     pub fn resources(&self) -> Value {
-        resources()
+        serde_json::to_value(self.engine.mcp_list_resources()).unwrap_or_default()
     }
 
     /// Reads a resource by URI directly.
     pub fn read_resource(&self, uri: &str) -> Result<Value, String> {
-        let request = json!({
-            "params": {
-                "uri": uri,
-            }
-        });
-        read_resource(&request)
+        let contents = self
+            .engine
+            .mcp_read_resource(uri)
+            .map_err(|e| e.to_string())?;
+        Ok(json!({
+            "contents": [contents],
+        }))
     }
 
-    /// Dispatches a JSON-RPC request in-memory, returning a `Pending` result handle.
-    pub fn dispatch(&self, request: &Value) -> Result<Pending, String> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| "mcp state mutex is poisoned")?;
-        state.drain();
-        Ok(dispatch(request, &mut state))
+    /// Dispatches a JSON-RPC request in-memory, returning a `HandlerResult`.
+    pub fn dispatch(&self, request: &Value) -> HandlerResult<Option<String>> {
+        self.engine.handle(&request.to_string())
     }
 
     /// Directly calls a tool by name with the given argument object.
-    pub fn call_tool(&self, name: &str, arguments: Value) -> Result<Pending, String> {
-        let request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": name,
-                "arguments": arguments,
-            }
-        });
-        self.dispatch(&request)
+    pub fn call_tool(&self, name: &str, arguments: Value) -> HandlerResult<ToolResult> {
+        self.engine.mcp_call_tool_handler(name, arguments)
+    }
+
+    /// Returns a shared reference to the underlying documentation and tool engine.
+    pub fn engine(&self) -> Arc<DocEngine> {
+        self.engine.clone()
     }
 }
 
@@ -89,6 +86,8 @@ pub fn in_process(
         dropped: dropped.clone(),
     }));
 
+    let engine = Arc::new(doc_engine_with_state(state.clone()));
+
     let reporter = Reporter {
         sender: tx,
         requests,
@@ -97,9 +96,11 @@ pub fn in_process(
         dropped,
         shutdown,
         addr: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+        #[cfg(not(target_arch = "wasm32"))]
+        server: None,
     };
 
-    let mcp = InProcessMcp { state };
+    let mcp = InProcessMcp { engine, state };
 
     (reporter, mcp)
 }

@@ -6,6 +6,32 @@ use serde_json::{json, Value};
 use super::server::*;
 use super::*;
 
+use std::sync::{Arc, Mutex};
+
+/// A pending reply for test harnesses wrapping agent_man's HandlerResult.
+pub(crate) struct TestPending(pub(crate) agent_man::mcp::HandlerResult<Option<String>>);
+
+impl TestPending {
+    pub(crate) fn settled(self) -> Option<Value> {
+        match self.0 {
+            agent_man::mcp::HandlerResult::Ready(opt) => {
+                opt.and_then(|s| serde_json::from_str(&s).ok())
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            agent_man::mcp::HandlerResult::Pending(p) => {
+                p.settled().and_then(|s| serde_json::from_str(&s).ok())
+            }
+            #[cfg(target_arch = "wasm32")]
+            agent_man::mcp::HandlerResult::Pending(_) => None,
+        }
+    }
+}
+
+pub(crate) fn dispatch(request: &Value, state: &Arc<Mutex<State>>) -> TestPending {
+    let engine = resources::doc_engine_with_state(state.clone());
+    TestPending(engine.handle(&request.to_string()))
+}
+
 /// Creates a mock test state with channels disconnected from a real render loop.
 pub(crate) fn state(events: mpsc::Receiver<Event>) -> State {
     State {

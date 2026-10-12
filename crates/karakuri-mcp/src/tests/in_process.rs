@@ -29,28 +29,28 @@ fn in_process_lists_tools_and_handles_direct_calls() {
         .any(|t| t.get("name") == Some(&json!("read_procedure"))));
 
     // Non-blocking call to an immediate tool (e.g. invalid/refused or inspection)
-    let mut pending = mcp
-        .call_tool("list_sets", json!({}))
-        .expect("dispatch list_sets");
-    let result = pending.poll_settled().expect("poll list_sets");
-    assert!(result.is_some(), "list_sets completes synchronously");
+    let res = mcp.call_tool("list_sets", json!({}));
+    assert!(matches!(res, agent_man::mcp::HandlerResult::Ready(_)));
 
     // Call an operation that requires render loop execution (Gain under MixFaders)
-    let mut pending_op = mcp
-        .call_tool(
-            "operate",
-            json!({
-                "operation": "Gain",
-                "with": {
-                    "deck": 0,
-                    "gain": 0.5,
-                }
-            }),
-        )
-        .expect("dispatch Gain");
+    let res_op = mcp.call_tool(
+        "operate",
+        json!({
+            "operation": "Gain",
+            "with": {
+                "deck": 0,
+                "gain": 0.5,
+            }
+        }),
+    );
+
+    let mut pending_op = match res_op {
+        agent_man::mcp::HandlerResult::Pending(p) => p,
+        _ => panic!("expected Pending"),
+    };
 
     // Initially not settled because the render loop hasn't drained it
-    let polled = pending_op.poll_settled().unwrap();
+    let polled = pending_op.poll_settled();
     assert!(
         polled.is_none(),
         "operate should await the render loop but got: {polled:?}"
@@ -63,8 +63,8 @@ fn in_process_lists_tools_and_handles_direct_calls() {
     op.reply.clone().settled(Ok("faded".into()));
 
     // Now polling should succeed with the settled answer
-    let finished = pending_op.poll_settled().unwrap();
+    let finished = pending_op.poll_settled();
     assert!(finished.is_some());
     let val = finished.unwrap();
-    assert_eq!(val["result"]["content"][0]["text"], "faded");
+    assert_eq!(val.content[0].text, "faded");
 }

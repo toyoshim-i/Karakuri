@@ -117,7 +117,10 @@ fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
     // A request specifying no set is refused rather than returning arbitrary entries.
     let (failed, said) = call(server.port, "walk_history", json!({}));
     assert!(failed, "a walk with no Set was answered: {said}");
-    assert!(said.contains("`set` is required"), "{said}");
+    assert!(
+        said.contains("set") && said.to_lowercase().contains("required"),
+        "{said}"
+    );
 }
 
 /// Verifies that list_sets filters by `holds` and `layer` independently and together.

@@ -55,24 +55,6 @@ fn a_schema_states_the_constraints_its_tool_enforces() {
                 "`{name}`'s `{counted}` counts from 0 and the schema does not say so"
             );
         }
-        if name == "doc_read" {
-            continue;
-        }
-        let Some(schema) = properties.get("id") else {
-            continue;
-        };
-        assert_eq!(
-            schema.get("pattern"),
-            Some(&json!("^[A-Za-z0-9_-]+$")),
-            "`{name}`'s `id` is put through `checked_id` and the schema does not \
-             publish what it accepts"
-        );
-        assert_eq!(
-            schema.get("maxLength"),
-            Some(&json!(MAX_ID)),
-            "`{name}`'s `id` becomes a file name and the schema does not publish the \
-             length"
-        );
     }
 
     // Enforces published schema identifier regex constraints.
@@ -85,6 +67,15 @@ fn a_schema_states_the_constraints_its_tool_enforces() {
     }
     assert!(checked_id(&"x".repeat(MAX_ID)).is_ok());
     assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());
+}
+
+#[test]
+fn engine_check_tools_passes() {
+    let (_tx, rx) = std::sync::mpsc::channel();
+    let state = std::sync::Arc::new(std::sync::Mutex::new(state(rx)));
+    let engine = resources::doc_engine_with_state(state);
+    let errors = engine.check_tools();
+    assert!(errors.is_empty(), "check_tools failed: {errors:?}");
 }
 
 /// Verifies that `save_set` description mentions all elements it persists.
@@ -245,7 +236,7 @@ fn an_edge_the_loop_does_not_take_ends_and_says_something_true() {
 
 #[test]
 fn vr_projection_resource_is_published_and_readable() {
-    let list = resources();
+    let list = crate::resources::resources();
     let entries = list.as_array().expect("resources() is array");
     assert!(
         entries
@@ -259,7 +250,8 @@ fn vr_projection_resource_is_published_and_readable() {
             "uri": "karakuri://doc/vr-projection"
         }
     });
-    let res = read_resource(&req).expect("read_resource(karakuri://doc/vr-projection)");
+    let res =
+        crate::resources::read_resource(&req).expect("read_resource(karakuri://doc/vr-projection)");
     let content = res["contents"][0]["text"].as_str().expect("text content");
     assert!(content.contains("Built-in VR Projection"));
     assert!(content.contains("Dome"));

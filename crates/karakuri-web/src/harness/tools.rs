@@ -588,29 +588,20 @@ fn convert_token_value(key: &str, val_str: &str, tool_schema: Option<&Value>) ->
 }
 
 /// Formats the tool execution result or error for terminal display.
-pub fn format_call_result(tool_name: &str, res: Result<Value, String>) -> String {
+pub fn format_call_result(
+    tool_name: &str,
+    res: Result<agent_man::mcp::ToolResult, String>,
+) -> String {
     match res {
-        Ok(val) => {
-            if let Some(err) = val.get("error") {
-                if let Some(msg) = err.get("message").and_then(|m| m.as_str()) {
-                    return format!("\x1b[31m✖ Error from {tool_name}:\x1b[0m\r\n{msg}");
-                }
-            }
+        Ok(tool_res) => {
+            let text = tool_res
+                .content
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
 
-            let is_error = val
-                .get("isError")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-                || val
-                    .get("result")
-                    .and_then(|r| r.get("isError"))
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false)
-                || val.get("error").is_some();
-
-            let text = crate::harness::client::extract_mcp_result_text(&val);
-
-            if is_error {
+            if tool_res.is_error {
                 format!("\x1b[31m✖ Error from {tool_name}:\x1b[0m\r\n{text}")
             } else {
                 let display_text = if let Ok(parsed_json) = serde_json::from_str::<Value>(&text) {

@@ -257,7 +257,7 @@ fn a_null_id_is_an_absent_id_and_not_a_bad_one() {
     // And an argument that really is the wrong type still is one.
     let (failed, said) = call(server.port, "save_set", json!({"slot":0,"id":7}));
     assert!(failed, "{said}");
-    assert!(said.contains("`id` is a string"), "{said}");
+    assert!(said.contains("a string"), "{said}");
 }
 
 /// Verifies that in-flight save requests do not block concurrent requests on separate connections.

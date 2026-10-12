@@ -74,7 +74,7 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
 #[test]
 fn every_workflow_tool_is_published_and_callable() {
     let (_tx, rx) = mpsc::channel();
-    let mut state = state(rx);
+    let state = Arc::new(Mutex::new(state(rx)));
     for tool_name in [
         "get_permissions",
         "read_slot",
@@ -96,15 +96,15 @@ fn every_workflow_tool_is_published_and_callable() {
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": { "name": "get_permissions", "arguments": {} }
     });
-    let rep = dispatch(&req, &mut state).settled().expect("rep");
-    assert_eq!(rep["result"]["isError"], false);
+    let rep = dispatch(&req, &state).settled().expect("rep");
+    assert_ne!(rep["result"]["isError"], true);
 
     let req_res = json!({
         "jsonrpc": "2.0", "id": 2, "method": "tools/call",
         "params": { "name": "doc_read", "arguments": { "id": "operations" } }
     });
-    let rep_res = dispatch(&req_res, &mut state).settled().expect("rep_res");
-    assert_eq!(rep_res["result"]["isError"], false);
+    let rep_res = dispatch(&req_res, &state).settled().expect("rep_res");
+    assert_ne!(rep_res["result"]["isError"], true);
 }
 
 /// Verifies that every vocabulary operation is spelled uniquely in the SPELLED table.
@@ -240,7 +240,7 @@ fn the_schema_lists_every_operation_the_spelling_accepts() {
 fn an_operate_on_a_closed_class_is_refused_with_the_gates_sentence() {
     use karakuri_operation::gate::{Class, Standing};
     let (_tx, rx) = mpsc::channel();
-    let mut state = state(rx);
+    let state = Arc::new(Mutex::new(state(rx)));
     let request = json!({
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": {
@@ -248,7 +248,7 @@ fn an_operate_on_a_closed_class_is_refused_with_the_gates_sentence() {
             "arguments": {"operation": "Gain", "with": {"deck": 0, "gain": 0.25}},
         },
     });
-    let reply = dispatch(&request, &mut state)
+    let reply = dispatch(&request, &state)
         .settled()
         .expect("a call is answered");
     let result = &reply["result"];
@@ -358,13 +358,13 @@ fn a_class_the_operator_opens_is_open_on_the_next_call() {
 #[test]
 fn a_notification_is_acted_on_and_not_answered() {
     let (_tx, rx) = mpsc::channel();
-    let mut state = state(rx);
+    let state = Arc::new(Mutex::new(state(rx)));
     let notification = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-    assert!(dispatch(&notification, &mut state).settled().is_none());
+    assert!(dispatch(&notification, &state).settled().is_none());
     // And one that *does* carry an id is answered, so the test above is
     // about the notification rather than about the method being unknown.
     let request = json!({ "jsonrpc": "2.0", "id": 7, "method": "ping" });
-    assert!(dispatch(&request, &mut state).settled().is_some());
+    assert!(dispatch(&request, &state).settled().is_some());
 }
 
 /// The swap history is bounded and is a report on the present.

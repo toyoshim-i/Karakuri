@@ -56,4 +56,5 @@ pub(crate) fn operate(
 }
 
 /// Duration to wait for the render loop to perform an operation.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) const OPERATE_REPLY: std::time::Duration = WIRE_REPLY;

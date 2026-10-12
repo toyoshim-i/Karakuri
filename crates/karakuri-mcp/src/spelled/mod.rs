@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(crate) mod dispatch;
+mod dispatch;
 pub(crate) mod schema;
 pub(crate) mod table;
 

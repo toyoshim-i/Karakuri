@@ -306,7 +306,7 @@ pub fn call(port: u16, name: &str, args: Value) -> (bool, String) {
     let reply = call_raw(port, name, args);
     let result = &reply["result"];
     (
-        result["isError"].as_bool().unwrap_or(true),
+        result["isError"].as_bool().unwrap_or(false),
         result["content"][0]["text"]
             .as_str()
             .unwrap_or("")

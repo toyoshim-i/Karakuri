@@ -1,451 +1,230 @@
+use std::sync::{Arc, Mutex};
+
+use agent_man::mcp::{HandlerResult, ParamType, Tool, ToolBuilder, ToolResult};
 use serde_json::{json, Value};
 
-use crate::{layer_name, operate_tool, ID_PATTERN, LAYERS, MAX_ID};
+use super::called_to_handler_result;
+use super::dispatch_tool;
+use super::tool_result;
+use crate::{doc_engine, layer_name, Slots, State, LAYERS};
 
-pub(crate) fn tools() -> Value {
-    // Retrieve available layer names from the shared `LAYERS` registry.
-    let layers: Vec<&str> = LAYERS.iter().map(|layer| layer_name(*layer)).collect();
-    json!([
-        {
-            "name": "read_procedure",
-            "description":
-                "The source of one node of one deck slot. `layer` says which: L1 is what \
-                 the elements are and how they move, L2 a deformation applied to them, L3 \
-                 the camera, L4 how they are drawn, and Field a distance function the \
-                 others evaluate. Read before writing: the edit is usually small, and what \
-                 is already there is the best guide to the language.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "slot": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "deck slot, from 0",
-                    },
-                    "layer": { "type": "string", "enum": layers },
-                    "index": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description":
-                            "which node of that layer, from 0, in the order the slot's files \
-                             were named. A slot draws with as many L4s as it likes — the same \
-                             cloud as sprites and as strokes is one slot with two — and may \
-                             simulate with more than one L1, look from more than one L3 and \
-                             hold more than one Field. Omit for the first.",
-                    },
-                },
-                "required": ["slot", "layer"],
-            },
-        },
-        {
-            "name": "write_procedure",
-            "description":
-                "Check a procedure and, if it compiles, write it. It is then compiled on a \
-                 worker thread, swapped in at a frame boundary, and measured for thirty \
-                 frames — if it costs more than the frame budget it is dropped and the \
-                 previous one comes back at the time it was parked at. So an expensive \
-                 mistake is survivable. **The diagnostics are the point of the return \
-                 value**: if it does not compile, what comes back is what the checker \
-                 said, against the source. **The check is of this procedure alone, and \
-                 the slot is rebuilt whole**: everything between nodes — what a renderer \
-                 consumes against what a geometry emits, what each `uses` slot is bound \
-                 to, the capacities, the cost of a field inlined into its caller — is \
-                 decided when the slot is assembled, so a clean write can still be \
-                 followed by a build failure `swap_outcome` reports. **A `uses` \
-                 declaration needs an `edge`, and `wire_input` writes one**: adding \
-                 `uses <name> : <Geometry|Field|Camera|Source>` to a procedure leaves \
-                 the slot unable to build until an edge says which node fills it, so \
-                 write the procedure and then call `wire_input`. The builds between \
-                 the two are refusals `swap_outcome` reports, and what was on air \
-                 stays on air through them. **Taking one back is the half that is \
-                 missing**: nothing here unbinds an edge, so a procedure rewritten \
-                 without a `uses` it had been wired for leaves an edge naming a slot \
-                 nothing declares, and the slot refuses to build for that instead.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "slot": { "type": "integer", "minimum": 0 },
-                    "layer": { "type": "string", "enum": layers },
-                    "index": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description":
-                            "which node of that layer, from 0. Omit for the first. The \
-                             source's own `kind` line must name the same layer as this \
-                             address, which is what stops a deformation being written over \
-                             a renderer.",
-                    },
-                    "source": { "type": "string", "description": "the whole procedure" },
-                },
-                "required": ["slot", "layer", "source"],
-            },
-        },
-        {
-            "name": "wire_input",
-            "description":
-                "Bind one node's declared input to another node of the same deck slot \
-                 — the `edge` a `uses` declaration needs before the slot can build. A \
-                 procedure declares each input under a name of its own (`uses far : \
-                 Geometry`, `uses shape : Field`, `uses view : Camera`, `uses only : \
-                 Source`) and never names the node that fills it; the Set says that, \
-                 and this is how it is said. **Both ends are node names, not \
-                 addresses**: `read_procedure`'s `layer` and `index` are a position, \
-                 and a position moves when a slot's files are reordered — which would \
-                 silently change which geometry a morph blends towards. A node is \
-                 called what the Set named it, or what its own procedure calls itself \
-                 where nothing named it; `read_set` and `list_sets` answer in those \
-                 names. **An edge already binding this input is replaced**, and every \
-                 other edge is left alone — so changing your mind is one call and \
-                 never a refusal about a slot being bound twice. **Nothing here \
-                 unbinds one**: an edge outlives the `uses` that needed it, so a \
-                 procedure rewritten without a `uses` it was wired for leaves an edge \
-                 naming a slot nothing declares, and the slot refuses to build for \
-                 that instead. **The names are the Set's and this server cannot check \
-                 them**: a node the Set does not hold, a slot the node does not \
-                 declare, or a far end of the wrong kind is refused where the slot is \
-                 built — in the same sentence `--edge` meets — and comes back through \
-                 `swap_outcome` with everything else a rebuild decided. The rebuild \
-                 itself is a procedure write's: compiled on a worker thread, swapped \
-                 at a frame boundary, judged on that Set's own measured frame, and \
-                 left in the slot with the slot stopped if it costs too much.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "slot": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "deck slot, from 0: whose Set this edge is about",
-                    },
-                    "node": {
-                        "type": "string",
-                        "description":
-                            "the node that declares the input, by name — `morph` in \
-                              `--edge morph.far=sphere_shell`",
-                    },
-                    "input": {
-                        "type": "string",
-                        "description":
-                            "what that node's procedure calls the input — `far`, from \
-                              `uses far : Geometry`. It is `input` and not `slot` \
-                              because `slot` means the deck slot in every tool here, \
-                              and one word means one thing across this surface.",
-                    },
-                    "to": {
-                        "type": "string",
-                        "description":
-                            "the node bound to it, by name — `sphere_shell`. A slot \
-                              declared `: Geometry` or `: Source` takes an L1, `: \
-                              Field` a Field, `: Camera` an L3 or the built-in camera; \
-                              a far end of the wrong kind is refused where the slot is \
-                              built and names what the Set holds.",
-                    },
-                },
-                "required": ["slot", "node", "input", "to"],
-            },
-        },
-        {
-            "name": "swap_outcome",
-            "description":
-                "What the swap machinery has said recently: whether a written procedure \
-                 landed, was overloaded, or failed to build. Call it after a \
-                 write to find out what happened — a write returning cleanly means it \
-                 compiled, not that it is on screen. **Overloaded is a state rather \
-                 than an outcome**: one frame of that Set costs more than a frame may, \
-                 so it is still in the slot and the slot has stopped updating — it \
-                 takes no step and draws no frame, and the picture holds the last frame \
-                 it drew. Nothing puts anything back and nothing ends it on its own: \
-                 the ways out are a write that fits, an earlier version landed on the \
-                 node, or the operator's hand on the fader. So a procedure this names \
-                 is one worth writing again, cheaper.",
-            "inputSchema": { "type": "object", "properties": {} },
-        },
-        {
-            "name": "save_set",
-            "description":
-                "Keep what a slot is playing, as a Set file. It writes the material \
-                 **on screen** — the versions the \
-                 slot is running, by content hash, with the whole of the wiring and the \
-                 state around them: the parameters, the capacities, the bindings and the \
-                 seeds the live Set holds now, the edges binding each `uses` slot, \
-                 whether it composites and which renderer is live, and the camera — and \
-                 not what any file on disk says, which is exactly what the operator's \
-                 `k` key writes. That distinction is the \
-                 point: a procedure that was written and never picked up is on disk and \
-                 not on screen, and this saves the screen. **What you save goes \
-                 into the store's sandbox, `<store>/sandbox/`, and not into the \
-                 operator's library**: the library is written by the operator's own act \
-                 and nothing else, and what lands in the sandbox is the edit history of \
-                 this session — the files a person goes looking for afterwards. So \
-                 `read_set`, `list_sets` and `--load-set` do not reach what you write \
-                 here; if the operator wants one of these in their library they save it \
-                 themselves, or move the file. **It waits for the \
-                 disk and tells you what happened**, so what comes back names the id it \
-                 was saved under; do not report a set as kept until it does, and use the \
-                 id it gives you rather than the one you asked for.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "slot": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "deck slot, from 0",
-                    },
-                    "id": {
-                        "type": "string",
-                        "pattern": ID_PATTERN,
-                        "maxLength": MAX_ID,
-                        "description":
-                            "what to call it: letters, digits, `-` and `_`, and it \
-                             becomes part of a file name. **Nothing in the sandbox is \
-                             overwritten**, so what you save is filed under the moment it \
-                             was saved with your name behind it — `20260905-143052-271_my_take` \
-                             — and two saves under one name are two files rather than one. \
-                             That is the point of the directory: it is a session's edit \
-                             history, and a snapshot a later snapshot can replace is not \
-                             one. Omit it and the set is named after the moment alone, \
-                             which is what the operator's key press gets. **The answer \
-                             names the id the file was actually written under**; use that \
-                             one.",
-                    },
-                },
-                "required": ["slot"],
-            },
-        },
-        {
-            "name": "read_set",
-            "description":
-                "What a saved Set holds, and what each procedure in it declares — read \
-                 out of the library without loading anything and without compiling \
-                 anything. A Set is a slot's material kept under a name: the operator's \
-                 `k` key writes one and `--load-set ID` plays one back. **This reads the \
-                 operator's library and not the sandbox `save_set` writes into**, so a \
-                 set you kept yourself is not here. For every node this says which layer it is on — L1 is what \
-                 the elements are and how they move, L2 a deformation, L3 the camera, \
-                 L4 how they are drawn, Field a distance function the others evaluate — \
-                 what the procedure calls itself, and what it *declares*: each \
-                 parameter with the two numbers a value must lie between and the value \
-                 it takes when nothing turns it; the element count an L1 may run at, \
-                 lowest, highest and the count it runs at unless a Set says otherwise; \
-                 and the attributes it emits, which are what a renderer drawn over it \
-                 can consume. **Ranges are declarations, not settings**: a range says \
-                 what a value will be refused outside of, not where this Set has it. \
-                 Call it to choose between things you have kept, and to find out what \
-                 there is to turn on one, without fetching its source and compiling it.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "pattern": ID_PATTERN,
-                        "maxLength": MAX_ID,
-                        "description":
-                            "the id the set was filed under: letters, digits, `-` and \
-                             `_`. It is what `save_set` came back naming, what \
-                             `--save-set ID` was given, or the stamp a save that named \
-                             nothing was called after.",
-                    },
-                },
-                "required": ["id"],
-            },
-        },
-        {
-            "name": "list_sets",
-            "description":
-                "What this store holds: every Set saved into it, most recently written \
-                 first, with an address and a name per node. A Set is a slot's material \
-                 kept under a name — the operator's `k` key writes one and `--load-set \
-                 ID` plays one back; this is **the operator's library and not the \
-                 sandbox `save_set` writes into** — and until this there was no \
-                 way to find out what had been kept: `read_set` answers about an id you \
-                 already have, and the ids of everything saved before this conversation \
-                 are not something a model can guess. **Call this first, then `read_set` \
-                 on the one you want.** What comes back is a line per set and not what \
-                 any of it declares: the parameters, the element counts and what a node \
-                 emits are `read_set`'s answer, because they need a card per artifact and \
-                 a listing that read them all would be reading a library to print an \
-                 index. **What a node is called here is what `read_set` calls it** — the \
-                 name the set gave it, the name its procedure gives itself where the set \
-                 gave none, and the short hash of its source where there is neither, \
-                 which is an ordinary state and not a damaged store. **The list is \
-                 capped**: what comes back says how many matched and how many are shown, \
-                 and if those differ you are looking at part of a library — narrow it \
-                 with the filters rather than assuming the rest is not there.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "holds": {
-                        "type": "string",
-                        "description":
-                            "list only sets holding a node whose name contains this, \
-                             matched without regard to case — `drift_shell` finds every \
-                             set built on that geometry. Omit to list everything.",
-                    },
-                    "layer": {
-                        "type": "string",
-                        "enum": layers,
-                        "description":
-                            "list only sets holding a node on this layer — `L2` for the \
-                             ones that deform something, `Field` for the ones with a \
-                             distance function. Given with `holds`, both must be true of \
-                             the set, though not of the same node. Omit to list \
-                             everything.",
-                    },
-                },
-            },
-        },
-        {
-            "name": "walk_history",
-            "description":
-                "Every version of one Set's material that compiled, most recent first. \
-                 Every build this instrument accepts is filed under `<store>/history/` \
-                 whether or not it stayed on screen — the gate is **compiling** and not \
-                 landing, so the version that cost too much to run is in here too — and \
-                 a row is the name the store filed it under: when it was written, which \
-                 slot, which node of that slot, and what the procedure called itself. \
-                 **This is the listing and not the landing**: put one of these versions \
-                 back with `operate` naming *Put a node's previous version back* and \
-                 `{\"deck\": <the row's slot>, \"revision\": {\"picked\": \"<row>\"}}`, \
-                 which is what a row is a name for. **Narrowed to one Set and never to a deck**: two decks playing one \
-                 Set have one history between them, and a version written while a slot \
-                 was running no Set is filed under none and is matched by no id. **The \
-                 walk is capped and says so**: it stops entering day directories once it \
-                 has enough, so an answer that says the walk stopped short is part of \
-                 what is there rather than all of it.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "set": {
-                        "type": "string",
-                        "pattern": ID_PATTERN,
-                        "maxLength": MAX_ID,
-                        "description":
-                            "the Set whose versions to walk, by the id it is filed under \
-                             — `list_sets` names them. Required: a walk that names no Set \
-                             lists nothing, because those versions are filed under no Set \
-                             rather than under all of them.",
-                    },
-                },
-                "required": ["set"],
-            },
-        },
-        // Automatically generated schema for the vocabulary's `operate` tool.
-        operate_tool(),
-        // Agent workflow and co-performance tools (M7, ADR-0363).
-        {
-            "name": "get_permissions",
-            "description":
-                "Discover current console constraints: bay class openings, per-slot MCP \
-                 policies (Auto, On, Off), live mixer contribution status (in_mix), and \
-                 whether each deck slot is writable. Call this at the start of a session \
-                 to plan edits in authorized slots.",
-            "inputSchema": { "type": "object", "properties": {} },
-        },
-        {
-            "name": "read_slot",
-            "description":
-                "Read the complete procedural tree (L1 material, L2 deformation, L3 camera, \
-                 L4 renderers, and Field distance functions) for a deck slot in a single \
-                 call, eliminating multi-call inspection latency.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "slot": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "deck slot, from 0",
-                    },
-                },
-                "required": ["slot"],
-            },
-        },
-        {
-            "name": "copy_slot",
-            "description":
-                "Atomically duplicate procedural definitions from a source slot to a destination \
-                 slot with optional layer filtering, guarded by destination slot policy and staged \
-                 through temporary files to prevent torn reads.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "from_slot": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "source deck slot, from 0",
-                    },
-                    "to_slot": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "destination deck slot, from 0",
-                    },
-                    "layer": {
-                        "type": "string",
-                        "enum": layers,
-                        "description": "optional layer filter (e.g. L1, L4)",
-                    },
-                },
-                "required": ["from_slot", "to_slot"],
-            },
-        },
-        {
-            "name": "check_procedure",
-            "description":
-                "Statically validate .kir shader source syntax, types, and execution costs \
-                 without compiling to GPU or altering engine memory state.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "the .kir shader source code to validate",
-                    },
-                },
-                "required": ["source"],
-            },
-        },
-        {
-            "name": "check_set",
-            "description":
-                "Validate Set configuration, knob mappings, and asset integrity in the store \
-                 before activation without touching GPU state.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "pattern": ID_PATTERN,
-                        "maxLength": MAX_ID,
-                        "description": "the Set ID to validate",
-                    },
-                },
-                "required": ["id"],
-            },
-        },
-        {
-            "name": "doc_list",
-            "description": "List all available documentation topics and summaries",
-            "inputSchema": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-        {
-            "name": "doc_read",
-            "description":
-                "Read documentation page by ID or extract a specific section by anchor",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Documentation page ID",
-                    },
-                    "section": {
-                        "type": "string",
-                        "description": "Optional section anchor",
-                    },
-                },
-                "required": ["id"],
-            },
-        },
-    ])
+fn tool_handler(
+    name: &'static str,
+    state: Arc<Mutex<State>>,
+) -> impl Fn(Value) -> HandlerResult<ToolResult> + Send + Sync + 'static {
+    move |args| {
+        let mut state = match state.lock() {
+            Ok(s) => s,
+            Err(_) => return ToolResult::error("mcp state mutex is poisoned").into(),
+        };
+        let called = match dispatch_tool(name, &args, &mut state) {
+            Ok(c) => c,
+            Err(e) => return tool_result(Err(e)).into(),
+        };
+        drop(state);
+        called_to_handler_result(called)
+    }
+}
+
+/// Builds all 14 MCP tools with concise descriptions, documentation links, and argument validation.
+pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
+    let layers: Vec<String> = LAYERS.iter().map(|l| layer_name(*l).to_string()).collect();
+    let operable_titles: Vec<String> = crate::operable()
+        .iter()
+        .map(|row| row.title().to_string())
+        .collect();
+
+    vec![
+        // 1. read_procedure
+        ToolBuilder::new(
+            "read_procedure",
+            "Read the source of one node of a deck slot by layer and index. Read before writing to guide your edit.",
+        )
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
+        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field)", true)
+        .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
+        .see("ir-spec")
+        .example(json!({ "slot": 0, "layer": "L1" }))
+        .handler(tool_handler("read_procedure", state.clone()))
+        .build(),
+
+        // 2. write_procedure
+        ToolBuilder::new(
+            "write_procedure",
+            "Check and write a procedure for a deck slot. The check is of this procedure alone; slot rebuild and swap errors are reported by swap_outcome. A `uses` declaration needs an `edge`, written by wire_input.",
+        )
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
+        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field)", true)
+        .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
+        .param("source", ParamType::String, "the whole procedure source", true)
+        .see("swap-lifecycle")
+        .example(json!({ "slot": 0, "layer": "L1", "source": "kind L1\nvoid main() {}" }))
+        .handler(tool_handler("write_procedure", state.clone()))
+        .build(),
+
+        // 3. wire_input
+        ToolBuilder::new(
+            "wire_input",
+            "Bind one node's declared input to another node in the same deck slot. An edge already binding this input is replaced. Nothing here unbinds one. Build errors are reported by swap_outcome. Both ends are node names, not addresses.",
+        )
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0: whose Set this edge is about", true)
+        .param("node", ParamType::String, "the node that declares the input, by name", true)
+        .param("input", ParamType::String, "what that node's procedure calls the input", true)
+        .param("to", ParamType::String, "the node bound to it, by name", true)
+        .see("edges-and-wiring")
+        .example(json!({ "slot": 0, "node": "morph", "input": "far", "to": "sphere_shell" }))
+        .handler(tool_handler("wire_input", state.clone()))
+        .build(),
+
+        // 4. swap_outcome
+        ToolBuilder::new(
+            "swap_outcome",
+            "Query recent swap and rebuild status for deck slots: whether a written procedure landed, was overloaded, or failed to build.",
+        )
+        .see("swap-lifecycle")
+        .example(json!({}))
+        .handler(tool_handler("swap_outcome", state.clone()))
+        .build(),
+
+        // 5. save_set
+        ToolBuilder::new(
+            "save_set",
+            "Keep what a slot is playing as a Set file in `<store>/sandbox/`. Saves live state: parameter values, capacit(ies), binding(s), seed(s), edge(s), composite/live renderer, and camera.",
+        )
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
+        .param("id", ParamType::String, "optional target filename ID", false)
+        .see("set-storage")
+        .example(json!({ "slot": 0 }))
+        .handler(tool_handler("save_set", state.clone()))
+        .build(),
+
+        // 6. read_set
+        ToolBuilder::new(
+            "read_set",
+            "Read declarations and node structures of a saved Set in the library without compiling or activating it.",
+        )
+        .param("id", ParamType::String, "the id the set was filed under", true)
+        .see("set-storage")
+        .example(json!({ "id": "default" }))
+        .handler(tool_handler("read_set", state.clone()))
+        .build(),
+
+        // 7. list_sets
+        ToolBuilder::new(
+            "list_sets",
+            "List saved Sets in the library with node addresses and names, most recently written first.",
+        )
+        .param("holds", ParamType::String, "list only sets holding a node whose name contains this", false)
+        .param("layer", ParamType::Enum(layers.clone()), "list only sets holding a node on this layer", false)
+        .see("set-storage")
+        .example(json!({}))
+        .handler(tool_handler("list_sets", state.clone()))
+        .build(),
+
+        // 8. walk_history
+        ToolBuilder::new(
+            "walk_history",
+            "List all compiled versions of a Set filed under `<store>/history/`, most recent first.",
+        )
+        .param("set", ParamType::String, "the Set whose versions to walk, by id", true)
+        .see("set-storage")
+        .example(json!({ "set": "default" }))
+        .handler(tool_handler("walk_history", state.clone()))
+        .build(),
+
+        // 9. operate
+        ToolBuilder::new(
+            "operate",
+            "Execute an instrument operation by heading name from the operations vocabulary. Audited against current console openings.",
+        )
+        .param("operation", ParamType::Enum(operable_titles), "heading of the operation to perform", true)
+        .skip_validation(true)
+        .see("operations")
+        .example(json!({ "operation": "Choose which renderer of a deck is live" }))
+        .handler(tool_handler("operate", state.clone()))
+        .build(),
+
+        // 10. get_permissions
+        ToolBuilder::new(
+            "get_permissions",
+            "Discover current console constraints: bay openings, per-slot MCP policies, mixer status, and writability.",
+        )
+        .see("operations")
+        .example(json!({}))
+        .handler(tool_handler("get_permissions", state.clone()))
+        .build(),
+
+        // 11. read_slot
+        ToolBuilder::new(
+            "read_slot",
+            "Read all procedural nodes (L1, L2, L3, L4, Field) for a deck slot in a single call.",
+        )
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
+        .see("set-storage")
+        .example(json!({ "slot": 0 }))
+        .handler(tool_handler("read_slot", state.clone()))
+        .build(),
+
+        // 12. copy_slot
+        ToolBuilder::new(
+            "copy_slot",
+            "Atomically copy procedural nodes from one deck slot to another, with optional layer filtering.",
+        )
+        .param("from_slot", ParamType::Integer { min: Some(0), max: None }, "source deck slot, from 0", true)
+        .param("to_slot", ParamType::Integer { min: Some(0), max: None }, "destination deck slot, from 0", true)
+        .param("layer", ParamType::Enum(layers), "optional layer filter", false)
+        .see("set-storage")
+        .example(json!({ "from_slot": 0, "to_slot": 1 }))
+        .handler(tool_handler("copy_slot", state.clone()))
+        .build(),
+
+        // 13. check_procedure
+        ToolBuilder::new(
+            "check_procedure",
+            "Statically validate .kir shader syntax, types, and resource costs without modifying GPU or memory state.",
+        )
+        .param("source", ParamType::String, "the .kir shader source code to validate", true)
+        .see("ir-spec")
+        .example(json!({ "source": "kind L1\nvoid main() {}" }))
+        .handler(tool_handler("check_procedure", state.clone()))
+        .build(),
+
+        // 14. check_set
+        ToolBuilder::new(
+            "check_set",
+            "Validate Set configuration, knob mappings, and asset integrity in the store.",
+        )
+        .param("id", ParamType::String, "the Set ID to validate", true)
+        .see("set-storage")
+        .example(json!({ "id": "default" }))
+        .handler(tool_handler("check_set", state))
+        .build(),
+    ]
+}
+
+/// Returns all registered MCP tool definitions as a JSON array (for tests and backwards compatibility).
+pub fn tools() -> Value {
+    let dummy_slots = Slots::unpointed();
+    let (_tx, rx) = std::sync::mpsc::sync_channel(1);
+    let (asked, _requests) = std::sync::mpsc::sync_channel(1);
+    let (wiring, _wires) = std::sync::mpsc::sync_channel(1);
+    let (operating, _operations) = std::sync::mpsc::sync_channel(1);
+    let state = Arc::new(Mutex::new(State {
+        slots: dummy_slots,
+        store: std::path::PathBuf::from("/tmp"),
+        watching: false,
+        opening: karakuri_environment::Opening::closed(),
+        slot_policies: karakuri_environment::SlotPolicies::new(),
+        events: rx,
+        asked,
+        wiring,
+        operating,
+        recent: Vec::new(),
+        dropped: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+    }));
+    let mut engine = doc_engine();
+    for tool in build_tools(state) {
+        let _ = engine.register_tool(tool);
+    }
+    serde_json::to_value(engine.mcp_list_tools()).unwrap_or_default()
 }

@@ -1,4 +1,4 @@
-pub mod dispatch;
+mod dispatch;
 pub mod history;
 pub mod operate;
 pub mod procedure;
@@ -15,13 +15,15 @@ use serde_json::{json, Value};
 
 pub use operate::OperateRequest;
 pub use procedure::check_procedure;
+pub(crate) use schema::build_tools;
+pub use schema::tools;
 pub use set::{check_set_configuration, LISTED};
+
+use agent_man::mcp::{HandlerResult, PendingResult, ToolResult};
 
 pub(crate) use dispatch::{perform, sayable, Sayable};
 pub(crate) use history::*;
-pub(crate) use operate::*;
 pub(crate) use procedure::*;
-pub(crate) use schema::tools;
 pub(crate) use set::*;
 pub(crate) use wire::*;
 
@@ -119,14 +121,7 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
     ))
 }
 
-pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
-    let params = request.get("params").ok_or("no params")?;
-    let name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or("no tool name")?;
-    let args = params.get("arguments").cloned().unwrap_or(json!({}));
-
+pub(crate) fn dispatch_tool(name: &str, args: &Value, state: &mut State) -> Result<Called, String> {
     if name == "check_procedure" {
         let source = match args.get("source").and_then(Value::as_str) {
             Some(s) => s,
@@ -335,7 +330,7 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
         ))));
     }
 
-    Ok(match asked(name, &args, &state.slots)? {
+    Ok(match asked(name, args, &state.slots)? {
         // Unified operation gate: named, audited, and performed.
         Asked::Named(operation) => match audited(&operation, state) {
             Ok(allowed) => perform(&allowed, state),
@@ -365,44 +360,100 @@ pub(crate) fn refusal_payload(detail: &RefusalDetail) -> String {
     .to_string()
 }
 
-/// Formats a tool execution outcome into MCP JSON response schema.
-pub(crate) fn tool_result(outcome: Result<String, String>) -> Value {
+/// Formats a tool execution outcome into agent-man's ToolResult with structuredContent.
+pub(crate) fn tool_result(outcome: Result<String, String>) -> ToolResult {
     match outcome {
         Ok(text) => {
             if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
-                json!({ "content": [{ "type": "text", "text": text }], "isError": false, "report": report })
+                ToolResult::structured(text, json!({ "report": report }))
             } else {
-                json!({ "content": [{ "type": "text", "text": text }], "isError": false })
+                ToolResult::text(text)
             }
         }
         Err(text) => {
             if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
-                json!({ "content": [{ "type": "text", "text": text }], "isError": true, "report": report })
+                ToolResult::error_structured(text, json!({ "report": report }))
             } else if let Ok(val) = serde_json::from_str::<Value>(&text) {
                 if let Some(refusal) = val.get("refusal") {
                     let msg = refusal
                         .get("message")
                         .and_then(Value::as_str)
                         .unwrap_or(&text);
-                    json!({
-                        "content": [{ "type": "text", "text": msg }],
-                        "isError": true,
-                        "refusal": refusal
-                    })
+                    ToolResult::error_structured(msg, json!({ "refusal": refusal }))
                 } else if val.get("code").is_some() && val.get("message").is_some() {
                     let msg = val.get("message").and_then(Value::as_str).unwrap_or(&text);
-                    json!({
-                        "content": [{ "type": "text", "text": msg }],
-                        "isError": true,
-                        "refusal": val
-                    })
+                    ToolResult::error_structured(msg, json!({ "refusal": val }))
                 } else {
-                    json!({ "content": [{ "type": "text", "text": text }], "isError": true })
+                    ToolResult::error(text)
                 }
             } else {
-                json!({ "content": [{ "type": "text", "text": text }], "isError": true })
+                ToolResult::error(text)
             }
         }
+    }
+}
+
+/// A pending asynchronous operation to be awaited with [`State`] unlocked.
+pub enum Pending {
+    /// A save the render loop has been asked for.
+    Saving { news: mpsc::Receiver<News> },
+    /// An operation the render loop has been asked for.
+    Operating { news: mpsc::Receiver<News> },
+    /// A rewiring the render loop has been asked for.
+    Wiring {
+        news: mpsc::Receiver<News>,
+        note: String,
+    },
+}
+
+const SAVE_GONE: &str = "the render loop ended before it took this save: nothing was saved";
+const OPERATE_GONE: &str = "the render loop disconnected before this operation completed";
+const WIRE_GONE: &str = "the render loop disconnected before this wire completed";
+
+fn noted(outcome: Result<String, String>, note: &str) -> Result<String, String> {
+    outcome.map(|said| {
+        if note.is_empty() {
+            said
+        } else {
+            format!("{said}\n\n{note}")
+        }
+    })
+}
+
+impl PendingResult<ToolResult> for Pending {
+    fn poll_settled(&mut self) -> Option<ToolResult> {
+        let (news, gone, note) = match self {
+            Pending::Saving { news } => (news, SAVE_GONE, ""),
+            Pending::Operating { news } => (news, OPERATE_GONE, ""),
+            Pending::Wiring { news, note } => (news, WIRE_GONE, note.as_str()),
+        };
+        match news.try_recv() {
+            Ok(News::Settled(outcome)) => Some(tool_result(noted(outcome, note))),
+            Ok(News::Accepted(_)) | Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => Some(ToolResult::error(gone)),
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn settled(self: Box<Self>) -> ToolResult {
+        match *self {
+            Pending::Saving { news } => tool_result(awaited(&news, crate::SAVE_REPLY)),
+            Pending::Operating { news } => tool_result(applied(&news, operate::OPERATE_REPLY)),
+            Pending::Wiring { news, note } => {
+                tool_result(noted(applied(&news, crate::WIRE_REPLY), &note))
+            }
+        }
+    }
+}
+
+pub(crate) fn called_to_handler_result(called: Called) -> HandlerResult<ToolResult> {
+    match called {
+        Called::Answered(outcome) => HandlerResult::Ready(tool_result(outcome)),
+        Called::Saving(news) => HandlerResult::Pending(Box::new(Pending::Saving { news })),
+        Called::Wiring { news, note } => {
+            HandlerResult::Pending(Box::new(Pending::Wiring { news, note }))
+        }
+        Called::Operating(news) => HandlerResult::Pending(Box::new(Pending::Operating { news })),
     }
 }
 
@@ -460,6 +511,7 @@ pub fn checked_id(id: &str) -> Result<String, String> {
 /// Awaits the outcome of a save operation over `news` until `wait` expires.
 ///
 /// Returns `Ok(outcome)` if settled before timeout, or `Err` with diagnostic text on timeout.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn awaited(
     news: &mpsc::Receiver<News>,
     wait: std::time::Duration,
@@ -502,6 +554,7 @@ pub(crate) fn awaited(
 /// Awaits acknowledgment for an applied edge from the render loop up to `wait` duration.
 ///
 /// Returns `Ok(result)` on loop acceptance, or `Err(reason)` if the edge was refused or timed out.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn applied(
     news: &mpsc::Receiver<News>,
     wait: std::time::Duration,

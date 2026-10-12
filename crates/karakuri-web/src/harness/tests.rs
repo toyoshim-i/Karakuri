@@ -205,18 +205,7 @@ fn test_extract_text_tool_calls_and_clean() {
 fn test_extract_mcp_result_text() {
     use crate::harness::client::extract_mcp_result_text;
 
-    let rpc_result = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {
-            "content": [
-                {
-                    "type": "text",
-                    "text": "{\"bays\": {\"master\": \"off\"}}"
-                }
-            ]
-        }
-    });
+    let rpc_result = agent_man::mcp::ToolResult::text("{\"bays\": {\"master\": \"off\"}}");
 
     let payload = extract_mcp_result_text(&rpc_result);
     assert_eq!(payload, "{\"bays\": {\"master\": \"off\"}}");
@@ -368,38 +357,14 @@ fn test_format_call_result_rendering() {
     use crate::harness::tools::format_call_result;
 
     // Success with JSON string payload (should be pretty-printed)
-    let ok_val = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {
-            "content": [
-                {
-                    "type": "text",
-                    "text": "{\"status\":\"ok\",\"count\":2}"
-                }
-            ],
-            "isError": false
-        }
-    });
-    let rendered = format_call_result("test_tool", Ok(ok_val));
+    let ok_res = agent_man::mcp::ToolResult::text("{\"status\":\"ok\",\"count\":2}");
+    let rendered = format_call_result("test_tool", Ok(ok_res));
     assert!(rendered.contains("✔ Result:"));
     assert!(rendered.contains("\"status\": \"ok\""));
 
     // Tool refusal / error
-    let err_val = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {
-            "content": [
-                {
-                    "type": "text",
-                    "text": "deck 0 is not active"
-                }
-            ],
-            "isError": true
-        }
-    });
-    let err_rendered = format_call_result("operate", Ok(err_val));
+    let err_res = agent_man::mcp::ToolResult::error("deck 0 is not active");
+    let err_rendered = format_call_result("operate", Ok(err_res));
     assert!(err_rendered.contains("✖ Error from operate:"));
     assert!(err_rendered.contains("deck 0 is not active"));
 

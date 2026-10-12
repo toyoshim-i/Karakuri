@@ -1,5 +1,6 @@
 //! OpenAI-compatible streaming client with In-Process MCP tool execution.
 
+use agent_man::mcp::ToolResult;
 use karakuri_mcp::InProcessMcp;
 use serde_json::json;
 use wasm_bindgen::JsCast;
@@ -236,36 +237,16 @@ fn parse_single_tool_call_value(
     Some((name, args_val.to_string()))
 }
 
-/// Extracts the underlying payload text from an MCP JSON-RPC response.
-pub fn extract_mcp_result_text(result_val: &serde_json::Value) -> String {
-    // 1. If wrapped in JSON-RPC: result.content
-    if let Some(res) = result_val.get("result") {
-        if let Some(content_arr) = res.get("content").and_then(|c| c.as_array()) {
-            let mut texts = Vec::new();
-            for item in content_arr {
-                if let Some(t) = item.get("text").and_then(|s| s.as_str()) {
-                    texts.push(t.to_string());
-                }
-            }
-            if !texts.is_empty() {
-                return texts.join("\n");
-            }
-        }
-        return res.to_string();
+/// Extracts the underlying payload text from an MCP ToolResult.
+pub fn extract_mcp_result_text(result: &ToolResult) -> String {
+    let texts: Vec<&str> = result.content.iter().map(|c| c.text.as_str()).collect();
+    if !texts.is_empty() {
+        texts.join("\n")
+    } else if let Some(ref sc) = result.structured_content {
+        sc.to_string()
+    } else {
+        String::new()
     }
-    // 2. If it is already a content array:
-    if let Some(content_arr) = result_val.get("content").and_then(|c| c.as_array()) {
-        let mut texts = Vec::new();
-        for item in content_arr {
-            if let Some(t) = item.get("text").and_then(|s| s.as_str()) {
-                texts.push(t.to_string());
-            }
-        }
-        if !texts.is_empty() {
-            return texts.join("\n");
-        }
-    }
-    result_val.to_string()
 }
 
 /// Prepares messages for sending to the LLM. Messages remain strictly immutable

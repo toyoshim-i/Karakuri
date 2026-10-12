@@ -20,6 +20,7 @@ karakuri-pattern = { version = "0.1.0", path = "../karakuri-pattern" }
 karakuri-signal.workspace = true
 karakuri-store.workspace = true
 karakuri-mcp = { version = "0.1.0", path = "../karakuri-mcp" }
+agent-man = { workspace = true, features = ["mcp", "webmcp"] }
 karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
 karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
 karakuri = { version = "0.1.0", path = "../karakuri" }

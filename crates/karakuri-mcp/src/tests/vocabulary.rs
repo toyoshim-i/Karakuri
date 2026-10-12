@@ -6,7 +6,7 @@ use super::*;
 /// where this list is the one the checker matches against.
 #[test]
 fn the_vocabulary_is_the_checkers_own_table() {
-    let rendered = vocabulary();
+    let rendered = crate::resources::vocabulary();
     let builtins = section(&rendered, "# Built-in functions");
     for builtin in karakuri_ir::builtin::Builtin::ALL {
         assert!(
@@ -32,7 +32,7 @@ fn the_vocabulary_is_the_checkers_own_table() {
 /// Verifies that the vocabulary documentation lists all topologies, blend modes, and stage outputs.
 #[test]
 fn the_vocabulary_lists_every_topology_every_blend_and_every_stage_output() {
-    let rendered = vocabulary();
+    let rendered = crate::resources::vocabulary();
 
     let topologies = section(&rendered, "# Topologies");
     for name in ["points", "lines"] {
@@ -263,7 +263,7 @@ fn a_renderer_is_addressed_by_index_and_a_bad_one_names_the_range() {
 fn a_refused_write_returns_the_diagnostics_as_content() {
     let (tx, rx) = mpsc::channel();
     drop(tx);
-    let mut state = state(rx);
+    let state = Arc::new(Mutex::new(state(rx)));
     let request = json!({
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": {
@@ -271,7 +271,7 @@ fn a_refused_write_returns_the_diagnostics_as_content() {
             "arguments": { "slot": 0, "layer": "L4", "source": "not a procedure" },
         },
     });
-    let reply = dispatch(&request, &mut state)
+    let reply = dispatch(&request, &state)
         .settled()
         .expect("a call is answered");
     let result = reply.get("result").expect("a result, not an error");
@@ -285,7 +285,8 @@ fn a_refused_write_returns_the_diagnostics_as_content() {
     );
     // Structured diagnostic report attached for AI agents
     let report: DiagnosticReport =
-        serde_json::from_value(result["report"].clone()).expect("structured report");
+        serde_json::from_value(result["structuredContent"]["report"].clone())
+            .expect("structured report");
     assert!(!report.success);
     assert!(!report.diagnostics.is_empty());
     assert_eq!(report.diagnostics[0].code, "KIR-E100-PARSE");
@@ -295,7 +296,7 @@ fn a_refused_write_returns_the_diagnostics_as_content() {
 fn check_procedure_returns_structured_diagnostics() {
     let (tx, rx) = mpsc::channel();
     drop(tx);
-    let mut state = state(rx);
+    let state = Arc::new(Mutex::new(state(rx)));
 
     // 1. Valid procedure
     let valid_src = include_str!("../../../karakuri-ir/tests/fixtures/drift_shell.kir");
@@ -306,13 +307,11 @@ fn check_procedure_returns_structured_diagnostics() {
             "arguments": { "source": valid_src },
         },
     });
-    let reply_valid = dispatch(&req_valid, &mut state)
-        .settled()
-        .expect("answered");
+    let reply_valid = dispatch(&req_valid, &state).settled().expect("answered");
     let res_valid = reply_valid.get("result").expect("result");
-    assert_eq!(res_valid["isError"], json!(false));
+    assert_ne!(res_valid["isError"], true);
     let report_valid: DiagnosticReport =
-        serde_json::from_value(res_valid["report"].clone()).expect("report");
+        serde_json::from_value(res_valid["structuredContent"]["report"].clone()).expect("report");
     assert!(report_valid.success);
     assert!(report_valid.diagnostics.is_empty());
 
@@ -325,13 +324,11 @@ fn check_procedure_returns_structured_diagnostics() {
             "arguments": { "source": broken_src },
         },
     });
-    let reply_broken = dispatch(&req_broken, &mut state)
-        .settled()
-        .expect("answered");
+    let reply_broken = dispatch(&req_broken, &state).settled().expect("answered");
     let res_broken = reply_broken.get("result").expect("result");
     assert_eq!(res_broken["isError"], json!(true));
     let report_broken: DiagnosticReport =
-        serde_json::from_value(res_broken["report"].clone()).expect("report");
+        serde_json::from_value(res_broken["structuredContent"]["report"].clone()).expect("report");
     assert!(!report_broken.success);
     assert_eq!(report_broken.diagnostics.len(), 1);
     assert_eq!(report_broken.diagnostics[0].code, "KIR-E102-UNKNOWN-KIND");

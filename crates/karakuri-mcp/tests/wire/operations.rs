@@ -281,10 +281,19 @@ fn copy_slot_copies_and_respects_slot_policies() {
     assert!(failed, "expected refusal when target is active in mix");
     assert!(text.contains("active in the mix"), "{text}");
     let raw = call_raw(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
-    assert_eq!(raw["result"]["refusal"]["code"], "SLOT_IN_MIX");
-    assert_eq!(raw["result"]["refusal"]["slot"], 1);
-    assert_eq!(raw["result"]["refusal"]["policy"], "auto");
-    assert_eq!(raw["result"]["refusal"]["in_mix"], true);
+    assert_eq!(
+        raw["result"]["structuredContent"]["refusal"]["code"],
+        "SLOT_IN_MIX"
+    );
+    assert_eq!(raw["result"]["structuredContent"]["refusal"]["slot"], 1);
+    assert_eq!(
+        raw["result"]["structuredContent"]["refusal"]["policy"],
+        "auto"
+    );
+    assert_eq!(
+        raw["result"]["structuredContent"]["refusal"]["in_mix"],
+        true
+    );
 
     // Also write_procedure to slot 1 is refused
     let (failed_write, text_write) = call(
@@ -299,7 +308,10 @@ fn copy_slot_copies_and_respects_slot_policies() {
         "write_procedure",
         json!({"slot": 1, "layer": "L1", "source": PROBE_L1}),
     );
-    assert_eq!(raw_write["result"]["refusal"]["code"], "SLOT_IN_MIX");
+    assert_eq!(
+        raw_write["result"]["structuredContent"]["refusal"]["code"],
+        "SLOT_IN_MIX"
+    );
 
     // Also SelectRenderer on slot 1 is refused
     let (failed_rend, text_rend) = call(
@@ -320,7 +332,10 @@ fn copy_slot_copies_and_respects_slot_policies() {
             "with": {"deck": 1, "renderer": 0}
         }),
     );
-    assert_eq!(raw_rend["result"]["refusal"]["code"], "SLOT_IN_MIX");
+    assert_eq!(
+        raw_rend["result"]["structuredContent"]["refusal"]["code"],
+        "SLOT_IN_MIX"
+    );
 
     // Also SetCompositing on slot 1 is refused when in mix
     let (failed_comp, text_comp) = call(
@@ -341,7 +356,10 @@ fn copy_slot_copies_and_respects_slot_policies() {
             "with": {"deck": 1, "compositing": true}
         }),
     );
-    assert_eq!(raw_comp["result"]["refusal"]["code"], "SLOT_IN_MIX");
+    assert_eq!(
+        raw_comp["result"]["structuredContent"]["refusal"]["code"],
+        "SLOT_IN_MIX"
+    );
 
     // 2. Slot 1 is off-air (in_mix = false) -> copy succeeds
     slot_policies.set_in_mix(1, false);
@@ -355,14 +373,26 @@ fn copy_slot_copies_and_respects_slot_policies() {
     assert!(failed_off);
     assert!(text_off.contains("locked against MCP"), "{text_off}");
     let raw_off = call_raw(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
-    assert_eq!(raw_off["result"]["refusal"]["code"], "SLOT_POLICY_OFF");
-    assert_eq!(raw_off["result"]["refusal"]["slot"], 1);
-    assert_eq!(raw_off["result"]["refusal"]["policy"], "off");
+    assert_eq!(
+        raw_off["result"]["structuredContent"]["refusal"]["code"],
+        "SLOT_POLICY_OFF"
+    );
+    assert_eq!(raw_off["result"]["structuredContent"]["refusal"]["slot"], 1);
+    assert_eq!(
+        raw_off["result"]["structuredContent"]["refusal"]["policy"],
+        "off"
+    );
 
     // 3b. Unallocated slot returns SLOT_UNALLOCATED refusal
     let raw_unalloc = call_raw(port, "copy_slot", json!({"from_slot": 0, "to_slot": 99}));
-    assert_eq!(raw_unalloc["result"]["refusal"]["code"], "SLOT_UNALLOCATED");
-    assert_eq!(raw_unalloc["result"]["refusal"]["slot"], 99);
+    assert_eq!(
+        raw_unalloc["result"]["structuredContent"]["refusal"]["code"],
+        "SLOT_UNALLOCATED"
+    );
+    assert_eq!(
+        raw_unalloc["result"]["structuredContent"]["refusal"]["slot"],
+        99
+    );
 
     // 4. Slot 1 is policy On -> allowed even when in_mix
     slot_policies.set_policy(1, SlotPolicy::On);

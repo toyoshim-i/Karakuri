@@ -16,12 +16,12 @@ pub use in_process::{in_process, InProcessMcp};
 pub use karakuri_ir::{Diagnostic, DiagnosticReport};
 pub use protocol::PROTOCOL;
 pub use resources::doc_engine;
-pub use server::{serve, serve_at, Pending};
+pub use server::{serve, serve_at};
 pub use state::{Event, News, Pointed, Reply, Reporter, SaveRequest, Slots, WireRequest};
-pub use tools::{check_procedure, check_set_configuration, checked_id, OperateRequest, LISTED};
+pub use tools::{
+    check_procedure, check_set_configuration, checked_id, OperateRequest, Pending, LISTED,
+};
 
-pub(crate) use protocol::*;
-pub(crate) use resources::*;
 pub(crate) use spelled::*;
 pub(crate) use state::*;
 pub(crate) use tools::*;
