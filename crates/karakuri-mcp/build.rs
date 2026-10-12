@@ -4,5 +4,5 @@ fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let workspace_root = Path::new(&manifest_dir).parent().unwrap().parent().unwrap();
     std::env::set_current_dir(workspace_root).unwrap();
-    agent_doc::build::embed("docs/agent").expect("failed to embed agent docs");
+    agent_man::build::embed("docs/agent").expect("failed to embed agent docs");
 }

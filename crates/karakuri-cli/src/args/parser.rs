@@ -45,7 +45,7 @@ pub(crate) fn parse_args() -> Args {
         },
         Ok(ParseOutcome::Guide(topic)) => {
             let engine = karakuri_mcp::doc_engine();
-            match engine.guide(topic.as_deref(), agent_doc::RenderMode::Terminal) {
+            match engine.guide(topic.as_deref(), stdout_render_mode()) {
                 Ok(said) => {
                     print!("{said}");
                     std::process::exit(0);
@@ -58,7 +58,7 @@ pub(crate) fn parse_args() -> Args {
         }
         Ok(ParseOutcome::Explain(code)) => {
             let engine = karakuri_mcp::doc_engine();
-            match engine.explain(&code, agent_doc::RenderMode::Terminal) {
+            match engine.explain(&code, stdout_render_mode()) {
                 Ok(said) => {
                     print!("{said}");
                     std::process::exit(0);
@@ -70,6 +70,14 @@ pub(crate) fn parse_args() -> Args {
             }
         }
         Err(message) => fail(&message),
+    }
+}
+
+fn stdout_render_mode() -> agent_man::RenderMode {
+    if !std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        agent_man::RenderMode::Agent
+    } else {
+        agent_man::RenderMode::Terminal
     }
 }
 

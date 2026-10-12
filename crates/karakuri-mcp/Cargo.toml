@@ -36,10 +36,10 @@ karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 # The wire format every tool call and every tool result is spoken in.
 serde_json.workspace = true
-agent-doc = { workspace = true, features = ["mcp", "mcp-http"] }
+agent-man = { workspace = true, features = ["mcp", "mcp-http", "webmcp"] }
 
 [build-dependencies]
-agent-doc = { workspace = true, features = ["build"] }
+agent-man = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
 # `karakuri_operation_record::written` is asserted against in

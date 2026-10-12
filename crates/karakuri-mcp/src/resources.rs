@@ -1,4 +1,4 @@
-use agent_doc::DocEngine;
+use agent_man::DocEngine;
 use serde_json::{json, Value};
 
 use crate::operations;
@@ -18,7 +18,7 @@ pub fn doc_engine() -> DocEngine {
         .with_scheme("karakuri")
         .with_version(env!("CARGO_PKG_VERSION"))
         .with_subcommands("--guide", "--explain");
-    engine.add_pages(include!(concat!(env!("OUT_DIR"), "/agent_doc_pages.rs")));
+    engine.add_pages(include!(concat!(env!("OUT_DIR"), "/agent_man_pages.rs")));
     engine.add_page("docs/agent/ir-vocabulary.md", &vocabulary());
     engine.add_page("docs/agent/operations.md", &operations());
     engine
