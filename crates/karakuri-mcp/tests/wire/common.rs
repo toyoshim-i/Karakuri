@@ -285,15 +285,22 @@ pub fn post(port: u16, body: &str) -> (u16, String) {
     )
 }
 
-fn raw_once(port: u16, request: &str) -> std::io::Result<(u16, String)> {
-    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
+pub fn raw(port: u16, request: &str) -> (u16, String) {
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .ok();
-    stream.write_all(request.as_bytes())?;
+    stream.write_all(request.as_bytes()).expect("write");
     let mut reader = BufReader::new(stream);
     let mut status_line = String::new();
-    reader.read_line(&mut status_line)?;
+    // Name specified to clarify timeout failure diagnostics.
+    // A connection held up by another one reaches the client's own read
+    // timeout and comes out here, and `expect("status")` reported that as an
+    // errno rather than as what it is.
+    reader.read_line(&mut status_line).expect(
+        "no status line: the server did not answer this connection within the \
+                 client's read timeout",
+    );
     let status: u16 = status_line
         .split_whitespace()
         .nth(1)
@@ -302,7 +309,7 @@ fn raw_once(port: u16, request: &str) -> std::io::Result<(u16, String)> {
     let mut length = 0usize;
     loop {
         let mut header = String::new();
-        reader.read_line(&mut header)?;
+        reader.read_line(&mut header).expect("header");
         let header = header.trim_end();
         if header.is_empty() {
             break;
@@ -314,30 +321,8 @@ fn raw_once(port: u16, request: &str) -> std::io::Result<(u16, String)> {
         }
     }
     let mut body = vec![0u8; length];
-    std::io::Read::read_exact(&mut reader, &mut body)?;
-    Ok((status, String::from_utf8_lossy(&body).into_owned()))
-}
-
-pub fn raw(port: u16, request: &str) -> (u16, String) {
-    let mut last = (0, String::new());
-    for _ in 0..5 {
-        match raw_once(port, request) {
-            Ok((status, body)) => {
-                if (status == 400 && body.contains("request line too long"))
-                    || (status == 0 && body.is_empty())
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(5));
-                    last = (status, body);
-                    continue;
-                }
-                return (status, body);
-            }
-            Err(_) => {
-                std::thread::sleep(std::time::Duration::from_millis(5));
-            }
-        }
-    }
-    last
+    std::io::Read::read_exact(&mut reader, &mut body).expect("body");
+    (status, String::from_utf8_lossy(&body).into_owned())
 }
 
 pub fn call(port: u16, name: &str, args: Value) -> (bool, String) {
