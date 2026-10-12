@@ -116,12 +116,12 @@ When a procedure block contains references to `ray` (`reads_ray`), the Built-in 
 
 ## 4. Shader Authoring Guide & Code Examples
 
-### 4.1 Converting `in.point_coord` to Polar Coordinates
-This helper converts `in.point_coord` into radial distance $r \in [0.0, 1.0]$ and angle $\phi \in [-\pi, \pi]$:
+### 4.1 Converting `point_coord` to Polar Coordinates
+This helper converts `point_coord` into radial distance $r \in [0.0, 1.0]$ and angle $\phi \in [-\pi, \pi]$:
 
-```kir
+```
 // Normalize to [-1.0, 1.0] relative to Zenith center
-let p = (in.point_coord - vec2(0.5, 0.5)) * 2.0;
+let p = (point_coord - vec2(0.5, 0.5)) * 2.0;
 let r = length(p);          // 0.0 at zenith, ~0.75 at horizon, 1.0 at -30 deg
 let phi = atan2(p.y, p.x);  // Azimuthal angle around the zenith
 ```
@@ -129,7 +129,7 @@ let phi = atan2(p.y, p.x);  // Azimuthal angle around the zenith
 ### 4.2 Handling Horizon Edge Falloff
 To prevent a harsh cutoff at the dome boundary, apply a soft smoothstep falloff near $r = 1.0$:
 
-```kir
+```
 let horizon_mask = 1.0 - smoothstep(0.85, 1.0, r);
 color = vec4(color.rgb * horizon_mask, color.a * horizon_mask);
 ```
@@ -146,30 +146,32 @@ proc celestial_aurora {
   kind L4
   blend additive
 
-  param wave_speed : float = 0.8 [0.1, 3.0]
-  param ribbon_freq : float = 6.0 [1.0, 16.0]
-  param intensity : float = 1.2 [0.0, 3.0]
+  param wave_speed  : float [0.1, 3.0] = 0.8
+  param ribbon_freq : float [1.0, 16.0] = 6.0
+  param intensity   : float [0.0, 3.0] = 1.2
+  param audio_low   : float [0.0, 2.0] = 0.0
+  param audio_mid   : float [0.0, 2.0] = 0.0
 
   fragment {
     // 1. Transform to polar coordinates around Zenith
-    let p = (in.point_coord - vec2(0.5, 0.5)) * 2.0;
+    let p = (point_coord - vec2(0.5, 0.5)) * 2.0;
     let r = length(p);
     let phi = atan2(p.y, p.x);
 
     // 2. Multi-layered swirling spiral waves
-    let t = time * wave_speed;
-    let wave1 = sin(phi * ribbon_freq + r * 8.0 - t * 2.0);
-    let wave2 = cos(phi * (ribbon_freq * 0.5) - r * 12.0 + t * 1.5);
+    let t_wave = t * wave_speed;
+    let wave1 = sin(phi * ribbon_freq + r * 8.0 - t_wave * 2.0);
+    let wave2 = cos(phi * (ribbon_freq * 0.5) - r * 12.0 + t_wave * 1.5);
     let curtain = pow(0.5 + 0.5 * (wave1 * 0.6 + wave2 * 0.4), 3.0);
 
     // 3. Elevation modulation: brighter near mid-sky, soft at zenith & horizon
     let elevation_weight = smoothstep(0.05, 0.3, r) * (1.0 - smoothstep(0.8, 1.0, r));
 
     // 4. Music-reactive spectral color gradient
-    let hue = fract(0.35 + sin(t * 0.2 + r * 2.0) * 0.15 + audio.y * 0.2);
-    let rgb = hsv2rgb(vec3(hue, 0.85, 1.0));
+    let hue = fract(0.35 + sin(t_wave * 0.2 + r * 2.0) * 0.15 + audio_low * 0.2);
+    let rgb = hsv_to_rgb(vec3(hue, 0.85, 1.0));
 
-    let final_lum = curtain * elevation_weight * intensity * (1.0 + audio.z * 1.5);
+    let final_lum = curtain * elevation_weight * intensity * (1.0 + audio_mid * 1.5);
     color = vec4(rgb * final_lum, final_lum);
   }
 }
@@ -183,27 +185,27 @@ proc planetarium_rings {
   kind L4
   blend additive
 
-  param ring_count : float = 8.0 [2.0, 16.0]
-  param beam_width : float = 0.04 [0.01, 0.2]
+  param ring_count  : float [2.0, 16.0] = 8.0
+  param beam_width  : float [0.01, 0.2] = 0.04
 
   fragment {
-    let p = (in.point_coord - vec2(0.5, 0.5)) * 2.0;
+    let p = (point_coord - vec2(0.5, 0.5)) * 2.0;
     let r = length(p);
     let phi = atan2(p.y, p.x);
 
     // Concentric elevation rings
-    let ring_phase = fract(r * ring_count - beat * 0.25);
+    let ring_phase = fract(r * ring_count - beats * 0.25);
     let ring_line = 1.0 - smoothstep(0.0, 0.08, abs(ring_phase - 0.5));
 
     // Rotating radial scanner beam
-    let beam_angle = mod(phi - beat * 0.5, 6.2831853);
+    let beam_angle = mod(phi - beats * 0.5, 6.2831853);
     let beam = smoothstep(beam_width, 0.0, beam_angle);
 
     // Horizon soft falloff
     let mask = 1.0 - smoothstep(0.85, 1.0, r);
 
     let lum = (ring_line * 0.4 + beam * 1.2) * mask;
-    let col = mix(vec3(0.1, 0.6, 1.0), vec3(0.9, 0.3, 1.0), r);
+    let col = mix(vec3(0.1, 0.6, 1.0), vec3(0.9, 0.3, 1.0), vec3(r));
     color = vec4(col * lum, lum);
   }
 }

@@ -8,7 +8,7 @@ One `.kir` file defines one procedure (`proc`). A Set is an assembly of procedur
 
 ## 1. File Structure
 
-```kir
+```
 proc <name> {
   <header declarations>
 
@@ -40,7 +40,7 @@ L5    : [Texture]          -> Texture  (post-processing and screen-space frame e
 | Kind | Required Header Declarations | Required Block | Execution Target |
 |---|---|---|---|
 | **`L1`** | `kind L1`, `capacity`, `topology` | `element { ... }` | Compute pass (per-element simulation) |
-| **`L2`** | `kind L2`, `uses <name> : Geometry` | `deform { ... }` | Compute pass (per-element modification) |
+| **`L2`** | `kind L2` | `deform { ... }` | Compute pass (per-element modification) |
 | **`L3`** | `kind L3` | `camera { ... }` | Evaluated once per frame |
 | **`L4`** | `kind L4`, `blend` | `fragment { ... }` | Render pass (vertex + fragment shaders) |
 | **`Field`**| `kind Field` | `field { ... }` | Spliced WGSL function (evaluated anywhere) |
@@ -60,7 +60,11 @@ Specifies the geometric representation emitted by the simulation:
 
 ### `capacity` (`L1` only)
 Defines the memory allocation range and default element count:
-```kir
+```
+capacity [min, max] = default
+```
+Example:
+```
 capacity [65536, 1048576] = 262144
 ```
 
@@ -71,63 +75,83 @@ Defines how fragment colors combine with underlying surfaces:
 - `opaque`: Depth-tested and depth-writing (early-Z occlusion against Depth32 buffer).
 
 ### Fullscreen `L4` Procedures & Built-in VR Projection
-An `L4` procedure that declares no `vertex` block acts as a **fullscreen fragment renderer** (e.g. 2D procedural patterns, raymarchers, canvas backgrounds).
+An `L4` procedure that declares no `vertex` block acts as a **fullscreen fragment renderer** (e.g. 2D procedural patterns, raymarchers, canvas backgrounds). Fullscreen procedures cannot declare `consumes` because there are no elements to read from.
 - On 2D screens: Renders across the entire display quad.
-- In WebXR Immersive mode: Automatically projected via **Built-in VR Projection** (`Wall`, `Dome`, or `Kaleidosky`). In `Dome` mode, `in.point_coord` maps the zenith $(0.5, 0.5)$ directly overhead down to $-30^\circ$ below the horizon.
+- In WebXR Immersive mode: Automatically projected via **Built-in VR Projection** (`Wall`, `Dome`, or `Kaleidosky`). In `Dome` mode, `point_coord` maps the zenith $(0.5, 0.5)$ directly overhead down to $-30^\circ$ below the horizon.
 - For complete coordinate mapping contracts, WGSL examples, and celestial dome shader guidelines, read `karakuri://vr-projection`.
 
 ### `param` (All kinds)
 Declares an interactive, controllable parameter exposed to the console, MIDI, and LLM:
-```kir
-param speed : float = 1.0 [0.0, 5.0]
-param radius : float = 2.5 [0.1, 10.0]
+```
+param name : type [min, max] = default
+```
+Example:
+```
+param speed : float [0.0, 5.0] = 1.0
+param radius : float [0.1, 10.0] = 2.5
 ```
 
 ### `emit` and `consumes`
 Establishes the typed attribute contract between simulation (`L1`/`L2`) and rendering (`L4`):
-- `emit`: Attributes written by `L1` or `L2` (e.g. `emit pos, vel, col, uv, age`).
-- `consumes`: Attributes read by `L4` (must be a subset of emitted attributes: `consumes ⊆ emit`).
+- `emit`: Attributes written by `L1` or `L2` (e.g. `emit position, velocity, tint, age`).
+- `consumes`: Attributes read by downstream nodes (`L2` or `L4`). Must be a subset of emitted attributes: `consumes ⊆ emit`.
 
-Built-in attributes: `pos` (vec3), `vel` (vec3), `col` (vec4), `uv` (vec2), `size` (float), `age` (float), `seed` (uint), `rot` (vec4 quaternion).
+Built-in element attributes:
+- `position` (`vec3`): World-space element coordinates.
+- `velocity` (`vec3`): World-space velocity vector.
+- `normal` (`vec3`): Surface normal vector.
+- `uv` (`vec2`): Texture parameter coordinates.
+- `age` (`float`): Lifetime elapsed since spawn in seconds.
+- `size` (`float`): Particle or line scale factor.
+- `tint` (`vec3`): Base color tint (linear RGB).
+
+*Note*: Element random seed `seed` is an ambient value, carried automatically and readable anywhere in element pipelines. It must never be declared in `emit` or `consumes`.
 
 ### `uses`
 Declares dependency wiring between nodes:
-- `uses far : Geometry` (`L2` only): Second geometry slot for morphing/blending.
+- `uses far : Geometry` (`L2` or `L3`): Second geometry slot for morphing/blending, or subject geometry tracked by camera.
 - `uses shape : Field` (`L1`, `L2`, `L3`, `L4`): References a `Field` procedure for collision or raymarching.
 - `uses view : Camera` (`L4` only): Binds an explicit `L3` procedural camera.
+- `uses id : Source` (`L1`, `L2`, `L4`): References a source identity slot for instance masking.
 - `uses under : Texture` (`L5` only): References another texture layer for compositing.
 
 ---
 
 ## 4. Built-in Environment & Signals
 
-Available implicitly inside execution blocks:
+Available implicitly inside execution blocks as ambient values:
 
 | Name | Type | Description |
 |---|---|---|
-| `time` | `float` | Continuous elapsed session time in seconds |
-| `beat` | `float` | Musical beat clock (accumulated continuous beats according to tempo) |
-| `dt` | `float` | Time elapsed since previous frame in seconds |
-| `aspect` | `float` | Target aspect ratio (`width / height`) |
-| `resolution` | `vec2` | Target dimensions in physical pixels |
-| `pointer` | `vec2` | Normalized pointer coordinates `[0.0, 1.0]` |
-| `audio` | `vec4` | Instantaneous audio frequency energy: `(sub_bass, bass, mid, high)` |
+| `t` | `float` | Continuous elapsed session time in seconds |
+| `beats` | `float` | Musical beat clock on the session tempo grid |
+| `dt` | `float` | Time elapsed since previous frame in seconds (L1, L3, L5) |
+| `seed` | `uint` | Carried per-element pseudo-random seed (L1, L2, L4) |
+| `source` | `uint` | Identifier / salt of the geometry source instance (L1, L2, L4) |
+| `capacity` | `uint` | Element allocation capacity of the L1 source (L1) |
+| `copy` | `uint` | Copy index produced by upstream amplifying L2 node (L2, L4) |
+| `point` | `vec3` | World-space evaluation point in Field procedures (Field) |
+| `camera` | `mat4` | View-projection matrix in L4 vertex stage (L4) |
+| `point_coord` | `vec2` | Normalized fragment or frame coordinates `[0.0, 1.0]^2` (L4 fragment, L5 frame) |
+| `eye` | `vec3` | World-space camera eye position (fullscreen L4 fragment) |
+| `ray` | `vec3` | World-space unit ray direction (fullscreen L4 fragment) |
+
+*Signals*: Dynamic control signals (such as audio FFT bands or MIDI CC values) are not directly readable from IR. Instead, declare an interactive `param` and bind the signal to that parameter in the Set configuration.
 
 ---
 
 ## 5. Built-in Functions
 
+Function signatures and shapes are strictly defined by the compiler checker. The complete generated reference is published at `karakuri://ir-vocabulary` (see `crates/karakuri-ir/src/builtin.rs`).
+
+Commonly used built-in functions:
 - **Math**: `min`, `max`, `clamp`, `abs`, `sign`, `floor`, `ceil`, `fract`, `mod`, `sqrt`, `pow`, `exp`, `log`, `step`, `smoothstep`, `mix`.
 - **Trigonometry**: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`.
 - **Vector**: `dot`, `cross`, `length`, `distance`, `normalize`, `reflect`, `refract`.
-- **Noise & Hash**:
-  - `hash(uint) -> float`
-  - `noise2d(vec2) -> float`
-  - `noise3d(vec3) -> float`
-  - `fbm2d(vec2, int octaves) -> float`
-  - `fbm3d(vec3, int octaves) -> float`
-- **SDF Primitives**: `sdf_sphere(p, r)`, `sdf_box(p, b)`, `sdf_torus(p, t)`, `sdf_cylinder(p, h, r)`.
-- **Color**: `hsv2rgb(vec3) -> vec3`, `rgb2hsv(vec3) -> vec3`.
+- **Noise & Hash**: `hash1(seed)`, `hash2(seed)`, `hash3(seed)`, `value_noise(p)`, `perlin(p)`, `simplex(p)`, `fbm(p, octaves)`, `curl(p)`.
+- **SDF Primitives & Operators**: `sd_sphere(p, r)`, `sd_box(p, b)`, `sd_torus(p, t)`, `sd_plane(p, n, d)`, `op_union(d1, d2)`, `op_smooth_union(d1, d2, k)`, `op_subtract(d1, d2)`.
+- **Color**: `hsv_to_rgb(hsv)`, `rgb_to_hsv(rgb)`, `srgb_to_linear(rgb)`, `linear_to_srgb(rgb)`.
+- **Transform**: `rot_x(p, angle)`, `rot_y(p, angle)`, `rot_z(p, angle)`, `rot_axis(p, axis, angle)`, `sphere_point(u, v)`.
 
 ---
 
@@ -140,24 +164,24 @@ proc particle_fountain {
   topology points
   capacity [1024, 65536] = 16384
 
-  param spread : float = 1.2 [0.1, 4.0]
-  param gravity : float = 9.8 [0.0, 20.0]
+  param spread : float [0.1, 4.0] = 1.2
+  param gravity : float [0.0, 20.0] = 9.8
 
-  emit pos, vel, col, age
+  emit position, velocity, tint, age
 
   element {
-    if (age <= 0.0 || pos.y < -5.0) {
+    tint = hsv_to_rgb(vec3(fract(beats * 0.1 + hash1(seed) * 0.2), 0.8, 1.0));
+    if (age <= 0.0 || position.y < -5.0) {
       // Spawn new particle
-      let angle = hash(seed) * 6.28318;
-      let speed = spread * (0.5 + 0.5 * hash(seed + 1u));
-      vel = vec3(cos(angle) * speed, 5.0 + 2.0 * hash(seed + 2u), sin(angle) * speed);
-      pos = vec3(0.0, 0.0, 0.0);
-      col = vec4(hsv2rgb(vec3(fract(beat * 0.1 + hash(seed) * 0.2), 0.8, 1.0)), 1.0);
-      age = 3.0 + hash(seed + 3u);
+      let angle = hash1(seed) * 6.2831853;
+      let speed = spread * (0.5 + 0.5 * hash1(seed + 1u));
+      velocity = vec3(cos(angle) * speed, 5.0 + 2.0 * hash1(seed + 2u), sin(angle) * speed);
+      position = vec3(0.0, 0.0, 0.0);
+      age = 3.0 + hash1(seed + 3u);
     } else {
       // Update simulation step
-      vel.y = vel.y - gravity * dt;
-      pos = pos + vel * dt;
+      velocity = velocity - vec3(0.0, gravity * dt, 0.0);
+      position = position + velocity * dt;
       age = age - dt;
     }
   }
@@ -170,24 +194,21 @@ proc particle_glow {
   kind L4
   blend additive
 
-  param point_size : float = 0.015 [0.001, 0.08]
+  param point_size : float [0.001, 0.08] = 0.015
 
-  consumes pos, col, age
+  consumes position, tint, age
 
   vertex {
     // Project 3D position to clip space
-    clip = project(pos);
+    clip = camera * vec4(position, 1.0);
     point_rate = point_size;
   }
 
   fragment {
     // Radial soft particle falloff
-    let dist = length(uv - vec2(0.5, 0.5)) * 2.0;
-    if (dist > 1.0) {
-      discard;
-    }
-    let alpha = (1.0 - dist * dist) * clamp(age, 0.0, 1.0);
-    color = vec4(col.rgb * 1.5, alpha);
+    let dist = length(point_coord * 2.0 - 1.0);
+    let alpha = max(0.0, 1.0 - dist * dist) * clamp(age, 0.0, 1.0);
+    color = vec4(tint * 1.5, alpha);
   }
 }
 ```
