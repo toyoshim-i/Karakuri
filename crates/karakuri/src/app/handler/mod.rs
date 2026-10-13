@@ -502,3 +502,5 @@ impl App {
         }
     }
 }
+
+pub(crate) mod capture;

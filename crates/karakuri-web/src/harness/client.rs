@@ -239,7 +239,7 @@ fn parse_single_tool_call_value(
 
 /// Extracts the underlying payload text from an MCP ToolResult.
 pub fn extract_mcp_result_text(result: &ToolResult) -> String {
-    let texts: Vec<&str> = result.content.iter().map(|c| c.text.as_str()).collect();
+    let texts: Vec<&str> = result.content.iter().filter_map(|c| c.as_text()).collect();
     if !texts.is_empty() {
         texts.join("\n")
     } else if let Some(ref sc) = result.structured_content {

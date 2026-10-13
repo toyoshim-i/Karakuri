@@ -1,3 +1,4 @@
+pub mod capture;
 mod dispatch;
 pub mod history;
 pub mod library;
@@ -14,6 +15,7 @@ use karakuri_operation::gate::{self, Allowed};
 use karakuri_operation::{NodeAddress, Operation, RefusalDetail};
 use serde_json::{json, Value};
 
+pub(crate) use capture::capture_frame;
 pub(crate) use library::list_library;
 pub use operate::OperateRequest;
 pub use procedure::check_procedure;
@@ -30,8 +32,8 @@ pub(crate) use set::*;
 pub(crate) use wire::*;
 
 use crate::{
-    layer_list, layer_name, layer_named, layer_of, operated, DiagnosticReport, News, Slots, State,
-    MAX_ID,
+    layer_list, layer_name, layer_named, layer_of, operated, CaptureNews, CapturedImage,
+    DiagnosticReport, News, Slots, State, MAX_ID,
 };
 
 /// What one tool call came to: an answer, or a wait that belongs outside the
@@ -49,6 +51,8 @@ pub(crate) enum Called {
     /// note beside it: what this server knows about the run that the loop will not
     /// say is the class the audit refused on, and a refusal never reaches here.
     Operating(mpsc::Receiver<News>),
+    /// A frame capture the loop has been asked to perform — see [`CaptureRequest`].
+    Capturing(mpsc::Receiver<CaptureNews>),
 }
 
 /// Resolves an incoming MCP tool invocation into an [`Operation`] or an argument refusal.
@@ -124,6 +128,9 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
 }
 
 pub(crate) fn dispatch_tool(name: &str, args: &Value, state: &mut State) -> Result<Called, String> {
+    if name == "capture_frame" {
+        return capture_frame(args, state);
+    }
     if name == "list_library" {
         return Ok(Called::Answered(list_library(args, state)));
     }
@@ -447,11 +454,14 @@ pub enum Pending {
         news: mpsc::Receiver<News>,
         note: String,
     },
+    /// A frame capture the render loop has been asked for.
+    Capturing { news: mpsc::Receiver<CaptureNews> },
 }
 
 const SAVE_GONE: &str = "the render loop ended before it took this save: nothing was saved";
 const OPERATE_GONE: &str = "the render loop disconnected before this operation completed";
 const WIRE_GONE: &str = "the render loop disconnected before this wire completed";
+const CAPTURE_GONE: &str = "the render loop disconnected before this capture completed";
 
 fn noted(outcome: Result<String, String>, note: &str) -> Result<String, String> {
     outcome.map(|said| {
@@ -463,12 +473,32 @@ fn noted(outcome: Result<String, String>, note: &str) -> Result<String, String> 
     })
 }
 
+fn capture_result(outcome: Result<CapturedImage, String>) -> ToolResult {
+    match outcome {
+        Ok(image) => ToolResult::text_and_image(image.description, image.data, image.mime_type)
+            .with_structured(json!({
+                "width": image.width,
+                "height": image.height,
+                "format": "image/png",
+            })),
+        Err(err) => ToolResult::error(err),
+    }
+}
+
 impl PendingResult<ToolResult> for Pending {
     fn poll_settled(&mut self) -> Option<ToolResult> {
+        if let Pending::Capturing { news } = self {
+            return match news.try_recv() {
+                Ok(CaptureNews::Settled(outcome)) => Some(capture_result(outcome)),
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(mpsc::TryRecvError::Disconnected) => Some(ToolResult::error(CAPTURE_GONE)),
+            };
+        }
         let (news, gone, note) = match self {
             Pending::Saving { news } => (news, SAVE_GONE, ""),
             Pending::Operating { news } => (news, OPERATE_GONE, ""),
             Pending::Wiring { news, note } => (news, WIRE_GONE, note.as_str()),
+            Pending::Capturing { .. } => unreachable!(),
         };
         match news.try_recv() {
             Ok(News::Settled(outcome)) => Some(tool_result(noted(outcome, note))),
@@ -485,6 +515,9 @@ impl PendingResult<ToolResult> for Pending {
             Pending::Wiring { news, note } => {
                 tool_result(noted(applied(&news, crate::WIRE_REPLY), &note))
             }
+            Pending::Capturing { news } => {
+                capture_result(awaited_capture(&news, crate::CAPTURE_REPLY))
+            }
         }
     }
 }
@@ -497,6 +530,7 @@ pub(crate) fn called_to_handler_result(called: Called) -> HandlerResult<ToolResu
             HandlerResult::Pending(Box::new(Pending::Wiring { news, note }))
         }
         Called::Operating(news) => HandlerResult::Pending(Box::new(Pending::Operating { news })),
+        Called::Capturing(news) => HandlerResult::Pending(Box::new(Pending::Capturing { news })),
     }
 }
 
@@ -637,4 +671,22 @@ pub(crate) fn applied(
              Nothing was rewired, and asking again is safe."
         ),
     })
+}
+
+/// Awaits the outcome of a frame capture operation over `news` until `wait` expires.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn awaited_capture(
+    news: &mpsc::Receiver<CaptureNews>,
+    wait: std::time::Duration,
+) -> Result<CapturedImage, String> {
+    match news.recv_timeout(wait) {
+        Ok(CaptureNews::Settled(outcome)) => outcome,
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(format!(
+            "the render loop had not completed this capture after {wait:?} — it is running slowly \
+             or not at all."
+        )),
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err("the render loop ended before it completed this capture".to_string())
+        }
+    }
 }

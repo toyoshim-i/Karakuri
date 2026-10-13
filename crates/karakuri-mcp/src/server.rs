@@ -32,6 +32,7 @@ pub fn serve_at(
     let (asked, requests) = mpsc::sync_channel(ASKED);
     let (wiring, wires) = mpsc::sync_channel(ASKED);
     let (operating, operations) = mpsc::sync_channel(ASKED);
+    let (capturing, captures) = mpsc::sync_channel(ASKED);
 
     let shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let dropped = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -46,6 +47,7 @@ pub fn serve_at(
         asked,
         wiring,
         operating,
+        capturing,
         recent: Vec::new(),
         dropped: dropped.clone(),
     }));
@@ -63,6 +65,7 @@ pub fn serve_at(
             requests,
             wires,
             operations,
+            captures,
             dropped,
             shutdown,
             addr: bound,
@@ -72,7 +75,7 @@ pub fn serve_at(
     #[cfg(target_arch = "wasm32")]
     {
         let _ = (
-            state, target, tx, requests, wires, operations, shutdown, dropped,
+            state, target, tx, requests, wires, operations, captures, shutdown, dropped,
         );
         Err("HTTP MCP server is not supported on this target".into())
     }

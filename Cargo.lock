@@ -35,9 +35,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-man"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f5b0f3c1cbef6fab7b66f721e0d4f680ba67006df20729799f12ebaa3951df1"
+checksum = "e6a29e579c32f0c96c80e5ba9d158fb90c4757e58f83128c08744beb207514d6"
 dependencies = [
  "js-sys",
  "serde",

@@ -260,7 +260,7 @@ fn sequence_driven(
 }
 
 /// Removes row copy alignment padding from a mapped readback buffer.
-fn unpad_rows(mapped: &[u8], padded_row: u32, unpadded_row: u32) -> Vec<u8> {
+pub fn unpad_rows(mapped: &[u8], padded_row: u32, unpadded_row: u32) -> Vec<u8> {
     if padded_row == unpadded_row {
         return mapped.to_vec();
     }
@@ -269,6 +269,51 @@ fn unpad_rows(mapped: &[u8], padded_row: u32, unpadded_row: u32) -> Vec<u8> {
         .flat_map(|row| &row[..unpadded_row as usize])
         .copied()
         .collect()
+}
+
+/// Encodes raw RGBA8 pixels into an sRGB PNG byte vector.
+pub fn encode_png_rgba8(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let mut png = png::Encoder::new(&mut out, width, height);
+    png.set_color(png::ColorType::Rgba);
+    png.set_depth(png::BitDepth::Eight);
+    png.write_header()
+        .and_then(|mut w| w.write_image_data(pixels))
+        .map_err(|e| format!("{e}"))?;
+    Ok(out)
+}
+
+/// Standard Base64 encoder for image payloads without external dependencies.
+pub fn encode_base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as usize;
+        let b1 = if chunk.len() > 1 {
+            chunk[1] as usize
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            chunk[2] as usize
+        } else {
+            0
+        };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[(triple >> 18) & 0x3f] as char);
+        out.push(TABLE[(triple >> 12) & 0x3f] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[(triple >> 6) & 0x3f] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[triple & 0x3f] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -317,5 +362,23 @@ mod tests {
     fn an_aligned_readback_is_copied_rather_than_walked() {
         let mapped: Vec<u8> = (0..64).collect();
         assert_eq!(unpad_rows(&mapped, 16, 16), mapped);
+    }
+
+    #[test]
+    fn base64_matches_rfc_test_vectors() {
+        assert_eq!(encode_base64(b""), "");
+        assert_eq!(encode_base64(b"f"), "Zg==");
+        assert_eq!(encode_base64(b"fo"), "Zm8=");
+        assert_eq!(encode_base64(b"foo"), "Zm9v");
+        assert_eq!(encode_base64(b"foob"), "Zm9vYg==");
+        assert_eq!(encode_base64(b"fooba"), "Zm9vYmE=");
+        assert_eq!(encode_base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn encode_png_rgba8_produces_valid_png() {
+        let pixels = vec![255, 0, 0, 255, 0, 255, 0, 255]; // 2x1 image
+        let png_bytes = encode_png_rgba8(&pixels, 2, 1).expect("encode png");
+        assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
     }
 }

@@ -240,7 +240,21 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         .param("limit", ParamType::Integer { min: Some(1), max: Some(500) }, "maximum number of items to return (default: 20)", false)
         .see("library")
         .example(json!({ "layer": "L1", "topology": "lines" }))
-        .handler(tool_handler("list_library", state))
+        .handler(tool_handler("list_library", state.clone()))
+        .build(),
+
+        // 16. capture_frame
+        ToolBuilder::new(
+            "capture_frame",
+            "Capture the currently rendered frame of a deck slot or the composed Program output as a PNG image.",
+        )
+        .param("target", ParamType::Enum(vec!["program".into(), "slot".into()]), "capture target: 'program' (default) or 'slot'", false)
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot index (required when target is 'slot')", false)
+        .param("max_dimension", ParamType::Integer { min: Some(128), max: Some(1024) }, "maximum bounding dimension for image in pixels (128..=1024, default: 512)", false)
+        .see("operations")
+        .example(json!({ "target": "program" }))
+        .example(json!({ "target": "slot", "slot": 0, "max_dimension": 512 }))
+        .handler(tool_handler("capture_frame", state))
         .build(),
     ]
 }
@@ -252,6 +266,7 @@ pub fn tools() -> Value {
     let (asked, _requests) = std::sync::mpsc::sync_channel(1);
     let (wiring, _wires) = std::sync::mpsc::sync_channel(1);
     let (operating, _operations) = std::sync::mpsc::sync_channel(1);
+    let (capturing, _captures) = std::sync::mpsc::sync_channel(1);
     let state = Arc::new(Mutex::new(State {
         slots: dummy_slots,
         store: std::path::PathBuf::from("/tmp"),
@@ -262,6 +277,7 @@ pub fn tools() -> Value {
         asked,
         wiring,
         operating,
+        capturing,
         recent: Vec::new(),
         dropped: Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }));

@@ -424,7 +424,13 @@ impl App {
         // Borrow held store reference before borrowing gfx to resolve chain slot procedures.
         let held = &*self.held;
         let presets_dir = self.presets.as_ref().map(|p| p.dir.clone());
-        let composed = {
+        let captures: Vec<karakuri_mcp::CaptureRequest> = self
+            .keeping
+            .mcp
+            .as_ref()
+            .map(|m| m.captures().collect())
+            .unwrap_or_default();
+        let (composed, capture_jobs) = {
             let Gfx {
                 window,
                 gpu,
@@ -519,6 +525,7 @@ impl App {
             present.set_chain_online(&online);
             let textures_delta = &mut output.textures_delta;
             let cost = &mut cost;
+            let picture_format = picture.format;
             // Collect picture and active auxiliary sinks for `compose` (ADR-0171).
             let mut sinks_vec: Vec<&mut dyn Sink> = Vec::with_capacity(6);
             sinks_vec.push(picture);
@@ -538,7 +545,16 @@ impl App {
                 sinks_vec.push(r);
             }
             let sinks: &mut [&mut dyn Sink] = &mut sinks_vec[..];
-            compose(
+
+            let (capture_draws, capture_jobs) = super::capture::prepare_captures(
+                captures,
+                present,
+                slot_bind_groups,
+                picture_format,
+                &gpu.device,
+            );
+
+            let composed = compose(
                 gpu,
                 deck,
                 present,
@@ -552,6 +568,12 @@ impl App {
                 // -- the panel, into the frame's encoder ------
                 |encoder| {
                     monitor(present, previews, slot_bind_groups, encoder);
+                    super::capture::render_captures(
+                        encoder,
+                        present,
+                        &capture_draws,
+                        &capture_jobs,
+                    );
                     panel_started = Some(Instant::now());
                     // One id can carry several deltas in a frame: a
                     // font atlas that grew arrives as the whole image
@@ -606,8 +628,11 @@ impl App {
                         gpu.queue.submit(user);
                     }
                 },
-            )
+            );
+            (composed, capture_jobs)
         };
+        // Process background frame capture jobs off the render thread (P-0094).
+        super::capture::dispatch_capture_jobs(capture_jobs, gfx.gpu.device.clone());
         // Track engine and panel paint duration across the encoder handover boundary.
         let panel_started = panel_started.expect("`finally` runs on every frame");
         cost.engine = panel_started - engine_started;

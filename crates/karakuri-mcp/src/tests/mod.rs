@@ -44,6 +44,7 @@ pub(crate) fn state(events: mpsc::Receiver<Event>) -> State {
         asked: mpsc::sync_channel(ASKED).0,
         wiring: mpsc::sync_channel(ASKED).0,
         operating: mpsc::sync_channel(ASKED).0,
+        capturing: mpsc::sync_channel(ASKED).0,
         recent: Vec::new(),
         dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }

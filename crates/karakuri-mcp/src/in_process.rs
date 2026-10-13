@@ -68,6 +68,7 @@ pub fn in_process(
     let (asked, requests) = mpsc::sync_channel(ASKED);
     let (wiring, wires) = mpsc::sync_channel(ASKED);
     let (operating, operations) = mpsc::sync_channel(ASKED);
+    let (capturing, captures) = mpsc::sync_channel(ASKED);
 
     let shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let dropped = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -82,6 +83,7 @@ pub fn in_process(
         asked,
         wiring,
         operating,
+        capturing,
         recent: Vec::new(),
         dropped: dropped.clone(),
     }));
@@ -93,6 +95,7 @@ pub fn in_process(
         requests,
         wires,
         operations,
+        captures,
         dropped,
         shutdown,
         addr: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),

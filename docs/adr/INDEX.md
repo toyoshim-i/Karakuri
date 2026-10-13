@@ -418,6 +418,7 @@ number; new records continue from the end.
 | [ADR-0390](0390-agent-man-mcp-engine-migration-and-structured-content.md) | Migrate MCP engine to agent-man and standardize structuredContent | 2026-10-12 | accepted |
 | [ADR-0391](0391-slot-mcp-policy-defaults-to-on.md) | Slot MCP policy defaults to on | 2026-10-13 | accepted |
 | [ADR-0392](0392-library-bay-tri-state-privacy-gate.md) | Library bay tri-state privacy gate | 2026-10-13 | accepted |
+| [ADR-0393](0393-mcp-capture-frame-image-tool-with-non-blocking-readback.md) | MCP capture_frame image tool with non-blocking readback | 2026-10-13 | accepted |
 
 
 ## Retired numbers

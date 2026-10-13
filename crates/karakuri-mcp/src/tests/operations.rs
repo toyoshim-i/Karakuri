@@ -39,6 +39,7 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
         "check_procedure",
         "check_set",
         "list_library",
+        "capture_frame",
         "doc_list",
         "doc_read",
     ];

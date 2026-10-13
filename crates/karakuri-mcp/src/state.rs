@@ -52,6 +52,46 @@ pub struct WireRequest {
     pub reply: Reply,
 }
 
+/// Target to capture a frame from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureTarget {
+    Program,
+    Slot(usize),
+}
+
+/// Information describing a captured image payload.
+#[derive(Debug, Clone)]
+pub struct CapturedImage {
+    pub description: String,
+    pub data: String,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Internal notification delivered over a `CaptureReply` channel.
+pub enum CaptureNews {
+    Settled(Result<CapturedImage, String>),
+}
+
+/// Channel sender used by the render loop to return a captured frame.
+#[derive(Clone)]
+pub struct CaptureReply(pub(crate) mpsc::Sender<CaptureNews>);
+
+impl CaptureReply {
+    /// Signals the final outcome of the frame capture request.
+    pub fn settled(self, result: Result<CapturedImage, String>) {
+        let _ = self.0.send(CaptureNews::Settled(result));
+    }
+}
+
+/// Request sent to the render loop to capture a rendered frame as an image.
+pub struct CaptureRequest {
+    pub target: CaptureTarget,
+    pub max_dimension: u32,
+    pub reply: CaptureReply,
+}
+
 /// Internal notification items delivered over a `Reply` channel.
 pub enum News {
     Accepted(String),
@@ -64,6 +104,7 @@ pub struct Reporter {
     pub(crate) requests: mpsc::Receiver<SaveRequest>,
     pub(crate) wires: mpsc::Receiver<WireRequest>,
     pub(crate) operations: mpsc::Receiver<OperateRequest>,
+    pub(crate) captures: mpsc::Receiver<CaptureRequest>,
     pub(crate) dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
     pub(crate) shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) addr: std::net::SocketAddr,
@@ -97,6 +138,11 @@ impl Reporter {
     /// Drains pending operate requests without blocking.
     pub fn operations(&self) -> impl Iterator<Item = OperateRequest> + '_ {
         self.operations.try_iter()
+    }
+
+    /// Drains pending frame capture requests without blocking.
+    pub fn captures(&self) -> impl Iterator<Item = CaptureRequest> + '_ {
+        self.captures.try_iter()
     }
 
     /// Returns the bound server socket address.
@@ -374,6 +420,10 @@ pub(crate) const SAVE_REPLY: std::time::Duration =
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) const WIRE_REPLY: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Timeout waiting for a frame capture operation outcome.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const CAPTURE_REPLY: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Server runtime state shared across requests.
 pub(crate) struct State {
     pub(crate) slots: Slots,
@@ -385,6 +435,7 @@ pub(crate) struct State {
     pub(crate) asked: mpsc::SyncSender<SaveRequest>,
     pub(crate) wiring: mpsc::SyncSender<WireRequest>,
     pub(crate) operating: mpsc::SyncSender<OperateRequest>,
+    pub(crate) capturing: mpsc::SyncSender<CaptureRequest>,
     pub(crate) recent: Vec<String>,
     pub(crate) dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }

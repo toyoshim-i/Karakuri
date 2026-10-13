@@ -594,12 +594,7 @@ pub fn format_call_result(
 ) -> String {
     match res {
         Ok(tool_res) => {
-            let text = tool_res
-                .content
-                .iter()
-                .map(|c| c.text.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
+            let text = tool_res.text_content();
 
             if tool_res.is_error {
                 format!("\x1b[31m✖ Error from {tool_name}:\x1b[0m\r\n{text}")
