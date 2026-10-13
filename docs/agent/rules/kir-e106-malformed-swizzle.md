@@ -9,9 +9,9 @@ summary: A vector swizzle expression contains invalid component characters or in
 
 ## Behavior
 
-The swizzle suffix contains characters other than `xyzw` or `rgba`, or exceeds 4 components.
+The swizzle suffix contains characters other than `x`, `y`, `z`, `w`, or specifies more than 4 components. (In `.kir`, swizzles strictly use coordinate components `x`, `y`, `z`, `w`; color letters `r`, `g`, `b`, `a` are not supported).
 
 ## Remediation
 
-- Limit swizzle component letters strictly to coordinates (`x`, `y`, `z`, `w`) or colors (`r`, `g`, `b`, `a`).
-- Do not mix coordinate and color naming in a single swizzle.
+- Limit swizzle component letters strictly to coordinate axes: `x`, `y`, `z`, `w`.
+- Ensure the swizzle length is between 1 and 4 components (e.g. `.x`, `.xy`, `.xyz`, `.xyzw`).

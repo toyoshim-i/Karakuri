@@ -9,9 +9,9 @@ summary: The procedure contains a while loop, which is disallowed in .kir shader
 
 ## Behavior
 
-Dynamic `while` loops are strictly prohibited in `.kir` to ensure execution determinism and prevent unbounded GPU hangs on the render thread.
+Dynamic `while` loops are strictly prohibited in `.kir` to ensure execution determinism and prevent unbounded GPU execution on the render thread.
 
 ## Remediation
 
 - Replace `while` loops with fixed-iteration `for` loops.
-- Use `for (i in 0..N)` where `N` is an integer literal.
+- Use `for i in 0..N { ... }` where `N` is an integer literal constant (note: no parentheses around `i in 0..N`).

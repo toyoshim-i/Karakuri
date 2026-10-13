@@ -9,9 +9,9 @@ summary: Swizzling was attempted on a non-vector type or out-of-bounds component
 
 ## Behavior
 
-Swizzle access was attempted on a scalar float or integer, or accessed components beyond the vector's dimension (e.g. `.z` on a `vec2`).
+Swizzle access was attempted on a non-vector type (such as scalar `float` or `int`), or accessed components beyond the vector's dimensionality (e.g. `.z` on a `vec2`, or `.w` on a `vec3`).
 
 ## Remediation
 
-- Verify that the target expression is a vector.
-- Ensure swizzle components do not exceed the vector dimensionality (`.xy` for `vec2`, `.xyz` for `vec3`).
+- Verify that the target expression is a vector (`vec2`, `vec3`, or `vec4`).
+- Ensure swizzle components do not exceed vector dimensions (`.xy` for `vec2`, `.xyz` for `vec3`, `.xyzw` for `vec4`).

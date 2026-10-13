@@ -9,9 +9,14 @@ summary: Declared topology is incompatible with stage block requirements.
 
 ## Behavior
 
-The procedure structure conflicts with its declared topology. For example, a `fullscreen` topology must NOT declare a `vertex` block.
+The procedure structure conflicts with its declared topology:
+- L1 procedures require a `topology` declaration (`points`, `lines`, `triangles`, `grid`, `ribbon`).
+- Connected topologies (`triangles`, `grid`, `ribbon`) require static sources (they cannot contain `spawn` blocks or `kill()` calls).
+- Fullscreen L4 procedures (no `vertex` block) cannot consume element attributes.
+- In L4 with `lines` topology, the `vertex` block must assign both `clip` and `clip_b`.
 
 ## Remediation
 
-- For `fullscreen` topology, omit the `vertex` block entirely and perform raymarching in `fragment`.
-- For `lines` topology, assign both `clip` and `clip_b` in the `vertex` block.
+- For L1, specify one of `points`, `lines`, `triangles`, `grid`, or `ribbon`.
+- For connected topologies (`triangles`, `grid`, `ribbon`), use static element generation without dynamic spawn.
+- For fullscreen L4 procedures, omit `vertex` and `consumes`.

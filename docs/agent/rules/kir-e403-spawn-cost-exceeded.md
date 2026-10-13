@@ -1,17 +1,17 @@
 ---
 id: KIR-E403-SPAWN-COST-EXCEEDED
 aliases: ["E403", "KIR-E403", "kir-e403-spawn-cost-exceeded"]
-title: Spawn rate budget exceeded
-summary: Element generation rate exceeds memory allocation bandwidth.
+title: Spawn cost budget exceeded
+summary: Spawn block static instruction count exceeds budget.
 ---
 
-# Spawn rate budget exceeded
+# Spawn cost budget exceeded
 
 ## Behavior
 
-The procedure attempts to instantiate more elements per frame than available buffer allocation allows.
+The static instruction count for a `spawn` block exceeds the limit of 16,384 operations per spawn invocation.
 
 ## Remediation
 
-- Reduce particle emission rates.
-- Lower the maximum capacity declared in the `capacity` block.
+- Simplify particle initialization logic inside the `spawn` block.
+- Precompute complex initial distributions or replace multi-step loops with closed-form expressions.

@@ -9,10 +9,10 @@ summary: The procedure passed initial checking but failed native WGSL compilatio
 
 ## Behavior
 
-The `.kir` AST was validated by the frontend checker, but backend shader translation or GPU pipeline creation failed during translation to WGSL.
+The `.kir` AST was validated by the frontend checker, but backend shader translation or GPU pipeline creation failed during translation to WGSL (e.g. Naga validation error or WebGPU pipeline layout error).
 
 ## Remediation
 
-- Review the compiler error message in the diagnostic report.
-- Verify that variable expressions do not produce division by zero or invalid shader constructs.
-- Check that the GPU target supports all features and limits referenced by the procedure.
+- Review the compiler error message and Naga validation details in the diagnostic report.
+- Verify that arithmetic expressions do not generate invalid shader constructs.
+- Check that the target device supports the required texture or buffer bindings.

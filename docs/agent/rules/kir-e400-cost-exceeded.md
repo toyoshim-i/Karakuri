@@ -1,17 +1,18 @@
 ---
 id: KIR-E400-COST-EXCEEDED
 aliases: ["E400", "KIR-E400", "kir-e400-cost-exceeded"]
-title: Overall execution cost budget exceeded
-summary: Estimated static instruction or memory cost exceeds safety thresholds.
+title: Fragment cost budget exceeded
+summary: Estimated static instruction cost in fragment stage exceeds safety thresholds.
 ---
 
-# Overall execution cost budget exceeded
+# Fragment cost budget exceeded
 
 ## Behavior
 
-The static complexity score of the procedure exceeds the maximum instruction threshold, threatening the 60fps render budget.
+The static instruction cost of the `fragment` stage exceeds the allocation limit (512 operations per fragment for geometry passes, 4096 operations for fullscreen passes).
 
 ## Remediation
 
-- Reduce inner loop counts.
-- Simplify arithmetic expressions and avoid redundant transcendental operations.
+- Reduce inner loop counts in fragment shaders.
+- Simplify arithmetic expressions, raymarching step counts, or texture taps.
+- Precompute complex transformations in vertex stage or pass values via parameters.

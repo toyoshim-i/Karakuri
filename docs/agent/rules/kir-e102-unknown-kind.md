@@ -9,9 +9,15 @@ summary: Declared procedure kind is not recognized by the compiler.
 
 ## Behavior
 
-The procedure header specified an invalid `kind` identifier. In `.kir` v0.2, valid procedure kinds are `L1` (particle/geometry generator) and `L4` (visual renderer).
+The procedure header specified an invalid `kind` identifier. Valid procedure kinds are:
+- `L1` (source generator / particle simulation)
+- `L2` (geometry deformer / modifier)
+- `L3` (geometry processor / camera coordinator)
+- `Field` (signed distance / scalar field function)
+- `L4` (visual renderer / rasterizer)
+- `L5` (post-processing effect / screen pass)
 
 ## Remediation
 
-- Change the header declaration to `kind L1` or `kind L4`.
-- Ensure the procedure structure conforms to the declared kind.
+- Change the header declaration to one of the supported kinds (`kind L1`, `kind L2`, `kind L3`, `kind Field`, `kind L4`, or `kind L5`).
+- Ensure the procedure structure and stage blocks conform to the declared kind.

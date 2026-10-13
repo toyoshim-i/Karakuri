@@ -67,6 +67,7 @@ impl<'a> Checker<'a> {
         if name == "id" {
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 "`id` is reserved and cannot be used as a name",
                 "there is no `id` — element identity is `seed`",
@@ -76,6 +77,7 @@ impl<'a> Checker<'a> {
         if Attr::from_name(name).is_some() {
             self.err(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{name}` shadows an attribute name"),
             );
@@ -84,6 +86,7 @@ impl<'a> Checker<'a> {
         if self.uses == Some(name) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{name}` is the geometry this procedure uses"),
                 "a slot and a local share one scope — rename one of them",
@@ -93,6 +96,7 @@ impl<'a> Checker<'a> {
         if self.fields.contains(&name) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{name}` is a field this procedure uses"),
                 "a slot and a local share one scope — rename one of them",
@@ -102,6 +106,7 @@ impl<'a> Checker<'a> {
         if self.camera == Some(name) {
             self.err_hint(
                 Stage::Contract,
+                codes::E309_CAMERA_CONTRACT,
                 span,
                 format!("`{name}` is the camera this procedure draws from"),
                 "a slot and a local share one scope — rename one of them",
@@ -111,6 +116,7 @@ impl<'a> Checker<'a> {
         if self.textures.contains(&name) {
             self.err_hint(
                 Stage::Contract,
+                codes::E308_TEXTURE_CONTRACT,
                 span,
                 format!("`{name}` is a picture this procedure folds in"),
                 "a slot and a local share one scope — rename one of them",
@@ -123,6 +129,7 @@ impl<'a> Checker<'a> {
         {
             self.err_hint(
                 Stage::Contract,
+                codes::E308_TEXTURE_CONTRACT,
                 span,
                 format!("`{name}` is a texture this procedure is handed"),
                 format!(
@@ -136,6 +143,7 @@ impl<'a> Checker<'a> {
         if Ambient::from_name(name).is_some() {
             self.err(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{name}` shadows an ambient value"),
             );
@@ -144,18 +152,25 @@ impl<'a> Checker<'a> {
         if shadows_output(name, self.kind) {
             self.err(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{name}` shadows a stage output name"),
             );
             return;
         }
         if self.params.contains_key(name) {
-            self.err(Stage::Contract, span, format!("`{name}` shadows a param"));
+            self.err(
+                Stage::Contract,
+                codes::E101_UNDECLARED_PARAM,
+                span,
+                format!("`{name}` shadows a param"),
+            );
             return;
         }
         if self.scope.lookup(name).is_some() {
             self.err(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{name}` shadows another local"),
             );
@@ -169,6 +184,7 @@ impl<'a> Checker<'a> {
         if self.params.contains_key(name) {
             self.err(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!("cannot assign to param `{name}`; params are read-only"),
             );
@@ -210,6 +226,7 @@ impl<'a> Checker<'a> {
                 };
                 self.err_hint(
                     Stage::Contract,
+                    codes::E300_CONTRACT,
                     span,
                     format!("attribute `{name}` is not writable here"),
                     hint,
@@ -229,6 +246,7 @@ impl<'a> Checker<'a> {
         if Ambient::from_name(name).is_some() {
             self.err(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!("cannot assign to `{name}`; it is an ambient value"),
             );
@@ -240,6 +258,7 @@ impl<'a> Checker<'a> {
             if self.block != Some(owner) {
                 self.err_hint(
                     Stage::Contract,
+                    codes::E300_CONTRACT,
                     span,
                     format!("`{name}` belongs to the `{}` block", owner.name()),
                     format!("write `{name}` inside `{}`, not here", owner.name()),
@@ -252,6 +271,7 @@ impl<'a> Checker<'a> {
         if name == OLD_POINT_SIZE {
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{OLD_POINT_SIZE}` is now spelled `point_rate`"),
                 POINT_RATE_HINT.to_string(),
@@ -260,6 +280,7 @@ impl<'a> Checker<'a> {
         }
         self.err_hint(
             Stage::Type,
+            codes::E201_UNDECLARED_NAME,
             span,
             format!("assigning to `{name}`, which was never declared"),
             "assigning to a name that was never declared is an error, not a declaration — \
@@ -283,6 +304,7 @@ impl<'a> Checker<'a> {
                 TargetRes::Attr(_) => {
                     self.err_hint(
                         Stage::Type,
+                        codes::E200_TYPE,
                         span,
                         format!("compound assignment is not allowed on attribute `{target}`"),
                         format!(
@@ -296,6 +318,7 @@ impl<'a> Checker<'a> {
                 TargetRes::Output(_) => {
                     self.err(
                         Stage::Type,
+                        codes::E200_TYPE,
                         span,
                         format!("compound assignment is not allowed on stage output `{target}`"),
                     );
@@ -311,6 +334,7 @@ impl<'a> Checker<'a> {
                 if !mutable {
                     self.err_hint(
                         Stage::Type,
+                        codes::E200_TYPE,
                         span,
                         format!("cannot assign to `{name}`; `let` bindings are immutable"),
                         "declare it with `var` instead if it needs to change",
@@ -328,6 +352,7 @@ impl<'a> Checker<'a> {
                 if final_v.ty != ty {
                     self.err(
                         Stage::Type,
+                        codes::E203_TYPE_MISMATCH,
                         span,
                         format!(
                             "cannot assign `{}` to `{name}`, which has type `{}`",
@@ -348,6 +373,7 @@ impl<'a> Checker<'a> {
                 if value_t.ty != attr.ty() {
                     self.err(
                         Stage::Type,
+                        codes::E203_TYPE_MISMATCH,
                         span,
                         format!(
                             "cannot assign `{}` to attribute `{}`, which has type `{}`",
@@ -369,6 +395,7 @@ impl<'a> Checker<'a> {
                 if value_t.ty != output.ty() {
                     self.err(
                         Stage::Type,
+                        codes::E203_TYPE_MISMATCH,
                         span,
                         format!(
                             "cannot assign `{}` to `{}`, which has type `{}`",
@@ -394,6 +421,7 @@ impl<'a> Checker<'a> {
             if c.ty != Ty::Bool {
                 self.err(
                     Stage::Type,
+                    codes::E203_TYPE_MISMATCH,
                     c.span,
                     format!("`if` condition must be `bool`, found `{}`", c.ty.name()),
                 );
@@ -455,6 +483,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 "`kill()` is only legal in an L1 `element` block",
                 hint,

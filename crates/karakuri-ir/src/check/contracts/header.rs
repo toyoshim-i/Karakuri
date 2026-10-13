@@ -4,12 +4,17 @@ use std::collections::HashSet;
 
 use super::{check_slot_names, kind_name};
 use crate::ast::{BlockKind, Kind, Proc, SlotTy, Topology, Ty};
-use crate::error::IrError;
+use crate::error::{codes, IrError};
 use crate::span::Span;
 
 /// Creates an error for invalid `uses … : Texture` declarations on non-L5 procedures.
 pub(crate) fn texture_slot_is_l5s(span: Span, why: &str) -> IrError {
-    IrError::contract(span, "`uses … : Texture` is L5 only").with_hint(format!(
+    IrError::contract(
+        codes::E308_TEXTURE_CONTRACT,
+        span,
+        "`uses … : Texture` is L5 only",
+    )
+    .with_hint(format!(
         "remove it, or change `kind` to `L5`: {why}. A Texture slot is one input of a nested \
          L5, bound by an `edge` and read with `texel` and `tap`"
     ))
@@ -20,12 +25,14 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         Kind::L1 => {
             match &proc.capacity {
                 None => errors.push(IrError::contract(
+                    codes::E306_CAPACITY_CONTRACT,
                     proc.span,
                     "L1 procedures require a `capacity` declaration",
                 )),
                 // Capacity minimum must be >= 1 for compaction pyramid allocation.
                 Some(cap) if cap.min == 0 => errors.push(
                     IrError::contract(
+                        codes::E306_CAPACITY_CONTRACT,
                         cap.span,
                         "`capacity` minimum must be at least 1; a Set of no elements has nothing to run",
                     )
@@ -35,16 +42,21 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             match proc.topology {
                 None => errors.push(IrError::contract(
+                    codes::E305_TOPOLOGY_CONTRACT,
                     proc.span,
                     "L1 procedures require a `topology` declaration",
                 )),
                 // Fullscreen topology applies to renderers, not geometry generators.
                 Some(Topology::Fullscreen) => errors.push(
-                    IrError::contract(proc.span, "`fullscreen` describes a renderer, not geometry")
-                        .with_hint(
-                            "use `points`, `lines`, `triangles`, `grid`, or `ribbon` here. An L4 draws the whole frame by \
-                         having no `vertex` block, which is the only way to say it",
-                        ),
+                    IrError::contract(
+                        codes::E305_TOPOLOGY_CONTRACT,
+                        proc.span,
+                        "`fullscreen` describes a renderer, not geometry",
+                    )
+                    .with_hint(
+                        "use `points`, `lines`, `triangles`, `grid`, or `ribbon` here. An L4 draws the whole frame by \
+                     having no `vertex` block, which is the only way to say it",
+                    ),
                 ),
                 Some(top) if top.is_shared() => {
                     let has_spawn = proc.block(BlockKind::Spawn).is_some();
@@ -52,6 +64,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     if has_spawn || has_kill {
                         errors.push(
                             IrError::contract(
+                                codes::E305_TOPOLOGY_CONTRACT,
                                 proc.span,
                                 format!("`topology {}` is legal only on static sources", top.name()),
                             )
@@ -67,13 +80,18 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.blend.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`blend` is L4 only")
+                    IrError::contract(codes::E304_BLEND_CONTRACT, proc.span, "`blend` is L4 only")
                         .with_hint("remove `blend`, or change `kind` to `L4`"),
                 );
             }
             if let Some(amp) = &proc.amplify {
                 errors.push(
-                    IrError::contract(amp.span, "`amplify` is L2 only").with_hint(
+                    IrError::contract(
+                        codes::E303_AMPLIFY_CONTRACT,
+                        amp.span,
+                        "`amplify` is L2 only",
+                    )
+                    .with_hint(
                         "remove `amplify`: how many elements an L1 makes is `capacity`, \
                             which a Set turns. Amplification is a *multiplier on what reaches \
                             it*, which is a thing only a stage with an input can be",
@@ -83,7 +101,11 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             for u in &proc.uses {
                 match u.ty {
                     SlotTy::Geometry => {
-                        errors.push(IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's").with_hint(
+                        errors.push(IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "`uses … : Geometry` is L2's and L3's",
+                        ).with_hint(
                             "remove it: an L1 makes geometry rather than taking any, so there \
                              is nothing for a second one to be blended with",
                         ))
@@ -92,7 +114,11 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     SlotTy::Field => {}
                     // Cameras are permitted on L4 renderers only.
                     SlotTy::Camera => errors.push(
-                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                        IrError::contract(
+                            codes::E309_CAMERA_CONTRACT,
+                            u.span,
+                            "`uses … : Camera` is L4 only",
+                        ).with_hint(
                             "remove it: an L1 makes geometry and draws nothing, so there is \
                              no projection here for a camera to be the origin of",
                         ),
@@ -108,6 +134,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
                 errors.push(IrError::contract(
+                    codes::E300_CONTRACT,
                     proc.span,
                     "L1 procedures require an `element` block",
                 ));
@@ -117,6 +144,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 match proc.spawn_rate() {
                     None => errors.push(
                         IrError::contract(
+                            codes::E101_UNDECLARED_PARAM,
                             spawn.span,
                             "a `spawn` block requires a `spawn_rate` param",
                         )
@@ -128,6 +156,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                     Some(p) if p.ty != Ty::Float => errors.push(
                         IrError::contract(
+                            codes::E200_TYPE,
                             p.span,
                             format!("`spawn_rate` must be a `float`, not a `{}`", p.ty.name()),
                         )
@@ -141,7 +170,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         Kind::L2 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
-                    IrError::contract(cap.span, "`capacity` is L1 only").with_hint(
+                    IrError::contract(
+                        codes::E306_CAPACITY_CONTRACT,
+                        cap.span,
+                        "`capacity` is L1 only",
+                    )
+                    .with_hint(
                         "remove `capacity`: an L2 gets as many elements as reach it, and \
                              how many that is belongs to the L1 that made them",
                     ),
@@ -149,7 +183,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.topology.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`topology` is L1's").with_hint(
+                    IrError::contract(
+                        codes::E305_TOPOLOGY_CONTRACT,
+                        proc.span,
+                        "`topology` is L1's",
+                    )
+                    .with_hint(
                         "remove `topology`: a deformation moves elements about and does \
                              not turn a cloud into strands, so what the geometry reads as \
                              stays what the L1 declared",
@@ -158,7 +197,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.blend.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`blend` is L4 only")
+                    IrError::contract(codes::E304_BLEND_CONTRACT, proc.span, "`blend` is L4 only")
                         .with_hint("remove `blend`: an L2 rewrites geometry and draws nothing"),
                 );
             }
@@ -167,6 +206,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 if p.ty != Ty::Float {
                     errors.push(
                         IrError::contract(
+                            codes::E200_TYPE,
                             p.span,
                             format!("`weight` must be a `float`, not a `{}`", p.ty.name()),
                         )
@@ -179,8 +219,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if !proc.blocks.iter().any(|b| b.kind == BlockKind::Deform) {
                 errors.push(
-                    IrError::contract(proc.span, "L2 procedures require a `deform` block")
-                        .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
+                    IrError::contract(
+                        codes::E300_CONTRACT,
+                        proc.span,
+                        "L2 procedures require a `deform` block",
+                    )
+                    .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
                 );
             }
             // Geometry slot usage and amplification are mutually exclusive on L2.
@@ -189,7 +233,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 &proc.amplify,
             ) {
                 errors.push(
-                    IrError::contract(u.span, "`uses` and `amplify` cannot both apply").with_hint(
+                    IrError::contract(
+                        codes::E303_AMPLIFY_CONTRACT,
+                        u.span,
+                        "`uses` and `amplify` cannot both apply",
+                    )
+                    .with_hint(
                         "split them: a node that takes a second geometry, and a node below \
                              it that amplifies what the first one produced",
                     ),
@@ -199,7 +248,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // Camera slots are L4 only; deformation nodes operate in world space.
             for u in proc.uses.iter().filter(|u| u.ty == SlotTy::Camera) {
                 errors.push(
-                    IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                    IrError::contract(
+                        codes::E309_CAMERA_CONTRACT,
+                        u.span,
+                        "`uses … : Camera` is L4 only",
+                    )
+                    .with_hint(
                         "remove it: an L2 rewrites geometry in world space, and where that \
                          geometry is watched from is the renderer's question — one geometry \
                          may be drawn from two cameras at once",
@@ -218,13 +272,16 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             if let Some(first) = geometries.next() {
                 for u in geometries {
                     errors.push(
-                        IrError::contract(u.span, "a node takes one second geometry").with_hint(
-                            format!(
-                                "`{}` is already declared. Chain two nodes instead — each takes \
+                        IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "a node takes one second geometry",
+                        )
+                        .with_hint(format!(
+                            "`{}` is already declared. Chain two nodes instead — each takes \
                                  one and passes the result down",
-                                first.name
-                            ),
-                        ),
+                            first.name
+                        )),
                     );
                 }
             }
@@ -247,14 +304,19 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         )
                     };
                     errors.push(
-                        IrError::contract(amp.span, format!("`amplify` must be at least 2; {why}"))
-                            .with_hint(hint),
+                        IrError::contract(
+                            codes::E303_AMPLIFY_CONTRACT,
+                            amp.span,
+                            format!("`amplify` must be at least 2; {why}"),
+                        )
+                        .with_hint(hint),
                     );
                 }
                 const MAX_AMPLIFY: u32 = 1024;
                 if amp.factor > MAX_AMPLIFY {
                     errors.push(
                         IrError::contract(
+                            codes::E303_AMPLIFY_CONTRACT,
                             amp.span,
                             format!(
                                 "`amplify {}` is above the ceiling of {MAX_AMPLIFY}",
@@ -276,7 +338,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         Kind::L3 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
-                    IrError::contract(cap.span, "`capacity` is L1 only").with_hint(
+                    IrError::contract(
+                        codes::E306_CAPACITY_CONTRACT,
+                        cap.span,
+                        "`capacity` is L1 only",
+                    )
+                    .with_hint(
                         "remove `capacity`: an L3 produces one viewpoint per frame and \
                              has no elements of its own",
                     ),
@@ -284,20 +351,28 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.topology.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`topology` is L1's")
-                        .with_hint("remove `topology`: an L3 is a viewpoint, not geometry"),
+                    IrError::contract(
+                        codes::E305_TOPOLOGY_CONTRACT,
+                        proc.span,
+                        "`topology` is L1's",
+                    )
+                    .with_hint("remove `topology`: an L3 is a viewpoint, not geometry"),
                 );
             }
             if proc.blend.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`blend` is L4 only")
+                    IrError::contract(codes::E304_BLEND_CONTRACT, proc.span, "`blend` is L4 only")
                         .with_hint("remove `blend`: an L3 draws nothing"),
                 );
             }
             if let Some(amp) = &proc.amplify {
                 errors.push(
-                    IrError::contract(amp.span, "`amplify` is L2 only")
-                        .with_hint("remove `amplify`: an L3 produces one viewpoint, not elements"),
+                    IrError::contract(
+                        codes::E303_AMPLIFY_CONTRACT,
+                        amp.span,
+                        "`amplify` is L2 only",
+                    )
+                    .with_hint("remove `amplify`: an L3 produces one viewpoint, not elements"),
                 );
             }
             let mut geometries = proc.uses.iter().filter(|u| u.ty == SlotTy::Geometry);
@@ -305,12 +380,15 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             if let Some(first) = subject {
                 for u in geometries {
                     errors.push(
-                        IrError::contract(u.span, "a camera reads one geometry").with_hint(
-                            format!(
-                                "`{}` is already declared. Reading a second source is not built",
-                                first.name
-                            ),
-                        ),
+                        IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "a camera reads one geometry",
+                        )
+                        .with_hint(format!(
+                            "`{}` is already declared. Reading a second source is not built",
+                            first.name
+                        )),
                     );
                 }
             }
@@ -324,7 +402,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     SlotTy::Field => {}
                     // L3 produces a camera viewpoint and cannot bind camera slots.
                     SlotTy::Camera => errors.push(
-                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                        IrError::contract(codes::E309_CAMERA_CONTRACT, u.span, "`uses … : Camera` is L4 only").with_hint(
                             "remove it: an L3 *is* a camera — it writes `eye` and `target`, \
                              and `clip`, `eye` and `ray` are derived from what it writes",
                         ),
@@ -332,6 +410,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // L3 viewpoints are independent of source element geometries.
                     SlotTy::Source => errors.push(
                         IrError::contract(
+                            codes::E302_USES_CONTRACT,
                             u.span,
                             "`uses … : Source` is for masking, and an L3 masks nothing",
                         )
@@ -350,28 +429,40 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if !proc.emit.is_empty() {
                 errors.push(
-                    IrError::contract(proc.span, "`emit` is for procedures that write elements")
-                        .with_hint(
-                            "remove `emit`: what an L3 produces is a camera, and the six values \
+                    IrError::contract(
+                        codes::E300_CONTRACT,
+                        proc.span,
+                        "`emit` is for procedures that write elements",
+                    )
+                    .with_hint(
+                        "remove `emit`: what an L3 produces is a camera, and the six values \
                              it writes are named by the `camera` block rather than declared",
-                        ),
+                    ),
                 );
             }
             // An L3's `consumes` lists what it reads through its geometry slot.
             if !proc.consumes.is_empty() && subject.is_none() {
                 errors.push(
-                    IrError::contract(proc.span, "an L3 consumes only through a geometry slot")
-                        .with_hint(
-                            "declare `uses subject : Geometry` and read `subject[0u].position`: \
+                    IrError::contract(
+                        codes::E302_USES_CONTRACT,
+                        proc.span,
+                        "an L3 consumes only through a geometry slot",
+                    )
+                    .with_hint(
+                        "declare `uses subject : Geometry` and read `subject[0u].position`: \
                              a camera has no element of its own, so `consumes` names what it \
                              reads from the geometry it follows",
-                        ),
+                    ),
                 );
             }
             if !proc.blocks.iter().any(|b| b.kind == BlockKind::Camera) {
                 errors.push(
-                    IrError::contract(proc.span, "L3 procedures require a `camera` block")
-                        .with_hint("add `camera { … }`: it is the whole of what an L3 does"),
+                    IrError::contract(
+                        codes::E309_CAMERA_CONTRACT,
+                        proc.span,
+                        "L3 procedures require a `camera` block",
+                    )
+                    .with_hint("add `camera { … }`: it is the whole of what an L3 does"),
                 );
             }
         }
@@ -396,8 +487,15 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 ),
             ] {
                 if present {
+                    let code = match what {
+                        "capacity" => codes::E306_CAPACITY_CONTRACT,
+                        "topology" => codes::E305_TOPOLOGY_CONTRACT,
+                        "blend" => codes::E304_BLEND_CONTRACT,
+                        "amplify" => codes::E303_AMPLIFY_CONTRACT,
+                        _ => codes::E300_CONTRACT,
+                    };
                     errors.push(
-                        IrError::contract(proc.span, format!("`{what}` is not a field's"))
+                        IrError::contract(code, proc.span, format!("`{what}` is not a field's"))
                             .with_hint(format!("remove `{what}`: {hint}")),
                     );
                 }
@@ -406,16 +504,25 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             for u in &proc.uses {
                 match u.ty {
                     SlotTy::Geometry => errors.push(
-                        IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's")
-                            .with_hint(
-                                "remove it: a field is a function of space — it is handed `point` \
+                        IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "`uses … : Geometry` is L2's and L3's",
+                        )
+                        .with_hint(
+                            "remove it: a field is a function of space — it is handed `point` \
                              and returns a distance, and there are no elements here for a \
                              second geometry to be read beside",
-                            ),
+                        ),
                     ),
                     // Fields cannot bind other fields to prevent recursive calls.
                     SlotTy::Field => errors.push(
-                        IrError::contract(u.span, "a field cannot take a field").with_hint(
+                        IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "a field cannot take a field",
+                        )
+                        .with_hint(
                             "inline what you wanted from it — a field is the one procedure \
                              whose whole body is an expression over `point`, and one bound to \
                              itself is a function calling itself",
@@ -423,7 +530,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                     // Field distance functions are camera-invariant.
                     SlotTy::Camera => errors.push(
-                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                        IrError::contract(
+                            codes::E309_CAMERA_CONTRACT,
+                            u.span,
+                            "`uses … : Camera` is L4 only",
+                        )
+                        .with_hint(
                             "remove it: a field is handed `point` and returns a distance, and \
                               the same point has the same distance from wherever it is seen",
                         ),
@@ -431,6 +543,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // Field functions are independent of source geometry identities.
                     SlotTy::Source => errors.push(
                         IrError::contract(
+                            codes::E302_USES_CONTRACT,
                             u.span,
                             "`uses … : Source` is for masking, and a field masks nothing",
                         )
@@ -450,6 +563,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
                 errors.push(
                     IrError::contract(
+                        codes::E300_CONTRACT,
                         proc.span,
                         "`emit` and `consumes` are about elements, and a field has none",
                     )
@@ -462,37 +576,55 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if !proc.blocks.iter().any(|b| b.kind == BlockKind::Field) {
                 errors.push(
-                    IrError::contract(proc.span, "Field procedures require a `field` block")
-                        .with_hint("add `field { … }`: it is the whole of what a field does"),
+                    IrError::contract(
+                        codes::E300_CONTRACT,
+                        proc.span,
+                        "Field procedures require a `field` block",
+                    )
+                    .with_hint("add `field { … }`: it is the whole of what a field does"),
                 );
             }
         }
         Kind::L4 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
-                    IrError::contract(cap.span, "`capacity` is L1 only")
-                        .with_hint("remove `capacity`, or change `kind` to `L1`"),
+                    IrError::contract(
+                        codes::E306_CAPACITY_CONTRACT,
+                        cap.span,
+                        "`capacity` is L1 only",
+                    )
+                    .with_hint("remove `capacity`, or change `kind` to `L1`"),
                 );
             }
             if proc.topology.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`topology` is declared on L1 and inferred on L4")
-                        .with_hint(
-                            "remove `topology`: an L4 draws segments by assigning `clip_b` in \
+                    IrError::contract(
+                        codes::E305_TOPOLOGY_CONTRACT,
+                        proc.span,
+                        "`topology` is declared on L1 and inferred on L4",
+                    )
+                    .with_hint(
+                        "remove `topology`: an L4 draws segments by assigning `clip_b` in \
                              `vertex` and sprites by not assigning it, so declaring it here \
                              would be a second place for the same fact to be wrong",
-                        ),
+                    ),
                 );
             }
             if proc.blend.is_none() {
                 errors.push(IrError::contract(
+                    codes::E304_BLEND_CONTRACT,
                     proc.span,
                     "L4 procedures require a `blend` declaration",
                 ));
             }
             if let Some(amp) = &proc.amplify {
                 errors.push(
-                    IrError::contract(amp.span, "`amplify` is L2 only").with_hint(
+                    IrError::contract(
+                        codes::E303_AMPLIFY_CONTRACT,
+                        amp.span,
+                        "`amplify` is L2 only",
+                    )
+                    .with_hint(
                         "remove `amplify`: a renderer draws what reaches it and makes no \
                             elements. Several copies of one element is a deformation that \
                             amplifies, above the renderer rather than inside it",
@@ -502,7 +634,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             for u in &proc.uses {
                 match u.ty {
                     SlotTy::Geometry => {
-                        errors.push(IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's").with_hint(
+                        errors.push(IrError::contract(codes::E302_USES_CONTRACT, u.span, "`uses … : Geometry` is L2's and L3's").with_hint(
                             "remove it: a renderer draws what reaches it. Taking a second \
                              geometry is a deformation, above the renderer rather than inside it",
                         ))
@@ -528,13 +660,16 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             if let Some(first) = cameras.next() {
                 for u in cameras {
                     errors.push(
-                        IrError::contract(u.span, "a renderer draws from one camera").with_hint(
-                            format!(
-                                "`{}` is already declared. Two viewpoints in one frame are two \
+                        IrError::contract(
+                            codes::E309_CAMERA_CONTRACT,
+                            u.span,
+                            "a renderer draws from one camera",
+                        )
+                        .with_hint(format!(
+                            "`{}` is already declared. Two viewpoints in one frame are two \
                                  renderers, each bound to its own camera",
-                                first.name
-                            ),
-                        ),
+                            first.name
+                        )),
                     );
                 }
             }
@@ -543,6 +678,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             {
                 errors.push(
                     IrError::contract(
+                        codes::E305_TOPOLOGY_CONTRACT,
                         proc.span,
                         "an L4 with no `vertex` block draws the whole frame and cannot \
                          consume attributes",
@@ -556,6 +692,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Fragment) {
                 errors.push(IrError::contract(
+                    codes::E310_MISSING_OUTPUT,
                     proc.span,
                     "L4 procedures require a `fragment` block",
                 ));
@@ -563,7 +700,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // Renderers draw pixels and cannot emit element attributes.
             if let Some((_, span)) = proc.emit.first() {
                 errors.push(
-                    IrError::contract(*span, "`emit` is not an L4 declaration").with_hint(
+                    IrError::contract(
+                        codes::E300_CONTRACT,
+                        *span,
+                        "`emit` is not an L4 declaration",
+                    )
+                    .with_hint(
                         "a renderer draws what reaches it and stores nothing: it has no \
                              element buffer to emit into. `consumes` is how an L4 says what \
                              it reads",
@@ -600,8 +742,15 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 ),
             ] {
                 if present {
+                    let code = match what {
+                        "capacity" => codes::E306_CAPACITY_CONTRACT,
+                        "topology" => codes::E305_TOPOLOGY_CONTRACT,
+                        "blend" => codes::E304_BLEND_CONTRACT,
+                        "amplify" => codes::E303_AMPLIFY_CONTRACT,
+                        _ => codes::E300_CONTRACT,
+                    };
                     errors.push(
-                        IrError::contract(proc.span, format!("`{what}` is not an L5's"))
+                        IrError::contract(code, proc.span, format!("`{what}` is not an L5's"))
                             .with_hint(format!("remove `{what}`: {hint}")),
                     );
                 }
@@ -612,15 +761,24 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     SlotTy::Texture => {}
                     // L5 processes frame textures and cannot access element-level slots.
                     SlotTy::Geometry => errors.push(
-                        IrError::contract(u.span, "`uses … : Geometry` is L2's and L3's")
-                            .with_hint(
-                                "remove it: an L5 is handed a picture, and the elements that drew \
+                        IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "`uses … : Geometry` is L2's and L3's",
+                        )
+                        .with_hint(
+                            "remove it: an L5 is handed a picture, and the elements that drew \
                              it are no longer in front of it. Fold another picture in with \
                              `uses <name> : Texture` instead",
-                            ),
+                        ),
                     ),
                     SlotTy::Camera => errors.push(
-                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                        IrError::contract(
+                            codes::E309_CAMERA_CONTRACT,
+                            u.span,
+                            "`uses … : Camera` is L4 only",
+                        )
+                        .with_hint(
                             "remove it: the frame an L5 is handed may hold several decks\u{2019} \
                              material seen from several cameras, so there is no one viewpoint \
                              for it to name",
@@ -628,6 +786,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                     SlotTy::Source => errors.push(
                         IrError::contract(
+                            codes::E302_USES_CONTRACT,
                             u.span,
                             "`uses … : Source` is for masking, and an L5 masks nothing",
                         )
@@ -639,8 +798,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                     // L5 operates on screen coordinates rather than 3D spatial points.
                     SlotTy::Field => errors.push(
-                        IrError::contract(u.span, "`uses … : Field` is not an L5\u{2019}s")
-                            .with_hint(
+                        IrError::contract(
+                            codes::E302_USES_CONTRACT,
+                            u.span,
+                            "`uses … : Field` is not an L5\u{2019}s",
+                        )
+                        .with_hint(
                             "remove it: a field is a distance at a *point in space*, and an L5 \
                              has only a frame coordinate — the viewpoint that would turn one \
                              into the other is exactly what an L5 has no way to name. March \
@@ -652,6 +815,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
                 errors.push(
                     IrError::contract(
+                        codes::E300_CONTRACT,
                         proc.span,
                         "`emit` and `consumes` are about elements, and an L5 has none",
                     )
@@ -664,8 +828,12 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if !proc.blocks.iter().any(|b| b.kind == BlockKind::Frame) {
                 errors.push(
-                    IrError::contract(proc.span, "L5 procedures require a `frame` block")
-                        .with_hint("add `frame { … }`: it is the whole of what an L5 does"),
+                    IrError::contract(
+                        codes::E300_CONTRACT,
+                        proc.span,
+                        "L5 procedures require a `frame` block",
+                    )
+                    .with_hint("add `frame { … }`: it is the whole of what an L5 does"),
                 );
             }
         }
@@ -676,6 +844,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         if proc.kind != Kind::L5 {
             errors.push(
                 IrError::contract(
+                    codes::E308_TEXTURE_CONTRACT,
                     r.span,
                     format!(
                         "`retains` is L5 only, and this is {} {}",
@@ -701,6 +870,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         if block.kind.kind() != proc.kind {
             errors.push(
                 IrError::contract(
+                    codes::E300_LAYER_MISMATCH,
                     block.span,
                     format!(
                         "a `{}` block is not valid in a `{}` procedure",
@@ -721,6 +891,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
     for block in &proc.blocks {
         if !seen.insert(block.kind) {
             errors.push(IrError::contract(
+                codes::E300_CONTRACT,
                 block.span,
                 format!("a `{}` block is declared more than once", block.kind.name()),
             ));

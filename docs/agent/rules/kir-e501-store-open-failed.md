@@ -9,9 +9,9 @@ summary: Unable to open or access the persistent artifact store directory.
 
 ## Behavior
 
-The runtime store directory path cannot be opened. The path may not exist or lacks read/write filesystem permissions.
+The runtime store directory path cannot be opened or initialized. The path may not exist or lacks read/write filesystem permissions.
 
 ## Remediation
 
-- Check the store directory path provided in command-line arguments.
-- Ensure the target directory exists and the process has write permissions.
+- Check the store directory path provided in command-line arguments or environment configuration.
+- Ensure the target directory exists and the host process has read and write permissions.

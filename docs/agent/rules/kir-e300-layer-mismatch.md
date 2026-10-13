@@ -9,9 +9,9 @@ summary: Procedure kind does not match the target slot layer.
 
 ## Behavior
 
-An L1 procedure was written to an L4 slot layer, or an L4 procedure was written to an L1 slot layer. Layers are not interchangeable.
+A procedure kind does not match the target slot where it is installed (e.g. installing an L1 generator procedure into an L4 render slot, or vice versa), or an internal stage block belongs to a different procedure kind.
 
 ## Remediation
 
-- Update the `kind` declaration inside the `.kir` file to match the target layer.
-- Alternatively, specify the matching layer (`layer: "L1"` or `layer: "L4"`) in the `write_procedure` call.
+- Update the `kind` declaration inside the `.kir` file to match the target slot kind.
+- In MCP operations, install procedures into matching slots (`write_procedure` targeting the correct slot ID).

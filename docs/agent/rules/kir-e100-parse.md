@@ -13,6 +13,7 @@ The source code violates `.kir` grammar rules. The parser encountered an unexpec
 
 ## Remediation
 
-- Inspect the reported line and column numbers in the diagnostic output.
-- Verify that statements terminate with semicolons `;`.
+- Inspect the reported line and column numbers in the diagnostic report.
+- Verify that statements inside blocks terminate with semicolons `;`.
+- Note that header declarations (`kind`, `topology`, `blend`, `capacity`, `param`, `consumes`, `uses`, `retains`) do not use trailing semicolons.
 - Consult `karakuri://doc/ir-spec` for the complete language grammar specification.

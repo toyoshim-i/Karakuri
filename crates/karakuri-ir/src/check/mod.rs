@@ -14,7 +14,7 @@ pub(crate) use coverage::*;
 use std::collections::HashSet;
 
 use crate::ast::{Attr, BlockKind, Kind, Proc, SlotTy, Topology};
-use crate::error::{IrError, IrResult};
+use crate::error::{codes, IrError, IrResult};
 use crate::typed::{Checked, InputPort, Slot, TBlock};
 
 /// Resolve names, type every expression, and enforce the contracts.
@@ -91,6 +91,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             if !covered.contains(&key) {
                 errors.push(
                     IrError::contract(
+                        codes::E310_MISSING_OUTPUT,
                         block.span,
                         format!(
                             "`{}` is not assigned on every path through `{}`",

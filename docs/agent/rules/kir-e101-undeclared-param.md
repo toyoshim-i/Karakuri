@@ -1,16 +1,20 @@
 ---
 id: KIR-E101-UNDECLARED-PARAM
 aliases: ["E101-UNDECLARED-PARAM", "kir-e101-undeclared-param"]
-title: Undeclared parameter in contract
-summary: Contract or header references a parameter not declared in the procedure body.
+title: Parameter contract or scoping violation
+summary: Missing required parameter (such as spawn_rate), duplicate parameter declaration, or parameter name collision.
 ---
 
-# Undeclared parameter in contract
+# Parameter contract or scoping violation
 
 ## Behavior
 
-A contract attribute or capacity expression references a parameter name that was never declared in a `param` statement.
+A parameter declaration violates interface contracts or scoping rules:
+- An L1 procedure declares a `spawn` block but does not declare the mandatory `param spawn_rate : float [min, max] = default` in its header.
+- A parameter is declared more than once in the header.
+- A declared slot (`uses`) or local binding (`let`) shadows a declared parameter name.
 
 ## Remediation
 
-- Declare the parameter in the procedure body: `param <name> : <type> [<min>, <max>] = <default>;`.
+- If using a `spawn` block, declare `param spawn_rate : float [0.0, 40000.0] = 8000.0` in the header.
+- Ensure each parameter name is unique and does not collide with slot or variable names.

@@ -1,5 +1,6 @@
 use super::Parser;
 use crate::ast::*;
+use crate::error::codes;
 use crate::lexer::TokKind;
 
 impl Parser {
@@ -11,6 +12,16 @@ impl Parser {
                 "if" => return Some(self.parse_if()),
                 "for" => return self.parse_for(),
                 "kill" => return self.parse_kill(),
+                "while" => {
+                    let sp = self.advance().span;
+                    self.error_with_code_and_hint(
+                        codes::E107_WHILE_NOT_SUPPORTED,
+                        sp,
+                        "`while` loops are not supported in .kir",
+                        "use a fixed-iteration `for` loop instead, e.g. `for i in 0..N`",
+                    );
+                    return None;
+                }
                 _ => {
                     if self.is_assignment_start() {
                         return self.parse_assign();
@@ -271,7 +282,8 @@ impl Parser {
                 _ => {
                     let sp = self.peek().span;
                     let found = self.peek().kind.describe();
-                    self.error(
+                    self.error_with_code(
+                        codes::E106_MALFORMED_SWIZZLE,
                         sp,
                         format!("expected swizzle components after `.`, found {found}"),
                     );

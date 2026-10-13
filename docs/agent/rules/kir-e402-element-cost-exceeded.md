@@ -9,9 +9,10 @@ summary: Vertex or element processing instruction count exceeds budget.
 
 ## Behavior
 
-The element update kernel contains too many instructions per particle/element.
+The static instruction count for an `element`, `deform`, or `vertex` block exceeds the limit of 4096 operations per element.
 
 ## Remediation
 
-- Simplify noise calculations (e.g. fewer octaves in fbm).
-- Replace expensive trigonometric calls with approximations or direct coordinates.
+- Simplify arithmetic and transcendental functions (e.g. fewer noise octaves or trigonometric calls).
+- Reduce loop iteration counts in element and vertex stages.
+- Split heavy calculations across multiple pipeline stages (e.g. generator followed by modifier).

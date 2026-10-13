@@ -7,7 +7,7 @@ use crate::ast::{
     Ambient, Attr, BlockKind, Kind, Output, Proc, SlotTy, Ty, TEXTURE_HELD, TEXTURE_SRC,
 };
 use crate::builtin::Builtin;
-use crate::error::IrError;
+use crate::error::{codes, IrError};
 use crate::span::Span;
 
 pub(crate) fn kind_name(kind: Kind) -> &'static str {
@@ -49,6 +49,7 @@ pub(crate) fn check_slot_names(proc: &Proc, errors: &mut Vec<IrError>) {
         if proc.kind == Kind::L5 && matches!(u.name.as_str(), TEXTURE_SRC | TEXTURE_HELD) {
             errors.push(
                 IrError::contract(
+                    codes::E308_TEXTURE_CONTRACT,
                     u.name_span,
                     format!("`{}` is a texture an L5 is already handed", u.name),
                 )
@@ -66,19 +67,27 @@ pub(crate) fn check_slot_names(proc: &Proc, errors: &mut Vec<IrError>) {
         }
         if proc.params.iter().any(|p| p.name == u.name) {
             errors.push(
-                IrError::contract(u.name_span, format!("`{}` is already a param", u.name))
-                    .with_hint("a slot and a param share one scope — rename one of them"),
+                IrError::contract(
+                    codes::E101_UNDECLARED_PARAM,
+                    u.name_span,
+                    format!("`{}` is already a param", u.name),
+                )
+                .with_hint("a slot and a param share one scope — rename one of them"),
             );
         }
         // Reject duplicate slot declarations.
         if let Some(first) = proc.uses[..at].iter().find(|p| p.name == u.name) {
             errors.push(
-                IrError::contract(u.name_span, format!("`{}` is already a slot", u.name))
-                    .with_hint(format!(
-                        "it is declared as `{}` above — an edge names a slot, so two of one \
-                         name would be one address for two inputs",
-                        first.ty.name()
-                    )),
+                IrError::contract(
+                    codes::E302_USES_CONTRACT,
+                    u.name_span,
+                    format!("`{}` is already a slot", u.name),
+                )
+                .with_hint(format!(
+                    "it is declared as `{}` above — an edge names a slot, so two of one \
+                     name would be one address for two inputs",
+                    first.ty.name()
+                )),
             );
         }
         // Field slot names must not clash with builtins or type constructors.
@@ -93,6 +102,7 @@ pub(crate) fn check_slot_names(proc: &Proc, errors: &mut Vec<IrError>) {
             if let Some(what) = clashes_with {
                 errors.push(
                     IrError::contract(
+                        codes::E302_USES_CONTRACT,
                         u.name_span,
                         format!("`{}` is {what}, and a Field slot is called", u.name),
                     )
@@ -117,6 +127,7 @@ pub(crate) fn check_reserved(
     if name == "id" {
         errors.push(
             IrError::contract(
+                codes::E300_CONTRACT,
                 span,
                 format!("`id` is reserved and cannot be used as a {kind_of_decl} name"),
             )
@@ -124,16 +135,22 @@ pub(crate) fn check_reserved(
         );
     } else if Attr::from_name(name).is_some() {
         errors.push(
-            IrError::contract(span, format!("`{name}` shadows an attribute name"))
-                .with_hint("pick a different name — attributes and params share one scope"),
+            IrError::contract(
+                codes::E300_CONTRACT,
+                span,
+                format!("`{name}` shadows an attribute name"),
+            )
+            .with_hint("pick a different name — attributes and params share one scope"),
         );
     } else if Ambient::from_name(name).is_some() {
         errors.push(IrError::contract(
+            codes::E300_CONTRACT,
             span,
             format!("`{name}` shadows an ambient value"),
         ));
     } else if shadows_output(name, kind) {
         errors.push(IrError::contract(
+            codes::E300_CONTRACT,
             span,
             format!("`{name}` shadows a stage output name"),
         ));
@@ -148,6 +165,7 @@ pub(crate) fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<St
     for p in &proc.params {
         if !matches!(p.ty, Ty::Float | Ty::Vec2 | Ty::Vec3) {
             errors.push(IrError::ty(
+                codes::E200_TYPE,
                 p.span,
                 format!(
                     "param `{}` has type `{}`; params may only be `float`, `vec2`, or `vec3`",
@@ -159,6 +177,7 @@ pub(crate) fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<St
         check_reserved(&p.name, p.span, proc.kind, "param", errors);
         if map.contains_key(&p.name) {
             errors.push(IrError::contract(
+                codes::E101_UNDECLARED_PARAM,
                 p.span,
                 format!("param `{}` is declared more than once", p.name),
             ));
@@ -186,6 +205,7 @@ pub(crate) fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<St
         if let Some(v) = checker.check_expr(&p.default) {
             if v.ty != p.ty {
                 errors.push(IrError::ty(
+                    codes::E203_TYPE_MISMATCH,
                     p.default.span(),
                     format!(
                         "param `{}` default has type `{}`, expected `{}`",
@@ -219,6 +239,7 @@ pub(crate) fn dedup_attrs(
             vec.push((*a, *span));
         } else {
             errors.push(IrError::contract(
+                codes::E300_CONTRACT,
                 *span,
                 format!("`{}` is listed in `{}` more than once", a.name(), label),
             ));
@@ -249,6 +270,7 @@ pub(crate) fn check_consumes_emitted(
                 Some(from) => {
                     errors.push(
                         IrError::contract(
+                            codes::E300_CONTRACT,
                             span,
                             format!(
                                 "`{}` is derived from `{}`, which this procedure does not emit",
@@ -268,6 +290,7 @@ pub(crate) fn check_consumes_emitted(
         }
         errors.push(
             IrError::contract(
+                codes::E300_CONTRACT,
                 span,
                 format!("`{}` is consumed but not emitted", attr.name()),
             )

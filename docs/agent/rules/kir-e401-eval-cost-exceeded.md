@@ -1,17 +1,18 @@
 ---
 id: KIR-E401-EVAL-COST-EXCEEDED
 aliases: ["E401", "KIR-E401", "kir-e401-eval-cost-exceeded"]
-title: Evaluation cost limit exceeded
-summary: Per-frame global evaluation instruction count exceeds budget.
+title: Field evaluation cost limit exceeded
+summary: Inlined field evaluations inside loops exceed budget.
 ---
 
-# Evaluation cost limit exceeded
+# Field evaluation cost limit exceeded
 
 ## Behavior
 
-The per-frame evaluation pass cost exceeds the allocated budget.
+Static complexity analysis determined that calling field procedures inside loops exceeds the evaluation instruction limit.
 
 ## Remediation
 
-- Move heavy computation out of the global block into the per-element or fragment stage.
-- Cache repeated calculations into local variables.
+- Reduce loop iteration counts enclosing field evaluation calls (`field(p)`).
+- Simplify the distance calculation in the referenced Field procedure.
+- Hoist field evaluations outside loops where coordinates do not vary per iteration.

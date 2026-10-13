@@ -122,80 +122,7 @@ impl Diagnostic {
     }
 
     pub fn code_for(err: &IrError) -> String {
-        let msg = err.message.to_lowercase();
-        match err.stage {
-            Stage::Parse => {
-                if msg.contains("unterminated") {
-                    codes::E101_UNTERMINATED_BLOCK.to_string()
-                } else if msg.contains("unknown kind") {
-                    codes::E102_UNKNOWN_KIND.to_string()
-                } else if msg.contains("unknown topology") {
-                    codes::E103_UNKNOWN_TOPOLOGY.to_string()
-                } else if msg.contains("unknown blend") {
-                    codes::E104_UNKNOWN_BLEND.to_string()
-                } else if msg.contains("range") || msg.contains("param") {
-                    codes::E105_PARAM_SYNTAX.to_string()
-                } else if msg.contains("swizzle") {
-                    codes::E106_MALFORMED_SWIZZLE.to_string()
-                } else if msg.contains("while") {
-                    codes::E107_WHILE_NOT_SUPPORTED.to_string()
-                } else if msg.contains("for") {
-                    codes::E108_FOR_BOUND.to_string()
-                } else {
-                    codes::E100_PARSE.to_string()
-                }
-            }
-            Stage::Type => {
-                if msg.contains("undeclared")
-                    || msg.contains("undefined")
-                    || msg.contains("unknown name")
-                {
-                    codes::E201_UNDECLARED_NAME.to_string()
-                } else if msg.contains("swizzle") {
-                    codes::E202_INVALID_SWIZZLE.to_string()
-                } else if msg.contains("int and float") || msg.contains("type mismatch") {
-                    codes::E203_TYPE_MISMATCH.to_string()
-                } else {
-                    codes::E200_TYPE.to_string()
-                }
-            }
-            Stage::Contract => {
-                if msg.contains("undeclared") || msg.contains("param") {
-                    codes::E101_UNDECLARED_PARAM.to_string()
-                } else if msg.contains("uses") {
-                    codes::E302_USES_CONTRACT.to_string()
-                } else if msg.contains("amplify") {
-                    codes::E303_AMPLIFY_CONTRACT.to_string()
-                } else if msg.contains("blend") {
-                    codes::E304_BLEND_CONTRACT.to_string()
-                } else if msg.contains("topology") {
-                    codes::E305_TOPOLOGY_CONTRACT.to_string()
-                } else if msg.contains("capacity") {
-                    codes::E306_CAPACITY_CONTRACT.to_string()
-                } else if msg.contains("seed") {
-                    codes::E307_SEED_CONTRACT.to_string()
-                } else if msg.contains("texture") {
-                    codes::E308_TEXTURE_CONTRACT.to_string()
-                } else if msg.contains("camera") {
-                    codes::E309_CAMERA_CONTRACT.to_string()
-                } else if msg.contains("required") || msg.contains("missing") {
-                    codes::E310_MISSING_OUTPUT.to_string()
-                } else {
-                    codes::E300_CONTRACT.to_string()
-                }
-            }
-            Stage::Cost => {
-                if msg.contains("evaluation") {
-                    codes::E401_EVAL_COST_EXCEEDED.to_string()
-                } else if msg.contains("element") {
-                    codes::E402_ELEMENT_COST_EXCEEDED.to_string()
-                } else if msg.contains("spawn") {
-                    codes::E403_SPAWN_COST_EXCEEDED.to_string()
-                } else {
-                    codes::E400_COST_EXCEEDED.to_string()
-                }
-            }
-        }
+        err.code.to_string()
     }
 
     pub fn from_ir_error(err: &IrError, src: &str) -> Self {
@@ -221,7 +148,7 @@ impl Diagnostic {
         remedy: Option<String>,
         src: &str,
     ) -> Self {
-        let err = IrError::parse(span, message);
+        let err = IrError::parse(codes::E100_PARSE, span, message);
         let mut d = Self::from_ir_error(&err, src);
         if remedy.is_some() {
             d.remedy = remedy;
@@ -286,6 +213,7 @@ impl Stage {
 #[error("{}: {message}", stage.name())]
 pub struct IrError {
     pub stage: Stage,
+    pub code: &'static str,
     pub message: String,
     pub span: Span,
     /// Shown under the message. Use it whenever there is a specific thing the
@@ -294,29 +222,35 @@ pub struct IrError {
 }
 
 impl IrError {
-    pub fn new(stage: Stage, span: Span, message: impl Into<String>) -> IrError {
+    pub fn new(
+        stage: Stage,
+        code: &'static str,
+        span: Span,
+        message: impl Into<String>,
+    ) -> IrError {
         IrError {
             stage,
+            code,
             message: message.into(),
             span,
             hint: None,
         }
     }
 
-    pub fn parse(span: Span, message: impl Into<String>) -> IrError {
-        IrError::new(Stage::Parse, span, message)
+    pub fn parse(code: &'static str, span: Span, message: impl Into<String>) -> IrError {
+        IrError::new(Stage::Parse, code, span, message)
     }
 
-    pub fn ty(span: Span, message: impl Into<String>) -> IrError {
-        IrError::new(Stage::Type, span, message)
+    pub fn ty(code: &'static str, span: Span, message: impl Into<String>) -> IrError {
+        IrError::new(Stage::Type, code, span, message)
     }
 
-    pub fn contract(span: Span, message: impl Into<String>) -> IrError {
-        IrError::new(Stage::Contract, span, message)
+    pub fn contract(code: &'static str, span: Span, message: impl Into<String>) -> IrError {
+        IrError::new(Stage::Contract, code, span, message)
     }
 
-    pub fn cost(span: Span, message: impl Into<String>) -> IrError {
-        IrError::new(Stage::Cost, span, message)
+    pub fn cost(code: &'static str, span: Span, message: impl Into<String>) -> IrError {
+        IrError::new(Stage::Cost, code, span, message)
     }
 
     pub fn with_hint(mut self, hint: impl Into<String>) -> IrError {
@@ -361,8 +295,12 @@ mod tests {
     #[test]
     fn render_points_at_the_span() {
         let src = "proc a {\n  kind L9\n}\n";
-        let err = IrError::parse(Span::new(16, 18), "unknown kind `L9`")
-            .with_hint("v0.2 defines `L1` and `L4`");
+        let err = IrError::parse(
+            codes::E102_UNKNOWN_KIND,
+            Span::new(16, 18),
+            "unknown kind `L9`",
+        )
+        .with_hint("v0.2 defines `L1` and `L4`");
         let out = err.render(src);
         assert!(out.starts_with("2:8: parse: unknown kind `L9`"), "{out}");
         assert!(out.contains("^^"), "{out}");
@@ -372,9 +310,17 @@ mod tests {
     #[test]
     fn diagnostic_structured_report_and_serde() {
         let src = "proc a {\n  kind L9\n  undeclared = 1.0\n}\n";
-        let err1 = IrError::parse(Span::new(16, 18), "unknown kind `L9`")
-            .with_hint("v0.2 defines `L1` and `L4`");
-        let err2 = IrError::ty(Span::new(22, 32), "undeclared name");
+        let err1 = IrError::parse(
+            codes::E102_UNKNOWN_KIND,
+            Span::new(16, 18),
+            "unknown kind `L9`",
+        )
+        .with_hint("v0.2 defines `L1` and `L4`");
+        let err2 = IrError::ty(
+            codes::E201_UNDECLARED_NAME,
+            Span::new(22, 32),
+            "undeclared name",
+        );
 
         let report = DiagnosticReport::from_ir_errors(&[err1, err2], src);
         assert!(!report.success);

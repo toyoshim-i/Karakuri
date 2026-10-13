@@ -9,9 +9,13 @@ summary: Capacity bounds or default allocation violates limits.
 
 ## Behavior
 
-Capacity declaration bounds are inverted (`min > max`) or default value lies outside the interval.
+The capacity declaration is malformed or invalid:
+- `capacity` is only permitted on and required by L1 procedures.
+- Syntax is `capacity [<min>, <max>] = <default>` (no trailing semicolon).
+- Bounds must satisfy `1 <= min <= default <= max`.
 
 ## Remediation
 
-- Specify capacity as `capacity [<min>, <max>] = <default>;` where `min <= default <= max`.
-- Ensure capacity does not exceed the hardware particle ceiling (1,048,576).
+- Declare capacity in L1 as `capacity [min, max] = default` without trailing semicolon.
+- Ensure `min >= 1` and `min <= default <= max`.
+- Remove `capacity` declarations from non-L1 procedures.

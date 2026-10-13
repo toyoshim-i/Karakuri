@@ -4,8 +4,8 @@ use crate::ast::{
     AmplifyDecl, Attr, Blend, Block, BlockKind, CapacityDecl, Kind, Param, Proc, RetainsDecl,
     SlotTy, Stmt, Topology, Ty, UsesDecl,
 };
-use crate::error::IrError;
 use crate::error::IrResult;
+use crate::error::{codes, IrError};
 use crate::lexer::{self, TokKind, Token};
 use crate::span::Span;
 mod expr;
@@ -103,12 +103,28 @@ impl Parser {
     }
 
     fn error(&mut self, span: Span, message: impl Into<String>) {
-        self.errors.push(IrError::parse(span, message));
+        self.errors
+            .push(IrError::parse(codes::E100_PARSE, span, message));
+    }
+
+    fn error_with_code(&mut self, code: &'static str, span: Span, message: impl Into<String>) {
+        self.errors.push(IrError::parse(code, span, message));
     }
 
     fn error_with_hint(&mut self, span: Span, message: impl Into<String>, hint: impl Into<String>) {
         self.errors
-            .push(IrError::parse(span, message).with_hint(hint));
+            .push(IrError::parse(codes::E100_PARSE, span, message).with_hint(hint));
+    }
+
+    fn error_with_code_and_hint(
+        &mut self,
+        code: &'static str,
+        span: Span,
+        message: impl Into<String>,
+        hint: impl Into<String>,
+    ) {
+        self.errors
+            .push(IrError::parse(code, span, message).with_hint(hint));
     }
 
     /// Consume `want` if present; otherwise report it missing and leave the stream
@@ -254,7 +270,8 @@ impl Parser {
             _ => {
                 let sp = self.peek().span;
                 let found = self.peek().kind.describe();
-                self.error_with_hint(
+                self.error_with_code_and_hint(
+                    codes::E108_FOR_BOUND,
                     sp,
                     format!("`for` bounds must be constant integers, found {found}"),
                     "loop bounds cannot reference a param, an ambient, or any other \
@@ -306,7 +323,11 @@ impl Parser {
         loop {
             if self.at_end() {
                 let sp = self.peek().span;
-                self.error(sp, "unterminated `proc`: expected `}` before end of file");
+                self.error_with_code(
+                    codes::E101_UNTERMINATED_BLOCK,
+                    sp,
+                    "unterminated `proc`: expected `}` before end of file",
+                );
                 break;
             }
             if self.peek().kind == TokKind::RBrace {
@@ -446,7 +467,8 @@ impl Parser {
                 "L5" => Kind::L5,
                 "Field" => Kind::Field,
                 _ => {
-                    self.error_with_hint(
+                    self.error_with_code_and_hint(
+                        codes::E102_UNKNOWN_KIND,
                         span,
                         format!("unknown kind `{name}`"),
                         "this compiler builds `L1` (geometry), `L2` (geometry modulation), \
@@ -476,7 +498,8 @@ impl Parser {
             // exist; it is not something geometry can be.
             "fullscreen" => Some(Topology::Fullscreen),
             _ => {
-                self.error_with_hint(
+                self.error_with_code_and_hint(
+                    codes::E103_UNKNOWN_TOPOLOGY,
                     span,
                     format!("unknown topology `{name}`"),
                     "the topologies are `points`, `lines`, `triangles`, `grid`, and `ribbon`",
@@ -494,7 +517,8 @@ impl Parser {
             "weighted" => Some(Blend::Weighted),
             "opaque" => Some(Blend::Opaque),
             _ => {
-                self.error_with_hint(
+                self.error_with_code_and_hint(
+                    codes::E104_UNKNOWN_BLEND,
                     span,
                     format!("unknown blend mode `{name}`"),
                     "the blend modes are `additive`, which sums colour and occludes nothing, \
@@ -580,7 +604,8 @@ impl Parser {
 
         if self.peek().kind != TokKind::LBracket {
             let sp = self.peek().span;
-            self.error_with_hint(
+            self.error_with_code_and_hint(
+                codes::E105_PARAM_SYNTAX,
                 sp,
                 format!("param `{name}` has no range"),
                 "the range is mandatory — it is the fader range, the agent's search \
@@ -686,7 +711,11 @@ impl Parser {
         loop {
             if self.at_end() {
                 let sp = self.peek().span;
-                self.error(sp, "unterminated block: expected `}` before end of file");
+                self.error_with_code(
+                    codes::E101_UNTERMINATED_BLOCK,
+                    sp,
+                    "unterminated block: expected `}` before end of file",
+                );
                 break;
             }
             if self.peek().kind == TokKind::RBrace {

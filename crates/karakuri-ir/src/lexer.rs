@@ -1,6 +1,6 @@
 //! Lexical analyzer converting `.kir` source text into a token stream.
 
-use crate::error::IrError;
+use crate::error::{codes, IrError};
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -304,6 +304,7 @@ pub(crate) fn lex(src: &str) -> (Vec<Token>, Vec<IrError>) {
                     } else {
                         let end = lx.pos as u32;
                         errors.push(IrError::parse(
+                            codes::E100_PARSE,
                             Span::new(start, end),
                             "unexpected character `&` (did you mean `&&`?)",
                         ));
@@ -317,6 +318,7 @@ pub(crate) fn lex(src: &str) -> (Vec<Token>, Vec<IrError>) {
                     } else {
                         let end = lx.pos as u32;
                         errors.push(IrError::parse(
+                            codes::E100_PARSE,
                             Span::new(start, end),
                             "unexpected character `|` (did you mean `||`?)",
                         ));
@@ -326,6 +328,7 @@ pub(crate) fn lex(src: &str) -> (Vec<Token>, Vec<IrError>) {
                 other => {
                     let end = lx.pos as u32;
                     errors.push(IrError::parse(
+                        codes::E100_PARSE,
                         Span::new(start, end),
                         format!("unexpected character `{other}`"),
                     ));

@@ -23,12 +23,14 @@ impl<'a> Checker<'a> {
         match hint {
             Some(hint) => self.err_hint(
                 Stage::Type,
+                codes::E201_UNDECLARED_NAME,
                 span,
                 format!("`{name}` is not a builtin function or a type constructor"),
                 hint,
             ),
             None => self.err(
                 Stage::Type,
+                codes::E201_UNDECLARED_NAME,
                 span,
                 format!("`{name}` is not a builtin function or a type constructor"),
             ),
@@ -47,6 +49,7 @@ impl<'a> Checker<'a> {
         if args.len() != 1 {
             self.err_hint(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!("`{slot}` takes 1 argument, found {}", args.len()),
                 "a field is handed a position and returns the distance at it",
@@ -60,6 +63,7 @@ impl<'a> Checker<'a> {
         if point.ty != Ty::Vec3 {
             self.err(
                 Stage::Type,
+                codes::E203_TYPE_MISMATCH,
                 point.span,
                 format!("`{slot}` expects `vec3`, found `{}`", point.ty.name()),
             );
@@ -97,6 +101,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!(
                     "`{}` takes {} argument(s), found {}",
@@ -123,6 +128,7 @@ impl<'a> Checker<'a> {
                         Some(other) => {
                             self.err_hint(
                                 Stage::Type,
+                                codes::E203_TYPE_MISMATCH,
                                 other.span,
                                 format!(
                                     "`{}` expects a texture, found a `{}`",
@@ -142,6 +148,7 @@ impl<'a> Checker<'a> {
             other => {
                 self.err_hint(
                     Stage::Type,
+                    codes::E308_TEXTURE_CONTRACT,
                     other.span(),
                     format!("`{}` expects a texture name here", b.name()),
                     "a texture is named rather than computed: there is no value of one to \
@@ -166,6 +173,7 @@ impl<'a> Checker<'a> {
             if t.ty != Ty::Vec2 {
                 self.err_hint(
                     Stage::Type,
+                    codes::E203_TYPE_MISMATCH,
                     t.span,
                     format!("`{}` expects `vec2`, found `{}`", b.name(), t.ty.name()),
                     "a frame coordinate runs 0..1 across the frame, x to the right and y \
@@ -197,6 +205,7 @@ impl<'a> Checker<'a> {
         if b.is_frame_effect() && self.kind != Kind::L5 {
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{}` is an L5 builtin", b.name()),
                 format!(
@@ -214,6 +223,7 @@ impl<'a> Checker<'a> {
         if b.is_fragment_only() && self.block != Some(crate::ast::BlockKind::Fragment) {
             self.err_hint(
                 Stage::Type,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{}` is only available in a `fragment` block", b.name()),
                 "screen-space derivatives and flat normals measure adjacent pixels during \
@@ -231,6 +241,7 @@ impl<'a> Checker<'a> {
         if args_ast.len() != sig.args.len() {
             self.err(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!(
                     "`{}` takes {} argument(s), found {}",
@@ -256,6 +267,7 @@ impl<'a> Checker<'a> {
                 ) {
                     self.err_hint(
                         Stage::Type,
+                        codes::E200_TYPE,
                         a.span(),
                         format!(
                             "argument {} to `{}` must be a literal integer",
@@ -288,6 +300,7 @@ impl<'a> Checker<'a> {
                     if actual.ty != *t {
                         self.err(
                             Stage::Type,
+                            codes::E203_TYPE_MISMATCH,
                             actual.span,
                             format!(
                                 "`{}` expects `{}`, found `{}`",
@@ -303,6 +316,7 @@ impl<'a> Checker<'a> {
                     if !domain_allows(sig.domain, actual.ty) {
                         self.err(
                             Stage::Type,
+                            codes::E200_TYPE,
                             actual.span,
                             format!("`{}` does not accept `{}`", b.name(), actual.ty.name()),
                         );
@@ -314,6 +328,7 @@ impl<'a> Checker<'a> {
                             Some(t) => {
                                 self.err(
                                     Stage::Type,
+                                    codes::E203_TYPE_MISMATCH,
                                     actual.span,
                                     format!(
                                         "`{}` expects every argument to be the same type; found \
@@ -370,6 +385,7 @@ impl<'a> Checker<'a> {
                 if args_ast.len() != 1 {
                     self.err(
                         Stage::Type,
+                        codes::E200_TYPE,
                         span,
                         format!("`{}(...)` takes exactly one argument", ty.name()),
                     );
@@ -382,6 +398,7 @@ impl<'a> Checker<'a> {
                 if !matches!(a.ty, Ty::Float | Ty::Int | Ty::Uint) {
                     self.err(
                         Stage::Type,
+                        codes::E203_TYPE_MISMATCH,
                         a.span,
                         format!(
                             "`{}(...)` converts a scalar number, found `{}`",
@@ -435,6 +452,7 @@ impl<'a> Checker<'a> {
             Ty::Bool | Ty::Mat3 | Ty::Mat4 => {
                 self.err(
                     Stage::Type,
+                    codes::E200_TYPE,
                     span,
                     format!("`{}` cannot be constructed", ty.name()),
                 );
@@ -466,6 +484,7 @@ impl<'a> Checker<'a> {
                 _ => {
                     self.err(
                         Stage::Type,
+                        codes::E203_TYPE_MISMATCH,
                         a.span,
                         format!(
                             "`{}(...)` arguments must be `float` or a vector, found `{}`",
@@ -483,6 +502,7 @@ impl<'a> Checker<'a> {
         if total != n {
             self.err_hint(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!(
                     "`{}(...)` arguments have {} component(s) total, expected {}",
@@ -506,6 +526,7 @@ impl<'a> Checker<'a> {
         let Some(attr) = Attr::from_name(name) else {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}.{name}` is not an attribute"),
                 format!(
@@ -518,6 +539,7 @@ impl<'a> Checker<'a> {
         if !matches!(self.block, Some(BlockKind::Deform) | Some(BlockKind::Mask)) {
             self.err(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}` is readable in a `deform` or a `mask`, and nowhere else"),
             );
@@ -526,6 +548,7 @@ impl<'a> Checker<'a> {
         if !self.consumes.contains(&attr) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}.{name}` is not consumed"),
                 format!(
@@ -550,6 +573,7 @@ impl<'a> Checker<'a> {
         if self.block != Some(BlockKind::Camera) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}[…]` addresses an element from a `camera` block, and nowhere else"),
                 format!(
@@ -571,6 +595,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}[…].{name}` is not an attribute"),
                 hint,
@@ -581,6 +606,7 @@ impl<'a> Checker<'a> {
         if i.ty != Ty::Uint {
             self.err_hint(
                 Stage::Type,
+                codes::E203_TYPE_MISMATCH,
                 i.span,
                 format!("an element index is `uint`, not `{}`", i.ty.name()),
                 "write a `uint` — `0u`, or `uint(k)` for a computed one".to_string(),
@@ -590,6 +616,7 @@ impl<'a> Checker<'a> {
         if !self.consumes.contains(&attr) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}[…].{name}` is not consumed"),
                 format!(
@@ -626,6 +653,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}.{name}` is not a reduction"),
                 hint,
@@ -635,6 +663,7 @@ impl<'a> Checker<'a> {
         if !self.consumes.contains(&Attr::Position) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{slot}.{name}` reads `position`, which is not consumed"),
                 "add `position` to `consumes`: the reductions are over the elements' positions"
@@ -659,6 +688,7 @@ impl<'a> Checker<'a> {
             _ => {
                 self.err_hint(
                     Stage::Contract,
+                    codes::E309_CAMERA_CONTRACT,
                     span,
                     format!("`{slot}.{name}` is not part of a camera"),
                     format!(
@@ -685,6 +715,7 @@ impl<'a> Checker<'a> {
         if matches!(amb, Ambient::Eye | Ambient::Ray) && !self.fullscreen {
             self.err_hint(
                 Stage::Contract,
+                codes::E309_CAMERA_CONTRACT,
                 span,
                 format!(
                     "`{slot}.{name}` is only available to a procedure that draws the whole frame"
@@ -699,6 +730,7 @@ impl<'a> Checker<'a> {
         }
         self.err_hint(
             Stage::Contract,
+            codes::E309_CAMERA_CONTRACT,
             span,
             format!("`{slot}.{name}` is not available in this block"),
             format!(

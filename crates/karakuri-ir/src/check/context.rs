@@ -155,18 +155,25 @@ impl<'a> Checker<'a> {
         !matches!(amb, Ambient::Seed | Ambient::Copy) || !self.fullscreen
     }
 
-    pub(crate) fn err(&mut self, stage: Stage, span: Span, msg: impl Into<String>) {
-        self.errors.push(IrError::new(stage, span, msg));
+    pub(crate) fn err(
+        &mut self,
+        stage: Stage,
+        code: &'static str,
+        span: Span,
+        msg: impl Into<String>,
+    ) {
+        self.errors.push(IrError::new(stage, code, span, msg));
     }
 
     pub(crate) fn err_hint(
         &mut self,
         stage: Stage,
+        code: &'static str,
         span: Span,
         msg: impl Into<String>,
         hint: impl Into<String>,
     ) {
         self.errors
-            .push(IrError::new(stage, span, msg).with_hint(hint));
+            .push(IrError::new(stage, code, span, msg).with_hint(hint));
     }
 }

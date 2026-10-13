@@ -2,15 +2,20 @@
 id: KIR-E309-CAMERA-CONTRACT
 aliases: ["E309", "KIR-E309", "kir-e309-camera-contract"]
 title: Camera contract error
-summary: Camera projection or coordinate transform is malformed.
+summary: Camera slot binding or camera ambient access is malformed.
 ---
 
 # Camera contract error
 
 ## Behavior
 
-Camera transform uniforms are accessed incorrectly or with mismatched types.
+Camera declarations or ambient accesses violate pipeline contracts:
+- Declaring `uses <name> : Camera` is only permitted in L4 procedures (at most one camera slot).
+- L3 procedures require a `camera` block.
+- Camera ambients (`camera`, `eye`, `ray`) require appropriate stage blocks (`camera` in vertex; `eye` and `ray` in fullscreen fragment).
 
 ## Remediation
 
-- Use standard camera ambients: `view_proj` (mat4x4), `eye` (vec3), and `ray` (vec3).
+- For 3D camera projection in L4, declare at most one camera slot: `uses cam : Camera`.
+- In L3 procedures, include a `camera { ... }` block.
+- Read camera ambients only within the stages where they are defined.

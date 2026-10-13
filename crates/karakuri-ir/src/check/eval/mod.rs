@@ -9,7 +9,7 @@ pub(crate) use crate::ast::{
     Ambient, Attr, BinOp, Expr, Kind, Lit, Output, Stmt, Ty, UnOp, TEXTURE_HELD, TEXTURE_SRC,
 };
 pub(crate) use crate::builtin::{Builtin, Domain, Shape};
-pub(crate) use crate::error::Stage;
+pub(crate) use crate::error::{codes, Stage};
 pub(crate) use crate::span::Span;
 pub(crate) use crate::typed::{Reduction, TExpr, TExprKind, TStmt, Target, TexRef};
 

@@ -9,9 +9,9 @@ summary: The declared topology in an L1 procedure is not recognized.
 
 ## Behavior
 
-The `topology` declaration specified an unrecognized draw mode. Valid topologies are: `points`, `lines`, `triangles`, `grid`, `ribbon`, and `fullscreen`.
+The `topology` declaration in an L1 header specified an unrecognized draw mode. Topologies declared in L1 headers must be one of: `points`, `lines`, `triangles`, `grid`, or `ribbon`. (Note: `fullscreen` is an L4 rendering configuration without an L1 topology, not an L1 source topology).
 
 ## Remediation
 
-- Update the declaration to one of the valid topologies listed in `karakuri://doc/ir-vocabulary`.
-- For fullscreen post-processing or raymarching, specify `topology fullscreen`.
+- Update the declaration to one of the valid topologies: `topology points`, `topology lines`, `topology triangles`, `topology grid`, or `topology ribbon`.
+- Topologies sharing connectivity across elements (`triangles`, `grid`, `ribbon`) require static sources (no `spawn` block or `kill()` calls).

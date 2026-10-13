@@ -2,7 +2,7 @@
 
 use crate::ast::{BlockKind, Kind, Lit};
 use crate::builtin::Builtin;
-use crate::error::{IrError, IrResult};
+use crate::error::{codes, IrError, IrResult};
 use crate::span::Span;
 use crate::typed::{Checked, Cost, TExpr, TExprKind, TStmt};
 
@@ -407,14 +407,30 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         field_calls,
     };
 
-    for (measured, ceiling, unit) in [
-        (ops_per_element, MAX_OPS_PER_ELEMENT, "ops/element"),
-        (ops_per_spawn, MAX_OPS_PER_SPAWN, "ops/spawn"),
-        (ops_per_fragment, fragment_ceiling(checked), "ops/fragment"),
+    for (measured, ceiling, unit, code) in [
+        (
+            ops_per_element,
+            MAX_OPS_PER_ELEMENT,
+            "ops/element",
+            codes::E402_ELEMENT_COST_EXCEEDED,
+        ),
+        (
+            ops_per_spawn,
+            MAX_OPS_PER_SPAWN,
+            "ops/spawn",
+            codes::E403_SPAWN_COST_EXCEEDED,
+        ),
+        (
+            ops_per_fragment,
+            fragment_ceiling(checked),
+            "ops/fragment",
+            codes::E400_COST_EXCEEDED,
+        ),
     ] {
         if measured > ceiling {
             return Err(vec![reject(
                 checked,
+                code,
                 measured,
                 ceiling,
                 unit,
@@ -499,6 +515,7 @@ pub fn check_with_field(
                 slot: (*slot).to_string(),
                 errors: vec![IrError::new(
                     crate::error::Stage::Cost,
+                    codes::E401_EVAL_COST_EXCEEDED,
                     caller.span,
                     format!(
                         "{total} {unit} with its fields multiplied in exceeds the {ceiling} \
@@ -522,6 +539,7 @@ pub fn check_with_field(
 /// budget" tells a repair prompt nothing about how much to cut.
 fn reject(
     checked: &Checked,
+    code: &'static str,
     ops: u64,
     ceiling: u64,
     unit: &str,
@@ -544,7 +562,7 @@ fn reject(
             hot.builtin.name(),
             hot.block.name(),
         );
-        IrError::cost(hot.span, message).with_hint(hint)
+        IrError::cost(code, hot.span, message).with_hint(hint)
     } else {
         // No single builtin call stands out — the estimate is dominated by
         // plain statements and arithmetic, most likely under deep loop
@@ -564,6 +582,6 @@ fn reject(
              by plain arithmetic under loop nesting there, not by a single builtin call.",
             dom_block.name(),
         );
-        IrError::cost(checked.span, message).with_hint(hint)
+        IrError::cost(code, checked.span, message).with_hint(hint)
     }
 }

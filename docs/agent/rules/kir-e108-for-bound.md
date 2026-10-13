@@ -9,9 +9,9 @@ summary: A for loop bound is not a static constant expression.
 
 ## Behavior
 
-The upper limit of a `for` loop evaluated to a non-constant or dynamic variable. GPU instruction cost estimation requires static bounds.
+The lower or upper limit of a `for` loop evaluated to a non-constant expression, or the lower bound is greater than or equal to the upper bound. GPU instruction cost estimation and shader lowering require static bounds.
 
 ## Remediation
 
-- Specify an integer constant literal for the loop range (e.g. `0..16`).
-- If variable length is needed, loop over a static maximum and break or conditionally discard.
+- Specify integer literal constants for loop bounds (e.g. `0..16`).
+- If variable iteration counts are required, loop over a static maximum and conditionally `break` or skip.

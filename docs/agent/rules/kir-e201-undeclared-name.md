@@ -9,9 +9,10 @@ summary: An identifier is used without prior declaration in the current scope.
 
 ## Behavior
 
-The referenced identifier is not defined as a parameter, local variable, ambient input, or built-in function.
+The referenced identifier is not defined as a parameter (`param`), local variable (`let`), consumed attribute (`consumes`), ambient signal, slot (`uses`), or built-in function in the current block scope.
 
 ## Remediation
 
-- Declare the variable with `let <name> = <expr>;` before first use.
-- Check `karakuri://doc/ir-vocabulary` for the correct names of built-in functions.
+- Declare local variables before first use: `let <name> = <expr>;`.
+- For attributes emitted by an upstream procedure, declare `consumes <attr>` in the header.
+- Check `karakuri://doc/ir-vocabulary` for the correct names of built-in functions and signals.

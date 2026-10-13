@@ -9,8 +9,12 @@ summary: Geometry amplification factor exceeds maximum limits or is non-constant
 
 ## Behavior
 
-The amplification multiplier exceeds hardware expansion limits (typically 64x) or is non-constant.
+The `amplify` declaration violates geometry expansion contracts:
+- `amplify` is only permitted on L2 procedures.
+- The amplification factor must be an integer constant between 2 and 1024 inclusive (`2 <= factor <= 1024`).
+- An L2 declaring `amplify` cannot also declare an input geometry slot (`uses <name> : Geometry`).
 
 ## Remediation
 
-- Set amplification factor to an integer constant within `[1, 64]`.
+- Declare `amplify <N>` only in L2 procedures, with integer `2 <= N <= 1024`.
+- If modifying an existing geometry stream via a slot, omit `amplify`.

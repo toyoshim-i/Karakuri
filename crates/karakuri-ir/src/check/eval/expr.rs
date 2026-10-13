@@ -42,7 +42,13 @@ impl<'a> Checker<'a> {
                           L3's geometry slot, as `subject[0u].position`"
                         .to_string(),
                 };
-                self.err_hint(Stage::Contract, *span, "`[ ]` is not a value", hint);
+                self.err_hint(
+                    Stage::Contract,
+                    codes::E300_CONTRACT,
+                    *span,
+                    "`[ ]` is not a value",
+                    hint,
+                );
                 None
             }
         }
@@ -121,6 +127,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("attribute `{name}` is not available here"),
                 hint,
@@ -133,6 +140,7 @@ impl<'a> Checker<'a> {
                 if let Some(far) = self.paired {
                     self.err_hint(
                         Stage::Contract,
+                        codes::E300_CONTRACT,
                         span,
                         format!(
                             "`source` is ambiguous in a procedure that declares `{far} : Geometry`"
@@ -163,6 +171,7 @@ impl<'a> Checker<'a> {
             if matches!(ambient, Ambient::Seed | Ambient::Copy) && self.fullscreen {
                 self.err_hint(
                     Stage::Contract,
+                    codes::E307_SEED_CONTRACT,
                     span,
                     format!("`{name}` is per element, and this procedure draws the whole frame"),
                     "an L4 with no `vertex` block covers the frame and has no element to have \
@@ -179,6 +188,7 @@ impl<'a> Checker<'a> {
             if ambient == Ambient::Seed && self.kind == Kind::Field {
                 self.err_hint(
                     Stage::Contract,
+                    codes::E307_SEED_CONTRACT,
                     span,
                     "`seed` is per element, and a field has none",
                     "a field is a function of space — it is handed `point` and nothing else, \
@@ -191,6 +201,7 @@ impl<'a> Checker<'a> {
             if matches!(ambient, Ambient::Eye | Ambient::Ray) && self.kind == Kind::L4 {
                 self.err_hint(
                     Stage::Contract,
+                    codes::E309_CAMERA_CONTRACT,
                     span,
                     format!("`{name}` is only available to a procedure that draws the whole frame"),
                     "a `vertex` block is what makes an L4 per-element, and a ray through a \
@@ -242,6 +253,7 @@ impl<'a> Checker<'a> {
                 };
                 self.err_hint(
                     Stage::Contract,
+                    codes::E300_CONTRACT,
                     span,
                     format!("`{name}` is not available to an L5"),
                     hint,
@@ -270,6 +282,7 @@ impl<'a> Checker<'a> {
                 };
                 self.err_hint(
                     Stage::Contract,
+                    codes::E300_CONTRACT,
                     span,
                     format!("`source` is per geometry, and {what} runs over none"),
                     hint,
@@ -278,6 +291,7 @@ impl<'a> Checker<'a> {
             }
             self.err(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{name}` is not available in this block"),
             );
@@ -298,6 +312,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{name}` is a geometry, not a value"),
                 hint,
@@ -308,6 +323,7 @@ impl<'a> Checker<'a> {
         if self.fields.contains(&name) {
             self.err_hint(
                 Stage::Contract,
+                codes::E302_USES_CONTRACT,
                 span,
                 format!("`{name}` is a field, not a value"),
                 format!(
@@ -328,6 +344,7 @@ impl<'a> Checker<'a> {
             };
             self.err_hint(
                 Stage::Contract,
+                codes::E308_TEXTURE_CONTRACT,
                 span,
                 format!("`{name}` is a texture, not a value"),
                 format!(
@@ -342,6 +359,7 @@ impl<'a> Checker<'a> {
         if name == TEXTURE_HELD && self.block == Some(BlockKind::Frame) && !self.retains {
             self.err_hint(
                 Stage::Contract,
+                codes::E308_TEXTURE_CONTRACT,
                 span,
                 "`held` is available only under `retains`",
                 "add a bare `retains` to the header: it says this procedure reads a retained \
@@ -365,6 +383,7 @@ impl<'a> Checker<'a> {
         if self.camera == Some(name) {
             self.err_hint(
                 Stage::Contract,
+                codes::E309_CAMERA_CONTRACT,
                 span,
                 format!("`{name}` is a camera, not a value"),
                 format!(
@@ -377,6 +396,7 @@ impl<'a> Checker<'a> {
         if Output::from_name(name).is_some() {
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("reading `{name}` is not allowed; stage outputs are write-only"),
                 "bind a `let` to the value you need before writing it, and read the `let` instead",
@@ -389,6 +409,7 @@ impl<'a> Checker<'a> {
         if name == OLD_POINT_SIZE {
             self.err_hint(
                 Stage::Contract,
+                codes::E300_CONTRACT,
                 span,
                 format!("`{OLD_POINT_SIZE}` is now spelled `point_rate`"),
                 POINT_RATE_HINT.to_string(),
@@ -400,6 +421,7 @@ impl<'a> Checker<'a> {
         if self.block.is_some() {
             self.err_hint(
                 Stage::Contract,
+                codes::E201_UNDECLARED_NAME,
                 span,
                 format!("`{name}` does not resolve to a local, a param, an attribute, or an ambient value"),
                 format!(
@@ -408,7 +430,12 @@ impl<'a> Checker<'a> {
                 ),
             );
         } else {
-            self.err(Stage::Type, span, format!("`{name}` is undefined"));
+            self.err(
+                Stage::Type,
+                codes::E201_UNDECLARED_NAME,
+                span,
+                format!("`{name}` is undefined"),
+            );
         }
         None
     }
@@ -421,6 +448,7 @@ impl<'a> Checker<'a> {
                 } else {
                     self.err(
                         Stage::Type,
+                        codes::E200_TYPE,
                         span,
                         format!("`-` is not defined for `{}`", ty.name()),
                     );
@@ -433,6 +461,7 @@ impl<'a> Checker<'a> {
                 } else {
                     self.err(
                         Stage::Type,
+                        codes::E203_TYPE_MISMATCH,
                         span,
                         format!("`!` requires `bool`, found `{}`", ty.name()),
                     );
@@ -468,6 +497,7 @@ impl<'a> Checker<'a> {
             }
             self.err(
                 Stage::Type,
+                codes::E203_TYPE_MISMATCH,
                 span,
                 format!(
                     "`{}` requires `bool` operands, found `{}` and `{}`",
@@ -489,6 +519,7 @@ impl<'a> Checker<'a> {
             }
             self.err(
                 Stage::Type,
+                codes::E200_TYPE,
                 span,
                 format!(
                     "`{}` is not defined for `{}` and `{}`",
@@ -520,6 +551,7 @@ impl<'a> Checker<'a> {
         }
         self.err(
             Stage::Type,
+            codes::E200_TYPE,
             span,
             format!(
                 "`{}` is not defined for `{}` and `{}` — there are no implicit conversions",
@@ -569,6 +601,7 @@ impl<'a> Checker<'a> {
             other => {
                 self.err(
                     Stage::Type,
+                    codes::E202_INVALID_SWIZZLE,
                     span,
                     format!(
                         "cannot swizzle `{}`; only vectors have components",
@@ -581,6 +614,7 @@ impl<'a> Checker<'a> {
         if components.is_empty() || components.len() > 4 {
             self.err(
                 Stage::Type,
+                codes::E202_INVALID_SWIZZLE,
                 span,
                 format!(
                     "swizzle must have 1 to 4 components, found {}",
@@ -601,6 +635,7 @@ impl<'a> Checker<'a> {
                 _ => {
                     self.err(
                         Stage::Type,
+                        codes::E202_INVALID_SWIZZLE,
                         span,
                         format!(
                             "`{c}` is not a valid swizzle component; use `x`, `y`, `z`, or `w`"
@@ -613,6 +648,7 @@ impl<'a> Checker<'a> {
             if i >= width {
                 self.err_hint(
                     Stage::Type,
+                    codes::E202_INVALID_SWIZZLE,
                     span,
                     format!("`.{c}` is out of range for a {width}-component vector"),
                     format!(
