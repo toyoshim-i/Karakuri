@@ -387,7 +387,7 @@ number; new records continue from the end.
 | [ADR-0359](0359-the-transport-rows-frame-figure-stays-the-cpus-and-says-so.md) | The transport row's frame figure stays the CPU's, and says so | 2026-09-14 | accepted |
 | [ADR-0360](0360-over-budget-stays-the-live-slots-sum-and-no-deck-total-is-drawn.md) | over_budget stays the Live slots' sum, and no deck total is drawn | 2026-09-14 | accepted |
 | [ADR-0361](0361-the-picture-format-is-read-off-the-consoles-own-surface-rather-than-named.md) | The picture format is read off the console's own surface rather than named | 2026-09-14 | accepted |
-| [ADR-0362](0362-a-slots-mcp-policy-is-auto-on-or-off-and-the-mixers-live-contribution-decides-auto.md) | A slot's MCP policy is auto, on, or off, and the mixer's live contribution decides auto | 2026-09-16 | accepted |
+| [ADR-0362](0362-a-slots-mcp-policy-is-auto-on-or-off-and-the-mixers-live-contribution-decides-auto.md) | A slot's MCP policy is auto, on, or off, and the mixer's live contribution decides auto | 2026-09-16 | superseded by [ADR-0391](0391-slot-mcp-policy-defaults-to-on.md) |
 | [ADR-0363](0363-agent-workflow-operations-are-read-slot-copy-slot-and-get-permissions-staged-through-atomic-rename.md) | Agent workflow operations are read_slot, copy_slot, and get_permissions, staged through atomic rename | 2026-09-16 | accepted |
 | [ADR-0364](0364-every-bay-head-renders-the-menu-dice-and-double-clicking-the-header-toggles-folding.md) | Every bay head renders the menu dice, and double-clicking the header toggles folding | 2026-09-27 | accepted |
 | [ADR-0365](0365-the-prompt-bay-embeds-an-interactive-multi-session-terminal-multiplexer-with-cursor-anchored-input.md) | The Prompt bay embeds an interactive multi-session terminal multiplexer with cursor-anchored input | 2026-09-27 | accepted |
@@ -416,6 +416,7 @@ number; new records continue from the end.
 | [ADR-0388](0388-built-in-vr-projection-modes-and-celestial-dome-specification.md) | Built-in VR projection modes and celestial dome shader specification | 2026-10-08 | accepted |
 | [ADR-0389](0389-social-sharing-remote-storage-and-clean-loop-video-capture.md) | Social sharing of Set bundles, remote cloud storage, and clean loop video capture | 2026-10-11 | accepted |
 | [ADR-0390](0390-agent-man-mcp-engine-migration-and-structured-content.md) | Migrate MCP engine to agent-man and standardize structuredContent | 2026-10-12 | accepted |
+| [ADR-0391](0391-slot-mcp-policy-defaults-to-on.md) | Slot MCP policy defaults to on | 2026-10-13 | accepted |
 
 
 ## Retired numbers

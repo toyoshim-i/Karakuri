@@ -1,10 +1,10 @@
 ---
 id: 0362
 title: A slot's MCP policy is auto, on, or off, and the mixer's live contribution decides auto
-status: accepted
+status: superseded
 date: 2026-09-16
 supersedes: []
-superseded_by: []
+superseded_by: [0391]
 principles: [0085, 0090, 0094]
 tags: [mcp, console, mixer, policy, m7]
 ---

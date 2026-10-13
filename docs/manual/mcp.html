@@ -80,9 +80,9 @@
         <tbody>
           <tr>
             <td><strong>Inspector</strong></td>
-            <td>Slot Pill (<code>mcp · auto/on/off</code>)</td>
+            <td>Slot Pill (<code>mcp · on/auto/off</code>)</td>
             <td>Per-Slot (Deck A&ndash;D)</td>
-            <td><span class="tag slot">Auto</span></td>
+            <td><span class="tag open">On</span></td>
             <td>All shader code, parameters, bindings, and configurations in that specific slot</td>
           </tr>
           <tr>
@@ -147,21 +147,25 @@
     </p>
     <ul>
       <li>
-        <strong><code>Auto</code> (Default)</strong>: Automatically write-protects the slot while
+        <strong><code>On</code> (Default)</strong>: The slot is directly writable by external MCP tools,
+        allowing first-time performers, live-coders, and testing agents to mutate shaders immediately
+        without being blocked by initial <code>SLOT_IN_MIX</code> refusals (<a href="../adr/0391-slot-mcp-policy-defaults-to-on.md">ADR-0391</a>).
+      </li>
+      <li>
+        <strong><code>Auto</code></strong>: Automatically write-protects the slot while
         contributing to the main projection (<code>tally == Live &amp;&amp; opacity &gt; 0.0</code>).
         The moment the human operator pulls the fader down to 0.0 or mutes the channel, the slot
         leaves the mix and becomes immediately writable by the agent. Pushing the fader back up
         re-arms protection instantly.
       </li>
       <li>
-        <strong><code>On</code></strong>: The operator explicitly authorizes the agent to live-code
-        this slot directly on air, with hot-reloading reflected live in the projection.
-      </li>
-      <li>
         <strong><code>Off</code></strong>: The slot is strictly locked against all agent mutations,
         regardless of fader position.
       </li>
     </ul>
+    <p>
+      Clicking the slot pill in the Inspector header cycles its policy: <code>On &rarr; Auto &rarr; Off &rarr; On</code>.
+    </p>
 
     <h3>2. Bay Class Gates: Coarse Safety Openings</h3>
     <p>

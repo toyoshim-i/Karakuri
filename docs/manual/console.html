@@ -184,7 +184,7 @@
                 <span style="display:flex;gap:5px;align-items:center">
                   <span class="pill" data-tip="Master composite render resolution. Determined by the largest active output sink. Configured in the Outputs row. &#8853; MIDI: unassigned &mdash; readout only.">3840&times;2160</span>
                   <span class="pill" data-tip="Toggle solo display mode. Folds all console control bays away to present a borderless full-frame program canvas for performance or capture. &#8853; MIDI: unassigned.">solo</span>
-                  <span class="pill" data-tip="Agent mutation policy gate for on-air live slots. Controls whether external MCP tools can alter live shaders and parameters. Click to toggle ON/AUTO/OFF. &#8853; MIDI: unassigned.">mcp &middot; shut</span>
+                  <span class="pill" data-tip="Agent permission gate for Program Bay live residency and forcing sets live. Click to toggle open/shut. &#8853; MIDI: unassigned.">mcp &middot; shut</span>
                   <span class="pill armed" data-tip="Number of active deck monitor preview thumbnails. Click to adjust concurrency limit to balance rendering load against GPU budget. &#8853; MIDI: unassigned.">previews 3 of 4</span>
                   <span class="grip">&#8942;&#8942;</span>
                 </span>
@@ -227,6 +227,7 @@
                   <div class="half-head"><span>showing</span><span class="what">deck A &middot; drift_night</span><span data-tip="Which deck this pane is showing. Click to choose deck slot (A, B, C, D). Independent of keyboard selection. &#8853; MIDI: unassigned &mdash; local console view targeting.">&#9662;</span>
                     <span class="sep"></span>
                     <span class="shown" data-tip="Count of visible whole node groups out of total (6 of 6). Scroll with wheel. Readout only. &#8853; MIDI: unassigned &mdash; readout only.">6 of 6</span>
+                    <span class="pill" data-tip="Agent mutation policy gate for this deck slot. Default is ON (agent writes allowed directly). Cycles ON &rarr; AUTO (write-protected while contributing live to the mix) &rarr; OFF (strictly locked against MCP writes). Click to cycle. &#8853; MIDI: unassigned.">mcp &middot; on</span>
                     <span class="pill on" data-tip="Keep deck A state as a new Set in library under current timestamp. Pink wash indicates deck is currently on air. &#8853; MIDI: unassigned &mdash; saves snapshot of active pane.">keep</span>
                   </div>
 
@@ -3912,9 +3913,9 @@
           than discovered that way is not settled here. Neither is whether one
           press opens a class or a single operation of it, whether an opening
           outlives a restart, or whether an open class shuts itself again after
-          a while. <strong>Nor is whether a bay carrying no class draws the
-          pill at all</strong> &mdash; the Library, the Inspector, Staging and
-          the Sequencer have none, and an indicator that is present everywhere
+          a while. <strong>Each Inspector pane now carries its own per-slot policy pill</strong>
+          (<code>on</code> / <code>auto</code> / <code>off</code>), while the Library,
+          Staging and the Sequencer have none. An indicator that is present everywhere
           reads as a state wherever it is absent.
         </p>
       </div>
