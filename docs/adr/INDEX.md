@@ -417,6 +417,7 @@ number; new records continue from the end.
 | [ADR-0389](0389-social-sharing-remote-storage-and-clean-loop-video-capture.md) | Social sharing of Set bundles, remote cloud storage, and clean loop video capture | 2026-10-11 | accepted |
 | [ADR-0390](0390-agent-man-mcp-engine-migration-and-structured-content.md) | Migrate MCP engine to agent-man and standardize structuredContent | 2026-10-12 | accepted |
 | [ADR-0391](0391-slot-mcp-policy-defaults-to-on.md) | Slot MCP policy defaults to on | 2026-10-13 | accepted |
+| [ADR-0392](0392-library-bay-tri-state-privacy-gate.md) | Library bay tri-state privacy gate | 2026-10-13 | accepted |
 
 
 ## Retired numbers

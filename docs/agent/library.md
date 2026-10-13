@@ -27,9 +27,17 @@ Use `list_library` to search and explore available procedures and sets:
 - **Text Search (`query`)**: Matches keywords across file names, identifiers, and leading comment documentation (e.g. `"audio"`, `"particle"`, `"fractal"`, `"bloom"`).
 - **Pagination (`offset`, `limit`)**: Page deterministically through large result sets to inspect every item in the library.
 
-When called with no parameters, `list_library` provides an overview catalog showing distribution statistics by layer, topology, and common categories.
+## Permissions & Privacy Gate
+
+Library access is governed by the operator's Library bay MCP gate (`LibraryGate`):
+
+- **`preset` (Default)**: Grants access exclusively to public reference examples (`presets`). All user store items (`.karakuri/`) are withheld from listings, and requests specifying `scope: "store"` are refused with an explanation directing the operator to open the gate if access is intended.
+- **`all`**: Operator has authorized full library access. Both presets and private store sets and procedures can be discovered and read.
+- **`off`**: The operator has closed the Library bay. All library listing and procedure/set reading calls are refused.
+
+When an operation is refused due to the gate, the response includes actionable instructions naming the Library bay header pill.
 
 ## Reading Source Code
 
 - **`read_procedure`**: Read the full `.kir` source code of any procedure by `name` (e.g. `{"name": "bloom"}`) without needing to mount it onto an active deck slot. Can still read active slot nodes via `{"slot": 0, "layer": "L1"}`.
-- **`read_set`**: Read the complete structure and full `.kir` source code of all constituent nodes for any Set by `id` (e.g. `{"id": "beat_cloud"}`).
+- **`read_set`**: Read the complete structure and full `.kir` source code of all constituent nodes for any Set by `id` (e.g. `{"id": "beat_cloud"}`). Stored Sets require the Library gate set to `all`.

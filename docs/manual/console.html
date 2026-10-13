@@ -108,7 +108,7 @@
           <!-- LEFT: library over staging -->
           <div class="col">
             <div class="bay" style="flex:1; display:flex; flex-direction:column;">
-              <div class="bay-head"><span>Library</span><span class="grip">&#8942;&#8942;</span></div>
+              <div class="bay-head"><span>Library</span><span style="display:flex;gap:5px;align-items:center"><span class="pill" data-tip="Agent exploration gate for library sets and procedures. Cycles PRESET (bundled factory examples only; user store withheld) &rarr; ALL (operator's private store permitted) &rarr; OFF (library queries refused). Click to cycle. &#8853; MIDI: unassigned.">mcp &middot; preset</span><span class="grip">&#8942;&#8942;</span></span></div>
               <div class="scopes">
                 <span class="scope sel" data-tip="Library scope: all sets and procedures in this store. Narrows via filter field below. Click to switch scope. &#8853; MIDI: unassigned &mdash; dynamic store items cannot be addressed by static mapping.">all</span>
                 <span class="scope" data-tip="Library scope: starred sets marked with &#9733;. Empty if no sets are starred. Click to switch scope. &#8853; MIDI: unassigned &mdash; dynamic store items cannot be addressed by static mapping.">my sets</span>
@@ -3913,9 +3913,10 @@
           than discovered that way is not settled here. Neither is whether one
           press opens a class or a single operation of it, whether an opening
           outlives a restart, or whether an open class shuts itself again after
-          a while. <strong>Each Inspector pane now carries its own per-slot policy pill</strong>
-          (<code>on</code> / <code>auto</code> / <code>off</code>), while the Library,
-          Staging and the Sequencer have none. An indicator that is present everywhere
+          a while. <strong>Every operational bay now draws its own explicit gate</strong> &mdash;
+          the Library bay carries its tri-state privacy pill (<code>preset</code> / <code>all</code> / <code>off</code>),
+          each Inspector pane carries its per-slot policy pill (<code>on</code> / <code>auto</code> / <code>off</code>),
+          and Staging and the Sequencer have none. An indicator that is present everywhere
           reads as a state wherever it is absent.
         </p>
       </div>

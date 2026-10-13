@@ -86,6 +86,13 @@
             <td>All shader code, parameters, bindings, and configurations in that specific slot</td>
           </tr>
           <tr>
+            <td><strong>Library</strong></td>
+            <td>Bay Head Capsule (<code>mcp · preset/all/off</code>)</td>
+            <td>Global Bay</td>
+            <td><span class="tag slot">Preset</span></td>
+            <td>Sets and procedures exploration; preset allows bundled examples, all unlocks user private store, off disables library access</td>
+          </tr>
+          <tr>
             <td><strong>Mixer</strong></td>
             <td>Bay Head Capsule (<code>mcp · on/off</code>)</td>
             <td>Global Bay</td>
@@ -167,7 +174,32 @@
       Clicking the slot pill in the Inspector header cycles its policy: <code>On &rarr; Auto &rarr; Off &rarr; On</code>.
     </p>
 
-    <h3>2. Bay Class Gates: Coarse Safety Openings</h3>
+    <h3>2. Library Bay: Tri-State Privacy Gate</h3>
+    <p>
+      The Library bay explores reference procedures and complete Sets across both bundled factory examples
+      (<code>examples/</code>) and the operator's local store (<code>.karakuri/</code>). To protect proprietary,
+      unreleased performance material while ensuring agents always have access to public learning examples,
+      the Library bay head features a three-state permission gate (<a href="../adr/0392-library-bay-tri-state-privacy-gate.md">ADR-0392</a>):
+    </p>
+    <ul>
+      <li>
+        <strong><code>Preset</code> (Default)</strong>: Grants read access exclusively to bundled reference examples.
+        The operator's private store items are withheld from listings, and requests specifying <code>scope: "store"</code>
+        are refused with actionable guidance.
+      </li>
+      <li>
+        <strong><code>All</code></strong>: With explicit operator authorization, opens the full library, enabling the agent
+        to search, read, and inspect operator-saved Sets and procedures.
+      </li>
+      <li>
+        <strong><code>Off</code></strong>: Blocks all library exploration, searching, and source reads.
+      </li>
+    </ul>
+    <p>
+      Clicking the pill in the Library bay header cycles: <code>Preset &rarr; All &rarr; Off &rarr; Preset</code>.
+    </p>
+
+    <h3>3. Bay Class Gates: Coarse Safety Openings</h3>
     <p>
       The remaining console bays control shared stage surfaces. Their bay heads carry an interactive
       capsule (e.g. <code>mcp &middot; on</code> / <code>mcp &middot; off</code>). By default, all mutating
@@ -175,7 +207,7 @@
       explanation until the operator intentionally clicks the bay header to grant permission.
     </p>
 
-    <h3>3. Permanently Locked (Unclassed) Controls</h3>
+    <h3>4. Permanently Locked (Unclassed) Controls</h3>
     <p>
       Certain controls &mdash; specifically live musical tempo tapping (<code>TapBeat</code>),
       clock phase nudging (<code>ScaleGrid</code>), step sequence triggers, and application
