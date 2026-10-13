@@ -573,6 +573,12 @@ impl Readout {
             return Some(self.opened(&pill));
         }
 
+        if let Some(pill) = library_mcp_pill(ctx, self.panel.layout(), self.view.opening) {
+            if pill.hit(at) {
+                return Some(self.cycle_library_gate());
+            }
+        }
+
         None
     }
 

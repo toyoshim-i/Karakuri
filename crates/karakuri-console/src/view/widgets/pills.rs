@@ -100,6 +100,54 @@ pub fn mcp_pill(
     })
 }
 
+/// A Library bay MCP gate pill.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LibraryMcpPill {
+    /// The control capsule rectangle.
+    pub pill: Rect,
+    /// The active library gate setting.
+    pub gate: karakuri_operation::gate::LibraryGate,
+}
+
+impl LibraryMcpPill {
+    /// Returns the next gate setting when cycled.
+    pub fn next(&self) -> karakuri_operation::gate::LibraryGate {
+        self.gate.next()
+    }
+
+    /// Whether `p` is on the control.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.pill.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+/// Derives the Library bay MCP gate pill if visible.
+pub fn library_mcp_pill(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    open: Open,
+) -> Option<LibraryMcpPill> {
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let node = layout.find("library")?;
+    if !layout.visible(node) {
+        return None;
+    }
+    let head = head_of(region("library")?)?;
+    let pill = head_capsule(
+        ctx,
+        to_egui(layout.rect(node)),
+        &head,
+        open,
+        open.library().pill_word(),
+    )?;
+    Some(LibraryMcpPill {
+        pill,
+        gate: open.library(),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Pill appearance and geometry helpers
 // ---------------------------------------------------------------------------

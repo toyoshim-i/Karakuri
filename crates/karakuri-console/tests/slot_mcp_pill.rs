@@ -50,12 +50,12 @@ fn slot_mcp_pill_is_laid_out_to_the_left_of_keep_pill() {
 
 #[test]
 fn slot_mcp_pill_cycles_policies() {
-    assert_eq!(SlotPolicy::Auto.next(), SlotPolicy::On);
-    assert_eq!(SlotPolicy::On.next(), SlotPolicy::Off);
-    assert_eq!(SlotPolicy::Off.next(), SlotPolicy::Auto);
+    assert_eq!(SlotPolicy::On.next(), SlotPolicy::Auto);
+    assert_eq!(SlotPolicy::Auto.next(), SlotPolicy::Off);
+    assert_eq!(SlotPolicy::Off.next(), SlotPolicy::On);
 
-    assert_eq!(SlotPolicy::Auto.pill_word(), "mcp · auto");
     assert_eq!(SlotPolicy::On.pill_word(), "mcp · on");
+    assert_eq!(SlotPolicy::Auto.pill_word(), "mcp · auto");
     assert_eq!(SlotPolicy::Off.pill_word(), "mcp · off");
 }
 

@@ -53,6 +53,8 @@ impl Readout {
                         mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)
                             .is_some_and(|pill| pill.hit(at))
                     })
+                    || library_mcp_pill(ctx, self.panel.layout(), self.view.opening)
+                        .is_some_and(|pill| pill.hit(at))
                     || bay_grip(self.panel.layout(), bay.name).is_some_and(|grip| grip.hit(at));
                 if !is_pill {
                     if let karakuri_console::focus::Asked::Panel(op) =

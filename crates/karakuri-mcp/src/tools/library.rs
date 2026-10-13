@@ -103,8 +103,8 @@ fn extract_kset_summary(source: &str, stem: &str) -> String {
     }
 }
 
-/// Collects all available items across presets (`examples/`) and store (`.karakuri/`).
-pub(crate) fn collect_library_items(state: &State) -> Vec<LibraryItem> {
+/// Collects all available items across presets (`examples/`) and optionally store (`.karakuri/`).
+pub(crate) fn collect_library_items(state: &State, include_store: bool) -> Vec<LibraryItem> {
     let mut items = Vec::new();
     let presets_dir = resolve_presets_dir();
 
@@ -160,45 +160,48 @@ pub(crate) fn collect_library_items(state: &State) -> Vec<LibraryItem> {
     }
 
     // 2. Store collection
-    if let Ok(store) = karakuri_store::Store::open(&state.store) {
-        // Stored sets
-        if let Ok(sets) = karakuri_environment::setfile::summarise(&store) {
-            for set in sets {
-                let node_count = set.nodes.len();
-                let summary = format!(
-                    "Saved operator Set holding {} node{}",
-                    node_count,
-                    if node_count == 1 { "" } else { "s" }
-                );
-                items.push(LibraryItem {
-                    name: set.id.clone(),
-                    file: format!("{}.kbset", set.id),
-                    layer: "Set".to_string(),
-                    topology: None,
-                    origin: "store".to_string(),
-                    summary,
-                });
-            }
-        }
-
-        // Stored standalone procedures
-        if let Ok(procs) = store.list_procedures() {
-            for proc in procs {
-                if let Ok(bytes) = store.read_procedure(&proc.name) {
-                    let content = String::from_utf8_lossy(&bytes);
-                    let layer = karakuri_environment::history::declared_kind(content.as_bytes())
-                        .unwrap_or("L4")
-                        .to_string();
-                    let topology = declared_topology(&content);
-                    let summary = extract_summary(&content);
+    if include_store {
+        if let Ok(store) = karakuri_store::Store::open(&state.store) {
+            // Stored sets
+            if let Ok(sets) = karakuri_environment::setfile::summarise(&store) {
+                for set in sets {
+                    let node_count = set.nodes.len();
+                    let summary = format!(
+                        "Saved operator Set holding {} node{}",
+                        node_count,
+                        if node_count == 1 { "" } else { "s" }
+                    );
                     items.push(LibraryItem {
-                        name: proc.name.clone(),
-                        file: format!("{}.kir", proc.name),
-                        layer,
-                        topology,
+                        name: set.id.clone(),
+                        file: format!("{}.kbset", set.id),
+                        layer: "Set".to_string(),
+                        topology: None,
                         origin: "store".to_string(),
                         summary,
                     });
+                }
+            }
+
+            // Stored standalone procedures
+            if let Ok(procs) = store.list_procedures() {
+                for proc in procs {
+                    if let Ok(bytes) = store.read_procedure(&proc.name) {
+                        let content = String::from_utf8_lossy(&bytes);
+                        let layer =
+                            karakuri_environment::history::declared_kind(content.as_bytes())
+                                .unwrap_or("L4")
+                                .to_string();
+                        let topology = declared_topology(&content);
+                        let summary = extract_summary(&content);
+                        items.push(LibraryItem {
+                            name: proc.name.clone(),
+                            file: format!("{}.kir", proc.name),
+                            layer,
+                            topology,
+                            origin: "store".to_string(),
+                            summary,
+                        });
+                    }
                 }
             }
         }
@@ -226,7 +229,31 @@ pub(crate) fn collect_library_items(state: &State) -> Vec<LibraryItem> {
 
 /// Executes the `list_library` tool call with multi-dimensional filtering, overview statistics, and pagination.
 pub(crate) fn list_library(args: &Value, state: &State) -> Result<String, String> {
-    let all_items = collect_library_items(state);
+    let gate = state.opening.read().library();
+    if gate == karakuri_operation::gate::LibraryGate::Off {
+        return Err(
+            "the Library gate is off — the operator opens it at the head of the Library bay".into(),
+        );
+    }
+
+    let scope_filter = args.get("scope").and_then(Value::as_str);
+    if let Some(scope) = scope_filter {
+        if scope.eq_ignore_ascii_case("store") && !gate.allows_store() {
+            return Err(
+                "reading the store is not permitted while the Library gate is preset — \
+                 access to the operator's private store requires the Library gate set to 'all' \
+                 at the head of the Library bay"
+                    .into(),
+            );
+        }
+    }
+
+    let include_store = gate.allows_store()
+        && scope_filter
+            .map(|s| !s.eq_ignore_ascii_case("presets") && !s.eq_ignore_ascii_case("preset"))
+            .unwrap_or(true);
+
+    let all_items = collect_library_items(state, include_store);
 
     // Compute library overview statistics
     let total_all = all_items.len();
@@ -253,7 +280,6 @@ pub(crate) fn list_library(args: &Value, state: &State) -> Result<String, String
     let store_count = all_items.iter().filter(|i| i.origin == "store").count();
 
     // Parse filters
-    let scope_filter = args.get("scope").and_then(Value::as_str);
     let layer_filter = args.get("layer").and_then(Value::as_str);
     let topology_filter = args.get("topology").and_then(Value::as_str);
     let query_filter = args.get("query").and_then(Value::as_str);
@@ -314,11 +340,17 @@ pub(crate) fn list_library(args: &Value, state: &State) -> Result<String, String
 
     let matched_count = filtered.len();
 
+    let store_note = if !gate.allows_store() {
+        " | store withheld: Library gate is preset; open to 'all' at Library bay head for full access"
+    } else {
+        ""
+    };
+
     let mut out = format!(
         "Library Overview ({total_all} items: {sets_count} Sets, {l1_count} L1, {l2_count} L2, \
          {l3_count} L3, {l4_count} L4, {field_count} Field, {l5_count} L5 | \
          Topology: {points_count} points, {lines_count} lines, {triangles_count} triangles | \
-         {presets_count} presets, {store_count} in store)\n\n"
+         {presets_count} presets, {store_count} in store{store_note})\n\n"
     );
 
     if matched_count == 0 {

@@ -517,6 +517,24 @@ impl Readout {
         Acted::Opened
     }
 
+    /// A press on the Library bay MCP gate pill, cycling Preset -> All -> Off -> Preset.
+    pub(crate) fn cycle_library_gate(&mut self) -> Acted {
+        let next = self.view.opening.library().next();
+        let next_open = self.view.opening.with_library(next);
+        self.opening.set(next_open);
+        self.view.opening = next_open;
+        println!(
+            "Library: `{}` — library access is {} for models. the operator sets it at the head of the Library bay.",
+            next.pill_word(),
+            match next {
+                karakuri_operation::gate::LibraryGate::Preset => "restricted to presets",
+                karakuri_operation::gate::LibraryGate::All => "open across presets and store",
+                karakuri_operation::gate::LibraryGate::Off => "shut",
+            }
+        );
+        Acted::Opened
+    }
+
     /// Selects library scope filter, emitting `SelectScope` and requesting listing reload (P-0091).
     pub(crate) fn chose(&mut self, chosen: Chosen) -> Acted {
         let moved = self.view.select_scope(chosen.scope);

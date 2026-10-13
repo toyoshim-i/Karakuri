@@ -317,7 +317,16 @@ fn a_console_with_no_store_lists_nothing() {
     let empty = shapes_inside(&mut view, &mut panel, region);
     let bare = empty.len();
 
-    // Compares bare library against master bay body shapes, subtracting the master class pill (ADR-0235).
+    // Compares bare library against master bay body shapes, subtracting each bay's MCP pill (ADR-0235).
+    let lib_capsule =
+        karakuri_console::view::library_mcp_pill(&drawn_once(), panel.layout(), Open::CLOSED)
+            .expect("the Library bay draws its gate pill")
+            .pill;
+    assert!(
+        !shapes_inside(&mut view, &mut panel, lib_capsule).is_empty(),
+        "nothing drawn inside library gate pill"
+    );
+
     let master = to_egui(rect_of(panel.layout(), "master"));
     let capsule = mcp_pill(
         &drawn_once(),
@@ -334,10 +343,9 @@ fn a_console_with_no_store_lists_nothing() {
     );
     let in_master = shapes_inside(&mut view, &mut panel, master).len();
     assert_eq!(
-        bare,
+        bare - 3,
         in_master - pill,
-        "the Library bay draws {bare} shapes with no store behind it and the Master bay, \
-         which has no body at all, draws {in_master} less the {pill} of its class pill"
+        "the Library bay draws {bare} shapes (less 3 pill) with no store behind it and the Master bay draws {in_master} less {pill}"
     );
 
     // With the store's names, the same frame draws the rows and the foot.

@@ -182,6 +182,7 @@ pub(crate) fn dispatch_tool(name: &str, args: &Value, state: &mut State) -> Resu
                 "mixer": if opening.holds(karakuri_operation::gate::Class::MixFaders) { "on" } else { "off" },
                 "master": if opening.holds(karakuri_operation::gate::Class::MasterEffects) { "on" } else { "off" },
                 "outputs": if opening.holds(karakuri_operation::gate::Class::InputsAndOutputs) { "on" } else { "off" },
+                "library": opening.library().name(),
             },
             "slots": slots,
         });

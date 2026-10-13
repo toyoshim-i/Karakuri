@@ -78,19 +78,35 @@ pub(crate) fn read_procedure_by_name(name: &str, state: &State) -> Result<String
         }
     }
 
-    // 2. Check store procedures
-    if let Ok(store) = karakuri_store::Store::open(&state.store) {
-        if let Ok(bytes) = store.read_procedure(stem) {
-            return Ok(String::from_utf8_lossy(&bytes).to_string());
-        }
+    let gate = state.opening.read().library();
+    if gate == karakuri_operation::gate::LibraryGate::Off {
+        return Err(
+            "the Library gate is off — the operator opens it at the head of the Library bay".into(),
+        );
     }
 
-    // 3. Check presets
+    // 2. Check presets
     let presets_dir = super::library::resolve_presets_dir();
     let preset_file = presets_dir.join(format!("{stem}.kir"));
     if karakuri_store::fs::exists(&preset_file) {
         if let Ok(content) = karakuri_store::fs::read_to_string(&preset_file) {
             return Ok(content);
+        }
+    }
+
+    // 3. Check store procedures
+    if let Ok(store) = karakuri_store::Store::open(&state.store) {
+        if store.has_procedure(stem) {
+            if !gate.allows_store() {
+                return Err(format!(
+                    "reading procedure `{name}` from store is not permitted while the Library gate is preset — \
+                     access to the operator's private store requires the Library gate set to 'all' \
+                     at the head of the Library bay"
+                ));
+            }
+            if let Ok(bytes) = store.read_procedure(stem) {
+                return Ok(String::from_utf8_lossy(&bytes).to_string());
+            }
         }
     }
 

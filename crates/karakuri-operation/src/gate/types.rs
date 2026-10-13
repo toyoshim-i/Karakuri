@@ -139,6 +139,54 @@ pub enum Standing {
     Unread(Reading),
 }
 
+/// The access policy for the Library bay (P-0083, ADR-0235).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LibraryGate {
+    /// Library access by models is completely disabled.
+    Off,
+    /// Models can discover and read built-in presets and examples, but not the operator's private store.
+    #[default]
+    Preset,
+    /// Models have unrestricted access across both presets and the operator's private store.
+    All,
+}
+
+impl LibraryGate {
+    pub const ALL: [LibraryGate; 3] = [LibraryGate::Preset, LibraryGate::All, LibraryGate::Off];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            LibraryGate::Off => "off",
+            LibraryGate::Preset => "preset",
+            LibraryGate::All => "all",
+        }
+    }
+
+    pub fn pill_word(self) -> &'static str {
+        match self {
+            LibraryGate::Off => "mcp · off",
+            LibraryGate::Preset => "mcp · preset",
+            LibraryGate::All => "mcp · all",
+        }
+    }
+
+    pub fn next(self) -> LibraryGate {
+        match self {
+            LibraryGate::Preset => LibraryGate::All,
+            LibraryGate::All => LibraryGate::Off,
+            LibraryGate::Off => LibraryGate::Preset,
+        }
+    }
+
+    pub fn allows_preset(self) -> bool {
+        matches!(self, LibraryGate::Preset | LibraryGate::All)
+    }
+
+    pub fn allows_store(self) -> bool {
+        matches!(self, LibraryGate::All)
+    }
+}
+
 /// Operator authorizations opening protected operation classes (ADR-0235).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Open {
@@ -146,16 +194,30 @@ pub struct Open {
     mix_faders: bool,
     master_effects: bool,
     inputs_and_outputs: bool,
+    library: LibraryGate,
 }
 
 impl Open {
-    /// All classes closed (default state).
+    /// All classes closed, library gate set to Preset (default state).
     pub const CLOSED: Open = Open {
         live_deck: false,
         mix_faders: false,
         master_effects: false,
         inputs_and_outputs: false,
+        library: LibraryGate::Preset,
     };
+
+    /// Returns the active Library bay gate setting.
+    pub fn library(self) -> LibraryGate {
+        self.library
+    }
+
+    /// Returns a new `Open` configuration with the Library bay gate updated.
+    pub fn with_library(self, gate: LibraryGate) -> Open {
+        let mut next = self;
+        next.library = gate;
+        next
+    }
 
     /// Returns a new `Open` configuration with the specified class set to `open`.
     pub fn with(self, class: Class, open: bool) -> Open {

@@ -249,16 +249,16 @@ impl Authority {
 pub enum SlotPolicy {
     /// Automatically permit writes when off-air (fader == 0 or muted),
     /// and protect against writes when on-air.
-    #[default]
     Auto,
     /// Always allow MCP modifications to this slot.
+    #[default]
     On,
     /// Always block MCP modifications to this slot.
     Off,
 }
 
 impl SlotPolicy {
-    pub const ALL: [SlotPolicy; 3] = [SlotPolicy::Auto, SlotPolicy::On, SlotPolicy::Off];
+    pub const ALL: [SlotPolicy; 3] = [SlotPolicy::On, SlotPolicy::Auto, SlotPolicy::Off];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -278,9 +278,9 @@ impl SlotPolicy {
 
     pub fn next(self) -> SlotPolicy {
         match self {
-            SlotPolicy::Auto => SlotPolicy::On,
-            SlotPolicy::On => SlotPolicy::Off,
-            SlotPolicy::Off => SlotPolicy::Auto,
+            SlotPolicy::On => SlotPolicy::Auto,
+            SlotPolicy::Auto => SlotPolicy::Off,
+            SlotPolicy::Off => SlotPolicy::On,
         }
     }
 }

@@ -16,6 +16,8 @@ pub struct Head {
     pub grip: bool,
     /// The class this head opens, where it opens one — [`class_at`].
     pub class: Option<Class>,
+    /// Whether this head belongs to the Library bay, displaying the library gate pill.
+    pub library: bool,
     /// Active bank pill index (0..3) if this head displays bank pills.
     pub banks: Option<usize>,
     /// Whether the head indicates an in-flight background build.
@@ -36,11 +38,13 @@ pub fn head_of(region: &Region) -> Option<Head> {
             return None
         }
     };
+    let is_library = matches!(region.kind, Kind::Library);
     Some(Head {
         title,
         pills,
         grip: head_grip(region.kind),
         class: class_at(region.name),
+        library: is_library,
         banks: None,
         building: false,
     })
@@ -155,6 +159,10 @@ impl Head {
         if let Some(class) = self.class {
             words[len] = mcp_word(open.holds(class));
             armed[len] = open.holds(class);
+            len += 1;
+        } else if self.library {
+            words[len] = open.library().pill_word();
+            armed[len] = open.library() != karakuri_operation::gate::LibraryGate::Off;
             len += 1;
         }
         HeadWords { words, armed, len }

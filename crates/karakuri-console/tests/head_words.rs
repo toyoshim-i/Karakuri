@@ -34,13 +34,20 @@ fn every_heads_words_are_its_own_controls_and_its_class_pill() {
             let mut want: Vec<&str> = head.pills.to_vec();
             if let Some(class) = head.class {
                 want.push(mcp_word(open.holds(class)));
+            } else if head.library {
+                want.push(open.library().pill_word());
             }
             let words = head.words(open);
             assert_eq!(words.as_slice(), want.as_slice(), "{}'s head", region.name);
             for index in 0..want.len() {
-                let lit = head.class.is_some()
-                    && index + 1 == want.len()
-                    && open.holds(head.class.unwrap());
+                let lit = if let Some(class) = head.class {
+                    index + 1 == want.len() && open.holds(class)
+                } else if head.library {
+                    index + 1 == want.len()
+                        && open.library() != karakuri_operation::gate::LibraryGate::Off
+                } else {
+                    false
+                };
                 assert_eq!(
                     words.armed(index),
                     lit,

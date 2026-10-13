@@ -145,28 +145,40 @@ pub(crate) fn save_set(
 /// Preconditions: `id` must be a valid sanitized Set identifier.
 /// Queries persistent store metadata cards and full procedure sources without requiring compilation or GPU initialization.
 pub(crate) fn read_set(id: &str, state: &State) -> Result<String, String> {
-    // Already one path component, because that is part of naming a set rather
-    // than part of reading one — see [`asked`]'s `read_set` arm and
-    // [`checked_id`].
+    let gate = state.opening.read().library();
+    if gate == karakuri_operation::gate::LibraryGate::Off {
+        return Err(
+            "the Library gate is off — the operator opens it at the head of the Library bay".into(),
+        );
+    }
+
+    // 1. Check presets first
+    let presets_dir = super::library::resolve_presets_dir();
+    let preset_path = presets_dir.join(format!("{id}.kset"));
+    if karakuri_store::fs::exists(&preset_path) {
+        return read_preset_set(id, &preset_path, &presets_dir);
+    }
+
+    // 2. Check store
+    if !gate.allows_store() {
+        return Err(format!(
+            "reading set `{id}` from store is not permitted while the Library gate is preset — \
+             access to the operator's private store requires the Library gate set to 'all' \
+             at the head of the Library bay"
+        ));
+    }
+
     let store = Store::open(&state.store)
         .map_err(|e| format!("the store at `{}`: {e}", state.store.display()))?;
-    let lines = match store.read_set(id) {
-        Ok(l) => l,
-        Err(e) => {
-            let presets_dir = super::library::resolve_presets_dir();
-            let preset_path = presets_dir.join(format!("{id}.kset"));
-            if karakuri_store::fs::exists(&preset_path) {
-                return read_preset_set(id, &preset_path, &presets_dir);
-            }
-            return Err(format!(
-                "reading set `{id}`: {e} — this reads the operator's library, which is \
-                 filed under the id a set was saved under by the `k` key or by \
-                 `--save-set ID`. A set kept with `save_set` is in `<store>/{}/` and not \
-                 here, because the library is written by the operator's own act",
-                Store::SANDBOX
-            ));
-        }
-    };
+    let lines = store.read_set(id).map_err(|e| {
+        format!(
+            "reading set `{id}`: {e} — this reads the operator's library, which is \
+             filed under the id a set was saved under by the `k` key or by \
+             `--save-set ID`. A set kept with `save_set` is in `<store>/{}/` and not \
+             here, because the library is written by the operator's own act",
+            Store::SANDBOX
+        )
+    })?;
     // Preserves file declaration order of nodes as written.
     let nodes: Vec<(Layer, u32, Option<String>, Hash)> = lines
         .iter()

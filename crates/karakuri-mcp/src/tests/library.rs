@@ -256,3 +256,105 @@ fn library_documentation_topic_is_readable() {
     let text = rep["result"]["content"][0]["text"].as_str().expect("text");
     assert!(text.contains("Library & Preset Exploration"), "{text}");
 }
+
+#[test]
+fn library_gate_enforces_permissions_and_privacy() {
+    let (_tx, rx) = mpsc::channel();
+    let s = state(rx);
+    let opening = s.opening.clone();
+    let state = Arc::new(Mutex::new(s));
+
+    // 1. Default is Preset
+    let req_perm = json!({
+        "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+        "params": { "name": "get_permissions", "arguments": {} }
+    });
+    let rep_perm = dispatch(&req_perm, &state).settled().expect("rep");
+    let text_perm = rep_perm["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    assert!(
+        text_perm.contains("\"library\": \"preset\""),
+        "should default to preset: {text_perm}"
+    );
+    assert!(
+        text_perm.contains("\"policy\": \"on\""),
+        "slots should default to on: {text_perm}"
+    );
+
+    // Preset: list_library with scope: "store" is refused
+    let req_store = json!({
+        "jsonrpc": "2.0", "id": 12, "method": "tools/call",
+        "params": {
+            "name": "list_library",
+            "arguments": { "scope": "store" }
+        }
+    });
+    let rep_store = dispatch(&req_store, &state).settled().expect("rep");
+    assert_eq!(rep_store["result"]["isError"], true);
+    let err_text = rep_store["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    assert!(
+        err_text.contains("not permitted while the Library gate is preset"),
+        "{err_text}"
+    );
+
+    // Preset: list_library without scope has store withheld notice
+    let req_all = json!({
+        "jsonrpc": "2.0", "id": 13, "method": "tools/call",
+        "params": { "name": "list_library", "arguments": {} }
+    });
+    let rep_all = dispatch(&req_all, &state).settled().expect("rep");
+    let text_all = rep_all["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    assert!(
+        text_all.contains("store withheld: Library gate is preset"),
+        "{text_all}"
+    );
+
+    // 2. Off gate: everything is refused
+    opening.set(
+        karakuri_operation::gate::Open::CLOSED
+            .with_library(karakuri_operation::gate::LibraryGate::Off),
+    );
+    let req_off_list = json!({
+        "jsonrpc": "2.0", "id": 14, "method": "tools/call",
+        "params": { "name": "list_library", "arguments": {} }
+    });
+    let rep_off_list = dispatch(&req_off_list, &state).settled().expect("rep");
+    assert_eq!(rep_off_list["result"]["isError"], true);
+
+    let req_off_proc = json!({
+        "jsonrpc": "2.0", "id": 15, "method": "tools/call",
+        "params": { "name": "read_procedure", "arguments": { "name": "bloom" } }
+    });
+    let rep_off_proc = dispatch(&req_off_proc, &state).settled().expect("rep");
+    assert_eq!(rep_off_proc["result"]["isError"], true);
+
+    let req_off_set = json!({
+        "jsonrpc": "2.0", "id": 16, "method": "tools/call",
+        "params": { "name": "read_set", "arguments": { "id": "beat_cloud" } }
+    });
+    let rep_off_set = dispatch(&req_off_set, &state).settled().expect("rep");
+    assert_eq!(rep_off_set["result"]["isError"], true);
+
+    // 3. All gate: scope: "store" is permitted
+    opening.set(
+        karakuri_operation::gate::Open::CLOSED
+            .with_library(karakuri_operation::gate::LibraryGate::All),
+    );
+    let req_all_store = json!({
+        "jsonrpc": "2.0", "id": 17, "method": "tools/call",
+        "params": {
+            "name": "list_library",
+            "arguments": { "scope": "store" }
+        }
+    });
+    let rep_all_store = dispatch(&req_all_store, &state).settled().expect("rep");
+    assert_ne!(
+        rep_all_store["result"]["isError"], true,
+        "{rep_all_store:?}"
+    );
+}

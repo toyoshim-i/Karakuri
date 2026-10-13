@@ -8,6 +8,7 @@ use std::time::Duration;
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
+pub use karakuri_operation::gate::LibraryGate;
 use karakuri_operation::gate::{Class, Open};
 pub use karakuri_operation::SlotPolicy;
 use karakuri_operation::{
@@ -269,7 +270,7 @@ impl View {
             ungate_requested: None,
             // Bay opening state defaulted to closed (ADR-0235).
             opening: Open::CLOSED,
-            slot_policies: [SlotPolicy::Auto; DECKS],
+            slot_policies: [SlotPolicy::On; DECKS],
             phase: Phase::ZERO,
             // Initial focus defaults to the first reachable bay in traversal order.
             focus: Focus::default(),

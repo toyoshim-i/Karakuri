@@ -672,3 +672,29 @@ fn a_group_with_no_bay_is_refused_and_no_opening_reaches_it() {
         );
     }
 }
+
+#[test]
+fn library_gate_defaults_to_preset_and_cycles() {
+    assert_eq!(Open::CLOSED.library(), LibraryGate::Preset);
+    assert_eq!(LibraryGate::Preset.pill_word(), "mcp · preset");
+    assert_eq!(LibraryGate::Preset.name(), "preset");
+    assert!(LibraryGate::Preset.allows_preset());
+    assert!(!LibraryGate::Preset.allows_store());
+
+    assert_eq!(LibraryGate::Preset.next(), LibraryGate::All);
+    assert_eq!(LibraryGate::All.pill_word(), "mcp · all");
+    assert_eq!(LibraryGate::All.name(), "all");
+    assert!(LibraryGate::All.allows_preset());
+    assert!(LibraryGate::All.allows_store());
+
+    assert_eq!(LibraryGate::All.next(), LibraryGate::Off);
+    assert_eq!(LibraryGate::Off.pill_word(), "mcp · off");
+    assert_eq!(LibraryGate::Off.name(), "off");
+    assert!(!LibraryGate::Off.allows_preset());
+    assert!(!LibraryGate::Off.allows_store());
+
+    assert_eq!(LibraryGate::Off.next(), LibraryGate::Preset);
+
+    let open_all = Open::CLOSED.with_library(LibraryGate::All);
+    assert_eq!(open_all.library(), LibraryGate::All);
+}
