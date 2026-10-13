@@ -129,12 +129,13 @@ fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
     std::fs::write(&l1, PROBE_L1).expect("l1");
     std::fs::write(&l4, PROBE_L4).expect("l4");
     let pair = (l1, vec![l4]);
+    let opening = closed();
     let reporter = serve(
         0,
         Slots::of(vec![pair.clone(), pair]),
         store_root(&dir),
         true,
-        closed(),
+        opening.clone(),
         policies(),
     )
     .expect("serve");
@@ -142,6 +143,7 @@ fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
         port: reporter.port(),
         dir,
         shutdown: reporter.shutdown_handle(),
+        opening,
     };
     stand_in(reporter, |request| {
         let SaveRequest { slot, id, reply } = request;

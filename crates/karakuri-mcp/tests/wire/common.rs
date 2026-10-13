@@ -17,6 +17,7 @@ pub struct Server {
     pub port: u16,
     pub dir: tempfile::TempDir,
     pub shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub opening: karakuri_environment::Opening,
 }
 
 impl Drop for Server {
@@ -44,6 +45,12 @@ impl Server {
     /// The library this server was started on, open from the test's side.
     pub fn store(&self) -> Store {
         Store::open(store_root(&self.dir)).expect("store")
+    }
+
+    /// Sets the library gate on this server's opening state.
+    pub fn set_library_gate(&self, gate: karakuri_operation::gate::LibraryGate) {
+        let current = self.opening.read();
+        self.opening.set(current.with_library(gate));
     }
 }
 
@@ -195,12 +202,13 @@ pub fn start_chain() -> Server {
         write("blob.kir", PROBE_FIELD),
         write("l1_b.kir", PROBE_L1_B),
     ];
+    let opening = closed();
     let reporter = serve(
         0,
         Slots::of(vec![(head, rest)]),
         store_root(&dir),
         true,
-        closed(),
+        opening.clone(),
         policies(),
     )
     .expect("serve");
@@ -211,6 +219,7 @@ pub fn start_chain() -> Server {
         port,
         dir,
         shutdown,
+        opening,
     }
 }
 
@@ -230,12 +239,13 @@ pub fn started(watching: bool) -> (Server, Reporter) {
     std::fs::write(&l4, PROBE_L4).expect("l4");
     // Port 0: the operating system picks, and `serve` reports what it got —
     // which is also the fix for `--mcp 0` naming a port that is not the port.
+    let opening = closed();
     let reporter = serve(
         0,
         Slots::of(vec![(l1, vec![l4])]),
         store_root(&dir),
         watching,
-        closed(),
+        opening.clone(),
         policies(),
     )
     .expect("serve");
@@ -246,6 +256,7 @@ pub fn started(watching: bool) -> (Server, Reporter) {
             port,
             dir,
             shutdown,
+            opening,
         },
         reporter,
     )
@@ -491,12 +502,13 @@ pub fn wired(
         write("l4.kir", PROBE_L4),
         write("blob.kir", PROBE_FIELD),
     ];
+    let opening = closed();
     let reporter = serve(
         0,
         Slots::of(vec![(head, rest)]),
         store_root(&dir),
         watching,
-        closed(),
+        opening.clone(),
         policies(),
     )
     .expect("serve");
@@ -508,6 +520,7 @@ pub fn wired(
             port,
             dir,
             shutdown,
+            opening,
         },
         seen,
     )

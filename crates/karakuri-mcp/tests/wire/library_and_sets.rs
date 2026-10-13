@@ -269,6 +269,7 @@ fn an_empty_store_and_a_filter_that_matches_nothing_read_differently() {
 #[test]
 fn a_node_is_called_here_what_read_set_calls_it() {
     let server = start(true);
+    server.set_library_gate(karakuri_operation::gate::LibraryGate::All);
     let carded = stored(&server, PROBE_KNOBS, true);
     let uncarded = stored(&server, PROBE_L1, false);
     let elsewhere = Hash::of(b"stored on another machine");
@@ -345,6 +346,7 @@ fn a_store_that_cannot_be_opened_is_an_error_naming_the_path() {
 #[test]
 fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
     let server = start(true);
+    server.set_library_gate(karakuri_operation::gate::LibraryGate::All);
     kept(&server, "keeper", PROBE_KNOBS, true);
 
     let (_, listed) = post(
@@ -392,6 +394,7 @@ fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
 #[test]
 fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
     let server = start(true);
+    server.set_library_gate(karakuri_operation::gate::LibraryGate::All);
     let store = server.store();
     let put = |source: &str| store.put_artifact(source.as_bytes()).expect("put");
     let (l1, l2, l4) = (put(PROBE_L1), put(PROBE_L2), put(PROBE_L4));
@@ -465,6 +468,7 @@ fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
 #[test]
 fn an_artifact_with_no_card_is_answered_and_not_called_a_broken_store() {
     let server = start(true);
+    server.set_library_gate(karakuri_operation::gate::LibraryGate::All);
     kept(&server, "uncarded", PROBE_KNOBS, false);
     let (failed, said) = call(server.port, "read_set", json!({"id":"uncarded"}));
     assert!(
@@ -522,6 +526,7 @@ fn a_set_id_on_the_way_to_a_card_cannot_name_a_path() {
 #[test]
 fn a_set_this_store_never_saw_is_refused_by_its_id() {
     let server = start(true);
+    server.set_library_gate(karakuri_operation::gate::LibraryGate::All);
     let (failed, said) = call(server.port, "read_set", json!({"id":"never_saved"}));
     assert!(
         failed,
@@ -529,4 +534,22 @@ fn a_set_this_store_never_saw_is_refused_by_its_id() {
     );
     assert!(said.contains("never_saved"), "{said}");
     assert!(said.contains("save_set"), "{said}");
+}
+
+/// Verifies that reading a store Set is refused when the Library gate is at default (preset).
+#[test]
+fn read_set_from_store_is_refused_when_library_gate_is_preset() {
+    let server = start(true);
+    kept(&server, "keeper", PROBE_KNOBS, true);
+    let (failed, said) = call(server.port, "read_set", json!({"id":"keeper"}));
+    assert!(
+        failed,
+        "reading a private store set under preset gate was accepted: {said}"
+    );
+    assert!(
+        said.contains(
+            "reading set `keeper` from store is not permitted while the Library gate is preset"
+        ),
+        "expected gate refusal message, got: {said}"
+    );
 }
