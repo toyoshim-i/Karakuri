@@ -205,7 +205,7 @@ fn a_second_camera_loads_beside_the_first() {
     let loaded = from_lines(&store, "two_eyes", &lines).expect("two cameras load");
     assert_eq!(
         loaded
-            .l3s
+            .l3s()
             .iter()
             .map(|c| c.name.clone())
             .collect::<Vec<_>>(),

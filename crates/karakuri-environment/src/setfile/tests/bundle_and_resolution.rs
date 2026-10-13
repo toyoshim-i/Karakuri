@@ -36,8 +36,8 @@ fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
     assert!(said.contains("`s1`"), "{said}");
 
     let loaded = load(&bare, "s1").expect("the set is filed and its artifacts are here");
-    assert_eq!(loaded.l1s[0].name, "ring");
-    assert_eq!(loaded.l4s[0].name, "points");
+    assert_eq!(loaded.l1s()[0].name, "ring");
+    assert_eq!(loaded.l4s()[0].name, "points");
     for hash in [
         Hash::of(&std::fs::read(&l1).expect("read")),
         Hash::of(&std::fs::read(&l4).expect("read")),
@@ -468,8 +468,8 @@ fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
     let bare = Store::open(elsewhere.path()).expect("store");
     unbundle(&bare, CameFrom::Somebody, &sent).expect("the bundle carries its own sources");
     let loaded = load(&bare, "night").expect("the set is filed and its artifacts are here");
-    assert_eq!(loaded.l1s[0].name, "ring");
-    assert_eq!(loaded.l4s[0].name, "points");
+    assert_eq!(loaded.l1s()[0].name, "ring");
+    assert_eq!(loaded.l4s()[0].name, "points");
 }
 
 /// Ensures loading rejects unresolved part records present in a .kbset file.

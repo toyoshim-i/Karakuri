@@ -274,62 +274,9 @@ pub(crate) fn loading(
     }
 
     let letter = deck_letter(slot as u8);
-    let mut named = Vec::with_capacity(loaded.srcs.len());
-    for (at, ((checked, src), name)) in loaded.nodes().zip(loaded.node_names()).enumerate() {
-        let path = karakuri_environment::scratch::place(
-            root,
-            // Resolve scratch file path using consistent slot and node naming convention.
-            &karakuri_environment::scratch::node_name(slot, at, &checked.name),
-            src,
-        )?;
-        // Use Set node identifier for compiler bindings to preserve edge references on save.
-        named.push(karakuri_environment::compile::Named { name, path });
-    }
-    let mut named = named.into_iter();
-    let head = named
-        .next()
-        .ok_or_else(|| format!("`{id}` names no procedure at all"))?;
-
-    // Preserve recorded seed/salts or fall back to slot-specific derived seeds.
-    let seed_salt = loaded.salts.first().copied().flatten().unwrap_or(salt);
-    let salts: Vec<u32> = (0..loaded.l1s.len())
-        .map(|at| {
-            loaded
-                .salts
-                .get(at)
-                .copied()
-                .flatten()
-                .unwrap_or_else(|| karakuri_engine::set::derived_salt(seed_salt, at))
-        })
-        .collect();
-
-    let nodes = loaded.srcs.len();
-    aim.re_point(watch::Aim {
-        head,
-        rest: named.collect(),
-        layering: loaded.layering,
-        live: loaded.live,
-        // Apply recorded capacity override for geometry slots.
-        capacity: loaded.capacities.first().copied().flatten(),
-        seed_salt,
-        salts,
-        // A Set holds a built-in camera whatever its files declare, so
-        // `Orbit::default()` where the file recorded none is the camera it
-        // would have been built with rather than a value invented here.
-        camera: loaded.camera.unwrap_or_default(),
-        overrides: loaded.params,
-        // Nothing in a Set file publishes a control — `setfile` writes none
-        // and reads none — so this is empty for the same reason this program's
-        // startup watchers pass an empty list: there is no `--publish` here to
-        // fold in either (ADR-0216).
-        published: Vec::new(),
-        bindings: loaded.bindings,
-        edges: loaded.edges,
-        authorities: Vec::new(),
-        // Track the active Set ID so future revisions are recorded under this material (ADR-0276).
-        set: Some(id.to_string()),
-    })
-    .map_err(|()| {
+    let nodes = loaded.nodes.len();
+    let slot_aim = loaded.aim(root, slot, salt)?;
+    aim.re_point(slot_aim).map_err(|()| {
         format!(
             "deck {letter}'s build worker is gone, so `{id}` cannot be built; \
              what is on that deck keeps running"

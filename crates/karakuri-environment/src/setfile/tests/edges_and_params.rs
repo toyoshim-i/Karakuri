@@ -71,7 +71,7 @@ fn an_edge_and_the_names_it_points_with_survive_the_file() {
 
     let loaded = load(&store, "wired").expect("load");
     assert_eq!(loaded.edges, edges, "the edge came back as it went in");
-    assert_eq!(loaded.names.l1s, [None, Some("far".to_string())]);
+    assert_eq!(loaded.names().l1s, [None, Some("far".to_string())]);
     assert!(
         loaded.notes.is_empty(),
         "nothing here is unhonourable: {:?}",
@@ -165,7 +165,7 @@ fn a_source_slot_edge_survives_the_file() {
 
     let loaded = load(&store, "masked").expect("load");
     assert_eq!(loaded.edges, edges, "the edge came back as it went in");
-    assert_eq!(loaded.names.l1s, [None, Some("victim".to_string())]);
+    assert_eq!(loaded.names().l1s, [None, Some("victim".to_string())]);
     assert_eq!(
         loaded.salts,
         vec![Some(11), Some(22)],
@@ -299,8 +299,8 @@ fn inlined_source_loads_without_a_store_that_knows_the_artifact() {
     let elsewhere = tempfile::tempdir().expect("tempdir");
     let bare = Store::open(elsewhere.path()).expect("store");
     let loaded = from_lines(&bare, "s1", &lines).expect("the file carries its own source");
-    assert_eq!(loaded.l1s[0].name, "ring");
-    assert_eq!(loaded.l4s[0].name, "points");
+    assert_eq!(loaded.l1s()[0].name, "ring");
+    assert_eq!(loaded.l4s()[0].name, "points");
 }
 
 /// Verifies legacy param records without an index are treated as wildcard writes across layers.

@@ -49,7 +49,7 @@ mod gpu {
         let store = Store::open(&root).expect("the store the save made");
         let loaded = setfile::load(&store, "kept01").expect("the file it wrote");
         assert_eq!(
-            loaded.srcs.len(),
+            loaded.srcs().len(),
             engine.placed.len(),
             "the file does not name every node the slot is running"
         );

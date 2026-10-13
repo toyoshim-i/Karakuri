@@ -164,8 +164,9 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
     };
     // Resolves element capacity for each geometry from explicit file configuration
     // or falls back to procedure defaults.
-    let mut sources: Vec<(&Checked, u32)> = Vec::with_capacity(loaded.l1s.len());
-    for (at, l1) in loaded.l1s.iter().enumerate() {
+    let l1s = loaded.l1s();
+    let mut sources: Vec<(&Checked, u32)> = Vec::with_capacity(l1s.len());
+    for (at, l1) in l1s.iter().enumerate() {
         match loaded
             .capacities
             .get(at)
@@ -183,11 +184,12 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
             }
         }
     }
-    let l2s: Vec<&Checked> = loaded.l2s.iter().collect();
-    let l3s: Vec<&Checked> = loaded.l3s.iter().collect();
-    let fields: Vec<&Checked> = loaded.fields.iter().collect();
-    let l4s: Vec<&Checked> = loaded.l4s.iter().collect();
-    let l5s: Vec<&Checked> = loaded.l5s.iter().collect();
+    let l2s = loaded.l2s();
+    let l3s = loaded.l3s();
+    let fields = loaded.fields();
+    let l4s = loaded.l4s();
+    let l5s = loaded.l5s();
+    let names = loaded.names();
     let plan = match karakuri_engine::Set::validate(
         &sources,
         &l2s,
@@ -203,12 +205,12 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
         loaded.salts.first().copied().flatten().unwrap_or_default(),
         &loaded.salts,
         karakuri_engine::set::Wiring {
-            l1s: &loaded.names.l1s,
-            l2s: &loaded.names.l2s,
-            l3s: &loaded.names.l3s,
-            l4s: &loaded.names.l4s,
-            fields: &loaded.names.fields,
-            l5s: &loaded.names.l5s,
+            l1s: &names.l1s,
+            l2s: &names.l2s,
+            l3s: &names.l3s,
+            l4s: &names.l4s,
+            fields: &names.fields,
+            l5s: &names.l5s,
             edges: &loaded.edges,
             depth_tests: &[],
         },

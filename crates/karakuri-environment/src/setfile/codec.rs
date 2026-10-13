@@ -10,7 +10,6 @@ use karakuri_store::ndjson::Line;
 use karakuri_store::record::{Layer, NodeAddress, Record, Value};
 use karakuri_store::store::Store;
 
-use crate::compile::Names;
 use crate::meta::{kind_name, kind_of, layer_name, layer_of};
 use crate::Asked;
 
@@ -19,7 +18,7 @@ use super::binding::{
     ParamRecord,
 };
 use super::bundle::part_at;
-use super::types::{Loaded, Node, Saving, VERSION};
+use super::types::{Loaded, LoadedNode, Node, Saving, VERSION};
 
 /// Validates that a Set configuration contains at least one geometry and one renderer,
 /// exact capacity and seed counts per geometry, and contiguous node indices per layer.
@@ -635,46 +634,63 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         false
     });
 
-    // Node order, which is what [`Loaded::srcs`] promises: the same order the
-    // procedures above are chained in, so the two walk in step.
-    let srcs = l1_srcs
-        .into_iter()
-        .chain(l2_srcs)
-        .chain(l3_srcs)
-        .chain(l4_srcs)
-        .chain(field_srcs)
-        .chain(l5_srcs)
-        .collect();
-
-    // Trim names to loaded node bounds.
-    let mut names = Names {
-        l1s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L1) as usize]),
-        l2s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L2) as usize]),
-        l3s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L3) as usize]),
-        l4s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L4) as usize]),
-        fields: std::mem::take(&mut slot_names[layer_ordinal(Kind::Field) as usize]),
-        l5s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L5) as usize]),
-    };
-    names.l1s.truncate(l1s.len());
-    names.l2s.truncate(l2s.len());
-    names.l3s.truncate(l3s.len());
-    names.l4s.truncate(l4s.len());
-    names.fields.truncate(fields.len());
-    names.l5s.truncate(l5s.len());
+    let mut nodes = Vec::new();
+    let mut add_layer =
+        |kind: Kind, srcs: Vec<String>, procs: Vec<Checked>, names: &mut Vec<Option<String>>| {
+            for (index, (src, checked)) in srcs.into_iter().zip(procs).enumerate() {
+                let name = names.get(index).cloned().flatten();
+                nodes.push(LoadedNode {
+                    layer: kind,
+                    index: index as u32,
+                    checked,
+                    src,
+                    name,
+                });
+            }
+        };
+    add_layer(
+        Kind::L1,
+        l1_srcs,
+        l1s,
+        &mut slot_names[layer_ordinal(Kind::L1) as usize],
+    );
+    add_layer(
+        Kind::L2,
+        l2_srcs,
+        l2s,
+        &mut slot_names[layer_ordinal(Kind::L2) as usize],
+    );
+    add_layer(
+        Kind::L3,
+        l3_srcs,
+        l3s,
+        &mut slot_names[layer_ordinal(Kind::L3) as usize],
+    );
+    add_layer(
+        Kind::L4,
+        l4_srcs,
+        l4s,
+        &mut slot_names[layer_ordinal(Kind::L4) as usize],
+    );
+    add_layer(
+        Kind::Field,
+        field_srcs,
+        fields,
+        &mut slot_names[layer_ordinal(Kind::Field) as usize],
+    );
+    add_layer(
+        Kind::L5,
+        l5_srcs,
+        l5s,
+        &mut slot_names[layer_ordinal(Kind::L5) as usize],
+    );
 
     Ok(Loaded {
         id: file_id,
-        l1s,
-        l2s,
-        l3s,
-        fields,
-        l4s,
-        l5s,
-        srcs,
+        nodes,
         capacities,
         params,
         bindings,
-        names,
         edges,
         camera,
         layering,

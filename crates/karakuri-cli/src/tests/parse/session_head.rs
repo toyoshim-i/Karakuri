@@ -26,8 +26,8 @@ fn a_session_head_carries_the_material_a_replay_needs() {
 
     let loaded = setfile::from_lines(&store, "a_set", &head)
         .expect("the head a recording writes is a head a replay can load");
-    assert_eq!(loaded.l1s[0].kind, karakuri_ir::Kind::L1);
-    assert_eq!(loaded.l4s[0].kind, karakuri_ir::Kind::L4);
+    assert_eq!(loaded.l1s()[0].kind, karakuri_ir::Kind::L1);
+    assert_eq!(loaded.l4s()[0].kind, karakuri_ir::Kind::L4);
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
@@ -82,7 +82,7 @@ fn a_two_slot_head_splits_into_the_material_and_the_deck() {
     let loaded = setfile::from_lines(&store, "two", &stream.head)
         .expect("the head a recording writes is a head a replay can load");
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
-    assert_eq!(loaded.l1s[0].kind, karakuri_ir::Kind::L1);
+    assert_eq!(loaded.l1s()[0].kind, karakuri_ir::Kind::L1);
 
     let named: Vec<usize> = stream
         .opening
@@ -125,7 +125,7 @@ fn a_session_head_carries_a_whole_chain_and_not_just_a_pair() {
         .expect("the head a recording writes is a head a replay can load");
     assert_eq!(
         loaded
-            .l1s
+            .l1s()
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
@@ -134,7 +134,7 @@ fn a_session_head_carries_a_whole_chain_and_not_just_a_pair() {
     );
     assert_eq!(
         loaded
-            .l2s
+            .l2s()
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
@@ -143,7 +143,7 @@ fn a_session_head_carries_a_whole_chain_and_not_just_a_pair() {
     );
     assert_eq!(
         loaded
-            .l4s
+            .l4s()
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),

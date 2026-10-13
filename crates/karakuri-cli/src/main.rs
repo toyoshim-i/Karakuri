@@ -85,36 +85,22 @@ fn main() {
     // Load pre-packaged or saved Set if specified, replacing CLI arguments.
     let mut args = args;
     let loaded = args.load_set.clone().map(|id| load_set(&mut args, &id));
+    if let Some(loaded) = &loaded {
+        let slot_aim = match loaded.aim(&args.store, 0, SEED) {
+            Ok(aim) => aim,
+            Err(e) => {
+                eprintln!("karakuri-cli: {e}");
+                std::process::exit(1);
+            }
+        };
+        args.sets.insert(0, (slot_aim.head, slot_aim.rest));
+    }
 
     // Initialize scratch space and snapshot tracking for editable sessions.
     let mut snapshots: Option<history::Shared> = None;
     let editable = editable(&args);
     if editable {
         let root = args.store.clone();
-        if let Some(loaded) = &loaded {
-            let written: Result<Vec<PathBuf>, String> = loaded
-                .nodes()
-                .enumerate()
-                .map(|(at, (checked, src))| {
-                    scratch::place(&root, &scratch::node_name(0, at, &checked.name), src)
-                })
-                .collect();
-            match written {
-                Ok(paths) => {
-                    let mut named = paths
-                        .iter()
-                        .cloned()
-                        .zip(loaded.node_names())
-                        .map(|(path, name)| Named { name, path });
-                    let head = named.next().expect("a Set file names at least an L1");
-                    args.sets.insert(0, (head, named.collect()))
-                }
-                Err(e) => {
-                    eprintln!("karakuri-cli: {e}");
-                    std::process::exit(1);
-                }
-            }
-        }
         match scratch::materialise(
             &root,
             args.sets.iter_mut().map(|(l1, l4s)| {
@@ -168,20 +154,6 @@ fn main() {
     let mut procs: Vec<Material> = Vec::new();
     // Retain slot-indexed structure for downstream mapping.
     let mut placed: Vec<Vec<Placed>> = Vec::new();
-    if let Some(loaded) = loaded.filter(|_| !editable) {
-        eprintln!("  slot 0: set `{}`", loaded.id);
-        let names = loaded.names.clone();
-        procs.push(Material {
-            l1s: loaded.l1s,
-            l2s: loaded.l2s,
-            l3s: loaded.l3s,
-            fields: loaded.fields,
-            l4s: loaded.l4s,
-            l5s: loaded.l5s,
-            names,
-        });
-        placed.push(Vec::new());
-    }
     for (slot, (l1, rest)) in args.sets.iter().enumerate() {
         let (material, nodes) = sort_slot(slot, l1, rest);
         procs.push(material);

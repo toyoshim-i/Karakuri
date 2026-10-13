@@ -64,7 +64,7 @@ fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
     // is what a Set holds.
     assert_eq!(
         loaded
-            .l1s
+            .l1s()
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
@@ -73,7 +73,7 @@ fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
     );
     // The later of the colliding pair is what was built, which is what the
     // note promises and the only reading under which the note is true.
-    assert_eq!(loaded.l1s[0].name, "ring_two");
+    assert_eq!(loaded.l1s()[0].name, "ring_two");
 }
 
 /// Verifies recorded node names are preserved for edge resolution.
@@ -95,16 +95,17 @@ fn a_name_the_file_recorded_comes_back_with_the_node() {
 
     let loaded = from_lines(&store, "named", &lines).expect("a named slot still loads");
     assert_eq!(
-        loaded.l1s[0].name, "ring",
+        loaded.l1s()[0].name,
+        "ring",
         "the material is unaffected by the name"
     );
     assert_eq!(
-        loaded.names.l1s,
+        loaded.names().l1s,
         [Some("veil".to_string())],
         "the name the file recorded is what the node is called"
     );
     // Unnamed nodes retain None in loaded names structure.
-    assert_eq!(loaded.names.l4s, [None]);
+    assert_eq!(loaded.names().l4s, [None]);
     let notes = loaded.notes.join("\n");
     assert!(
         !notes.contains("veil"),
@@ -192,12 +193,12 @@ fn the_whole_chain_survives_the_file_it_is_written_to() {
     );
 
     let loaded = load(&store, "chain").expect("load");
-    let named = |procs: &[Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
-    assert_eq!(named(&loaded.l1s), ["ring", "ring_two"]);
-    assert_eq!(named(&loaded.l2s), ["warp"]);
-    assert_eq!(named(&loaded.l3s), ["look"]);
-    assert_eq!(named(&loaded.fields), ["blob"]);
-    assert_eq!(named(&loaded.l4s), ["points", "streaks"]);
+    let named = |procs: &[&Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+    assert_eq!(named(&loaded.l1s()), ["ring", "ring_two"]);
+    assert_eq!(named(&loaded.l2s()), ["warp"]);
+    assert_eq!(named(&loaded.l3s()), ["look"]);
+    assert_eq!(named(&loaded.fields()), ["blob"]);
+    assert_eq!(named(&loaded.l4s()), ["points", "streaks"]);
     // Node order, which is what the scratch places them in — see
     // [`Loaded::nodes`].
     assert_eq!(
@@ -208,14 +209,14 @@ fn the_whole_chain_survives_the_file_it_is_written_to() {
         ["ring", "ring_two", "warp", "look", "points", "streaks", "blob"]
     );
     assert!(
-        loaded.srcs[2].contains("proc warp"),
+        loaded.srcs()[2].contains("proc warp"),
         "a node was paired with another node's source: {}",
-        loaded.srcs[2]
+        loaded.srcs()[2]
     );
     // And the name it was written with, placed on the node it belongs to
     // rather than on whichever node the walk happened to reach.
-    assert_eq!(loaded.names.l1s, [Some("veil".to_string()), None]);
-    assert_eq!(loaded.names.l2s, [None]);
+    assert_eq!(loaded.names().l1s, [Some("veil".to_string()), None]);
+    assert_eq!(loaded.names().l2s, [None]);
 }
 
 /// Verifies multiple field procedures persist and restore at their respective indices.
@@ -275,8 +276,8 @@ fn two_fields_come_back_at_their_own_indices() {
     .expect("save");
 
     let loaded = load(&store, "two_fields").expect("load");
-    let named = |procs: &[Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
-    assert_eq!(named(&loaded.fields), ["blob", "bite"]);
+    let named = |procs: &[&Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+    assert_eq!(named(&loaded.fields()), ["blob", "bite"]);
     assert!(
         loaded.notes.is_empty(),
         "nothing was skipped: {:?}",
@@ -284,7 +285,7 @@ fn two_fields_come_back_at_their_own_indices() {
     );
     // The names, on the nodes they belong to — `None` for the one written
     // bare, which is what an edge pointing at `knife` needs to resolve.
-    assert_eq!(loaded.names.fields, [None, Some("knife".to_string())]);
+    assert_eq!(loaded.names().fields, [None, Some("knife".to_string())]);
     // Node order, which is what the scratch places sources in: the fields
     // are last and they are in index order.
     assert_eq!(
@@ -427,7 +428,7 @@ fn a_file_that_salted_the_whole_set_still_loads() {
     ));
 
     let loaded = from_lines(&store, "old", &lines).expect("load");
-    assert_eq!(loaded.l1s.len(), 2);
+    assert_eq!(loaded.l1s().len(), 2);
     assert_eq!(
         loaded.salts,
         vec![Some(4242)],

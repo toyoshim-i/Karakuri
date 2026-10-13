@@ -131,26 +131,35 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
     // one replaying it — which is the case a flag check could never have caught.
     check_canvas(&gpu.device, w, h);
 
+    let l1s: Vec<_> = loaded.l1s().into_iter().cloned().collect();
+    let l2s: Vec<_> = loaded.l2s().into_iter().cloned().collect();
+    let l3s: Vec<_> = loaded.l3s().into_iter().cloned().collect();
+    let fields: Vec<_> = loaded.fields().into_iter().cloned().collect();
+    let l4s: Vec<_> = loaded.l4s().into_iter().cloned().collect();
+    let l5s: Vec<_> = loaded.l5s().into_iter().cloned().collect();
+    let names = loaded.names();
+
     // Seed salts: file's own per geometry, derived only if unrecorded.
-    let salts = salts_for(seed_for(0), &loaded.salts, loaded.l1s.len());
+    let salts = salts_for(seed_for(0), &loaded.salts, l1s.len());
     let layering = layering_for(args, 0, loaded.layering);
     let live = loaded.live;
+    let capacities = capacities_for(args, &l1s, &loaded.capacities);
     let mut set = build(
         &gpu,
-        &loaded.l1s,
+        &l1s,
         // The chain recorded in the session head.
-        &loaded.l2s,
-        &loaded.l3s,
-        &loaded.fields,
-        &loaded.l4s,
-        &loaded.l5s,
+        &l2s,
+        &l3s,
+        &fields,
+        &l4s,
+        &l5s,
         // Layering recorded in head (defaults to Overdraw).
         layering,
         // Names and edges recorded in head.
-        &loaded.names,
+        &names,
         &loaded.edges,
         // Capacities per geometry from head or procedure defaults.
-        &capacities_for(args, &loaded.l1s, &loaded.capacities),
+        &capacities,
         &mut vec![false; loaded.bindings.len()],
         &loaded.params,
         &loaded.bindings,

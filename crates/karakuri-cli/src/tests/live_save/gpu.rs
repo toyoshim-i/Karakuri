@@ -83,7 +83,7 @@ fn a_live_save_reads_back_into_the_material_it_was_taken_from() {
 
     assert_eq!(
         loaded
-            .l1s
+            .l1s()
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
@@ -92,7 +92,7 @@ fn a_live_save_reads_back_into_the_material_it_was_taken_from() {
     );
     assert_eq!(
         loaded
-            .l4s
+            .l4s()
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
@@ -292,7 +292,8 @@ fn a_run_with_no_watcher_saves_the_version_it_is_still_drawing() {
         live_sources(running.playing(0), &placed),
     );
     assert_eq!(
-        kept.l1s[0].name, "drift_shell",
+        kept.l1s()[0].name,
+        "drift_shell",
         "the save read the path and wrote down an edit this run never \
      compiled, let alone drew"
     );
@@ -333,7 +334,8 @@ fn a_rewrite_between_the_compile_and_the_first_frame_cannot_reach_a_save() {
 
     let kept = save_and_load(&root, "kept", &set, sources);
     assert_eq!(
-        kept.l1s[0].name, "drift_shell",
+        kept.l1s()[0].name,
+        "drift_shell",
         "the save wrote down the rewrite rather than the material the deck \
      was built from"
     );

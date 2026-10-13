@@ -15,32 +15,26 @@ pub const VERSION: u32 = 1;
 /// `karakuri-store`'s `BindNoise` default, which is the record this stands for.
 pub const DEFAULT_OCTAVES: u32 = 4;
 
-/// Set definition decoded into engine layer collections.
+/// A loaded node in a Set: layer kind, slot index within layer, checked IR, source text, and optional name.
+#[derive(Clone, Debug)]
+pub struct LoadedNode {
+    pub layer: Kind,
+    pub index: u32,
+    pub checked: Checked,
+    pub src: String,
+    pub name: Option<String>,
+}
+
+/// Set definition decoded into an ordered node collection and playback parameters.
 #[cfg_attr(test, derive(Debug))]
 pub struct Loaded {
     pub id: String,
-    /// The geometry sources, by `slot` index. At least one; several is one Set
-    /// simulating several times and drawing all of them.
-    pub l1s: Vec<Checked>,
-    /// The deformers, by `slot` index — which is chain order, each one reading what
-    /// the one before it wrote.
-    pub l2s: Vec<Checked>,
-    /// Cameras by slot index, or empty if using the built-in orbit.
-    pub l3s: Vec<Checked>,
-    /// The fields, by `slot` index. Empty for a Set that evaluates none.
-    pub fields: Vec<Checked>,
-    /// The renderers, in the order their `slot` records indexed them.
-    pub l4s: Vec<Checked>,
-    /// The post-processing frame effects, by `slot` index.
-    pub l5s: Vec<Checked>,
-    /// Source procedure code in node order, excluding built-in cameras.
-    pub srcs: Vec<String>,
+    /// The decoded nodes in canonical execution order.
+    pub nodes: Vec<LoadedNode>,
     /// Vertex/point capacities per geometry slot, or `None` if engine default.
     pub capacities: Vec<Option<u32>>,
     pub params: Vec<ParamWrite>,
     pub bindings: Vec<Binding>,
-    /// Explicit node names by layer and slot index, preserved for wiring resolution.
-    pub names: Names,
     /// Which node fills each declared input slot, as the file recorded it.
     pub edges: Vec<karakuri_engine::set::Edge>,
     pub camera: Option<Orbit>,
@@ -57,27 +51,114 @@ pub struct Loaded {
 impl Loaded {
     /// Returns node names in canonical execution order, padded with `None` where unnamed.
     pub fn node_names(&self) -> impl Iterator<Item = Option<String>> + '_ {
-        let at = |v: &[Option<String>], n: usize| -> Vec<Option<String>> {
-            let mut out = v.to_vec();
-            out.resize(n, None);
-            out
-        };
-        at(&self.names.l1s, self.l1s.len())
-            .into_iter()
-            .chain(at(&self.names.l2s, self.l2s.len()))
-            .chain(at(&self.names.l3s, self.l3s.len()))
-            .chain(at(&self.names.l4s, self.l4s.len()))
-            .chain(at(&self.names.fields, self.fields.len()))
+        self.nodes.iter().map(|n| n.name.clone())
     }
 
+    /// Returns all nodes as `(&Checked, &str)` pairs in canonical execution order.
     pub fn nodes(&self) -> impl Iterator<Item = (&Checked, &str)> {
-        self.l1s
+        self.nodes.iter().map(|n| (&n.checked, n.src.as_str()))
+    }
+
+    /// Returns procedure sources in node order.
+    pub fn srcs(&self) -> Vec<String> {
+        self.nodes.iter().map(|n| n.src.clone()).collect()
+    }
+
+    /// Returns references to all checked procedures for the specified layer.
+    pub fn layer_checked(&self, kind: Kind) -> impl Iterator<Item = &Checked> {
+        self.nodes
             .iter()
-            .chain(&self.l2s)
-            .chain(&self.l3s)
-            .chain(&self.l4s)
-            .chain(&self.fields)
-            .zip(self.srcs.iter().map(String::as_str))
+            .filter(move |n| n.layer == kind)
+            .map(|n| &n.checked)
+    }
+
+    pub fn l1s(&self) -> Vec<&Checked> {
+        self.layer_checked(Kind::L1).collect()
+    }
+    pub fn l2s(&self) -> Vec<&Checked> {
+        self.layer_checked(Kind::L2).collect()
+    }
+    pub fn l3s(&self) -> Vec<&Checked> {
+        self.layer_checked(Kind::L3).collect()
+    }
+    pub fn fields(&self) -> Vec<&Checked> {
+        self.layer_checked(Kind::Field).collect()
+    }
+    pub fn l4s(&self) -> Vec<&Checked> {
+        self.layer_checked(Kind::L4).collect()
+    }
+    pub fn l5s(&self) -> Vec<&Checked> {
+        self.layer_checked(Kind::L5).collect()
+    }
+
+    /// Reconstructs [`Names`] partitioned by layer.
+    pub fn names(&self) -> Names {
+        let mut names = Names::default();
+        for node in &self.nodes {
+            match node.layer {
+                Kind::L1 => names.l1s.push(node.name.clone()),
+                Kind::L2 => names.l2s.push(node.name.clone()),
+                Kind::L3 => names.l3s.push(node.name.clone()),
+                Kind::L4 => names.l4s.push(node.name.clone()),
+                Kind::Field => names.fields.push(node.name.clone()),
+                Kind::L5 => names.l5s.push(node.name.clone()),
+            }
+        }
+        names
+    }
+
+    /// Creates the slot's [`crate::watch::Aim`], writing working copies to scratch storage.
+    pub fn aim(
+        &self,
+        root: &std::path::Path,
+        slot: usize,
+        salt: u32,
+    ) -> Result<crate::watch::Aim, String> {
+        let mut named = Vec::with_capacity(self.nodes.len());
+        for (at, node) in self.nodes.iter().enumerate() {
+            let path = crate::scratch::place(
+                root,
+                &crate::scratch::node_name(slot, at, &node.checked.name),
+                &node.src,
+            )?;
+            named.push(crate::compile::Named {
+                name: node.name.clone(),
+                path,
+            });
+        }
+        let mut named = named.into_iter();
+        let head = named
+            .next()
+            .ok_or_else(|| format!("`{}` names no procedure at all", self.id))?;
+
+        let seed_salt = self.salts.first().copied().flatten().unwrap_or(salt);
+        let l1_count = self.nodes.iter().filter(|n| n.layer == Kind::L1).count();
+        let salts: Vec<u32> = (0..l1_count)
+            .map(|at| {
+                self.salts
+                    .get(at)
+                    .copied()
+                    .flatten()
+                    .unwrap_or_else(|| karakuri_engine::set::derived_salt(seed_salt, at))
+            })
+            .collect();
+
+        Ok(crate::watch::Aim {
+            head,
+            rest: named.collect(),
+            layering: self.layering,
+            live: self.live,
+            capacity: self.capacities.first().copied().flatten(),
+            seed_salt,
+            salts,
+            camera: self.camera.unwrap_or_default(),
+            overrides: self.params.clone(),
+            published: Vec::new(),
+            bindings: self.bindings.clone(),
+            edges: self.edges.clone(),
+            authorities: Vec::new(),
+            set: Some(self.id.clone()),
+        })
     }
 }
 
