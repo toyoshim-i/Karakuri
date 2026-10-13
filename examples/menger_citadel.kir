@@ -1,0 +1,215 @@
+// An infinite 3-octave 3D Menger-sponge fractal megastructure raymarcher.
+// Uses exact 1:3:9 phase-locked lattice frequencies (0.20, 0.60, 1.80) so each
+// recursive Menger subdivision is centered inside the solid structural beams
+// of the parent octave. Inside the perforated lattice cage of every Menger
+// pillar hangs a pulsing octahedral reactor core that casts volumetric light
+// through the orthogonal cutouts.
+//
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/menger_citadel.kset
+//     cargo run -p karakuri-cli -- --load-set menger_citadel
+
+proc menger_citadel {
+  kind  L4
+  blend additive
+
+  // Forward flight speed through the infinite fractal megastructure.
+  param flow     : float [-2.0, 2.0] = 0.65
+
+  // Kinetic shift of the recursive Menger truss plates; bind to onset.
+  param shift_k  : float [0.0, 2.0] = 0.85
+
+  // Octave-2 Menger window cutout width.
+  param bevel    : float [0.05, 0.8] = 0.36
+
+  // Main corridor aperture width across the 3D lattice.
+  param aperture : float [0.10, 0.65] = 0.36
+
+  // Iridescent metallic sheen across the anodized titanium plates.
+  param prism    : float [0.0, 1.0] = 0.52
+
+  // Emissive circuit busbar and volumetric shaft intensity; bind to energy.
+  param glow     : float [0.0, 3.0] = 1.25
+
+  // Master output exposure.
+  param exposure : float [0.2, 4.0] = 1.15
+
+  fragment {
+    // Reconstruct an isotropic camera basis from built-in `eye` and `ray` so
+    // the camera glides down the main central nave at (x ≈ 2.5, y ≈ 2.5),
+    // banking and looking across the infinite 3D grid of Menger pillars.
+    let fw   = normalize(-eye);
+    let rt   = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up   = cross(rt, fw);
+    let uv_p = vec2(dot(ray, rt), dot(ray, up)) / max(dot(ray, fw), 0.15);
+
+    let z_pos = t * flow * 2.8 + 1.10;
+    let yaw   = sin(t * 0.22) * 0.24 + 0.12;
+    let pitch = cos(t * 0.17) * 0.12 - 0.04;
+
+    // Camera glides along the main nave, slightly off-center so both the
+    // receding central nave and the multi-octave side pillars are in full view.
+    let ro = vec3(
+      2.32 + sin(t * 0.29) * 0.22,
+      2.36 + cos(t * 0.23) * 0.20,
+      -z_pos
+    );
+    let rd = rot_y(rot_x(normalize(vec3(uv_p * 1.15, -1.0)), pitch), yaw);
+
+    let beat_hit = pow(1.0 - fract(beats), 3.0);
+    let tunnel_w = 0.25 + aperture * 0.24;
+    let slot2_w  = 0.22 + bevel * 0.32;
+    let core_r   = 0.35 + beat_hit * 0.07 + shift_k * 0.04;
+
+    var dist_t = 0.18;
+    var hit    = 0.0;
+    var is_orb = 0.0;
+    var glow_c = 0.0;
+
+    for i in 0..17 {
+      let p = ro + rd * dist_t;
+
+      // Exact base-3 Menger Sponge hierarchy:
+      // Octave 1 (period 5.0, scale 2.5): carves the central 1/3 nave [1/3, 2/3].
+      let c1   = abs(fract(p * 0.20) * 2.0 - vec3(1.0));
+      let m1   = min(c1, c1.yzx);
+      let cr1  = max(max(m1.x, m1.y), m1.z);
+      let d_o1 = (tunnel_w - cr1) * 2.5;
+
+      // Octave 2 (exact 3x harmonic, period 1.667, scale 0.8333):
+      // Carves the middle 1/3 of both solid sub-blocks at u = 1/6 and u = 5/6.
+      let c2   = abs(fract(p * 0.60) * 2.0 - vec3(1.0));
+      let m2   = min(c2, c2.yzx);
+      let cr2  = max(max(m2.x, m2.y), m2.z);
+      let d_o2 = (slot2_w - cr2) * 0.8333;
+
+      // Octave 3 (exact 9x harmonic, period 0.556, scale 0.2778):
+      // Carves the fine 1/9th Menger filigree slots across every Octave-2 beam.
+      let c3   = abs(fract(p * 1.80) * 2.0 - vec3(1.0));
+      let m3   = min(c3, c3.yzx);
+      let cr3  = max(max(m3.x, m3.y), m3.z);
+      let d_o3 = (0.35 - cr3) * 0.2778;
+
+      let d_wall = max(max(d_o1, d_o2), d_o3);
+
+      // Suspended Octahedral Reactor Core at the center (`c2 = 0`) of each
+      // Octave-2 chamber inside the solid Octave-1 structure (`d_o1 < -0.18`).
+      // Since `d_o1 <= -0.42` across the entire `core_r <= 0.46` octahedron,
+      // `d_o1 + 0.18` never clips the octahedron while keeping the nave clear.
+      let sum2   = c2.x + c2.y + c2.z;
+      let d_core = max((sum2 - core_r) * 0.4811, d_o1 + 0.18);
+
+      let d = min(d_wall, d_core);
+
+      // Accumulate volumetric light shafts from the caged reactor cores.
+      glow_c = glow_c + (1.0 - hit) / (1.0 + d_core * d_core * 32.0);
+
+      if d < 0.005 + dist_t * 0.0018 && hit < 0.5 {
+        hit    = 1.0;
+        is_orb = step(d_core, d_wall);
+      }
+      if hit < 0.5 {
+        dist_t = min(dist_t + max(d * 1.04, 0.015), 24.0);
+      }
+    }
+
+    // Reconstruct the exact hit point and evaluate all 3 Menger octaves to
+    // derive exact axis-aligned planar box normals with zero diagonal seams.
+    let hp   = ro + rd * dist_t;
+    let s1   = fract(hp * 0.20) * 2.0 - vec3(1.0);
+    let c1   = abs(s1);
+    let s2   = fract(hp * 0.60) * 2.0 - vec3(1.0);
+    let c2   = abs(s2);
+    let s3   = fract(hp * 1.80) * 2.0 - vec3(1.0);
+    let c3   = abs(s3);
+
+    let m1   = min(c1, c1.yzx);
+    let cr1  = max(max(m1.x, m1.y), m1.z);
+    let min1 = min(m1.x, c1.z);
+    let d_o1 = (tunnel_w - cr1) * 2.5;
+
+    let m2   = min(c2, c2.yzx);
+    let cr2  = max(max(m2.x, m2.y), m2.z);
+    let d_o2 = (slot2_w - cr2) * 0.8333;
+
+    let m3   = min(c3, c3.yzx);
+    let cr3  = max(max(m3.x, m3.y), m3.z);
+    let d_o3 = (0.35 - cr3) * 0.2778;
+
+    // Exact active-axis mask for each Menger octave (`cr == c.x, c.y, or c.z`).
+    let n_o1  = -sign(s1) * step(abs(c1 - vec3(cr1)), vec3(0.006));
+    let n_o2  = -sign(s2) * step(abs(c2 - vec3(cr2)), vec3(0.010));
+    let n_o3  = -sign(s3) * step(abs(c3 - vec3(cr3)), vec3(0.018));
+
+    let d_12   = max(d_o1, d_o2);
+    let d_fin  = max(d_12, d_o3);
+    let n_12   = mix(n_o1, n_o2, vec3(step(d_o1 + 0.008, d_o2)));
+    let n_wall = normalize(mix(n_12, n_o3, vec3(step(d_12 + 0.006, d_o3))) + vec3(0.0001));
+
+    let n_core = sign(s2) * vec3(0.57735);
+
+    var n = normalize(mix(n_wall, n_core, vec3(is_orb)));
+    let v = -rd;
+    if dot(n, v) < 0.0 {
+      n = -n;
+    }
+
+    // Crisp 90-degree edge rims ONLY along orthogonal box edges:
+    // - `edge1`: where two Octave-1 planes meet (`cr1 == min1` on `d_o1 == 0`)
+    // - `rim12`: where Octave-2 windows pierce Octave-1 walls (`d_o1 == d_o2`)
+    // - `rim23`: where Octave-3 slots pierce parent beams (`d_12 == d_o3`)
+    let edge1  = exp(-(cr1 - min1) * 55.0) * exp(-abs(d_o1) * 40.0);
+    let rim12  = exp(-abs(d_o1 - d_o2) * 65.0);
+    let rim23  = exp(-abs(d_12 - d_o3) * 90.0);
+    let pulse  = 0.5 + 0.5 * sin(hp.z * 1.2566 - beats * 3.1416);
+
+    // True architectural cavity AO: `d_o1 == 0` and `d_12 == 0` on the flat
+    // exterior Octave-1 faces so `ao` is a uniform 1.0 across every flat plate,
+    // darkening only inside recessed Octave-2 (`d_o1 < 0`) and Octave-3 (`d_12 < 0`)
+    // chambers.
+    let ao     = clamp(1.0 + d_o1 * 1.15, 0.24, 1.0) * clamp(1.0 + d_12 * 2.20, 0.34, 1.0);
+
+    let sum2   = c2.x + c2.y + c2.z;
+    let c_glow = exp(-max(sum2 - core_r, 0.0) * 2.6) * clamp(-d_o1 * 2.4, 0.0, 1.0);
+    let refl   = reflect(rd, n);
+
+    // Distinct directional lighting across X, Y, Z orthogonal planes so
+    // front-facing bulkheads (|n.z|), side walls (|n.x|), and ceilings (|n.y|)
+    // separate unmistakably in 3D space.
+    let l1     = normalize(vec3(0.85, 0.45, 0.27));
+    let l2     = normalize(vec3(-0.35, 0.86, -0.36));
+    let diff1  = max(dot(n, l1), 0.0);
+    let diff2  = max(dot(n, l2), 0.0);
+    let spec1  = pow(max(dot(refl, l1), 0.0), 40.0);
+    let spec2  = pow(max(dot(refl, l2), 0.0), 24.0);
+    let fres   = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+
+    // Palette: dark brutalist slate-titanium megastructure with glowing
+    // cyan/amber orthogonal aperture frames and caged golden reactor cores.
+    let p_tint = 0.5 + 0.5 * cos(vec3(0.0, 2.094, 4.188) + vec3(prism * 6.283 + hp.z * 0.10));
+    let neon_a = vec3(1.0, 0.42, 0.06);
+    let neon_b = vec3(0.08, 0.88, 1.0);
+
+    let wall_c = (vec3(0.024, 0.040, 0.070) + p_tint * 0.024) * (0.20 + 1.45 * diff1)
+               + vec3(0.04, 0.13, 0.26) * diff2
+               + neon_a * c_glow * (1.35 + 0.75 * diff2)
+               + (vec3(0.25, 0.58, 0.95) * fres * 0.42 + vec3(0.85, 0.94, 1.0) * spec1 * 0.95)
+               + neon_b * (rim23 * (0.60 + 0.55 * glow) + edge1 * 0.85)
+               + neon_a * rim12 * (0.80 + 0.85 * pulse * glow)
+               + neon_b * spec2 * 0.50;
+
+    let core_c = vec3(1.0, 0.78, 0.32) * (2.0 + beat_hit * 2.2)
+               + neon_b * fres * 2.2
+               + vec3(1.0) * spec1 * 2.5;
+
+    let surf   = mix(wall_c * ao, core_c, vec3(is_orb));
+    let s_hit  = max(hit, step(d_fin, 0.012 + dist_t * 0.002));
+    let fog    = exp(-dist_t * dist_t * 0.024);
+    let abyss  = vec3(0.004, 0.012, 0.028) + neon_b * exp(-length(uv_p) * 1.5) * 0.12;
+    let shafts = neon_a * (glow_c * glow * 0.016);
+
+    let rgb    = (mix(abyss, surf, vec3(s_hit * fog)) + shafts) * exposure;
+    color = vec4(rgb, 1.0);
+  }
+}

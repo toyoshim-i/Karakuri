@@ -1,0 +1,8 @@
+{"t":"set","id":"dyson_forge","v":1}
+{"t":"part","layer":"L1","path":"dyson_forge.kir"}
+{"t":"part","layer":"L3","path":"dyson_eye.kir"}
+{"t":"part","layer":"L4","path":"dyson_armor.kir"}
+{"t":"part","layer":"L5","path":"bloom.kir"}
+{"t":"param","layer":"L5","key":"amount","value":1.1}
+{"t":"bind","layer":"L1","key":"surge","signal":"onset","curve":"pow2","range":[0.2,1.6]}
+{"t":"bind","layer":"L1","key":"pulse","signal":"energy","curve":"smooth","range":[0.3,1.5]}

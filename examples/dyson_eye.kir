@@ -1,0 +1,53 @@
+// A sweeping orbital camera for `dyson_forge`: it glides on a three-dimensional
+// path thatframes the triple-gimbal Dyson armature, swoops over the abyssal
+// monolith amphitheater, and banks smoothly into each turn.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/dyson_forge.kset
+//     cargo run -p karakuri-cli -- --load-set dyson_forge
+
+proc dyson_eye {
+  kind L3
+
+  // Mean orbital distance from the forge hub.
+  param radius : float [5.0, 28.0] = 15.2
+
+  // Closest radial swoop inward as a fraction of radius.
+  param swoop  : float [0.0, 0.55] = 0.16
+
+  // Orbital turns per minute around the structure.
+  param pace   : float [-4.0, 4.0] = 1.0
+
+  // Vertical swing above and below the hub plane, in world units.
+  param climb  : float [0.0, 8.0] = 2.6
+
+  // How far the horizon banks into lateral turns.
+  param bank   : float [0.0, 1.5] = 0.35
+
+  // Vertical field of view in radians; wide lens exaggerates the polyhedral scale.
+  param lens   : float [0.6, 1.8] = 1.08
+
+  camera {
+    let a  = t * pace / 60.0 * 6.2831853 + 0.55;
+    let r  = radius * (1.0 - swoop * sin(a * 2.0));
+    let y  = 2.6 + climb * sin(a * 1.3 + 0.35);
+
+    let p0  = vec3(cos(a) * r, y, sin(a) * r);
+    let hub = vec3(0.0, 1.1 + 0.30 * sin(a * 0.7), 0.0);
+
+    // Lead the look-at point slightly along the orbital tangent so the core sits
+    // dynamically framed with the gimbal rings and monolith canyon sweeping past.
+    let tang = vec3(-sin(a), 0.0, cos(a));
+    let aim  = hub + tang * (0.9 * cos(a * 2.0));
+
+    let fwd   = normalize(aim - p0);
+    let right = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let top   = cross(right, fwd);
+    let roll  = cos(a * 2.0) * bank * swoop;
+
+    eye    = p0;
+    target = aim;
+    up     = top * cos(roll) + right * sin(roll);
+    fov_y  = lens;
+    far    = 80.0;
+  }
+}

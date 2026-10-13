@@ -1,0 +1,217 @@
+// A raymarched liquid-chrome ferrofluid singularity suspended inside a twisting
+// gyroid cathedral. Combines solid surface sphere-tracing with volumetric
+// prismatic caustics:
+//
+//   1. A central ferrofluid core that erupts into magnetic standing-wave spikes
+//      on the beat while an octahedral constellation of eight orbiting
+//      liquid-mercury droplets fuses into and tears away from it via smooth CSG
+//      union (`op_smooth_union`).
+//   2. A surrounding vaulted cavern carved from a Triply Periodic Minimal
+//      Surface (gyroid) whose struts organically taper open around the central
+//      sanctum, etched with glowing topographic laser isolines.
+//   3. Exact analytical surface normals derived from the gyroid and metaball
+//      gradients at the hit point, driving thin-film spectral iridescence,
+//      gyroid environment reflections along `reflect(rd, n)`, and crevice AO.
+//
+// Draws the whole frame and reads no geometry.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/ferro_sanctum.kset
+//     cargo run -p karakuri-cli -- --load-set ferro_sanctum
+
+proc ferro_sanctum {
+  kind  L4
+  blend additive
+
+  // Phase and flow speed of the gyroid standing wave and orbiting droplets.
+  param flow     : float [-2.0, 2.0] = 0.55
+
+  // Magnetic spike eruption strength on the ferrofluid core; bind to onset.
+  param spike    : float [0.0, 2.0] = 0.85
+
+  // Smooth-union viscosity between the core and the orbiting mercury droplets.
+  param melt     : float [0.05, 0.8] = 0.25
+
+  // Thickness of the surrounding gyroid cathedral struts.
+  param vault    : float [0.10, 0.65] = 0.40
+
+  // Thin-film spectral iridescence shift across the liquid chrome.
+  param prism    : float [0.0, 1.0] = 0.58
+
+  // Volumetric caustic and laser isoline intensity; bind to energy.
+  param glow     : float [0.0, 3.0] = 1.20
+
+  // Master output exposure.
+  param exposure : float [0.2, 4.0] = 1.15
+
+  fragment {
+    // Reconstruct an isotropic camera basis from built-in `eye` and `ray` so
+    // the camera orbits at radius 2.35 inside the open sanctum, framing the
+    // ferrofluid singularity at the origin with the gyroid vaults beyond.
+    let fw   = normalize(-eye);
+    let rt   = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+    let up   = cross(rt, fw);
+    let uv_p = vec2(dot(ray, rt), dot(ray, up)) / max(dot(ray, fw), 0.15);
+
+    let yaw  = t * 0.16;
+    let tip  = sin(t * 0.21) * 0.18;
+    let ro   = rot_x(rot_y(vec3(0.0, 0.16 * sin(t * 0.29), 2.35), yaw), tip);
+    let rd   = rot_x(rot_y(normalize(vec3(uv_p * 1.18, -1.0)), yaw), tip);
+
+    // Beat transient and magnetic Rosensweig spike excitation.
+    let beat_hit = pow(1.0 - fract(beats), 3.0);
+    let mag      = 0.30 + clamp(spike * 0.55 + beat_hit * 0.70, 0.0, 1.5) * 0.20;
+    let time     = t * flow;
+    let shift    = vec3(time * 0.85, -time * 0.65, time * 0.50);
+
+    // Octahedral droplet target in the positive octant; `abs(p)` folds one
+    // smooth-union into 8 symmetric liquid-mercury droplets orbiting the core.
+    let breathe = sin(time * 1.8 + beats * 0.785398);
+    let drop_c  = vec3(
+      0.50 + 0.16 * breathe,
+      0.48 - 0.15 * cos(time * 1.4),
+      0.50 + 0.16 * sin(time * 2.1 + 1.2)
+    );
+
+    var dist_t = 0.35;
+    var hit    = 0.0;
+    var is_cat = 0.0;
+    var glow_c = 0.0;
+    var glow_g = 0.0;
+
+    for i in 0..17 {
+      let p     = ro + rd * dist_t;
+      let r_len = length(p);
+
+      // Dual-octave 3D harmonics from a single sin/cos evaluation:
+      //   g1 = fundamental gyroid (cathedral vaults)
+      //   g4 = double-frequency standing-wave lattice via sin(2q) = 2*sq*cq
+      let q  = p * 2.05 + shift;
+      let sq = sin(q);
+      let cq = cos(q);
+      let g1 = dot(sq, cq.yzx);
+      let s2 = sq * cq;
+      let g4 = dot(s2, s2.yzx);
+
+      // 1. Ferrofluid Singularity Core (Rosensweig standing-wave spikes)
+      //    smooth-unioned with 8 octant-folded liquid mercury droplets.
+      let d_base = (r_len - 0.70 - g4 * mag) * 0.52;
+      let d_drop = length(abs(p) - drop_c) - 0.19;
+      let d_core = op_smooth_union(d_base, d_drop, melt);
+
+      // 2. Surrounding Gyroid Cathedral. A C1-smooth quadratic radial ramp
+      //    `u_cav * u_cav` carves the open sanctum inside r < 2.65 and rounds
+      //    off the inner tips of the gyroid vaults with zero normal seams.
+      let u_cav  = max(3.20 - r_len, 0.0);
+      let d_arch = (abs(g1) - vault) * 0.44 + u_cav * u_cav * 0.28;
+
+      // Once `dist_t > 2.75`, a ray has already passed the central core and
+      // leaps at full `d_arch` speed across the sanctum to the far cathedral.
+      let d = min(d_core + step(2.75, dist_t) * 8.0, d_arch);
+
+      // Volumetric caustic accumulation: core plasma + cathedral energy veins.
+      let keep = 1.0 - hit;
+      glow_c   = glow_c + keep / (1.0 + d_core * d_core * 150.0);
+      glow_g   = glow_g + keep / (1.0 + d_arch * d_arch * 90.0);
+
+      if d < 0.008 && hit < 0.5 {
+        hit    = 1.0;
+        is_cat = step(d_arch, d_core);
+      }
+      if hit < 0.5 {
+        dist_t = min(dist_t + max(d * 0.92, 0.012), 9.5);
+      }
+    }
+
+    // Any ray that missed the central ferrofluid core belongs to the surrounding
+    // cathedral vault (eliminating hard binary step-horizon cutoffs behind the core).
+    is_cat = max(is_cat, 1.0 - hit);
+
+    // Exact analytical surface normals at the hit point `hp` via chain rule on
+    // the g1 and g4 harmonics.
+    let hp     = ro + rd * dist_t;
+    let q_h    = hp * 2.05 + shift;
+    let sq     = sin(q_h);
+    let cq     = cos(q_h);
+    let s2     = sq * cq;
+    let c2     = cq * cq - sq * sq;
+    let g1     = dot(sq, cq.yzx);
+    let g4     = dot(s2, s2.yzx);
+
+    let gr1    = cq * cq.yzx - sq.zxy * sq;
+    let gr4    = c2 * (s2.yzx + s2.zxy);
+
+    let diff_d = abs(hp) - drop_c;
+    let dist_d = max(length(diff_d), 0.001);
+    let grad_d = diff_d * sign(hp) / dist_d;
+
+    let r_hp   = max(length(hp), 0.001);
+    let rad_n  = hp / r_hp;
+    let d_b0   = (r_hp - 0.70 - g4 * mag) * 0.52;
+    let w_drop = clamp(0.5 + 0.5 * (d_b0 - (dist_d - 0.19)) / melt, 0.0, 1.0);
+    let n_base = normalize(rad_n - gr4 * (2.05 * mag));
+    let n_core = normalize(mix(n_base, grad_d, vec3(w_drop)));
+
+    // C1-continuous bullnose arch normal: smoothly blends the gyroid gradient
+    // with the inward radial derivative of `u_cav * u_cav`.
+    let u_hp   = max(3.20 - r_hp, 0.0);
+    let s_arch = clamp(g1 * 6.0, -1.0, 1.0);
+    let n_arch = normalize(gr1 * s_arch - rad_n * (u_hp * 0.56));
+
+    var n = normalize(mix(n_core, n_arch, vec3(is_cat)));
+    let v = -rd;
+    if dot(n, v) < 0.0 {
+      n = -n;
+    }
+
+    // Analytical environment reflection: sample a multi-layered gyroid dome
+    // along `refl` so the dark liquid chrome mirrors razor-sharp neon vaults.
+    let refl   = reflect(rd, n);
+    let env_q  = refl * 3.6 + hp * 0.65 - shift;
+    let env_g  = dot(sin(env_q), cos(env_q.yzx));
+    let env_hi = pow(clamp(0.5 + 0.5 * env_g, 0.0, 1.0), 6.0);
+    let env_r  = exp(-abs(env_g) * 14.0);
+
+    // Thin-film spectral interference (iridescent bismuth / oil-slick chrome).
+    let ndotv  = max(dot(n, v), 0.0);
+    let fres   = pow(1.0 - ndotv, 3.2);
+    let phase  = ndotv * 5.5 + env_g * 1.4 + prism * 6.2831853 + t * 0.25;
+    let irid   = 0.5 + 0.5 * cos(vec3(0.0, 2.0943951, 4.1887902) + vec3(phase));
+
+    // Radial shockwave + harmonic contour isolines etched across both the
+    // ferrofluid core and the 3D cathedral vaults (since |g1| is constant on
+    // the cathedral walls, `r_hp` + `g4` slices crisp 3D topographic rings!).
+    let iso    = exp(-abs(fract(r_hp * 2.4 + g4 * 2.2 - beats * 0.5) - 0.5) * 24.0);
+
+    // Smooth continuous analytical ambient occlusion + dual key lighting.
+    let ao     = clamp(0.30 + 0.70 * ndotv, 0.22, 1.0);
+    let l1     = normalize(vec3(0.60, 0.78, 0.42));
+    let l2     = -rad_n;
+    let diff1  = max(dot(n, l1), 0.0);
+    let diff2  = max(dot(n, l2), 0.0);
+    let spec1  = pow(max(dot(refl, l1), 0.0), 48.0);
+    let spec2  = pow(max(dot(refl, l2), 0.0), 20.0);
+
+    // Core shading: deep obsidian liquid mercury with high-contrast specular
+    // glints, reflected neon cathedral ribs, and thin-film Fresnel rims.
+    let chrome = vec3(0.008, 0.012, 0.024) * (0.25 + 0.75 * diff1)
+               + irid * (env_hi * 1.45 + fres * 1.50 + env_r * 0.60)
+               + vec3(1.0, 0.95, 0.88) * spec1 * 2.8
+               + vec3(0.15, 0.92, 1.0) * iso * (0.50 + beat_hit * 0.90);
+
+    // Cathedral shading: sculptural obsidian-sapphire gothic vaults with crisp
+    // cyan-gold shockwave contour rings and metallic specular highlights.
+    let vein_c = mix(vec3(1.0, 0.45, 0.10), vec3(0.10, 0.90, 1.0), vec3(0.5 + 0.5 * sin(r_hp * 1.8 - t)));
+    let arch_c = vec3(0.008, 0.018, 0.045) * (0.30 + 0.70 * diff1)
+               + (vec3(0.05, 0.20, 0.46) + irid * 0.18) * (0.40 * diff2 + 0.55 * fres + 0.35 * env_hi)
+               + vein_c * iso * (0.85 + glow * 0.65)
+               + vec3(0.50, 0.82, 1.0) * spec2 * 0.55;
+
+    let surf   = mix(chrome, arch_c, vec3(is_cat)) * ao;
+    let fog    = exp(-max(dist_t - 2.4, 0.0) * 0.22);
+    let abyss  = vec3(0.002, 0.005, 0.014) + vein_c * env_r * 0.06;
+    let caust  = (vec3(0.10, 0.75, 1.0) * glow_c + vec3(0.15, 0.50, 1.0) * glow_g * 0.35) * glow * 0.022;
+
+    let rgb    = (mix(abyss, surf, vec3(fog)) + caust) * exposure;
+    color = vec4(rgb, 1.0);
+  }
+}

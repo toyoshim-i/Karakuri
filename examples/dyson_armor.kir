@@ -1,0 +1,109 @@
+// Opaque faceted obsidian-metal armor and glowing quad-frame bevels for 3D
+// polyhedral meshes: each six-sided solid body carries quad coordinates in
+// [-1, 1]^2 on `uv`, so outer bevels and recessed circuit frames are
+// antialiased with `fwidth(uv)` with no diagonal triangle seam across
+// rectangular faces.
+//
+// Recovers the world-space camera eye from the view-projection matrix for
+// accurate flat-normal orientation, dual-source Blinn-Phong specular glints
+// (central forge core + zenith key light), grazing Fresnel sheen, and deep
+// atmospheric haze.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/dyson_forge.kset
+//     cargo run -p karakuri-cli -- --load-set dyson_forge
+
+proc dyson_armor {
+  kind  L4
+  blend opaque
+
+  consumes position, uv, tint, size
+
+  // Brightness of the glowing outer bevel seams and inner circuit rings.
+  param neon     : float [0.0, 8.0] = 2.8
+
+  // Specular glint intensity across the metallic armor facets.
+  param glint    : float [0.0, 6.0] = 1.6
+
+  // Distance at which distant monoliths fade halfway into the abyssal haze.
+  param fog      : float [6.0, 80.0] = 20.0
+
+  // Master brightness multiplier.
+  param exposure : float [0.2, 4.0] = 1.05
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 1.0;
+  }
+
+  fragment {
+    // Recover world-space camera position from the view-projection matrix.
+    let c0 = camera * vec4(1.0, 0.0, 0.0, 0.0);
+    let c1 = camera * vec4(0.0, 1.0, 0.0, 0.0);
+    let c2 = camera * vec4(0.0, 0.0, 1.0, 0.0);
+    let c3 = camera * vec4(0.0, 0.0, 0.0, 1.0);
+    let r0 = vec3(c0.x, c1.x, c2.x);
+    let r1 = vec3(c0.y, c1.y, c2.y);
+    let r3 = vec3(c0.w, c1.w, c2.w);
+    let k13 = cross(r1, r3);
+    let eye_at = -(c3.x * k13 + c3.y * cross(r3, r0) + c3.w * cross(r0, r1)) / dot(r0, k13);
+
+    // Crisp screen-space flat normal oriented toward the camera.
+    let to_eye = eye_at - position;
+    let dist   = length(to_eye);
+    let v      = to_eye / max(dist, 0.0001);
+    var n      = flat_normal(position);
+    if dot(n, v) < 0.0 {
+      n = -n;
+    }
+
+    // Derivative-antialiased quad-face coordinates: `uv` spans [-1, 1]^2 across
+    // each rectangular face of a 3D block, so `px_edge` measures pixels from the
+    // four outer edges of the quad without drawing the internal diagonal split.
+    let auv     = abs(uv);
+    let fw      = max(fwidth(uv), vec2(0.0005));
+    let px_edge = (vec2(1.0) - auv) / fw;
+    let d_outer = min(px_edge.x, px_edge.y);
+    let bevel   = 1.0 - smoothstep(0.45, 1.55, d_outer);
+    let halo    = exp(-max(d_outer, 0.0) * 0.32) * 0.22;
+
+    // Recessed inner energy frame at 58% of the quad face width.
+    let box_d   = max(auv.x, auv.y);
+    let fw_max  = max(fw.x, fw.y);
+    let d_in    = abs(box_d - 0.58) / fw_max;
+    let inlay   = (1.0 - smoothstep(0.45, 1.50, d_in)) * smoothstep(0.20, 0.90, size);
+
+    // Dual lighting: warm point light from the star-forge core at (0, 1.8, 0)
+    // plus a cool zenith directional light.
+    let to_core = vec3(0.0, 1.8, 0.0) - position;
+    let d_core  = length(to_core);
+    let l_core  = to_core / max(d_core, 0.0001);
+    let core_att = 1.0 / (1.0 + d_core * d_core * 0.015);
+    let l_sky   = normalize(vec3(0.25, 0.92, 0.25));
+    let diff_c  = max(dot(n, l_core), 0.0) * core_att;
+    let diff_s  = max(dot(n, l_sky), 0.0);
+
+    let h_core  = normalize(l_core + v);
+    let h_sky   = normalize(l_sky + v);
+    let spec_c  = pow(max(dot(n, h_core), 0.0), 48.0) * glint * core_att;
+    let spec_s  = pow(max(dot(n, h_sky), 0.0), 40.0) * glint * 0.35 * step(0.0, dot(n, l_sky));
+    let fresnel = pow(1.0 - max(dot(n, v), 0.0), 3.2);
+
+    // Dark obsidian-gunmetal facet interior so the 3D faces read with high
+    // contrast against the glowing laser bevels.
+    let metal_base = vec3(0.008, 0.012, 0.024)
+                   + tint * (0.04 + 0.32 * diff_c + 0.14 * diff_s)
+                   + tint * fresnel * 0.22;
+    let spec_light = vec3(1.0, 0.85, 0.65) * spec_c + vec3(0.55, 0.80, 1.0) * spec_s;
+
+    // Emissive laser bevels and recessed circuit rings.
+    let heat      = clamp(size, 0.0, 1.4);
+    let edge_emit = tint * (bevel + halo + inlay * 0.75) * neon * (0.45 + heat * 0.85);
+    let white_hot = vec3(bevel * pow(heat, 2.2) * 0.45);
+
+    let lit  = metal_base + spec_light + edge_emit + white_hot;
+    let keep = 1.0 / (1.0 + (dist / fog) * (dist / fog));
+    let haze = vec3(0.004, 0.009, 0.022);
+
+    color = vec4(mix(haze, lit, vec3(keep)) * exposure, 1.0);
+  }
+}

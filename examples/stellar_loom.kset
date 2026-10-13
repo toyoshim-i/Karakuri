@@ -1,0 +1,14 @@
+{"t":"set","id":"stellar_loom","v":1}
+{"t":"part","layer":"L1","path":"stellar_loom.kir"}
+{"t":"part","layer":"L3","path":"flat_eye.kir"}
+{"t":"part","layer":"L4","path":"tint_strokes.kir"}
+{"t":"part","layer":"L5","path":"bloom.kir"}
+{"t":"param","layer":"L3","key":"frame","value":3.6}
+{"t":"param","layer":"L4","key":"width","value":0.0038}
+{"t":"param","layer":"L4","key":"streak","value":1.10}
+{"t":"param","layer":"L4","key":"exposure","value":1.65}
+{"t":"param","layer":"L4","key":"falloff","value":2.0}
+{"t":"param","layer":"L4","key":"taper","value":0.20}
+{"t":"param","layer":"L5","key":"amount","value":0.80}
+{"t":"bind","layer":"L1","key":"pulse_k","signal":"onset","curve":"smooth","range":[0.2,1.6]}
+{"t":"bind","layer":"L1","key":"warp","signal":"energy","curve":"smooth","range":[0.35,0.85]}

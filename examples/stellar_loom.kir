@@ -1,0 +1,183 @@
+// A 4D Hopf-fibration magnetic tokamak and relativistic polar jet assembly
+// drawn with 32,768 line segments (`topology lines`):
+//
+//   1. Inner 4D Hopf Fibration Vortex (fibers 0..47): 48 linked Villarceau
+//      fiber circles on S^3 undergoing Clifford rotation in 4D space before
+//      stereographic projection to R^3, continuously turning inside-out
+//      through the central magnetic pinch.
+//   2. Outer Tokamak Confinement Cage (fibers 48..79): 32 counter-wound
+//      geodesic meridian coils and equatorial busbars with beat-driven
+//      Alfvén wave ripples that cage the 4D plasma core.
+//   3. Collimated Polar Synchrotron Jets (fibers 80..95): 16 braided magnetic
+//      flux filaments spiraling out of the north and south magnetic poles.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/stellar_loom.kset
+//     cargo run -p karakuri-cli -- --load-set stellar_loom
+
+proc stellar_loom {
+  kind     L1
+  topology lines
+  capacity [4096, 65536] = 32768
+
+  // 4D Clifford rotation speed driving the inside-out Hopf vortex flow.
+  param flow    : float [-2.0, 2.0] = 0.45
+
+  // Stereographic 4D projection depth (higher values swell the outer lobes).
+  param warp    : float [0.1, 1.0]  = 0.58
+
+  // Beat-synchronized Alfvén wave eruption amplitude; bind to onset.
+  param pulse_k : float [0.0, 2.0]  = 0.85
+
+  // Helical twist of the outer confinement cage and polar synchrotron jets.
+  param twist   : float [1.0, 12.0] = 5.0
+
+  // Outer tokamak confinement cage scale relative to the Hopf core.
+  param cage    : float [0.5, 2.5]  = 1.35
+
+  // Length and collimation of the twin polar synchrotron jets.
+  param jet     : float [0.2, 2.5]  = 1.25
+
+  // Slow 3D orbital tumble of the entire magnetic loom.
+  param tumble  : float [0.0, 0.4]  = 0.05
+
+  emit position, velocity, tint
+
+  element {
+    let n_fibers = 144u;
+    let n_seg_f  = max(float(capacity / n_fibers), 1.0);
+    let f_id     = seed % n_fibers;
+    let s_id     = seed / n_fibers;
+    let fi       = float(f_id);
+
+    let beat_env = pow(1.0 - fract(beats), 3.0);
+    let phase_t  = t * flow * 1.6;
+    let spin_3d  = t * tumble * 6.2831853;
+
+    var pa = vec3(0.0);
+    var pb = vec3(0.0);
+
+    // Evaluate both endpoints (k = 0 and k = 1) of the line segment so every
+    // fiber forms a continuous, watertight parametric curve.
+    for k in 0..2 {
+      let u   = (float(s_id) + float(k)) / n_seg_f;
+      let psi = u * 6.2831853;
+      var pt  = vec3(0.0);
+
+      if f_id < 80u {
+        // Tier 1 (80 fibers): 4D Hopf fibration stereographically projected
+        // from S^3 to R^3 under continuous 4D Clifford rotation.
+        let ring_id = float(f_id / 16u);
+        let sub_id  = float(f_id % 16u);
+
+        // Latitude theta and longitude phi on the base S^2 sphere.
+        let theta = 0.36 + ring_id * 0.46 + 0.08 * sin(phase_t + sub_id * 0.3927);
+        let phi   = sub_id / 16.0 * 6.2831853 + ring_id * 0.2618;
+
+        let ct = cos(theta * 0.5);
+        let st = sin(theta * 0.5);
+        let a1 = psi + phi * 0.5 + phase_t;
+        let a2 = psi - phi * 0.5 - phase_t * 0.5;
+
+        // Point on unit 3-sphere S^3 in R^4.
+        let x1 = ct * cos(a1);
+        let x2 = ct * sin(a1);
+        let x3 = st * cos(a2);
+        let x4 = st * sin(a2);
+
+        // 4D Clifford rotation mixing (x1, x4) so fibers turn inside-out.
+        let w_ang = phase_t * 0.35;
+        let cw    = cos(w_ang);
+        let sw    = sin(w_ang);
+        let rx1   = x1 * cw - x4 * sw;
+        let rx4   = x1 * sw + x4 * cw;
+
+        // Stereographic projection from S^3 to R^3, modulated by beat pulse.
+        let denom = max(1.36 - warp * 0.42 - rx4 * 0.78, 0.28);
+        let rad   = 1.85 + beat_env * pulse_k * 0.20 * sin(psi * 3.0 - beats * 6.2831853);
+        pt = vec3(rx1, x3, x2) * (rad / denom);
+      } else {
+        if f_id < 120u {
+          // Tier 2 (40 fibers): Outer Tokamak Poloidal & Toroidal Confinement Cage.
+          let c_idx = fi - 80.0;
+          if f_id < 104u {
+            // 24 Poloidal D-shaped magnetic meridian ribs wrapping the torus.
+            let azim  = c_idx / 24.0 * 6.2831853 + phase_t * 0.15;
+            let pol   = psi + sin(psi * 2.0) * 0.18;
+            let r_maj = 2.15 * cage;
+            let r_min = (1.02 + 0.14 * cos(pol * 3.0)) * cage;
+            let rip   = 1.0 + 0.06 * pulse_k * beat_env * cos(pol * 6.0 - beats * 6.2831853);
+            let rr    = (r_maj + r_min * cos(pol)) * rip;
+            let yy    = r_min * (sin(pol) + 0.22 * sin(pol * 2.0)) * rip;
+            pt = vec3(rr * cos(azim), yy, rr * sin(azim));
+          } else {
+            // 16 Toroidal high-voltage helical busbar rings.
+            let r_idx = c_idx - 24.0;
+            let pol   = r_idx / 16.0 * 6.2831853;
+            let azim  = psi + pol * 0.25;
+            let r_maj = 2.15 * cage;
+            let r_min = 1.05 * cage;
+            let braid = 0.07 * sin(psi * floor(twist) * 2.0 - phase_t * 3.0);
+            let rr    = r_maj + (r_min + braid) * cos(pol);
+            let yy    = (r_min + braid) * sin(pol) * 1.12;
+            pt = vec3(rr * cos(azim), yy, rr * sin(azim));
+          }
+        } else {
+          // Tier 3 (24 fibers): Twin Polar Relativistic Synchrotron Jets.
+          let j_idx  = fi - 120.0;
+          let sign_y = step(fi, 131.5) * 2.0 - 1.0;
+          let strand = mod(j_idx, 12.0);
+          let base_a = strand / 12.0 * 6.2831853;
+
+          // Helical funnel expanding from the central magnetic pinch out the poles.
+          let h_dist = (0.12 + u * 3.4 * jet) * sign_y;
+          let funnel = 0.16 + pow(u, 1.30) * 0.82;
+          let h_ang  = base_a + u * twist * 3.5 * sign_y - phase_t * 2.2 * sign_y;
+          let pinch  = 1.0 + 0.18 * pulse_k * beat_env * sin(u * 12.0 - t * 8.0);
+          pt = vec3(
+            funnel * pinch * cos(h_ang),
+            h_dist,
+            funnel * pinch * sin(h_ang)
+          );
+        }
+      }
+
+      // Apply slow 3D orbital tilt so both the equatorial torus and polar jets
+      // sweep across the camera frame.
+      let tilted = rot_z(rot_x(rot_y(pt, spin_3d), 0.54 + 0.16 * sin(spin_3d * 0.7)), 0.22);
+      if k == 0 {
+        pa = tilted;
+      } else {
+        pb = tilted;
+      }
+    }
+
+    position = pa;
+    velocity = pa - pb;
+
+    // Color palette: high-contrast plasma telemetry with traveling energy pulses.
+    let u0    = float(s_id) / n_seg_f;
+    let surge = pow(0.5 + 0.5 * sin(u0 * 18.849556 - t * 5.5 + fi * 0.7), 3.0);
+    var col   = vec3(0.0);
+
+    if f_id < 80u {
+      // Hopf core: incandescent cyan-to-magenta-to-amber gradient by ring layer.
+      let layer = float(f_id / 16u) / 4.0;
+      let c_in  = mix(vec3(0.08, 0.92, 1.0), vec3(1.0, 0.18, 0.72), vec3(layer));
+      col = mix(c_in, vec3(1.0, 0.88, 0.38), vec3(surge * (0.50 + 0.40 * beat_env)))
+          * (0.38 + 0.72 * surge);
+    } else {
+      if f_id < 120u {
+        // Tokamak cage: deep cobalt architectural struts with electric cyan pulses.
+        let pulse_c = pow(0.5 + 0.5 * cos(u0 * 25.13274 + t * 4.0 + fi), 4.0);
+        col = mix(vec3(0.10, 0.38, 0.95), vec3(0.42, 0.98, 1.0), vec3(pulse_c))
+            * (0.65 + 1.25 * pulse_c);
+      } else {
+        // Polar jets: white-gold core tapering into solar-orange synchrotron plumes.
+        let jet_fade = (0.15 + u0 * 0.85) * (1.0 - u0 * 0.45) * (0.95 + 1.15 * surge + 0.65 * beat_env);
+        col = mix(vec3(1.0, 0.92, 0.55), vec3(1.0, 0.32, 0.08), vec3(u0)) * jet_fade;
+      }
+    }
+
+    tint = col;
+  }
+}

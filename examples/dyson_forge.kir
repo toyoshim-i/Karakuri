@@ -1,0 +1,297 @@
+// A colossal kinetic polyhedral Dyson forge in four interlocking parts, built
+// entirely from solid 3D six-faced polyhedra (12 triangles, 36 vertices each):
+//
+//   1. An inner star-forge core of 384 sharp pyramid-tapered crystal obelisks
+//      on a Fibonacci sphere that thrust outward on beat transients.
+//   2. Four concentric, orthogonally precessing gyroscopic gimbal rings lined
+//      with 960 articulated aerodynamic mecha-fins that flare open on each hit.
+//   3. Twin segmented cyber-leviathan spines (576 swept chevron vertebrae)
+//      weaving through the gimbals on a toroidal helix.
+//   4. An abyssal amphitheater of 1,152 towering monolith pillars below, rising
+//      and falling with radial seismic waves from the core.
+//
+// Every 36-vertex body writes quad-face coordinates in [-1, 1]^2 to `uv`, so
+// `dyson_armor.kir` can draw clean four-sided bevels and recessed energy panels
+// on every face without a diagonal triangle seam.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/dyson_forge.kset
+//     cargo run -p karakuri-cli -- --load-set dyson_forge
+
+proc dyson_forge {
+  kind     L1
+  topology triangles
+  capacity [9216, 294912] = 110592   // 3072 solid polyhedra * 36 vertices
+
+  // Master speed of the gimbal precession, spine flight and shockwaves.
+  param speed  : float [-2.0, 2.0] = 0.75
+
+  // Overall scale of the Dyson armature in world units.
+  param scale  : float [0.5, 2.5] = 1.0
+
+  // Transient burst that flings the gimbal louvers open and thrusts core spikes.
+  param surge  : float [0.0, 2.0] = 0.65
+
+  // Continuous energy swell across the monolith canyon and leviathan spines.
+  param pulse  : float [0.0, 2.0] = 0.7
+
+  // Base palette hue [0, 1]; core and rings sit on complementary bands.
+  param hue    : float [0.0, 1.0] = 0.56
+
+  emit position, uv, tint, size
+
+  element {
+    let body   = seed / 36u;
+    let rem    = seed % 36u;
+    let face   = rem / 6u;
+    let tri    = (rem % 6u) / 3u;
+    let corner = rem % 3u;
+    let total  = capacity / 36u;
+
+    // Decode the corner of the unit cube's quad face, u and v in {-1, 1}:
+    // triangle 0 is corners (0, 1, 2) and triangle 1 is corners (0, 2, 3).
+    var q = corner;
+    if tri == 1u && corner > 0u {
+      q = corner + 1u;
+    }
+    var u = -1.0;
+    var v = -1.0;
+    if q == 1u || q == 2u {
+      u = 1.0;
+    }
+    if q >= 2u {
+      v = 1.0;
+    }
+    let side = float(face % 2u) * 2.0 - 1.0;
+    var cube = vec3(side, u, v);
+    if face / 2u == 1u {
+      cube = vec3(v, side, u);
+    }
+    if face / 2u == 2u {
+      cube = vec3(u, v, side);
+    }
+
+    // Quad-space coordinates in [-1, 1]^2 for diagonal-free face bevels in L4.
+    uv = vec2(u, v);
+
+    // Beat transient and combined energy envelope.
+    let beat_hit = pow(1.0 - fract(beats), 3.5);
+    let bar_hit  = exp(-fract(beats * 0.25) * 10.0);
+    let drive    = clamp(beat_hit * 0.65 + surge * 0.55 + bar_hit * 0.3, 0.0, 1.5);
+    let time     = t * speed;
+
+    // Partition capacity (3072 bodies at default) into four structural zones:
+    //   0..384     (1/8)  : Star-Forge Core
+    //   384..1344  (5/16) : 4 Precessing Gimbal Rings (240 blades per ring)
+    //   1344..1920 (3/16) : Twin Helical Leviathan Spines (288 vertebrae each)
+    //   1920..3072 (3/8)  : Abyssal Monolith Amphitheater (1152 pillars)
+    let core_end   = total / 8u;
+    let gimbal_end = core_end + total * 5u / 16u;
+    let spine_end  = gimbal_end + total * 3u / 16u;
+
+    let hub = vec3(0.0, 1.8 * scale, 0.0);
+    var pos = vec3(0.0);
+    var col = vec3(0.0);
+    var hot = 0.0;
+
+    if body < core_end {
+      // ---------------------- 1. STAR-FORGE OBELISK CORE ----------------------
+      let idx  = float(body);
+      let cnt  = max(float(core_end), 1.0);
+      let phi  = idx * 2.3999632;
+      let y0   = 1.0 - (idx + 0.5) / cnt * 2.0;
+      let rs   = sqrt(max(1.0 - y0 * y0, 0.0));
+      let dir  = vec3(cos(phi) * rs, y0, sin(phi) * rs);
+
+      // Harmonic surface wave across the sphere.
+      let harm = sin(dir.x * 4.5 + time * 1.8)
+               * cos(dir.y * 4.5 - time * 1.4)
+               * sin(dir.z * 4.5 + time * 2.1);
+      let wave = pow(abs(harm), 0.7);
+      let thrust = wave * (0.65 + drive * 0.75) + beat_hit * 0.35;
+
+      // Taper each cube steeply along its radial x-axis into a sharp pyramid obelisk.
+      let taper  = 0.68 - 0.52 * cube.x;
+      let len    = (0.38 + thrust * 0.52) * scale;
+      let thick  = (0.17 + 0.06 * wave) * taper * scale;
+      let shaped = vec3(cube.x * len, cube.y * thick, cube.z * thick);
+      let spun   = rot_x(shaped, time * 1.2 + idx * 0.21);
+
+      // Orthonormal frame aligned with the outward ray.
+      let up_v  = normalize(dir + vec3(0.0, 0.0001, 0.0));
+      let tan_v = normalize(cross(up_v, vec3(0.0, 1.0, 0.01)) + vec3(0.0001, 0.0, 0.0));
+      let bin_v = cross(up_v, tan_v);
+
+      let rad   = (1.35 + thrust * 1.05) * scale;
+      let world = dir * rad + up_v * spun.x + tan_v * spun.y + bin_v * spun.z;
+      let core_ax = normalize(vec3(0.25, 1.0, 0.15));
+      pos = hub + rot_axis(world, core_ax, time * 0.45);
+
+      // Solar amber-to-crimson core palette contrasting with the cyan/cobalt rings.
+      hot = clamp(0.35 + wave * 0.85 + beat_hit * 0.45 + max(cube.x, 0.0) * 0.35, 0.0, 1.4);
+      let chue = fract(hue + 0.48 + wave * 0.07 - max(cube.x, 0.0) * 0.05);
+      col = hsv_to_rgb(vec3(chue, 0.88 - hot * 0.18, 0.95));
+
+    } else {
+      if body < gimbal_end {
+        // ---------------- 2. PRECESSING DYSON GIMBAL ARMATURE -----------------
+        let g_idx  = body - core_end;
+        let g_span = (gimbal_end - core_end) / 4u;
+        let ring   = g_idx / g_span;
+        let slot   = g_idx % g_span;
+        let rf     = min(float(ring), 3.0);
+        let u_ring = float(slot) / max(float(g_span), 1.0);
+        let ang    = u_ring * 6.2831853;
+
+        // Alternate rotation direction per gimbal ring.
+        let r_dir  = 1.0 - 2.0 * float(ring % 2u);
+        let spin_a = ang + time * (0.26 - rf * 0.045) * r_dir;
+
+        // Travelling wave around the gimbal perimeter.
+        let lobes   = 4.0 + rf * 2.0;
+        let ripple  = sin(ang * lobes - time * 2.6 * r_dir);
+        let pulse_w = pow(0.5 + 0.5 * ripple, 4.0);
+
+        let base_r = (3.1 + rf * 1.32) * scale;
+        let r_now  = base_r + (pulse_w * 0.32 + drive * 0.38 * (1.0 - rf * 0.15)) * scale;
+
+        // Local frame on the ring in the XZ plane before 3D gimbal precession.
+        let ca    = cos(spin_a);
+        let sa    = sin(spin_a);
+        let rad_v = vec3(ca, 0.0, sa);
+        let tan_v = vec3(-sa, 0.0, ca);
+        let ax_v  = vec3(0.0, 1.0, 0.0);
+
+        // Swept aerodynamic louver blade: thin tangentially so crisp gaps separate
+        // every blade around the ring, tapered toward its outer tip.
+        let taper  = 0.85 - 0.45 * cube.x;
+        let sweep  = cube.x * 0.22 + abs(cube.z) * 0.14;
+        let b_len  = (0.42 + rf * 0.08 + pulse_w * 0.18) * scale;
+        let b_thk  = (0.030 + 0.007 * rf) * taper * scale;
+        let b_wid  = (0.20 + 0.04 * rf) * taper * scale;
+        let blade0 = vec3((cube.x + 0.25) * b_len, (cube.y + sweep) * b_thk, cube.z * b_wid);
+
+        // Pair alternating inner/outer chevron banks on odd/even slots.
+        let bank_s = 1.0 - 2.0 * float(slot % 2u);
+        let flare  = (0.28 + pulse_w * 0.55 + drive * 0.55) * bank_s;
+        let blade1 = rot_z(rot_x(blade0, flare), ripple * 0.30);
+
+        let ring_p = rad_v * (r_now + blade1.x)
+                   + tan_v * blade1.y
+                   + ax_v  * (blade1.z + bank_s * 0.16 * scale);
+
+        // 3D gyroscope precession: each of the 4 rings tilts and tumbles on its own axis.
+        let tilt_x = 0.35 + rf * 0.42 + sin(time * 0.21 + rf * 1.5) * 0.38;
+        let tilt_z = cos(time * 0.17 + rf * 1.9) * (0.30 + rf * 0.14);
+        let prec_y = time * (0.13 - rf * 0.025) * r_dir + rf * 0.785;
+        pos = hub + rot_y(rot_z(rot_x(ring_p, tilt_x), tilt_z), prec_y);
+
+        hot = clamp(0.15 + pulse_w * 0.85 + drive * 0.45, 0.0, 1.35);
+        let ghue = fract(hue + rf * 0.07 + u_ring * 0.08 + pulse_w * 0.06);
+        col = hsv_to_rgb(vec3(ghue, 0.82 - pulse_w * 0.18, 0.90));
+
+      } else {
+        if body < spine_end {
+          // --------------- 3. TWIN HELICAL LEVIATHAN SPINES -----------------
+          let s_idx  = body - gimbal_end;
+          let s_tot  = spine_end - gimbal_end;
+          let half   = s_tot / 2u;
+          let strand = s_idx / half;
+          let seg    = s_idx % half;
+          let u_seg  = float(seg) / max(float(half), 1.0);
+          let sf     = float(strand);
+
+          // Toroidal (2, 3) knot path weaving through the gimbal rings.
+          let phase  = u_seg * 6.2831853 + sf * 3.1415927;
+          let t_ang  = phase - time * 0.36;
+          let k_ang  = phase * 2.0 + time * 0.52;
+          let r_maj  = (5.5 + 1.9 * cos(k_ang * 1.5)) * scale;
+          let y_hel  = (2.5 * sin(k_ang * 1.5) + 0.75 * cos(t_ang * 3.0)) * scale;
+          let cen    = hub + vec3(r_maj * cos(t_ang), y_hel, r_maj * sin(t_ang));
+
+          // Analytic step ahead along the curve for the Frenet frame.
+          let dt_a   = 0.03;
+          let t_nxt  = t_ang + dt_a;
+          let k_nxt  = k_ang + dt_a * 2.0;
+          let r_nxt  = (5.5 + 1.9 * cos(k_nxt * 1.5)) * scale;
+          let y_nxt  = (2.5 * sin(k_nxt * 1.5) + 0.75 * cos(t_nxt * 3.0)) * scale;
+          let nxt    = hub + vec3(r_nxt * cos(t_nxt), y_nxt, r_nxt * sin(t_nxt));
+
+          let tang   = normalize(nxt - cen + vec3(0.0001, 0.0, 0.0));
+          let rad_n  = normalize(cen - hub + vec3(0.0, 0.0001, 0.0));
+          let binorm = normalize(cross(tang, rad_n) + vec3(0.0, 0.0, 0.0001));
+          let norm   = cross(binorm, tang);
+
+          // Travelling energy surge racing from head to tail along each spine.
+          let surge_w = pow(0.5 + 0.5 * sin(u_seg * 18.849556 - time * 4.2 + sf * 1.57), 6.0);
+          let breath  = 1.0 + surge_w * (0.42 + pulse * 0.35) + beat_hit * 0.25;
+
+          // Swept V-chevron vertebra: wide wings swept back along the tangent,
+          // thin enough along `tang` so consecutive vertebrae stay separated.
+          let wing_sw = abs(cube.y) * 0.45;
+          let taper   = 0.90 - 0.38 * abs(cube.y);
+          let v_len   = (0.065 * taper - wing_sw * 0.08) * scale;
+          let v_span  = 0.46 * breath * scale;
+          let v_arch  = (0.075 * taper + abs(cube.y) * 0.14) * scale;
+
+          let roll    = sin(u_seg * 12.56637 + time * 1.8) * 0.45;
+          let local_v = rot_x(vec3(cube.x * v_len, cube.y * v_span, cube.z * v_arch), roll);
+
+          pos = cen + tang * local_v.x + binorm * local_v.y + norm * local_v.z;
+
+          hot = clamp(0.20 + surge_w * 0.95 + beat_hit * 0.35, 0.0, 1.4);
+          let shue = fract(hue + 0.28 + sf * 0.18 + u_seg * 0.12);
+          col = hsv_to_rgb(vec3(shue, 0.85 - surge_w * 0.22, 0.92));
+
+        } else {
+          // -------------- 4. ABYSSAL MONOLITH AMPHITHEATER ------------------
+          let m_idx  = body - spine_end;
+          let cols   = 64u;
+          let col_i  = m_idx % cols;
+          let row_i  = m_idx / cols;
+          let fc     = float(col_i);
+          let fr     = float(row_i);
+
+          // Staggered concentric rings of monoliths around the canyon floor.
+          let m_ang  = (fc + 0.5 * float(row_i % 2u)) / float(cols) * 6.2831853
+                     + time * 0.035 * (1.0 - fr * 0.035);
+          let m_rad  = (3.6 + fr * 1.05) * scale;
+
+          // Radial seismic wave + spiral harmonic ridge.
+          let s_wave = sin(m_rad * 0.82 - time * 2.8 + cos(m_ang * 3.0) * 0.8);
+          let ridge  = pow(0.5 + 0.5 * s_wave, 3.0);
+          let lift   = (ridge * (1.35 + pulse * 1.05) + beat_hit * 0.60 * exp(-fr * 0.11)) * scale;
+
+          // Towering tapered monolith pillar: cube.y in [-1, 1] stands from base to crown.
+          let crown  = 1.0 - 0.22 * (cube.y * 0.5 + 0.5);
+          let p_w    = (0.20 + fr * 0.018) * crown * scale;
+          let p_d    = (0.28 + fr * 0.022) * crown * scale;
+          let p_h    = (0.80 + lift * 0.85 + fr * 0.09) * scale;
+
+          let ca     = cos(m_ang);
+          let sa     = sin(m_ang);
+          let rad_v  = vec3(ca, 0.0, sa);
+          let tan_v  = vec3(-sa, 0.0, ca);
+
+          // Tilt inner pillars slightly inward toward the forge core.
+          let lean   = -0.14 * exp(-fr * 0.14);
+          let pil    = rot_z(vec3(cube.x * p_d, (cube.y + 1.0) * p_h, cube.z * p_w), lean);
+
+          let floor_y = -4.5 * scale;
+          pos = vec3(ca * m_rad, floor_y, sa * m_rad)
+              + rad_v * pil.x
+              + vec3(0.0, pil.y, 0.0)
+              + tan_v * pil.z;
+
+          let cap_glow = smoothstep(0.2, 1.0, cube.y) * ridge;
+          hot = clamp(0.08 + ridge * 0.72 + cap_glow * 0.45 + beat_hit * 0.25, 0.0, 1.3);
+          let mhue = fract(hue - 0.05 + fr * 0.012 + ridge * 0.07);
+          col = hsv_to_rgb(vec3(mhue, 0.80, 0.75));
+        }
+      }
+    }
+
+    size     = hot;
+    position = pos;
+    tint     = col;
+  }
+}
