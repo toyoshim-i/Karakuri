@@ -1587,6 +1587,7 @@ dependencies = [
  "karakuri-operation",
  "karakuri-operation-record",
  "karakuri-store",
+ "serde",
  "serde_json",
  "tempfile",
 ]

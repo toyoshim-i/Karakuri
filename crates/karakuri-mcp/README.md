@@ -18,14 +18,15 @@ Model Context Protocol (MCP) server exposing Karakuri inspection, documentation,
 
 ## 2. Tools & Capabilities
 
-The server registers 14 MCP tools with concise descriptions and documentation references:
+The server registers 15 MCP tools with concise descriptions and documentation references:
 
 1. **Shader Procedure Tools**:
-   - `read_procedure`: Fetches active `.kir` source from a running slot and layer.
+   - `read_procedure`: Fetches `.kir` source code by procedure name from the library/presets, or from an active running deck slot and layer.
    - `write_procedure`: Dispatches an updated procedure to background compilation workers with 30-frame GPU performance measurement.
    - `check_procedure`: Statically validates `.kir` syntax, types, and execution costs without compiling to GPU or altering memory. Returns diagnostic reports in `structuredContent.report`.
-2. **Set Configuration Tools**:
-   - `read_set`: Reads Set definitions, node bindings, and parameter states.
+2. **Library & Preset Exploration Tools**:
+   - `list_library`: Explores built-in presets and stored library items with multi-dimensional filtering (`layer`, `topology`, `query`, `scope`) and deterministic pagination.
+   - `read_set`: Reads complete Set definitions, node bindings, and full `.kir` source code for constituent nodes.
    - `list_sets`: Catalogs available Sets in the store with optional filtering.
    - `save_set`: Commits active deck parameters to a new or existing Set file.
    - `check_set`: Validates Set configuration and asset integrity before activation.

@@ -58,6 +58,49 @@ pub(crate) fn read_procedure(deck: u8, node: NodeAddress, state: &State) -> Resu
     karakuri_store::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// Reads a procedure's source text by name across active deck slots, store, or built-in presets.
+pub(crate) fn read_procedure_by_name(name: &str, state: &State) -> Result<String, String> {
+    let stem = name.strip_suffix(".kir").unwrap_or(name);
+
+    // 1. Check active slots
+    let slot_count = state.slots.count();
+    for slot in 0..slot_count {
+        if let Ok(nodes) = state.slots.nodes(slot) {
+            for (_, _, path) in nodes {
+                if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    if file_stem == stem {
+                        if let Ok(content) = karakuri_store::fs::read_to_string(&path) {
+                            return Ok(content);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Check store procedures
+    if let Ok(store) = karakuri_store::Store::open(&state.store) {
+        if let Ok(bytes) = store.read_procedure(stem) {
+            return Ok(String::from_utf8_lossy(&bytes).to_string());
+        }
+    }
+
+    // 3. Check presets
+    let presets_dir = super::library::resolve_presets_dir();
+    let preset_file = presets_dir.join(format!("{stem}.kir"));
+    if karakuri_store::fs::exists(&preset_file) {
+        if let Ok(content) = karakuri_store::fs::read_to_string(&preset_file) {
+            return Ok(content);
+        }
+    }
+
+    Err(format!(
+        "no procedure `{name}` found in active slots, store at `{}`, or presets at `{}`",
+        state.store.display(),
+        presets_dir.display()
+    ))
+}
+
 /// Validates and atomically writes a new procedure source to the slot node's backing file.
 pub(crate) fn write_procedure(
     deck: u8,

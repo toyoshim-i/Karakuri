@@ -1,5 +1,6 @@
 mod dispatch;
 pub mod history;
+pub mod library;
 pub mod operate;
 pub mod procedure;
 pub mod schema;
@@ -13,6 +14,7 @@ use karakuri_operation::gate::{self, Allowed};
 use karakuri_operation::{NodeAddress, Operation, RefusalDetail};
 use serde_json::{json, Value};
 
+pub(crate) use library::list_library;
 pub use operate::OperateRequest;
 pub use procedure::check_procedure;
 pub(crate) use schema::build_tools;
@@ -122,6 +124,14 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
 }
 
 pub(crate) fn dispatch_tool(name: &str, args: &Value, state: &mut State) -> Result<Called, String> {
+    if name == "list_library" {
+        return Ok(Called::Answered(list_library(args, state)));
+    }
+    if name == "read_procedure" {
+        if let Some(proc_name) = args.get("name").and_then(Value::as_str) {
+            return Ok(Called::Answered(read_procedure_by_name(proc_name, state)));
+        }
+    }
     if name == "check_procedure" {
         let source = match args.get("source").and_then(Value::as_str) {
             Some(s) => s,

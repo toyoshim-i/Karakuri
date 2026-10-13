@@ -98,6 +98,7 @@ const WORKFLOW_TOOLS: &[&str] = &[
     "copy_slot",
     "check_procedure",
     "check_set",
+    "list_library",
     "doc_list",
     "doc_read",
 ];

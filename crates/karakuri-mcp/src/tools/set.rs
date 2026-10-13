@@ -143,22 +143,30 @@ pub(crate) fn save_set(
 /// Reads metadata, declared parameters, and element memory estimates for a saved Set by ID.
 ///
 /// Preconditions: `id` must be a valid sanitized Set identifier.
-/// Queries persistent store metadata cards without requiring compilation or GPU initialization.
+/// Queries persistent store metadata cards and full procedure sources without requiring compilation or GPU initialization.
 pub(crate) fn read_set(id: &str, state: &State) -> Result<String, String> {
     // Already one path component, because that is part of naming a set rather
     // than part of reading one — see [`asked`]'s `read_set` arm and
     // [`checked_id`].
     let store = Store::open(&state.store)
         .map_err(|e| format!("the store at `{}`: {e}", state.store.display()))?;
-    let lines = store.read_set(id).map_err(|e| {
-        format!(
-            "reading set `{id}`: {e} — this reads the operator's library, which is \
-             filed under the id a set was saved under by the `k` key or by \
-             `--save-set ID`. A set kept with `save_set` is in `<store>/{}/` and not \
-             here, because the library is written by the operator's own act",
-            Store::SANDBOX
-        )
-    })?;
+    let lines = match store.read_set(id) {
+        Ok(l) => l,
+        Err(e) => {
+            let presets_dir = super::library::resolve_presets_dir();
+            let preset_path = presets_dir.join(format!("{id}.kset"));
+            if karakuri_store::fs::exists(&preset_path) {
+                return read_preset_set(id, &preset_path, &presets_dir);
+            }
+            return Err(format!(
+                "reading set `{id}`: {e} — this reads the operator's library, which is \
+                 filed under the id a set was saved under by the `k` key or by \
+                 `--save-set ID`. A set kept with `save_set` is in `<store>/{}/` and not \
+                 here, because the library is written by the operator's own act",
+                Store::SANDBOX
+            ));
+        }
+    };
     // Preserves file declaration order of nodes as written.
     let nodes: Vec<(Layer, u32, Option<String>, Hash)> = lines
         .iter()
@@ -189,9 +197,107 @@ pub(crate) fn read_set(id: &str, state: &State) -> Result<String, String> {
     for (layer, index, name, hash) in nodes {
         out.push('\n');
         out.push_str(&node_block(&store, layer, index, name.as_deref(), &hash));
+        if let Ok(bytes) = store.get_artifact(&hash) {
+            let src = String::from_utf8_lossy(&bytes);
+            out.push_str("\n```kir\n");
+            out.push_str(&src);
+            if !src.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str("```\n");
+        }
     }
     out.push('\n');
     out.push_str(&element_storage_block(&store, id));
+    Ok(out)
+}
+
+fn read_preset_set(
+    id: &str,
+    path: &std::path::Path,
+    presets_dir: &std::path::Path,
+) -> Result<String, String> {
+    let content =
+        karakuri_store::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut parts: Vec<(String, u32, String)> = Vec::new();
+    let mut edges: Vec<(String, String, String)> = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(rec) = serde_json::from_str::<Value>(line) {
+            match rec.get("t").and_then(Value::as_str) {
+                Some("part") => {
+                    let layer = rec
+                        .get("layer")
+                        .and_then(Value::as_str)
+                        .unwrap_or("L1")
+                        .to_string();
+                    let index = rec.get("index").and_then(Value::as_u64).unwrap_or(0) as u32;
+                    let p = rec
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    parts.push((layer, index, p));
+                }
+                Some("edge") => {
+                    let node = rec
+                        .get("node")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let slot = rec
+                        .get("slot")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let to = rec
+                        .get("to")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    edges.push((node, slot, to));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut out = format!(
+        "preset set `{id}` holds {} node{}, and `--load-set {id}` plays it. Everything below \
+         is what each procedure declares.\n",
+        parts.len(),
+        if parts.len() == 1 { "" } else { "s" }
+    );
+
+    for (layer, index, file_name) in parts {
+        let proc_path = presets_dir.join(&file_name);
+        let src = karakuri_store::fs::read_to_string(&proc_path).unwrap_or_default();
+        let stem = std::path::Path::new(&file_name)
+            .file_stem()
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or(&file_name);
+        out.push_str(&format!("\n{layer}:{index} `{stem}` ({file_name})\n"));
+        if !src.is_empty() {
+            out.push_str("```kir\n");
+            out.push_str(&src);
+            if !src.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str("```\n");
+        }
+    }
+
+    if !edges.is_empty() {
+        out.push_str("\nEdges:\n");
+        for (node, slot, to) in edges {
+            out.push_str(&format!("- `{node}.{slot}` -> `{to}`\n"));
+        }
+    }
+
     Ok(out)
 }
 

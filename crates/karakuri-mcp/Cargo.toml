@@ -35,6 +35,7 @@ karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 # does, and `wire_input` states an edge in the engine's own vocabulary for it.
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 # The wire format every tool call and every tool result is spoken in.
+serde.workspace = true
 serde_json.workspace = true
 agent-man = { workspace = true, features = ["mcp", "mcp-http", "webmcp"] }
 

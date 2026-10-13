@@ -38,6 +38,7 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
         "copy_slot",
         "check_procedure",
         "check_set",
+        "list_library",
         "doc_list",
         "doc_read",
     ];
@@ -81,6 +82,7 @@ fn every_workflow_tool_is_published_and_callable() {
         "copy_slot",
         "check_procedure",
         "check_set",
+        "list_library",
         "doc_list",
         "doc_read",
     ] {

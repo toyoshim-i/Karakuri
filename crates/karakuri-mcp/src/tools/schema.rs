@@ -38,12 +38,15 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         // 1. read_procedure
         ToolBuilder::new(
             "read_procedure",
-            "Read the source of one node of a deck slot by layer and index. Read before writing to guide your edit.",
+            "Read the source of one node of a deck slot by layer and index, or by procedure name from the library/presets. Read before writing to guide your edit.",
         )
-        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
-        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field)", true)
+        .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", false)
+        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field)", false)
         .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
+        .param("name", ParamType::String, "procedure name to read from library or presets (e.g. 'bloom')", false)
         .see("ir-spec")
+        .see("library")
+        .example(json!({ "name": "bloom" }))
         .example(json!({ "slot": 0, "layer": "L1" }))
         .handler(tool_handler("read_procedure", state.clone()))
         .build(),
@@ -101,10 +104,11 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         // 6. read_set
         ToolBuilder::new(
             "read_set",
-            "Read declarations and node structures of a saved Set in the library without compiling or activating it.",
+            "Read declarations, node bindings, and full procedure sources of a saved Set or built-in preset.",
         )
-        .param("id", ParamType::String, "the id the set was filed under", true)
+        .param("id", ParamType::String, "the id the set was filed under (or preset name)", true)
         .see("set-storage")
+        .see("library")
         .example(json!({ "id": "default" }))
         .handler(tool_handler("read_set", state.clone()))
         .build(),
@@ -197,7 +201,46 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         .param("id", ParamType::String, "the Set ID to validate", true)
         .see("set-storage")
         .example(json!({ "id": "default" }))
-        .handler(tool_handler("check_set", state))
+        .handler(tool_handler("check_set", state.clone()))
+        .build(),
+
+        // 15. list_library
+        ToolBuilder::new(
+            "list_library",
+            "Explore shaders and Sets across built-in presets and user stores. Supports multi-dimensional filtering (layer, topology, query, scope) and deterministic pagination.",
+        )
+        .param("query", ParamType::String, "search substring in procedure name or comment description", false)
+        .param(
+            "layer",
+            ParamType::Enum(vec![
+                "L1".into(),
+                "L2".into(),
+                "L3".into(),
+                "L4".into(),
+                "Field".into(),
+                "L5".into(),
+                "Set".into(),
+            ]),
+            "filter by layer or Set",
+            false,
+        )
+        .param(
+            "topology",
+            ParamType::Enum(vec!["points".into(), "lines".into(), "triangles".into()]),
+            "filter geometry (L1) by topology primitive",
+            false,
+        )
+        .param(
+            "scope",
+            ParamType::Enum(vec!["all".into(), "presets".into(), "store".into()]),
+            "search scope (default: all)",
+            false,
+        )
+        .param("offset", ParamType::Integer { min: Some(0), max: None }, "pagination offset (default: 0)", false)
+        .param("limit", ParamType::Integer { min: Some(1), max: Some(500) }, "maximum number of items to return (default: 20)", false)
+        .see("library")
+        .example(json!({ "layer": "L1", "topology": "lines" }))
+        .handler(tool_handler("list_library", state))
         .build(),
     ]
 }
