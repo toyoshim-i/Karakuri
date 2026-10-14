@@ -101,7 +101,7 @@ pub(crate) fn held_deck(
                     blend: deck.blend(at),
                     // Records requested residency; effective level is re-governed on replay.
                     residency: deck.requested_residency(at),
-                    policy: karakuri_operation::SlotPolicy::Auto,
+                    policy: karakuri_operation::SlotPolicy::On,
                     mask: deck.mask(at),
                     transport: *deck.transport(at),
                 }

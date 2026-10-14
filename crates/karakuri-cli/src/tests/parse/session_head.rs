@@ -70,7 +70,7 @@ fn a_two_slot_head_splits_into_the_material_and_the_deck() {
                     opacity: 1.0,
                     blend: karakuri_engine::deck::Blend::Add,
                     residency: karakuri_engine::deck::Residency::Live,
-                    policy: karakuri_operation::SlotPolicy::Auto,
+                    policy: karakuri_operation::SlotPolicy::On,
                     mask: karakuri_engine::deck::Mask::default(),
                     transport: karakuri_engine::transport::Transport::default(),
                 })
