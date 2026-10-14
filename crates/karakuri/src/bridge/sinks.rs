@@ -177,16 +177,15 @@ pub(crate) fn aims(
     (picture_rect(layout, canvas), preview_rects(layout, canvas))
 }
 
-/// Determines engine compositing dimensions by selecting the maximum area among enabled outputs (ADR-0171, ADR-0247).
-pub(crate) fn render_size(outputs: &[Option<(u32, u32)>]) -> Option<(u32, u32)> {
-    // Select largest output area, breaking ties in favor of earlier enabled outputs.
-    outputs.iter().flatten().copied().fold(None, |best, at| {
-        let area = |(w, h): (u32, u32)| (w as u64) * (h as u64);
-        match best {
-            Some(b) if area(b) >= area(at) => Some(b),
-            _ => Some(at),
-        }
-    })
+/// Resolves composite target render resolution (ADR-0246, ADR-0394).
+///
+/// In WebXR, the native eye size decides. Otherwise, the Program bay selected resolution
+/// decides. Neither preview frames, projector windows, nor plugin sinks determine render size.
+pub(crate) fn target_render_size(
+    selected_res: Option<(u32, u32)>,
+    stereo_eye: Option<(u32, u32)>,
+) -> Option<(u32, u32)> {
+    stereo_eye.or(selected_res)
 }
 
 /// Renders individual deck preview cells via tonemapping pass before mixing (ADR-0258).

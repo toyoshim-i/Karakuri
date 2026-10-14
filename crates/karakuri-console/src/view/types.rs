@@ -121,8 +121,6 @@ pub struct View {
     pub output_resolutions: Vec<((u32, u32), String)>,
     /// Currently selected resolution option index in `output_resolutions`.
     pub output_resolution_selected: usize,
-    /// Set when the user changes resolution via the Program bay dropdown.
-    pub output_resolution_changed: bool,
     /// Whether the Program bay resolution dropdown menu is open.
     pub resolution_menu_open: bool,
     /// Whether VR mode is active (adjusts dropdown options to device ratio).

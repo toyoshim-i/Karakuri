@@ -274,7 +274,7 @@ number; new records continue from the end.
 | [ADR-0244](0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md) | A sub-pixel primitive is drawn at one pixel and compensated in the alpha | 2026-09-02 | **superseded by ADR-0245** |
 | [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md) | The sub-pixel compensation is paid in the colour, because alpha is coverage | 2026-09-02 | accepted |
 | [ADR-0246](0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md) | The render size belongs to the output, and the session's canvas is only its default | 2026-09-02 | accepted |
-| [ADR-0247](0247-one-frame-is-rendered-and-scaled-into-each-output.md) | One frame is rendered and scaled into each output | 2026-09-03 | accepted |
+| [ADR-0247](0247-one-frame-is-rendered-and-scaled-into-each-output.md) | One frame is rendered and scaled into each output | 2026-09-03 | superseded |
 | [ADR-0248](0248-a-wipes-front-shape-is-the-transition-rows-and-travels-with-the-quantum-and-the-length.md) | A wipe's front shape is the transition row's, and travels with the quantum and the length | 2026-09-04 | accepted |
 | [ADR-0249](0249-a-principle-is-what-decides-a-question-it-does-not-mention.md) | A principle is what decides a question it does not mention | 2026-09-04 | accepted |
 | [ADR-0250](0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md) | Below the minima the arrangement scales rather than being rewritten | 2026-09-04 | accepted |
@@ -350,7 +350,7 @@ number; new records continue from the end.
 | [ADR-0322](0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md) | The sequencer is polled like a transition, live only, and its writes are its record | 2026-09-09 | accepted |
 | [ADR-0323](0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) | A scheduled move is refused on a control a lane holds | 2026-09-09 | accepted |
 | [ADR-0324](0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md) | An output is a named destination with a size and an on/off | 2026-09-09 | accepted |
-| [ADR-0325](0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) | The frame follows the largest enabled output, and a resize costs 0.145 ms | 2026-09-09 | accepted |
+| [ADR-0325](0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) | The frame follows the largest enabled output, and a resize costs 0.145 ms | 2026-09-09 | superseded |
 | [ADR-0326](0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md) | A staging row is a changed node, and the row is the keep | 2026-09-09 | accepted |
 | [ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md) | The lane chooser lists one deck's keys, the bank pills are the four banks, and the levels stay out of the payload | 2026-09-09 | accepted |
 | [ADR-0328](0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md) | The Inspector's deck head steps a slot's capacity and re-salts it, and the payload loses its node | 2026-09-09 | accepted |
@@ -419,6 +419,7 @@ number; new records continue from the end.
 | [ADR-0391](0391-slot-mcp-policy-defaults-to-on.md) | Slot MCP policy defaults to on | 2026-10-13 | accepted |
 | [ADR-0392](0392-library-bay-tri-state-privacy-gate.md) | Library bay tri-state privacy gate | 2026-10-13 | accepted |
 | [ADR-0393](0393-mcp-capture-frame-image-tool-with-non-blocking-readback.md) | MCP capture_frame image tool with non-blocking readback | 2026-10-13 | accepted |
+| [ADR-0394](0394-render-resolution-is-settled-solely-by-program-bay-selection-and-scaled-to-outputs.md) | Render resolution is settled solely by the Program bay selection and scaled to outputs | 2026-10-14 | accepted |
 
 
 ## Retired numbers

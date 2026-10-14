@@ -153,18 +153,16 @@ impl App {
         let scale = self.scale as f32;
         // Read projector size before borrowing engine in aim call.
         let projector = gfx.projector.as_ref().map(|p| p.size);
-        let plugin = gfx.plugin.as_ref().map(|p| p.size());
         let selected_res = (!self.readout.view.vr_mode)
             .then(|| self.readout.view.selected_resolution())
             .flatten();
-        let external_output = crate::bridge::render_size(&[projector, plugin, selected_res]);
         let stereo_eye = self.stereo_matrices.and(self.stereo_eye_size);
         let (picture, previews) = gfx.engine.aim(
             &gfx.gpu,
             &mut gfx.renderer,
             self.readout.panel.layout(),
             scale,
-            external_output,
+            selected_res,
             stereo_eye,
         );
         // Update projector chip readout state for current frame.

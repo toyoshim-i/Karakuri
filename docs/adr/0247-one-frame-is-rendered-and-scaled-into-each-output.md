@@ -1,10 +1,10 @@
 ---
 id: 0247
 title: One frame is rendered and scaled into each output
-status: accepted
+status: superseded
 date: 2026-09-03
 supersedes: []
-superseded_by: []
+superseded_by: [0394]
 principles: [0086]
 tags: [engine, ui, operations]
 ---

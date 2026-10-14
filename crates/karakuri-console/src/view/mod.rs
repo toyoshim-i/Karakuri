@@ -260,7 +260,6 @@ impl View {
                 ((3840, 2160), "3840x2160 (4K)".into()),
             ],
             output_resolution_selected: 1,
-            output_resolution_changed: false,
             resolution_menu_open: false,
             vr_mode: false,
             xr_mode: XrSessionMode::Vr,

@@ -238,8 +238,8 @@ impl Engine {
         renderer: &mut egui_wgpu::Renderer,
         layout: &karakuri_layout::Layout,
         scale: f32,
-        // The projector window's size, or `None` while closed.
-        projector: Option<(u32, u32)>,
+        // Program bay selected resolution, or None if VR eye decides.
+        selected_res: Option<(u32, u32)>,
         // One WebXR eye's size while the stereo world is drawn, else `None`.
         stereo_eye: Option<(u32, u32)>,
     ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
@@ -278,15 +278,13 @@ impl Engine {
             self.deck.set_measure_size(cell);
         }
 
-        // Resize composite targets and deck when output resolution changes (ADR-0247, P-0091).
-        // In WebXR the eye alone decides: it is the only output looked at.
-        let outputs = match stereo_eye {
-            Some(eye) => [Some(eye), None],
-            None => [self.picture.aimed.then_some(self.picture.size), projector],
-        };
-        if let Some(at) = render_size(&outputs) {
+        // Resize composite targets and deck when output resolution changes (ADR-0246, ADR-0394).
+        // In WebXR the eye alone decides; otherwise the Program bay selection decides.
+        // Preview frames, projector windows, and plugin sinks do NOT dictate render size.
+        let target_size = target_render_size(selected_res, stereo_eye);
+        if let Some(at) = target_size {
             if at != self.present.size() {
-                // Suppress per-frame resize logging during interactive divider drags (P-0095).
+                println!("render size: {}x{} (Program bay selection)", at.0, at.1);
                 self.present.resize(&gpu.device, &gpu.queue, at.0, at.1);
                 self.deck.resize(&gpu.device, at.0, at.1);
                 // Recreate preview bind groups for newly allocated slot views on resize (P-0094).

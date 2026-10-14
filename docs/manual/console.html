@@ -182,7 +182,7 @@
               <div class="bay-head">
                 <span>Program</span>
                 <span style="display:flex;gap:5px;align-items:center">
-                  <span class="pill" data-tip="Master composite render resolution. Determined by the largest active output sink. Configured in the Outputs row. &#8853; MIDI: unassigned &mdash; readout only.">3840&times;2160</span>
+                  <span class="pill" data-tip="Master composite render resolution. Settled solely by the Program bay selection. Configured via the dropdown menu. &#8853; MIDI: unassigned.">1920&times;1080</span>
                   <span class="pill" data-tip="Toggle solo display mode. Folds all console control bays away to present a borderless full-frame program canvas for performance or capture. &#8853; MIDI: unassigned.">solo</span>
                   <span class="pill" data-tip="Agent permission gate for Program Bay live residency and forcing sets live. Click to toggle open/shut. &#8853; MIDI: unassigned.">mcp &middot; shut</span>
                   <span class="pill armed" data-tip="Number of active deck monitor preview thumbnails. Click to adjust concurrency limit to balance rendering load against GPU budget. &#8853; MIDI: unassigned.">previews 3 of 4</span>
@@ -3939,12 +3939,11 @@
           projector&rsquo;s label carries the display it is on and that changes
           when the cable does. The size is the output&rsquo;s own: the window
           manager&rsquo;s for a window, and the rectangle the Program bay gives
-          the picture for the program view. <strong>One frame is composited at
-          the largest enabled output&rsquo;s size and scaled into every
-          one</strong>, so nothing is ever upscaled and nobody with several
-          outputs pays for several renders &mdash; and turning a larger sink on
-          raises what every frame costs, which is your own act and is what the
-          Program bay&rsquo;s size pill reads.
+          the picture for the program view. <strong>One frame is composited once
+          at the resolution selected in the Program bay and scaled into every
+          one</strong>, so nobody with several outputs pays for several renders,
+          and the frame resolution stays strictly under the operator's control
+          rather than following window resize drags or connected displays.
         </p>
         <p>
           <strong>All of them may be off, and that is a state worth having.</strong>

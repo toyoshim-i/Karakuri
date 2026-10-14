@@ -353,9 +353,9 @@ mod gpu {
         );
     }
 
-    /// Verifies composited frame size coordinates across picture bounds and projector target sizes (ADR-0325).
+    /// Verifies composited frame size follows the Program bay selected resolution and ignores output sizes (ADR-0246, ADR-0394).
     #[test]
-    fn the_frame_is_composited_at_the_largest_enabled_output() {
+    fn the_frame_is_composited_at_the_selected_resolution_and_ignores_outputs() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
         const W: u32 = 1440;
         const H: u32 = 900;
@@ -382,38 +382,33 @@ mod gpu {
             mcp::Slots::unpointed(),
         );
 
-        // Default configuration without projector composites at picture size.
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
-        assert_eq!(
-            engine.present.size(),
-            picture,
-            "the frame is composited at {:?} while the only output on is the picture at \
-         {picture:?} — every output is a downscale of the one render, so a frame larger \
-         than its only destination is a render nobody asked for and a frame smaller is \
-         an upscale",
-            engine.present.size()
-        );
+        // Initial present size starts at CANVAS default (1280x720).
+        assert_eq!(engine.present.size(), CANVAS);
         assert_ne!(
             picture, CANVAS,
-            "this window's picture happens to be exactly the session canvas, so the \
-         assertion above cannot tell the derivation from the constant it replaced"
+            "this window's picture happens to be exactly the session canvas"
         );
 
-        // Larger enabled projector raises compositing resolution.
-        let projector = (3840, 2160);
-        engine.aim(
-            &gpu,
-            &mut renderer,
-            panel.layout(),
-            1.0,
-            Some(projector),
-            None,
-        );
+        // Preview frame size (picture) does not dictate compositing resolution.
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(CANVAS), None);
+        assert_eq!(engine.present.size(), CANVAS);
+
+        // Selected resolution (e.g. 1920x1080 FHD) sets compositing resolution.
+        let fhd = (1920, 1080);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(fhd), None);
         assert_eq!(
             engine.present.size(),
-            projector,
-            "a projector larger than the picture did not raise the frame, so it would be \
-         shown an upscale of the picture's size"
+            fhd,
+            "selected resolution sets composite target dimensions"
+        );
+
+        // Even with a different preview layout size or connected external output,
+        // the render size remains at the selected resolution.
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(fhd), None);
+        assert_eq!(
+            engine.present.size(),
+            fhd,
+            "render size must stay at selected resolution and ignore output sizes"
         );
 
         // Deck rendering coordinates match updated present pass dimensions.
@@ -439,13 +434,13 @@ mod gpu {
         )
         .expect("the frame composes at the derived size");
 
-        // Disabling the projector drops presentation size back to picture bounds.
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None, None);
+        // Changing the selected resolution back to HD adjusts presentation size to HD,
+        // and it never drops to preview bounds.
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(CANVAS), None);
         assert_eq!(
             engine.present.size(),
-            picture,
-            "with the projector gone the picture is the only output left and the frame is \
-         its size again"
+            CANVAS,
+            "selecting HD switches render size to HD and never adopts preview frame bounds"
         );
     }
 }

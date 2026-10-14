@@ -739,7 +739,7 @@ fn the_press_handler_dispatches_resolution_controls() {
     readout.pointer(&ctx, Pointer::Down);
     assert!(!readout.view.resolution_menu_open);
     assert_eq!(readout.view.output_resolution_selected, 1);
-    assert!(readout.view.output_resolution_changed);
+    assert_eq!(readout.view.selected_resolution(), Some((1920, 1080)));
 
     // 3. Open menu again and click outside to dismiss (Rule 2)
     readout.pointer(&ctx, Pointer::Moved(pill_center));

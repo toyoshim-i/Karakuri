@@ -1,10 +1,10 @@
 ---
 id: 0325
 title: The frame follows the largest enabled output, and a resize costs 0.145 ms
-status: accepted
+status: superseded
 date: 2026-09-09
 supersedes: []
-superseded_by: []
+superseded_by: [0394]
 principles: [0086, 0091, 0095]
 tags: [engine, ui, performance, outputs, m5]
 ---

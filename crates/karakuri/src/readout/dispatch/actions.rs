@@ -110,10 +110,7 @@ impl Readout {
                 Acted::Nothing
             }
             view::ResolutionAsk::Select(idx) => {
-                if self.view.output_resolution_selected != idx {
-                    self.view.output_resolution_selected = idx;
-                    self.view.output_resolution_changed = true;
-                }
+                self.view.output_resolution_selected = idx;
                 self.view.resolution_menu_open = false;
                 Acted::Nothing
             }

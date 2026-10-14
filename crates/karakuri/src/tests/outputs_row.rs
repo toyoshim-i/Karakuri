@@ -1,70 +1,71 @@
-//! What the frame is composited at, and what a chip in the Outputs row asks
-//! for. Both are decisions rather than device work, so both are here rather
-//! than under `mod gpu` — `render_size` is arithmetic over sizes, and an
-//! operation is a value.
+//! What the frame is composited at, settled solely by the Program bay selection
+//! or the WebXR eye size (ADR-0246, ADR-0394).
+//!
+//! Output destinations (Program bay preview, external projector, Syphon plugin)
+//! are scaled from this single composited frame; their individual sizes do not
+//! alter the render resolution.
 
 use super::*;
+use crate::bridge::target_render_size;
 
-/// One output, and the frame is that output's size. The ordinary run: the
-/// program view is the only sink and the frame follows the Program bay's
-/// rectangle.
+/// In normal display mode, the Program bay selected resolution decides the frame size.
 #[test]
-fn the_frame_is_the_one_enabled_outputs_size() {
-    assert_eq!(render_size(&[Some((466, 262))]), Some((466, 262)));
-}
-
-/// Two outputs, and the frame is the larger — ADR-0247, so that every output is
-/// a downscale and none is ever upscaled. Asserted both ways round, because a
-/// `max` written the wrong way is right half the time.
-#[test]
-fn the_frame_is_the_largest_enabled_output() {
-    let picture = Some((466, 262));
-    let projector = Some((3840, 2160));
-    assert_eq!(render_size(&[picture, projector]), projector);
-    assert_eq!(render_size(&[projector, picture]), projector);
-}
-
-/// An output that is off is not in the maximum. The case an operator makes on
-/// purpose: the picture folded away and a projector on, which the manual says
-/// leaves the inspector the height.
-#[test]
-fn an_output_that_is_off_does_not_raise_the_frame() {
-    assert_eq!(render_size(&[None, Some((1920, 1080))]), Some((1920, 1080)));
-    assert_eq!(render_size(&[Some((640, 360)), None]), Some((640, 360)));
-}
-
-/// Turning off all outputs stops publishing without reallocating frame targets (ADR-0171).
-#[test]
-fn every_output_off_says_nothing() {
-    assert_eq!(render_size(&[None, None]), None);
-    assert_eq!(render_size(&[]), None);
-}
-
-/// The tie goes to the earlier entry, which is the program view — the output an
-/// operator is looking at while they decide. `max_by_key` hands back the *last*
-/// of several equal maxima, so this is the test that says the fold was written
-/// for a reason.
-#[test]
-fn a_tie_goes_to_the_program_view() {
-    let a = Some((1280, 720));
-    let b = Some((960, 960));
-    // 921600 either way.
-    assert_eq!(render_size(&[a, b]), a);
-    assert_eq!(render_size(&[b, a]), b);
-}
-
-/// The maximum is by pixel count and never componentwise. 1920x1080 beside
-/// 1024x1280 must not give 1920x1280, which is a size no output is and which
-/// upscales both of them in one axis.
-#[test]
-fn the_answer_is_always_some_outputs_own_size() {
-    let wide = (1920, 1080);
-    let tall = (1024, 1280);
-    let at = render_size(&[Some(wide), Some(tall)]).expect("two outputs are on");
-    assert!(
-        at == wide || at == tall,
-        "the frame is {at:?}, which is neither {wide:?} nor {tall:?} — a componentwise \
-         maximum invents a size no output has and upscales both of them"
+fn the_frame_follows_program_bay_selected_resolution() {
+    assert_eq!(
+        target_render_size(Some((1280, 720)), None),
+        Some((1280, 720))
     );
-    assert_eq!(at, wide);
+    assert_eq!(
+        target_render_size(Some((1920, 1080)), None),
+        Some((1920, 1080))
+    );
+    assert_eq!(
+        target_render_size(Some((1024, 768)), None),
+        Some((1024, 768))
+    );
+    assert_eq!(
+        target_render_size(Some((3840, 2160)), None),
+        Some((3840, 2160))
+    );
+}
+
+/// The Program bay preview frame rectangle does not dictate render resolution.
+#[test]
+fn the_preview_frame_does_not_change_render_size() {
+    let selected = Some((1280, 720));
+    let preview_rect_size = (466, 262);
+    let retina_preview_size = (1800, 1000);
+
+    // The render size remains the operator's selected resolution regardless of preview layout.
+    assert_eq!(target_render_size(selected, None), selected);
+    assert_ne!(target_render_size(selected, None), Some(preview_rect_size));
+    assert_ne!(
+        target_render_size(selected, None),
+        Some(retina_preview_size)
+    );
+}
+
+/// External projector windows do not raise or alter the render resolution.
+#[test]
+fn external_projector_does_not_change_render_size() {
+    let selected_1080p = Some((1920, 1080));
+    let projector_4k = (3840, 2160);
+
+    // Thermal budget allows rendering at 1080p even when outputting to a 4K display.
+    assert_eq!(target_render_size(selected_1080p, None), selected_1080p);
+    assert_ne!(target_render_size(selected_1080p, None), Some(projector_4k));
+}
+
+/// In WebXR mode, the native eye size decides composite dimensions.
+#[test]
+fn webxr_eye_size_decides_in_vr_mode() {
+    let selected = Some((1920, 1080));
+    let eye = Some((960, 1080));
+    assert_eq!(target_render_size(selected, eye), eye);
+}
+
+/// When no resolution or eye size is provided, returns None.
+#[test]
+fn no_selected_resolution_or_eye_says_nothing() {
+    assert_eq!(target_render_size(None, None), None);
 }
