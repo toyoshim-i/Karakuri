@@ -1,6 +1,8 @@
 use super::*;
 use crate::view::widgets::card::{card_row_text, popup_card};
-use crate::view::widgets::glyph::{chevron_down, CHEVRON_H, CHEVRON_W};
+use crate::view::widgets::glyph::chevron_down;
+#[cfg(target_arch = "wasm32")]
+use crate::view::widgets::glyph::{CHEVRON_H, CHEVRON_W};
 use egui::vec2;
 use karakuri_layout::Point;
 
@@ -19,6 +21,7 @@ const PROGRAM_VIEW: &str = "Program View";
 const PROJECTOR: &str = "Projector";
 
 /// Document Picture-in-Picture output sink label.
+#[cfg(target_arch = "wasm32")]
 const PIP: &str = "Picture-in-Picture";
 
 /// Share pill label.
@@ -36,8 +39,6 @@ pub enum OutputAction {
 
 #[cfg(target_arch = "wasm32")]
 const PIP_ABSENT: &str = "Picture-in-Picture · no support";
-#[cfg(not(target_arch = "wasm32"))]
-const PIP_ABSENT: &str = "Picture-in-Picture · web only";
 
 /// Default labels for plugin sinks when no plugin provider is loaded.
 #[cfg(target_arch = "wasm32")]
@@ -49,8 +50,6 @@ const PLUGIN_0_NAME: &str = "Spout";
 
 #[cfg(target_arch = "wasm32")]
 const PLUGIN_1_NAME: &str = "Cast";
-#[cfg(not(target_arch = "wasm32"))]
-const PLUGIN_1_NAME: &str = "NDI";
 
 #[cfg(target_arch = "wasm32")]
 const PLUGIN_0_ABSENT: &str = "WebXR · no session";
@@ -61,10 +60,21 @@ const PLUGIN_0_ABSENT: &str = "Spout · no plugin";
 
 #[cfg(target_arch = "wasm32")]
 const PLUGIN_1_ABSENT: &str = "Cast · no receiver";
-#[cfg(not(target_arch = "wasm32"))]
-const PLUGIN_1_ABSENT: &str = "NDI · no plugin";
 
+#[cfg(target_arch = "wasm32")]
 const PLUGIN_SINKS: [&str; 2] = [PLUGIN_0_ABSENT, PLUGIN_1_ABSENT];
+#[cfg(not(target_arch = "wasm32"))]
+const PLUGIN_SINKS: [&str; 1] = [PLUGIN_0_ABSENT];
+
+#[cfg(target_arch = "wasm32")]
+pub const SINK_MORE_COUNT: usize = 4;
+#[cfg(not(target_arch = "wasm32"))]
+pub const SINK_MORE_COUNT: usize = 2;
+
+#[cfg(target_arch = "wasm32")]
+const TOTAL_CHIPS: usize = 5;
+#[cfg(not(target_arch = "wasm32"))]
+const TOTAL_CHIPS: usize = 3;
 
 /// User interaction outcome from pressing inside WebXR mode pill or menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -206,7 +216,7 @@ pub struct Outputs {
     /// Whether the picture is on screen — `layout.visible(id)`, read here.
     pub on: bool,
     /// Auxiliary sink chips (projector, pip, and plugin sinks) in left-to-right order.
-    pub more: [SinkChip; 4],
+    pub more: [SinkChip; SINK_MORE_COUNT],
     /// WebXR presentation mode pill next to WebXR sink chip, if available.
     pub xr_pill: Option<XrPill>,
     /// Share action pill at right end of Outputs row.
@@ -239,8 +249,15 @@ impl Outputs {
     }
 
     /// Configures Document Picture-in-Picture state on the second auxiliary sink.
+    #[cfg(target_arch = "wasm32")]
     pub fn told_pip(mut self, pip: bool) -> Outputs {
         self.more[1].on = pip;
+        self
+    }
+
+    /// On native platforms, Picture-in-Picture is web-exclusive; this is a no-op.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn told_pip(self, _pip: bool) -> Outputs {
         self
     }
 
@@ -257,7 +274,12 @@ impl Outputs {
         present: bool,
         name: Option<&'static str>,
     ) -> Outputs {
-        if let Some(chip) = self.more.get_mut(index + 2) {
+        #[cfg(target_arch = "wasm32")]
+        let chip_index = index + 2;
+        #[cfg(not(target_arch = "wasm32"))]
+        let chip_index = index + 1;
+
+        if let Some(chip) = self.more.get_mut(chip_index) {
             chip.on = on;
             chip.present = present;
             if index == 0 {
@@ -266,7 +288,9 @@ impl Outputs {
                     (true, None) => PLUGIN_0_NAME,
                     (false, _) => PLUGIN_SINKS[0],
                 };
-            } else if index == 1 {
+            }
+            #[cfg(target_arch = "wasm32")]
+            if index == 1 {
                 chip.name = match (present, name) {
                     (true, Some(n)) => n,
                     (true, None) => PLUGIN_1_NAME,
@@ -366,13 +390,13 @@ pub fn outputs_with_plugin_details(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     open: Open,
-    pip_available: bool,
+    #[allow(unused_variables)] pip_available: bool,
     plugin_available: bool,
     plugin_name: Option<&'static str>,
-    plugin_1_available: bool,
-    plugin_1_name: Option<&'static str>,
-    xr_mode: XrSessionMode,
-    xr_menu_open: bool,
+    #[allow(unused_variables)] plugin_1_available: bool,
+    #[allow(unused_variables)] plugin_1_name: Option<&'static str>,
+    #[allow(unused_variables)] xr_mode: XrSessionMode,
+    #[allow(unused_variables)] xr_menu_open: bool,
 ) -> Option<Outputs> {
     // Defer layout until egui completes its initial pass and fonts become valid.
     if ctx.cumulative_pass_nr() == 0 {
@@ -386,12 +410,39 @@ pub fn outputs_with_plugin_details(
     let opened = open.holds(Class::InputsAndOutputs);
     let pill = pill_width(ctx, mcp_word(opened));
 
+    #[cfg(target_arch = "wasm32")]
     let pip_name = if pip_available { PIP } else { PIP_ABSENT };
     let custom_0_name = plugin_name.unwrap_or(PLUGIN_0_NAME);
+    #[cfg(target_arch = "wasm32")]
     let custom_1_name = plugin_1_name.unwrap_or(PLUGIN_1_NAME);
 
-    // Measure label widths for all five sink chips.
-    let widths: [f32; 5] = std::array::from_fn(|i| {
+    #[cfg(not(target_arch = "wasm32"))]
+    let widths: [f32; TOTAL_CHIPS] = std::array::from_fn(|i| {
+        let word = match i {
+            0 => PROGRAM_VIEW,
+            1 => PROJECTOR,
+            2 => {
+                if plugin_available {
+                    custom_0_name
+                } else {
+                    PLUGIN_SINKS[0]
+                }
+            }
+            _ => unreachable!(),
+        };
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                word.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    });
+
+    #[cfg(target_arch = "wasm32")]
+    let widths: [f32; TOTAL_CHIPS] = std::array::from_fn(|i| {
         let word = match i {
             0 => PROGRAM_VIEW,
             1 => PROJECTOR,
@@ -410,7 +461,7 @@ pub fn outputs_with_plugin_details(
                     PLUGIN_SINKS[1]
                 }
             }
-            n => PLUGIN_SINKS[n - 3],
+            _ => unreachable!(),
         };
         ctx.fonts_mut(|f| {
             f.layout_no_wrap(
@@ -423,6 +474,7 @@ pub fn outputs_with_plugin_details(
         })
     });
 
+    #[cfg(target_arch = "wasm32")]
     let xr_info = if plugin_available && plugin_name == Some("WebXR") {
         let mode_label = xr_mode.label();
         let text_w = ctx.fonts_mut(|f| {
@@ -439,6 +491,7 @@ pub fn outputs_with_plugin_details(
         None
     };
 
+    #[cfg(target_arch = "wasm32")]
     let share_w = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             SHARE_LABEL.to_owned(),
@@ -449,6 +502,7 @@ pub fn outputs_with_plugin_details(
         .x
     }) + size::PILL_PAD_X * 2.0;
 
+    #[cfg(target_arch = "wasm32")]
     let logs_w = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             LOGS_LABEL.to_owned(),
@@ -459,7 +513,12 @@ pub fn outputs_with_plugin_details(
         .x
     }) + size::PILL_PAD_X * 2.0;
 
-    outputs_row(row, viewport, label, pill, widths, share_w, logs_w, xr_info).map(
+    #[cfg(target_arch = "wasm32")]
+    let row_opt = outputs_row(row, viewport, label, pill, widths, share_w, logs_w, xr_info);
+    #[cfg(not(target_arch = "wasm32"))]
+    let row_opt = outputs_row(row, viewport, label, pill, widths);
+
+    row_opt.map(
         |OutputsRow {
              label,
              mcp,
@@ -478,22 +537,33 @@ pub fn outputs_with_plugin_details(
             more: std::array::from_fn(|i| SinkChip {
                 output: match i {
                     0 => Output::Projector(0),
+                    #[cfg(target_arch = "wasm32")]
                     1 => Output::Pip,
+                    #[cfg(target_arch = "wasm32")]
                     n => Output::Plugin(n as u8 - 2),
+                    #[cfg(not(target_arch = "wasm32"))]
+                    n => Output::Plugin(n as u8 - 1),
                 },
                 chip: chips[i + 1].0,
                 dot: chips[i + 1].1,
                 on: false,
                 present: match i {
                     0 => true,
+                    #[cfg(target_arch = "wasm32")]
                     1 => pip_available,
+                    #[cfg(target_arch = "wasm32")]
                     2 => plugin_available,
+                    #[cfg(target_arch = "wasm32")]
                     3 => plugin_1_available,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    1 => plugin_available,
                     _ => false,
                 },
                 name: match i {
                     0 => PROJECTOR,
+                    #[cfg(target_arch = "wasm32")]
                     1 => pip_name,
+                    #[cfg(target_arch = "wasm32")]
                     2 => {
                         if plugin_available {
                             custom_0_name
@@ -501,6 +571,7 @@ pub fn outputs_with_plugin_details(
                             PLUGIN_SINKS[0]
                         }
                     }
+                    #[cfg(target_arch = "wasm32")]
                     3 => {
                         if plugin_1_available {
                             custom_1_name
@@ -508,7 +579,15 @@ pub fn outputs_with_plugin_details(
                             PLUGIN_SINKS[1]
                         }
                     }
-                    n => PLUGIN_SINKS[n - 2],
+                    #[cfg(not(target_arch = "wasm32"))]
+                    1 => {
+                        if plugin_available {
+                            custom_0_name
+                        } else {
+                            PLUGIN_SINKS[0]
+                        }
+                    }
+                    _ => "",
                 },
             }),
             xr_pill,
@@ -523,19 +602,20 @@ struct OutputsRow {
     label: Rect,
     mcp: Rect,
     /// The capsule and its dot, per chip, left to right.
-    chips: [(Rect, Rect); 5],
+    chips: [(Rect, Rect); TOTAL_CHIPS],
     xr_pill: Option<XrPill>,
     share: Option<Rect>,
     logs: Option<Rect>,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[allow(clippy::too_many_arguments)]
 fn outputs_row(
     row: Rect,
     viewport: Rect,
     label_w: f32,
     pill_w: f32,
-    name_w: [f32; 5],
+    name_w: [f32; TOTAL_CHIPS],
     share_w: f32,
     logs_w: f32,
     xr_info: Option<(XrSessionMode, bool, f32)>,
@@ -552,10 +632,10 @@ fn outputs_row(
     );
     // Layout chips horizontally left-to-right from the MCP pill.
     let mut x = mcp.max.x;
-    let mut chips: [(Rect, Rect); 5] = [(Rect::ZERO, Rect::ZERO); 5];
+    let mut chips: [(Rect, Rect); TOTAL_CHIPS] = [(Rect::ZERO, Rect::ZERO); TOTAL_CHIPS];
     let mut xr_pill: Option<XrPill> = None;
 
-    for i in 0..5 {
+    for i in 0..TOTAL_CHIPS {
         let chip = Rect::from_min_size(
             Pos2::new(x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
             egui::vec2(
@@ -639,7 +719,7 @@ fn outputs_row(
     );
 
     // Require all chips and right-aligned action pills to fit within the row bounds without wrapping.
-    match row.contains_rect(chips[4].0)
+    match row.contains_rect(chips[TOTAL_CHIPS - 1].0)
         && row.contains_rect(logs_pill)
         && row.contains_rect(share_pill)
         && share_pill.min.x >= x + size::OUTPUTS_GAP
@@ -651,6 +731,55 @@ fn outputs_row(
             xr_pill,
             share: Some(share_pill),
             logs: Some(logs_pill),
+        }),
+        false => None,
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn outputs_row(
+    row: Rect,
+    _viewport: Rect,
+    label_w: f32,
+    pill_w: f32,
+    name_w: [f32; TOTAL_CHIPS],
+) -> Option<OutputsRow> {
+    let mid = row.center().y;
+    let label = Rect::from_min_size(
+        Pos2::new(row.min.x + size::OUTPUTS_PAD_X, mid - size::HEAD_SIZE * 0.5),
+        egui::vec2(label_w, size::HEAD_SIZE),
+    );
+    let mcp = Rect::from_min_size(
+        Pos2::new(label.max.x + size::OUTPUTS_GAP, mid - size::PILL_H * 0.5),
+        egui::vec2(pill_w, size::PILL_H),
+    );
+    let mut x = mcp.max.x;
+    let mut chips: [(Rect, Rect); TOTAL_CHIPS] = [(Rect::ZERO, Rect::ZERO); TOTAL_CHIPS];
+
+    for i in 0..TOTAL_CHIPS {
+        let chip = Rect::from_min_size(
+            Pos2::new(x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
+            egui::vec2(
+                size::SINK_PAD_X * 2.0 + size::SINK_DOT + size::SINK_GAP + name_w[i],
+                size::SINK_H,
+            ),
+        );
+        x = chip.max.x;
+        let dot = Rect::from_center_size(
+            Pos2::new(chip.min.x + size::SINK_PAD_X + size::SINK_DOT * 0.5, mid),
+            egui::vec2(size::SINK_DOT, size::SINK_DOT),
+        );
+        chips[i] = (chip, dot);
+    }
+
+    match row.contains_rect(chips[TOTAL_CHIPS - 1].0) {
+        true => Some(OutputsRow {
+            label,
+            mcp,
+            chips,
+            xr_pill: None,
+            share: None,
+            logs: None,
         }),
         false => None,
     }
@@ -791,11 +920,14 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     chip_into(row.sink, row.dot, PROGRAM_VIEW, row.on, true);
     for (i, c) in row.more.iter().enumerate() {
         chip_into(c.chip, c.dot, c.name, c.on, c.present);
+        #[cfg(target_arch = "wasm32")]
         if i == 2 {
             if let Some(ref xr_pill) = row.xr_pill {
                 xr_pill_into(ui, pal, xr_pill, false);
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = i;
     }
     if let Some(share) = row.share {
         pill_into(ui, pal, share, SHARE_LABEL, false);

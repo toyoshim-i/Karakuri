@@ -1,5 +1,7 @@
 //! Tests for WebXR presentation mode pill and dropdown menu interaction in Outputs row (ADR-0387).
 
+#![cfg(target_arch = "wasm32")]
+
 mod common;
 
 use common::{at, console, near, rect_of, PLAUSIBLE};

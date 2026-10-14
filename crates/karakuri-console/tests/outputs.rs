@@ -211,7 +211,10 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
             &mut panel,
             &ctx,
             &showing(&[]),
-            Point::new(sink.more[2].chip.max.x + 20.0, sink.sink.center().y)
+            Point::new(
+                sink.more.last().unwrap().chip.max.x + 20.0,
+                sink.sink.center().y
+            )
         ),
         Claim::Egui,
         "the empty half of the outputs row is being claimed"
@@ -707,13 +710,16 @@ fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
     assert_eq!(row.chip_at(at(row.label.center())), None);
     assert_eq!(row.chip_at(at(row.mcp.center())), None);
     // Nor is the ground past the last chip.
-    let past = egui::pos2(row.more[3].chip.max.x + 20.0, row.sink.center().y);
+    let past = egui::pos2(
+        row.more.last().unwrap().chip.max.x + 20.0,
+        row.sink.center().y,
+    );
     assert_eq!(row.chip_at(at(past)), None);
 }
 
 /// Chips are laid out horizontally with `.outputs` gaps and remain bounded by the row.
 #[test]
-fn the_five_chips_are_one_gap_apart_and_all_inside_the_row() {
+fn the_chips_are_one_gap_apart_and_all_inside_the_row() {
     let (panel, ctx) = console(PLAUSIBLE);
     let region = rect_of(panel.layout(), "outputs");
     let row = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sinks");
