@@ -204,9 +204,9 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
    - Eliminates redundant layout and paint code across bays, guarantees 100% parameter representation consistency, and ensures future parameter features apply universally across both desktop and web targets.
 10. **WebAssembly Platform Feature Gaps & Offline Hardening (`karakuri-web`)**:
     - **Browser Canvas File Drag-and-Drop & Local Export**: Enable direct drag-and-drop of `.kbset` and `.kir` files onto the WebGPU canvas via `FileReader` / `File.text()`, complementing URL hash sharing with local `.kbset` file export (`Blob` URL + `<a download>`).
-    - **Offline Venue Resilience (PWA & Service Worker)**: Provide `manifest.json` and a Cache-First Service Worker (`sw.js`) caching WASM, JS, and HTML assets for 100% offline standalone operation in performance venues lacking internet connectivity.
-    - **Touchscreen & Tablet Optimization**: Multi-touch simultaneous fader sweeping for iPad / tablet performance, `touch-action: none` to prevent browser gesture conflicts (pinch-zoom, pull-to-refresh, swipe navigation), and viewport stabilization when virtual software keyboards appear.
-    - **WebGPU Context Loss & Resource Profiling**: Implement `webgpucontextlost` recovery handling to prevent silent freezes on GPU resets, and conduct multi-hour continuous VRAM/heap leak profiling under dynamic shader hotswapping.
+    - **Offline Venue Resilience (PWA & Service Worker, Completed)**: Provided `manifest.json` and a Stale-While-Revalidate Service Worker (`sw.js`) precaching WASM, JS, and HTML assets for 100% offline standalone operation in performance venues lacking internet connectivity.
+    - **Touchscreen & Tablet Optimization (Completed)**: Prevent browser gesture conflicts (pinch-zoom, pull-to-refresh, swipe navigation, canvas context-menu), and stabilize canvas coordinates against software keyboard `visualViewport` resizes.
+    - **WebGPU Context Loss Recovery (Completed)**: Implemented `webgpucontextlost` and `device.lost` recovery handling to display notifications and gracefully restore sessions on GPU driver resets or sleeps. Multi-hour continuous VRAM/heap leak profiling under dynamic shader hotswapping tracked for release qualification.
 
 #### Carried from M6 (closed 2026-09-14) and M8 (closed 2026-09-27), status:
 - In-app dynamic MIDI map editing and 14-bit CC resolution deferred to M11; basic MIDI input binding and live learned maps are active.
