@@ -237,51 +237,37 @@ When `WebXR` is toggled:
 
 ---
 
-### 3.7 Social Sharing, Stateless Permalinks & Media Capture
+### 3.7 Social Sharing, Stateless Permalinks & Media Capture (ADR-0389)
 
-Sharing live procedural shader sets on social platforms (e.g. X / Twitter) traditionally requires either a cloud database to store user state or manual screen recording with third-party software. Karakuri Web implements a **100% serverless, zero-backend sharing pipeline** combining stateless URL hashes, in-browser video recording, and a hybrid social dispatch architecture:
+Sharing live procedural shader sets on social platforms (e.g. 𝕏 / Twitter) traditionally requires either a cloud database to store user state or manual screen recording with third-party software. Karakuri Web implements a **100% serverless, zero-backend sharing pipeline** combining stateless URL hashes, remote cloud storage fallback, in-browser offscreen video recording, and a two-step social composition workflow:
 
-#### 3.7.1 Stateless Set Permalinks via URL Hash (`#set=...`)
-1. **Zero-Backend Serialization & Compression**:
-   - The active Set (slot assignments, `.kir` shader code, parameter maps, and topology) is serialized into standard `.kbset` ndjson.
-   - The payload is compressed in-memory using **Deflate/zlib** and encoded as **URL-safe Base64** (`#set=<base64url>`).
-   - Standard sets compress from 5–15 KB of raw text down to **1–3 KB**, easily fitting within browser URL length limits (tens of kilobytes) while remaining completely transparent to web servers.
-2. **Client-Side Immunity to HTTP 414 (URI Too Long)**:
-   - Because the payload resides entirely in the URL hash fragment (`window.location.hash`), it is never transmitted over HTTP request headers, ensuring perfect compatibility with static hosts like GitHub Pages.
-3. **Startup Hydration**:
+#### 3.7.1 Dual-Tier Sharing Model (Inline Deflate & Remote Storage)
+1. **Tier 1 (Inline Hash `#set=...`)**:
+   - The active Set (slot assignments, `.kir` shader code, parameter maps, and topology) is serialized into standard `.kbset` ndjson via `App::export_active_set_bundle`.
+   - The payload is compressed in-memory using **raw Deflate** (`CompressionStream('deflate-raw')`) and encoded as **URL-safe Base64** (`#set=<base64url>`).
+   - Compact sets easily fit within browser URL hash limits while remaining completely transparent to static web hosting servers.
+2. **Tier 2 (Remote Storage `#url=...`)**:
+   - Social platforms such as 𝕏 employ strict URL parsing thresholds (`twitter-text` / Netty limits at ~4,096 bytes; Web Intent limits at ~3,800 characters). Because complex `.kbset` bundles repeat inlined source records (`Record::Src`) for every line of WGSL shaders, compressed bundles can exceed 3,800 characters.
+   - Exceeding 3,800 characters causes 𝕏 to fail t.co link shortening, dumping the literal URL into the post body and triggering massive character overflow.
+   - When a bundle exceeds 3,800 characters (or when creators prefer short permalinks), the UI offers two external storage options:
+     - **Cloudflare KV (Karakuri Public Storage)**: Uploads the `.kbset` bundle to a Cloudflare Worker backed by Workers KV (`https://karakuri-share.toyoshim.workers.dev/set`), protected by non-interactive Cloudflare Turnstile tokens.
+     - **User GitHub Gist**: Saves the Set as a public Gist using the performer's Personal Access Token (`gist` scope), generating an immutable GitHub raw URL.
+3. **Unified Startup Hydration**:
    - On page load, `karakuri-web` inspects `window.location.hash`.
-   - If `#set=` is detected, it asynchronously decodes and inflates the bundle, injects the `.kir` artifacts into the in-memory virtual filesystem, and triggers slot compilation and playback immediately without requiring any user sign-in or database lookup.
+   - The loader transparently resolves `#set=...`, `#url=...`, and `#load=...`, fetching and decompressing the raw bundle text and hydrating directly onto Deck A.
+   - **Idempotent Hydration**: If the Set ID already exists in local storage (e.g. author testing their own shared link), `import_and_load_bundle` caches missing inlined artifacts into the store and loads the set onto Deck A without raising collision errors.
 
-#### 3.7.2 End-to-End Social Sharing Workflow (X / Social Media)
-Attaching video content directly to a tweet via external web links presents hard platform boundaries on the modern web:
-- **Web Intent Limitations**: Standard web intents (`x.com/intent/post`) only accept query parameters for text, URLs, and hashtags (`?text=...&url=...`); browser security policies prevent passing local file attachments or video blobs via URL parameters.
-- **Clipboard API Restrictions**: `navigator.clipboard.write()` supports plain text and images (`image/png`), but browsers disallow `video/mp4` and `video/webm` MIME types on clipboard write.
-- **Player Card Sandboxing**: While `twitter:card = player` metadata exists, modern X requires manual domain whitelisting (now largely unavailable to independent developers), does not grant `webgpu` permissions inside iframes, and falls back to static links on mobile apps.
-
-To provide a seamless, high-engagement sharing experience despite these constraints, Karakuri Web uses a **two-tier hybrid dispatch architecture**:
-
-1. **In-Browser Video Capture (`captureStream` + `MediaRecorder`)**:
-   - The operator clicks "Share to X".
-   - The engine taps the clean Program View canvas via `canvas.captureStream(30)` or WebCodecs, recording a lightweight 5–10 second looping video (`video/mp4` or `video/webm`).
-2. **Tier A: Web Share API (Mobile / Native OS Share Target — Zero Friction)**:
-   - On mobile devices (iOS / Android) and supporting desktop OSes, the browser invokes:
-     ```javascript
-     const file = new File([videoBlob], 'karakuri_preview.mp4', { type: 'video/mp4' });
-     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-       await navigator.share({
-         files: [file],
-         text: 'Created with Karakuri #Karakuri',
-         url: permalinkUrlWithHash,
-       });
-     }
-     ```
-   - The native OS share sheet opens; selecting the X app immediately launches the X tweet composer with the **video file, description, and permalink pre-attached** ready for one-tap posting.
-3. **Tier B: Desktop Fallback (Auto-Download + Web Intent + Drag-and-Drop Guidance)**:
-   - When `navigator.canShare({ files })` is unavailable (e.g. desktop web browsers):
-     - The permalink with `#set=...` is copied to the operator's clipboard.
-     - The generated preview video is triggered for instant browser download.
-     - A new tab is opened to `https://x.com/intent/post?text=...&url=...` with the pre-filled post text and permalink.
-     - An in-console floating overlay guides the operator to drag-and-drop the downloaded video file into the open X composer window.
+#### 3.7.2 Pure Visual Offscreen Recording & Two-Step Social UX
+1. **Offscreen Canvas Recording (`#karakuri-recorder-canvas`)**:
+   - Attaches a secondary offscreen `wgpu::Surface` (1280×720) to `Gfx.recorder_sink`.
+   - The engine tone-maps and renders clean program video to the recorder canvas before egui UI chrome (bays, faders, knobs) is drawn.
+   - Captures a 5-second seamless loop via `canvas.captureStream(30)` and `MediaRecorder` with MP4 and WebM fallback.
+2. **Explicit Two-Step Social Workflow**:
+   - **Step 1 (`[ ⬇ Step 1: Download Loop Video (5s) ]`)**: Downloads the generated clean 5-second video loop (`.mp4` / `.webm`).
+   - **Step 2 (`[ 𝕏 Step 2: Open 𝕏 Post Composer ]`)**: Opens Twitter Web Intent pre-filled with `Generated by #KarakuriVJ\n` and the share URL.
+   - The user attaches the downloaded video in the composer, achieving video fidelity and executable reproducibility without friction.
+3. **Native Console HUD Integration**:
+   - Both `share` and `logs` are first-class pills in the console `OutputsRow` (painted directly in WebGPU with HUD tooltips cited from `docs/manual/console.html`), replacing floating HTML DOM buttons.
 
 ---
 
@@ -289,7 +275,7 @@ To provide a seamless, high-engagement sharing experience despite these constrai
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Phase 1: WebGPU Foundation & Standalone Player (~1 week)               │
+│ Phase 1: WebGPU Foundation & Standalone Player (Completed)             │
 │ - wasm32-unknown-unknown build setup                                   │
 │ - Abstraction of std::time::Instant with web-time                      │
 │ - Conditionalize portable-pty out for wasm32 target                    │
@@ -297,48 +283,48 @@ To provide a seamless, high-engagement sharing experience despite these constrai
 │ - WebGPU canvas rendering + egui console presentation                  │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 2: Web Audio & Web MIDI Integration (~3-5 days)                  │
+│ Phase 2: Web Audio & Web MIDI Integration (Completed)                  │
 │ - cpal Web Audio backend with user gesture activation                  │
 │ - midir Web MIDI backend (navigator.requestMIDIAccess)                 │
 │ - Verification of 8-band FFT reactivity and hardware MIDI control      │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 3: In-Process Agent Harness & OpenAI API Client (Completed)
-- wasm-bindgen-futures async agent loop in Prompt bay
-- Streaming fetch client for /v1/chat/completions with SSE token decoding
-- In-terminal /config parser & localStorage persistence
-- /model local LLM auto-detection probing localhost ports (Ollama, LM Studio, vLLM)
-- Interactive TUI menu selection with arrow keys and direct number selection
-- Direct in-process tool dispatcher (14-tool MCP matrix bridge) and WebMCP standard bridge
+│ Phase 3: In-Process Agent Harness & OpenAI API Client (Completed)      │
+│ - wasm-bindgen-futures async agent loop in Prompt bay                  │
+│ - Streaming fetch client for /v1/chat/completions with SSE token decoding
+│ - In-terminal /config parser & localStorage persistence                │
+│ - /model local LLM auto-detection probing localhost ports              │
+│ - Interactive TUI menu selection with arrow keys and direct selection │
+│ - Direct in-process tool dispatcher & WebMCP standard bridge           │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 4: Storage Persistence & Virtual FileSystem (Completed)
-- Pluggable FileSystem abstraction with zero-latency synchronous fs::* API (ADR-0386)
-- IndexedDB non-blocking background write-through and startup hydration
-- Full persistence across browser sessions for sets, procedures, and MIDI/key mappings
+│ Phase 4: Storage Persistence & Virtual FileSystem (Completed)          │
+│ - Pluggable FileSystem abstraction with synchronous fs::* API (ADR-0386)
+│ - IndexedDB non-blocking background write-through and startup hydration│
+│ - Full persistence across browser sessions for sets and mappings       │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (Completed)
-- Multi-window WebGPU Projector popout with shared GPU device & zero-copy surface (Completed)
-- Transient watchdog grace & rolling median reset on window transitions (Completed)
-- WebXR Spatial World & Side-by-Side Stereo Canvas Projection (Completed)
-- Wireless Presentation Cast with WebRTC P2P direct streaming (Completed)
-- Document Picture-in-Picture [ Picture-in-Picture ] always-on-top floating preview monitor (Completed)
+│ Phase 5: Advanced Web Outputs: Projector, WebRTC & WebXR (Completed)   │
+│ - Multi-window WebGPU Projector popout with shared GPU surface (ADR-0358)
+│ - Transient watchdog grace & rolling median reset on window transitions│
+│ - WebXR Spatial World, Stereo eye buffers & Celestial Dome (ADR-0388) │
+│ - Wireless Presentation Cast with WebRTC P2P direct streaming          │
+│ - Document Picture-in-Picture [ Picture-in-Picture ] floating monitor │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (In Progress)
-- Bundle import/export UI (.kbset file upload & Blob download)
-- Offline PWA manifest & service worker caching
-- Headset / touch & pointer interaction audit
-- Long-session memory and WebGPU resource profiling
+│ Phase 6: UX Polish, Preset Bundling & Standalone Hardening (Completed) │
+│ - Native console Outputs row pills (share, logs) & HUD tips            │
+│ - Full GUI tooltip audit across all console outputs                    │
+│ - Universal component unification and browser IO feature gaps deferred │
+│   to global roadmap (docs/roadmap.md § M11)                            │
 ├────────────────────────────────────┬───────────────────────────────────┤
 │                                    ▼                                   │
-│ Phase 7: Social Sharing, Permalinks & Media Capture (Planned)
-- Stateless Set permalink generation with Deflate compression & Base64URL URL Hash (#set=...)
-- Startup URL hash hydration and automatic background Set decoding & compilation
-- In-browser Program View video loop recording via Canvas captureStream() / MediaRecorder
-- Hybrid social sharing workflow: Web Share API (navigator.share with video File) for mobile X app and auto-download + Web Intent drag-and-drop overlay for desktop
-- Open Graph and Twitter Card fallback metadata (summary_large_image / player)
+│ Phase 7: Social Sharing, Permalinks & Media Capture (Completed, ADR-0389)
+│ - Stateless Set permalink generation with raw Deflate & Base64URL      │
+│ - Remote cloud storage fallback (Cloudflare KV + Turnstile, GitHub Gist)
+│ - Startup URL hash hydration (#set=..., #url=...) with idempotent store│
+│ - In-browser clean offscreen video loop recording (1280x720, 5s)       │
+│ - Two-step social sharing workflow (Download loop video -> Open 𝕏)    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -360,4 +346,16 @@ To provide a seamless, high-engagement sharing experience despite these constrai
 | **Projector Output**| `winit` secondary fullscreen window  | Same-origin popout (`projector.html`) with direct WebGPU surface sharing & Watchdog grace | Zero-copy multi-window GPU rendering, zero IPC latency |
 | **PiP Monitor**    | N/A (Desktop window management)     | Document Picture-in-Picture API (`window.documentPictureInPicture`) | Always-on-top OS-level floating monitor across applications |
 | **Plugin Sinks**   | Syphon (macOS) / Spout (Windows) / NDI | WebXR (VR/MR) & Wireless Cast (Presentation API + WebRTC P2P) | Browser-native spatial 6DoF and zero-backend wireless projection |
-| **Social & Permalinks** | Manual file save / CLI export | URL Hash (`#set=...` Deflate+Base64URL) + Web Share API / MediaRecorder | 100% serverless stateless sharing without backend database; native mobile video injection |
+| **Social & Permalinks** | Manual file save / CLI export | Dual-Tier URL Hash (`#set=...` / `#url=...`) + Offscreen 5s loop capture | 100% serverless stateless sharing + remote storage fallback for complex shaders |
+| **Console GUI**    | egui immediate-mode native widgets  | WebGPU-rendered native console pills + hover HUD cards | Unified multi-modal pointer invariance and zero-DOM chrome (ADR-0387) |
+
+---
+
+## 6. Milestone Completion & Roadmap Integration
+
+With the completion of **Phase 1 through Phase 7**, all primary WebAssembly / WebGPU engine foundations, input buses, virtual filesystems, multi-window outputs, in-process agent harnesses, and stateless social sharing capabilities are fully operational.
+
+To maintain a single authoritative operational ledger and avoid split backlogs, cross-platform component refactorings and future Web platform feature enhancements are tracked centrally in **[docs/roadmap.md](roadmap.md)**:
+- **Master Bay Component Unification ([ADR-0387](adr/0387-universal-console-gui-component-architecture.md))**: Tracked under M11 item 9.
+- **WebAssembly Platform Feature Gaps & Offline Hardening**: Tracked under M11 item 10, covering browser canvas file drag-and-drop (`.kbset` / `.kir`), local `.kbset` bundle export, offline PWA manifest & Service Worker (`sw.js`), touchscreen & tablet fader optimizations, and WebGPU context loss recovery.
+

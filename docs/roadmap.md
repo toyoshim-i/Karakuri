@@ -105,6 +105,8 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
 │ - Procedural Sky & SDF Ambient Occlusion / Volumetric Extensions        │
 │ - Mesh Group Lifecycle & Index-Shift Mesh Mode                          │
 │ - Library Free-Text Search & Thumbnail Generation                       │
+│ - Master Bay Component Unification with Inspector (ADR-0387)           │
+│ - WebAssembly Feature Gaps (Canvas File D&D, PWA Offline, Tablet Touch) │
 │ - Multi-Hour Continuous Rehearsal Stress Testing                        │
 │ - Release Packaging, Verification & Documentation Audit                 │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -197,6 +199,14 @@ The path to MVP proceeds through **M10 (Expressive Surface & Master Pipeline)** 
 8. **Documentation Audit & Release Distribution**:
    - Complete synchronization of `docs/manual/` with all implemented operations.
    - Production build packaging for macOS and Linux.
+9. **Universal Console Component Unification (`karakuri-console`)** *(Carried from [ADR-0387](adr/0387-universal-console-gui-component-architecture.md))*:
+   - Refactor `karakuri-console::view::master` (`layout.rs`, `paint.rs`, `types.rs`) to directly instantiate and consume Inspector component primitives (parameter cards, fader/knob controls, header pills, and wiring dispatch).
+   - Eliminates redundant layout and paint code across bays, guarantees 100% parameter representation consistency, and ensures future parameter features apply universally across both desktop and web targets.
+10. **WebAssembly Platform Feature Gaps & Offline Hardening (`karakuri-web`)**:
+    - **Browser Canvas File Drag-and-Drop & Local Export**: Enable direct drag-and-drop of `.kbset` and `.kir` files onto the WebGPU canvas via `FileReader` / `File.text()`, complementing URL hash sharing with local `.kbset` file export (`Blob` URL + `<a download>`).
+    - **Offline Venue Resilience (PWA & Service Worker)**: Provide `manifest.json` and a Cache-First Service Worker (`sw.js`) caching WASM, JS, and HTML assets for 100% offline standalone operation in performance venues lacking internet connectivity.
+    - **Touchscreen & Tablet Optimization**: Multi-touch simultaneous fader sweeping for iPad / tablet performance, `touch-action: none` to prevent browser gesture conflicts (pinch-zoom, pull-to-refresh, swipe navigation), and viewport stabilization when virtual software keyboards appear.
+    - **WebGPU Context Loss & Resource Profiling**: Implement `webgpucontextlost` recovery handling to prevent silent freezes on GPU resets, and conduct multi-hour continuous VRAM/heap leak profiling under dynamic shader hotswapping.
 
 #### Carried from M6 (closed 2026-09-14) and M8 (closed 2026-09-27), status:
 - In-app dynamic MIDI map editing and 14-bit CC resolution deferred to M11; basic MIDI input binding and live learned maps are active.
