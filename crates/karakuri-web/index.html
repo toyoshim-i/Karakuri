@@ -2,8 +2,14 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#111116">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Karakuri Web</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
   <style>
     html, body {
       margin: 0;
@@ -14,7 +20,11 @@
       background-color: #111116;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
       touch-action: none;
+      overscroll-behavior: none;
+      overscroll-behavior-x: none;
+      overscroll-behavior-y: none;
     }
     #karakuri-canvas {
       width: 100%;
@@ -22,6 +32,7 @@
       display: block;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
       touch-action: none;
     }
     @keyframes karakuri-pulse {
@@ -66,6 +77,7 @@
           if (isError) banner.style.backgroundColor = 'rgba(180, 20, 20, 0.95)';
         }
       }
+      window.__karakuri_show_banner = showBanner;
 
       function recordLog(level, msg) {
         const time = new Date().toLocaleTimeString();
@@ -813,11 +825,85 @@
 
       window.__karakuri_get_logs = window.__karakuri.get_logs;
     })();
+
+    // 1. Service Worker Registration (100% Offline Standalone Caching for Live Venues)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.warn('[SW] ServiceWorker registration failed:', err);
+        });
+      });
+    }
+
+    // 2. Touchscreen & Tablet Gesture Conflict Prevention
+    // Prevent pinch-to-zoom / double-tap-to-zoom gesture conflicts on mobile/tablet browsers
+    document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+    document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+    document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+
+    // Prevent context menu on long-press over the main WebGPU canvas
+    window.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('karakuri-canvas');
+      if (canvas) {
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        // WebGPU Context Lost & Restored Events on HTML Canvas
+        canvas.addEventListener('webgpucontextlost', (e) => {
+          e.preventDefault();
+          console.error('[WebGPU] webgpucontextlost event fired on canvas. Restoring session...');
+          if (typeof window.__karakuri_show_banner === 'function') {
+            window.__karakuri_show_banner('WebGPU context lost (GPU sleep / driver reset). Restoring session...', true);
+          }
+          setTimeout(() => window.location.reload(), 2000);
+        });
+        canvas.addEventListener('webgpucontextrestored', () => {
+          console.info('[WebGPU] webgpucontextrestored event fired on canvas.');
+        });
+      }
+    });
+
+    // Software keyboard / VisualViewport geometry stability
+    if (window.visualViewport) {
+      const stabilizeViewport = () => {
+        window.scrollTo(0, 0);
+      };
+      window.visualViewport.addEventListener('resize', stabilizeViewport);
+      window.visualViewport.addEventListener('scroll', stabilizeViewport);
+    }
+
+    // 3. WebGPU Device Context Loss Interceptor & Graceful Session Recovery
+    if (navigator.gpu && navigator.gpu.requestAdapter) {
+      const origRequestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
+      navigator.gpu.requestAdapter = async function(...args) {
+        const adapter = await origRequestAdapter(...args);
+        if (adapter && adapter.requestDevice) {
+          const origRequestDevice = adapter.requestDevice.bind(adapter);
+          adapter.requestDevice = async function(...dArgs) {
+            const device = await origRequestDevice(...dArgs);
+            if (device && device.lost) {
+              device.lost.then((info) => {
+                const reason = info.reason || 'unknown';
+                const msg = `WebGPU device lost (${reason}): ${info.message || 'GPU driver reset or power change'}`;
+                console.error('[WebGPU]', msg);
+                if (typeof window.__karakuri_show_banner === 'function') {
+                  window.__karakuri_show_banner(`${msg}. Restoring session in 2s...`, true);
+                }
+                setTimeout(() => window.location.reload(), 2000);
+              });
+            }
+            return device;
+          };
+        }
+        return adapter;
+      };
+    }
   </script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <link rel="rust" data-trunk href="Cargo.toml" />
   <link rel="copy-file" data-trunk href="projector.html" />
   <link rel="copy-file" data-trunk href="receiver.html" />
+  <link rel="copy-file" data-trunk href="manifest.json" />
+  <link rel="copy-file" data-trunk href="sw.js" />
+  <link rel="copy-file" data-trunk href="icon.svg" />
 </head>
 <body>
   <!-- Clean Visual Recorder Canvas (1280x720) without Console UI Overlays -->

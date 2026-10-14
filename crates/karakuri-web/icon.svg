@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="104" fill="#111116"/>
+  <g transform="translate(256,256)">
+    <!-- Outer geometric gear ring -->
+    <circle r="180" fill="none" stroke="#252733" stroke-width="8" stroke-dasharray="16 12"/>
+    <circle r="144" fill="none" stroke="#38ef7d" stroke-width="12" opacity="0.85"/>
+    <!-- Procedural triangles / Karakuri diamond core -->
+    <polygon points="0,-110 95,55 -95,55" fill="none" stroke="#11998e" stroke-width="10"/>
+    <polygon points="0,110 -95,-55 95,-55" fill="none" stroke="#38ef7d" stroke-width="6" opacity="0.75"/>
+    <circle r="36" fill="#111116" stroke="#38ef7d" stroke-width="8"/>
+    <circle r="14" fill="#38ef7d"/>
+  </g>
+</svg>
