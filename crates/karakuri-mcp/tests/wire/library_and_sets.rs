@@ -382,11 +382,10 @@ fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
             "the card does not say `{expected}`: {said}"
         );
     }
-    // Verify artifact declarations are shown rather than runtime instance values.
+    // Verify artifact declarations and active set parameters are both shown.
     assert!(
-        !said.contains("2.5"),
-        "a value this set holds was rendered as something the artifact \
-         declares: {said}"
+        said.contains("Parameters:\n- `L1:0 radius` = Scalar(2.5)"),
+        "the set's active parameter values are not reported: {said}"
     );
 }
 

@@ -219,9 +219,73 @@ pub(crate) fn read_set(id: &str, state: &State) -> Result<String, String> {
             out.push_str("```\n");
         }
     }
+    let mut params = Vec::new();
+
+    let mut bindings = Vec::new();
+    for line in &lines {
+        match line.record() {
+            Record::Param { at, key, value } => {
+                params.push((*at, key.clone(), *value));
+            }
+            Record::Bind {
+                layer,
+                index,
+                key,
+                signal,
+                curve,
+                range,
+                ..
+            } => {
+                bindings.push((
+                    *layer,
+                    *index,
+                    key.clone(),
+                    signal.clone(),
+                    curve.clone(),
+                    *range,
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    if !params.is_empty() {
+        out.push_str("\nParameters:\n");
+        for (at, key, val) in params {
+            let at_str = match at {
+                Some(addr) => format!("{}:{}", addr.layer, addr.index),
+                None => "*".to_string(),
+            };
+            out.push_str(&format!("- `{at_str} {key}` = {val:?}\n"));
+        }
+    }
+
+    if !bindings.is_empty() {
+        out.push_str("\nBindings:\n");
+        for (layer, idx, key, sig, curve, range) in bindings {
+            let at = match idx {
+                Some(i) => format!("{layer}:{i}"),
+                None => format!("{layer}"),
+            };
+            out.push_str(&format!(
+                "- `{at} {key}` <- `{sig}` ({curve}, [{:.2}, {:.2}])\n",
+                range[0], range[1]
+            ));
+        }
+    }
+
     out.push('\n');
     out.push_str(&element_storage_block(&store, id));
     Ok(out)
+}
+
+struct PresetBinding {
+    layer: String,
+    index: Option<u32>,
+    key: String,
+    signal: String,
+    curve: String,
+    range: [f64; 2],
 }
 
 fn read_preset_set(
@@ -233,6 +297,8 @@ fn read_preset_set(
         karakuri_store::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut parts: Vec<(String, u32, String)> = Vec::new();
     let mut edges: Vec<(String, String, String)> = Vec::new();
+    let mut params: Vec<(String, Option<u32>, String, Value)> = Vec::new();
+    let mut bindings: Vec<PresetBinding> = Vec::new();
 
     for line in content.lines() {
         let line = line.trim();
@@ -273,6 +339,62 @@ fn read_preset_set(
                         .to_string();
                     edges.push((node, slot, to));
                 }
+                Some("param") => {
+                    let layer = rec
+                        .get("layer")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let index = rec.get("index").and_then(Value::as_u64).map(|i| i as u32);
+                    let key = rec
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    if let Some(val) = rec.get("value") {
+                        params.push((layer, index, key, val.clone()));
+                    }
+                }
+                Some("bind") => {
+                    let layer = rec
+                        .get("layer")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let index = rec.get("index").and_then(Value::as_u64).map(|i| i as u32);
+                    let key = rec
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let sig = rec
+                        .get("signal")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let curve = rec
+                        .get("curve")
+                        .and_then(Value::as_str)
+                        .unwrap_or("lin")
+                        .to_string();
+                    let r = rec.get("range").and_then(Value::as_array);
+                    let r0 = r
+                        .and_then(|a| a.first())
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0);
+                    let r1 = r
+                        .and_then(|a| a.get(1))
+                        .and_then(Value::as_f64)
+                        .unwrap_or(1.0);
+                    bindings.push(PresetBinding {
+                        layer,
+                        index,
+                        key,
+                        signal: sig,
+                        curve,
+                        range: [r0, r1],
+                    });
+                }
                 _ => {}
             }
         }
@@ -307,6 +429,31 @@ fn read_preset_set(
         out.push_str("\nEdges:\n");
         for (node, slot, to) in edges {
             out.push_str(&format!("- `{node}.{slot}` -> `{to}`\n"));
+        }
+    }
+
+    if !params.is_empty() {
+        out.push_str("\nParameters:\n");
+        for (layer, idx, key, val) in params {
+            let at = match idx {
+                Some(i) => format!("{layer}:{i}"),
+                None => layer,
+            };
+            out.push_str(&format!("- `{at} {key}` = {val}\n"));
+        }
+    }
+
+    if !bindings.is_empty() {
+        out.push_str("\nBindings:\n");
+        for b in bindings {
+            let at = match b.index {
+                Some(i) => format!("{}:{i}", b.layer),
+                None => b.layer,
+            };
+            out.push_str(&format!(
+                "- `{at} {}` <- `{}` ({}, [{:.2}, {:.2}])\n",
+                b.key, b.signal, b.curve, b.range[0], b.range[1]
+            ));
         }
     }
 
