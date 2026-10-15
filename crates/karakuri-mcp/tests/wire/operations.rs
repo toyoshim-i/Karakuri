@@ -421,3 +421,46 @@ fn copy_slot_copies_and_respects_slot_policies() {
     );
     assert!(!dir.path().join("l4_1.kir.tmp").exists(), "no tmp left");
 }
+
+/// Verifies that WriteParam and AttachSignal bypass the closed Program bay gate
+/// when the target deck is writable under slot policy (Issue 8).
+#[test]
+fn param_and_signal_operations_succeed_on_writable_slot_without_program_bay() {
+    let server = start(true);
+    // Note: server opening has LiveDeck closed by default (Opening::closed()).
+    // Target deck 0 is writable by default under policies().
+    let (_failed, said) = call(
+        server.port,
+        "operate",
+        json!({
+            "operation": "Write a parameter",
+            "with": {"deck": 0, "layer": "L1", "index": 0, "key": "radius", "value": 2.0}
+        }),
+    );
+    // It should not be refused by BAY_CLOSED. It reaches the stand-in loop (or succeeds).
+    assert!(
+        !said.contains("BAY_CLOSED") && !said.contains("the program is closed by default"),
+        "WriteParam was refused by Program bay gate: {said}"
+    );
+
+    let (_failed_sig, said_sig) = call(
+        server.port,
+        "operate",
+        json!({
+            "operation": "Attach a signal to a parameter",
+            "with": {
+                "deck": 0,
+                "layer": "L1",
+                "index": 0,
+                "key": "radius",
+                "signal": "energy",
+                "curve": "lin",
+                "range": [0.5, 3.0]
+            }
+        }),
+    );
+    assert!(
+        !said_sig.contains("BAY_CLOSED") && !said_sig.contains("the program is closed by default"),
+        "AttachSignal was refused by Program bay gate: {said_sig}"
+    );
+}
