@@ -818,35 +818,42 @@ impl App {
             .clone()
             .or_else(|| gfx.engine.aimed.get(slot).and_then(|a| a.at.set.clone()));
 
-        let id = match active_id {
-            Some(id) if store.read_set(&id).is_ok() => id,
-            _ => {
-                // If not yet saved or read, save current playing state under a clean stamped name
-                let id = format!("set_{}", karakuri_environment::history::stamped_id());
-                let Some(nodes) = self.keeping.playing.at(slot) else {
-                    return Err("No active playing nodes in slot".into());
-                };
-                let sources = karakuri_environment::setfile::Sources(
-                    nodes.iter().map(crate::bridge::copied).collect(),
-                );
-                let values = crate::playing_values(
-                    gfx.engine
-                        .deck
-                        .slot(karakuri_engine::DeckSlot(slot as u8))
-                        .set(),
-                    &gfx.engine.edges,
-                );
-                let mut saving_values = values;
-                saving_values.nodes = sources.into_nodes(&store)?;
-                karakuri_environment::setfile::save(
-                    &store,
-                    karakuri_environment::Asked::Operator,
-                    &id,
-                    saving_values.saving(),
-                )?;
-                id
-            }
+        // Clean base name for unique export ID, stripping previous timestamps if re-sharing
+        let base_name = active_id.as_deref().unwrap_or("set");
+        let clean_base = match base_name.rfind('_') {
+            Some(idx) if base_name[idx + 1..].starts_with("202") => &base_name[..idx],
+            _ => base_name,
         };
+        let id = format!(
+            "{}_{}",
+            clean_base,
+            karakuri_environment::history::stamped_id()
+        );
+
+        // Always save current playing state (including live parameter values modified via Inspector,
+        // MIDI, or live-coding) into the store under a fresh stamped ID, so the exported bundle
+        // accurately preserves all current edits.
+        let Some(nodes) = self.keeping.playing.at(slot) else {
+            return Err("No active playing nodes in slot".into());
+        };
+        let sources = karakuri_environment::setfile::Sources(
+            nodes.iter().map(crate::bridge::copied).collect(),
+        );
+        let values = crate::playing_values(
+            gfx.engine
+                .deck
+                .slot(karakuri_engine::DeckSlot(slot as u8))
+                .set(),
+            &gfx.engine.edges,
+        );
+        let mut saving_values = values;
+        saving_values.nodes = sources.into_nodes(&store)?;
+        karakuri_environment::setfile::save(
+            &store,
+            karakuri_environment::Asked::Operator,
+            &id,
+            saving_values.saving(),
+        )?;
 
         let lines = karakuri_environment::setfile::bundle(&store, &id)?;
         let ndjson = lines

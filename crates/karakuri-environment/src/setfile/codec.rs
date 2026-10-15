@@ -61,7 +61,7 @@ fn refuse_unwritable(nodes: &[Node], capacities: &[u32], seeds: &[u32]) -> Resul
             if seeds.len() == 1 { "" } else { "s" },
         ));
     }
-    for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field] {
+    for layer in Kind::ALL {
         let mut indices: Vec<u32> = nodes
             .iter()
             .filter(|n| n.layer == layer)
