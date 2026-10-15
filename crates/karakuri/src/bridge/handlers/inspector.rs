@@ -180,6 +180,7 @@ pub(crate) fn inspector(
             .map(|(_, index)| index)
             .max();
         let mut nodes: Vec<view::Node> = Vec::new();
+        let mut field_nodes: Vec<view::Node> = Vec::new();
         let mut l5_nodes: Vec<view::Node> = Vec::new();
         let mut renderers: Vec<view::Renderer> = Vec::new();
         let mut renderer_nodes = 0;
@@ -250,10 +251,10 @@ pub(crate) fn inspector(
                 folded: false,
                 params: params(layer, index),
             };
-            if layer == Layer::L5 {
-                l5_nodes.push(node);
-            } else {
-                nodes.push(node);
+            match layer {
+                Layer::Field => field_nodes.push(node),
+                Layer::L5 => l5_nodes.push(node),
+                _ => nodes.push(node),
             }
         }
         if renderer_nodes > 0 {
@@ -281,6 +282,7 @@ pub(crate) fn inspector(
                 params,
             });
         }
+        nodes.extend(field_nodes);
         nodes.extend(l5_nodes);
 
         let placed: usize = nodes.iter().map(|node| node.params.len()).sum();
