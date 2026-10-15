@@ -30,26 +30,67 @@ set -e
 # makes this selective** — the previous version took no input, so it could not
 # tell a tag from a branch and ran everything for both.
 tags=""
-while read -r local_ref local_sha _remote_ref _remote_sha; do
-    case "$local_ref" in
-        refs/tags/*) ;;
-        *) continue ;;
+pushing_main=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # A deletion pushes the null sha and carries nothing to test.
+    case "$local_sha" in
+        0000000000000000000000000000000000000000) continue ;;
     esac
-    # A tag deletion pushes the null sha and carries nothing to test.
-    case "$local_sha" in *[!0]*) tags="$tags ${local_ref#refs/tags/}" ;; esac
+
+    case "$local_ref" in
+        refs/tags/*)
+            case "$local_sha" in *[!0]*) tags="$tags ${local_ref#refs/tags/}" ;; esac
+            ;;
+        refs/heads/main)
+            pushing_main="true"
+            ;;
+    esac
+
+    case "$remote_ref" in
+        refs/heads/main)
+            pushing_main="true"
+            ;;
+    esac
 done
 
-[ -n "$tags" ] || exit 0
+check_wasm_deploy() {
+    echo "pre-push: checking wasm workspace build"
+    cargo build --quiet --target wasm32-unknown-unknown
 
-echo "pre-push: tag$tags — running the full suite"
+    echo "pre-push: checking wasm demo build (GitHub Pages deploy gate)"
+    if command -v trunk >/dev/null 2>&1; then
+        echo "pre-push: trunk build crates/karakuri-web/index.html --release"
+        trunk build crates/karakuri-web/index.html --release --dist dist/demo --public-url /Karakuri/demo/
+    else
+        echo "pre-push: warning: 'trunk' not found on PATH. Falling back to cargo build."
+        echo "pre-push: to test exact deploy build locally, install trunk (e.g. cargo install trunk)"
+        cargo build --target wasm32-unknown-unknown -p karakuri-web
+    fi
+}
 
-echo "pre-push: cargo fmt --check"
-cargo fmt --check
 
-echo "pre-push: cargo clippy --workspace --all-targets"
-cargo clippy --quiet --workspace --all-targets -- -D warnings
+if [ -n "$tags" ]; then
+    echo "pre-push: tag$tags — running the full suite"
 
-echo "pre-push: cargo test --workspace"
-cargo test --quiet --workspace
+    echo "pre-push: cargo fmt --check"
+    cargo fmt --check
 
-echo "pre-push: ok"
+    echo "pre-push: cargo clippy --workspace --all-targets"
+    cargo clippy --quiet --workspace --all-targets -- -D warnings
+
+    echo "pre-push: cargo test --workspace"
+    cargo test --quiet --workspace
+
+    check_wasm_deploy
+
+    echo "pre-push: ok"
+    exit 0
+fi
+
+if [ "$pushing_main" = "true" ]; then
+    check_wasm_deploy
+    echo "pre-push: ok"
+    exit 0
+fi
+
