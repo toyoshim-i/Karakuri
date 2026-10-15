@@ -180,6 +180,7 @@ pub(crate) fn inspector(
             .map(|(_, index)| index)
             .max();
         let mut nodes: Vec<view::Node> = Vec::new();
+        let mut l5_nodes: Vec<view::Node> = Vec::new();
         let mut renderers: Vec<view::Renderer> = Vec::new();
         let mut renderer_nodes = 0;
         let mut renderer_authority = None;
@@ -230,7 +231,7 @@ pub(crate) fn inspector(
                 };
                 continue;
             }
-            nodes.push(view::Node {
+            let node = view::Node {
                 addr: node_addr(layer, index),
                 name: name.clone(),
                 authority,
@@ -248,7 +249,12 @@ pub(crate) fn inspector(
                 },
                 folded: false,
                 params: params(layer, index),
-            });
+            };
+            if layer == Layer::L5 {
+                l5_nodes.push(node);
+            } else {
+                nodes.push(node);
+            }
         }
         if renderer_nodes > 0 {
             // The mock's address for the folded head is the bare layer, with
@@ -275,6 +281,7 @@ pub(crate) fn inspector(
                 params,
             });
         }
+        nodes.extend(l5_nodes);
 
         let placed: usize = nodes.iter().map(|node| node.params.len()).sum();
         if placed < published.len() + unplaced {
