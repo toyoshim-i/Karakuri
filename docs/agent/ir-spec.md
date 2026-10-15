@@ -113,6 +113,19 @@ Built-in element attributes:
 
 *Note*: Element random seed `seed` is an ambient value, carried automatically and readable anywhere in element pipelines. It must never be declared in `emit` or `consumes`.
 
+#### Rigid Cluster & Deformation Attribute Packing
+When modeling or deforming rigid bodies or grouped clusters across L1 and L2, procedures should follow standard attribute packing:
+- `normal` (`vec3`): Centroid or local rotation pivot of the rigid cluster/body.
+- `size` (`float`): Rigid body cluster ID (e.g. `float(cluster_id)`).
+
+This convention allows downstream `L2` deformation stages to apply rigid translations and rotations around `normal` to each group without requiring custom stream attributes.
+
+#### Reserved Identifiers
+The following identifiers are reserved across all procedure stages and layers and must never be declared as local variables (`let ...`):
+`position`, `velocity`, `normal`, `uv`, `age`, `size`, `tint`, `color`, `clip`, `clip_b`, `point_rate`, `point_coord`, `camera`, `eye`, `ray`, `seed`, `t`, `dt`, `beats`, `source`, `copy`, `capacity`.
+
+In particular, in `L5` post-processing shaders, do NOT declare `let uv = ...`. Use `let p = point_coord;` instead, as `uv` is reserved for texture/geometry coordinates across the compiler.
+
 ### `uses`
 Declares dependency wiring between nodes:
 - `uses far : Geometry` (`L2` or `L3`): Second geometry slot for morphing/blending, or subject geometry tracked by camera.
@@ -142,7 +155,20 @@ Available implicitly inside execution blocks as ambient values:
 | `eye` | `vec3` | World-space camera eye position (fullscreen L4 fragment) |
 | `ray` | `vec3` | World-space unit ray direction (fullscreen L4 fragment) |
 
-*Signals*: Dynamic control signals (such as audio FFT bands or MIDI CC values) are not directly readable from IR. Instead, declare an interactive `param` and bind the signal to that parameter in the Set configuration.
+*Signals*: Dynamic control signals (such as live audio features, spectrum bands, or MIDI) are not directly readable from IR. Instead, declare an interactive `param` and bind the signal to that parameter in the Set configuration (or via `operate` with `AttachSignal`):
+- `energy`: Broadband overall audio energy / amplitude level in `[0.0, 1.0]`.
+- `onset`: Transient audio onset / percussion hit detector in `[0.0, 1.0]`.
+- `sub` or `band0`: Sub-bass frequency band (~40–85 Hz).
+- `bass` or `band1`: Bass frequency band (~85–180 Hz).
+- `low_mid` or `band2`: Low-mid frequency band (~180–380 Hz).
+- `mid` or `band3`: Mid-range frequency band (~380–800 Hz).
+- `high_mid` or `band4`: High-mid frequency band (~800–1700 Hz).
+- `presence` or `band5`: Presence frequency band (~1700–3600 Hz).
+- `brilliance` or `band6`: Brilliance frequency band (~3600–7500 Hz).
+- `air` / `high` or `band7`: Air / high frequency band (~7.5–16 kHz).
+- `band0` .. `band15`: Direct spectrum frequency bands.
+- `bpm`, `beat`, `bar`: Musical tempo and beat phase.
+
 *VR Projection*: In WebXR immersive mode, fullscreen fragment procedures render to the virtual screen or dome. See [VR Projection](vr-projection.md) for coordinate mapping and projection modes.
 
 ---
@@ -160,9 +186,22 @@ Commonly used built-in functions:
 - **Color**: `hsv_to_rgb(hsv)`, `rgb_to_hsv(rgb)`, `srgb_to_linear(rgb)`, `linear_to_srgb(rgb)`.
 - **Transform**: `rot_x(p, angle)`, `rot_y(p, angle)`, `rot_z(p, angle)`, `rot_axis(p, axis, angle)`, `sphere_point(u, v)`.
 
+### Type Restrictions on Math Built-ins
+Math functions (`min`, `max`, `clamp`, `abs`, `sign`, `floor`, `ceil`, `fract`, `sqrt`, `pow`, `exp`, `log`, `step`, `smoothstep`) are strictly defined on `float` and vector types (`vec2`, `vec3`, `vec4`). They do NOT accept integer types (`uint`, `int`).
+To pass an integer (such as `seed` or an integer counter) to these functions, cast it explicitly to float first: `float(seed)`.
+
 ---
 
-## 6. Complete Examples
+## 6. Language Rules & Common Pitfalls
+
+- **`mix` Vector Interpolation**: When blending vector values, the interpolant `t` must match the vector dimension or be explicitly converted: `mix(vec3(0.0), vec3(1.0), vec3(factor))` rather than passing scalar `factor` to vector `mix`.
+- **No Ternary Operator**: The C-style ternary operator (`cond ? a : b`) is not supported in `.kir`. Use standard `if (cond) { ... } else { ... }` branching or `select(...)`.
+- **No Boolean Casts**: `float(bool)` is invalid. Use an explicit `if (cond) { val = 1.0; } else { val = 0.0; }`.
+- **Mandatory Output Assignment**: All declared `emit` attributes and stage outputs (`position`, `velocity`, `color`, `clip`, `distance`, etc.) MUST be assigned a value along every control flow path. If assigning conditionally inside an `if`, provide an initial default value before the `if` or ensure the `else` branch assigns to the output.
+
+---
+
+## 7. Complete Examples
 
 ### Minimal Particle Simulation (`L1`)
 ```kir

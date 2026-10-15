@@ -96,7 +96,9 @@ pub(crate) const SET: &[Spelled] = &[
                         "required": ["layer", "key"],
                         "additionalProperties": false,
                     },
-                    "signal": p_string("what drives it — a signal on the bus, or `control:NAME` for a published control"),
+                    "signal": p_string(
+                        "what drives it — a signal on the bus (e.g. `energy`, `onset`, `bass`, `mid`, `high`, `band0`..`band15`, `bpm`, `beat`), or `control:NAME` for a published control",
+                    ),
                     "curve": p_word(
                         words(&karakuri_operation::Curve::ALL, karakuri_operation::Curve::name),
                         "how the signal is shaped on its way to the parameter",
