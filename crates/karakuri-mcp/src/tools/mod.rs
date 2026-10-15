@@ -15,6 +15,7 @@ use karakuri_operation::gate::{self, Allowed};
 use karakuri_operation::{NodeAddress, Operation, RefusalDetail};
 use serde_json::{json, Value};
 
+use crate::state::LAYERS;
 pub(crate) use capture::capture_frame;
 pub(crate) use library::list_library;
 pub use operate::OperateRequest;
@@ -127,7 +128,107 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
     ))
 }
 
+/// Parses single or batch write_procedure arguments and delegates to write_procedures_batch.
+pub(crate) fn handle_write_procedure(args: &Value, state: &State) -> Result<Called, String> {
+    let slot = match args.get("slot").and_then(Value::as_u64) {
+        Some(s) => s as usize,
+        None => {
+            return Ok(Called::Answered(Err(
+                "`slot` is required and is a number".into()
+            )))
+        }
+    };
+    if let Err(e) = state.slots.holds(slot) {
+        let detail = RefusalDetail::slot_unallocated(slot, e);
+        return Ok(Called::Answered(Err(refusal_payload(&detail))));
+    }
+
+    let deck = match deck_named(slot, &state.slots) {
+        Ok(d) => d,
+        Err(e) => return Ok(Called::Answered(Err(e))),
+    };
+
+    let mut updates = Vec::new();
+    if let Some(nodes_val) = args.get("nodes").and_then(Value::as_array) {
+        if nodes_val.is_empty() {
+            return Ok(Called::Answered(Err(
+                "`nodes` array must not be empty".into()
+            )));
+        }
+        for (i, node_val) in nodes_val.iter().enumerate() {
+            let layer_str = match node_val.get("layer").and_then(Value::as_str) {
+                Some(l) => l,
+                None => {
+                    return Ok(Called::Answered(Err(format!(
+                        "nodes[{i}].layer is required"
+                    ))))
+                }
+            };
+            let layer = match layer_named(layer_str) {
+                Some(l) => l,
+                None => {
+                    return Ok(Called::Answered(Err(format!(
+                        "`{layer_str}` is not a valid layer"
+                    ))))
+                }
+            };
+            let index = node_val.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+            let source = match node_val.get("source").and_then(Value::as_str) {
+                Some(s) => s.to_string(),
+                None => {
+                    return Ok(Called::Answered(Err(format!(
+                        "nodes[{i}].source is required"
+                    ))))
+                }
+            };
+            updates.push((layer, index, source));
+        }
+    } else {
+        let layer_str = match args.get("layer").and_then(Value::as_str) {
+            Some(l) => l,
+            None => {
+                let msg = format!(
+                    "`layer` is required and names a layer: {}",
+                    LAYERS
+                        .iter()
+                        .map(|layer| layer_name(*layer))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return Ok(Called::Answered(Err(msg)));
+            }
+        };
+        let layer = match layer_named(layer_str) {
+            Some(l) => l,
+            None => {
+                let msg = format!(
+                    "`{layer_str}` is not a layer: {}",
+                    LAYERS
+                        .iter()
+                        .map(|l| layer_name(*l))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return Ok(Called::Answered(Err(msg)));
+            }
+        };
+        let index = args.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let source = match args.get("source").and_then(Value::as_str) {
+            Some(s) => s.to_string(),
+            None => return Ok(Called::Answered(Err("`source` is required".into()))),
+        };
+        updates.push((layer, index, source));
+    }
+
+    Ok(Called::Answered(super::procedure::write_procedures_batch(
+        deck, &updates, state,
+    )))
+}
+
 pub(crate) fn dispatch_tool(name: &str, args: &Value, state: &mut State) -> Result<Called, String> {
+    if name == "write_procedure" {
+        return handle_write_procedure(args, state);
+    }
     if name == "capture_frame" {
         return capture_frame(args, state);
     }

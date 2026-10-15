@@ -320,6 +320,68 @@ impl Slots {
             ),
         })
     }
+
+    /// Finds or allocates a backing file path for a node at (slot, layer, index).
+    /// If the node already exists, returns its path and `false`.
+    /// If it does not exist, appends a new scratch path to the slot's rest list
+    /// and returns the path and `true`.
+    pub fn ensure_node(
+        &self,
+        slot: usize,
+        layer: Kind,
+        index: usize,
+    ) -> Result<(std::path::PathBuf, bool), String> {
+        let mut held = self.0.write().unwrap_or_else(|h| h.into_inner());
+        let count = held.len();
+        let pair = held
+            .get_mut(slot)
+            .ok_or_else(|| karakuri_environment::no_such_slot(slot, count))?;
+
+        let head_layer = karakuri_store::fs::read(&pair.0)
+            .ok()
+            .and_then(|source| karakuri_environment::history::declared_kind(&source))
+            .and_then(layer_named)
+            .unwrap_or(Kind::L1);
+        if layer == head_layer && index == 0 {
+            return Ok((pair.0.clone(), false));
+        }
+
+        let mut next: Vec<(Kind, usize)> = vec![(head_layer, 1)];
+        for path in &pair.1 {
+            let k = karakuri_store::fs::read(path)
+                .ok()
+                .and_then(|source| karakuri_environment::history::declared_kind(&source))
+                .and_then(layer_named)
+                .unwrap_or(Kind::L4);
+            let idx = match next.iter_mut().find(|(held_k, _)| *held_k == k) {
+                Some((_, free)) => {
+                    let cur = *free;
+                    *free += 1;
+                    cur
+                }
+                None => {
+                    next.push((k, 1));
+                    0
+                }
+            };
+            if k == layer && idx == index {
+                return Ok((path.clone(), false));
+            }
+        }
+
+        let dir = pair
+            .0
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let file_name = format!(
+            "deck_{slot}_{}_{index}.kir",
+            layer_name(layer).to_lowercase()
+        );
+        let new_path = dir.join(file_name);
+        pair.1.push(new_path.clone());
+        Ok((new_path, true))
+    }
 }
 
 /// Every layer a slot's files can be on, in the order they compose.
@@ -334,7 +396,7 @@ pub(crate) const LAYERS: [Kind; 6] = [
 ];
 
 /// Parses a case-insensitive layer name into a `Kind`.
-pub(crate) fn layer_named(name: &str) -> Option<Kind> {
+pub fn layer_named(name: &str) -> Option<Kind> {
     Some(match name.to_ascii_uppercase().as_str() {
         "L1" => Kind::L1,
         "L2" => Kind::L2,
@@ -350,7 +412,7 @@ pub(crate) fn layer_named(name: &str) -> Option<Kind> {
 ///
 /// Exhaustive on purpose: a sixth `Kind` should not compile until somebody has
 /// decided what this surface calls it and whether [`LAYERS`] offers it.
-pub(crate) fn layer_name(layer: Kind) -> &'static str {
+pub fn layer_name(layer: Kind) -> &'static str {
     match layer {
         Kind::L1 => "L1",
         Kind::L2 => "L2",
@@ -362,14 +424,14 @@ pub(crate) fn layer_name(layer: Kind) -> &'static str {
 }
 
 /// Maps a compiler `Kind` to an operation `Layer`.
-pub(crate) fn layer_of(layer: Kind) -> karakuri_operation::Layer {
+pub fn layer_of(layer: Kind) -> karakuri_operation::Layer {
     karakuri_environment::meta::op_layer_of(layer)
 }
 
 /// And back, for the two things that want the compiler's own: resolving an
 /// address to a file, and comparing a written source's `kind` line against the
 /// address it arrived at.
-pub(crate) fn kind_of(layer: karakuri_operation::Layer) -> Kind {
+pub fn kind_of(layer: karakuri_operation::Layer) -> Kind {
     karakuri_environment::meta::kind_of_op(layer)
 }
 

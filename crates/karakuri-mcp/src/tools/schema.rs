@@ -54,15 +54,15 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         // 2. write_procedure
         ToolBuilder::new(
             "write_procedure",
-            "Check and write a procedure for a deck slot. The check is of this procedure alone; slot rebuild and swap errors are reported by swap_outcome. A `uses` declaration needs an `edge`, written by wire_input.",
+            "Check and write one or more procedures for a deck slot. Supports atomic batch updates via `nodes: [{layer, index, source}, ...]`. Unallocated layers are automatically added to the slot. The check is of this procedure alone; slot rebuild and swap errors are reported by swap_outcome. A `uses` declaration needs an `edge`, written by wire_input.",
         )
         .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
-        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field, L5)", true)
-
+        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field, L5); optional if `nodes` is used", true)
         .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
-        .param("source", ParamType::String, "the whole procedure source", true)
+        .param("source", ParamType::String, "the whole procedure source; optional if `nodes` is used", true)
         .see("swap-lifecycle")
         .example(json!({ "slot": 0, "layer": "L1", "source": "proc spark {\n  kind L1\n  topology points\n  capacity [1, 64] = 16\n  element {\n    let x = 1.0;\n  }\n}" }))
+        .skip_validation(true)
         .handler(tool_handler("write_procedure", state.clone()))
         .build(),
 

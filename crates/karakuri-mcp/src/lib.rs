@@ -19,8 +19,9 @@ pub use protocol::PROTOCOL;
 pub use resources::doc_engine;
 pub use server::{serve, serve_at};
 pub use state::{
-    CaptureNews, CaptureReply, CaptureRequest, CaptureTarget, CapturedImage, Event, News, Pointed,
-    Reply, Reporter, SaveRequest, Slots, WireRequest,
+    kind_of, layer_name, layer_named, layer_of, CaptureNews, CaptureReply, CaptureRequest,
+    CaptureTarget, CapturedImage, Event, News, Pointed, Reply, Reporter, SaveRequest, Slots,
+    WireRequest,
 };
 pub use tools::{
     check_procedure, check_set_configuration, checked_id, OperateRequest, Pending, LISTED,

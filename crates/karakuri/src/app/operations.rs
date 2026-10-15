@@ -500,6 +500,28 @@ pub(crate) fn perform_emitted_operation(
     if let Some(line) = restored(gfx, operation) {
         println!("{line}");
     }
+    if let Operation::WriteProcedure { deck, node, source } = operation {
+        let slot = usize::from(*deck);
+        if let Some(aim) = gfx.engine.aimed.get_mut(slot) {
+            let layer = karakuri_mcp::kind_of(node.layer);
+            let existing = aim.at.rest.iter().any(|named| {
+                karakuri_store::fs::read(&named.path)
+                    .ok()
+                    .and_then(|src| karakuri_environment::history::declared_kind(&src))
+                    .and_then(karakuri_mcp::layer_named)
+                    == Some(layer)
+            });
+            if !existing {
+                if let Ok((path, _)) = aim.pointing.ensure_node(slot, layer, node.index as usize) {
+                    let _ = karakuri_store::fs::write(&path, source.as_bytes());
+                    let _ = aim.changed(|at| {
+                        at.rest
+                            .push(karakuri_environment::compile::Named { name: None, path });
+                    });
+                }
+            }
+        }
+    }
     if let Some(line) = kept(&mut readout.view, operation) {
         println!("{line}");
     }

@@ -124,100 +124,166 @@ pub(crate) fn write_procedure(
     source: &str,
     state: &State,
 ) -> Result<String, String> {
+    write_procedures_batch(
+        deck,
+        &[(kind_of(node.layer), node.index as usize, source.to_string())],
+        state,
+    )
+}
+
+/// Validates and atomically writes a batch of procedure sources to the slot's backing files.
+/// Automatically allocates new backing files for unallocated layers.
+pub(crate) fn write_procedures_batch(
+    deck: u8,
+    updates: &[(Kind, usize, String)],
+    state: &State,
+) -> Result<String, String> {
     let slot = usize::from(deck);
     state
         .slot_policies
         .check_writable_detail(slot)
         .map_err(|d| refusal_payload(&d))?;
-    let layer = kind_of(node.layer);
-    let index = node.index as usize;
-    let path = state.slots.path(slot, layer, index)?;
-    let name = layer_name(layer);
 
-    // Validate syntax and compilation before writing to disk.
-    let report = check_procedure(source);
-    if !report.success {
-        return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
-    }
-    let checked = karakuri_environment::compile::check(source).map_err(|e| {
-        let fallback = DiagnosticReport {
-            diagnostics: vec![Diagnostic::new(
-                karakuri_ir::error::codes::E100_COMPILE_FAILED,
-                format!("compile: {e}"),
-                None,
-                None,
-                None,
-            )],
-            success: false,
-            hint: None,
-        };
-        serde_json::to_string_pretty(&fallback).unwrap_or(e)
-    })?;
-    // Ensure the declared procedure kind matches the target layer.
-    if checked.kind != layer {
-        let report = DiagnosticReport {
-            diagnostics: vec![Diagnostic::new(
-                karakuri_ir::error::codes::E300_LAYER_MISMATCH,
-                format!(
-                    "this is a {:?} procedure and it was addressed to slot {slot}'s {name} — \
-                     the two layers are not interchangeable, and what a file is is the `kind` \
-                     line inside it",
-                    checked.kind
-                ),
-                None,
-                None,
-                Some(format!(
-                    "Change `kind {:?}` to match `{name}` or address the appropriate slot layer.",
-                    checked.kind
-                )),
-            )],
-            success: false,
-            hint: None,
-        };
-        return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
+    // 1. Validate syntax and compilation of ALL procedures before touching disk.
+    for (layer, _index, source) in updates {
+        let report = check_procedure(source);
+        if !report.success {
+            return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
+        }
+        let checked = karakuri_environment::compile::check(source).map_err(|e| {
+            let fallback = DiagnosticReport {
+                diagnostics: vec![Diagnostic::new(
+                    karakuri_ir::error::codes::E100_COMPILE_FAILED,
+                    format!("compile: {e}"),
+                    None,
+                    None,
+                    None,
+                )],
+                success: false,
+                hint: None,
+            };
+            serde_json::to_string_pretty(&fallback).unwrap_or(e)
+        })?;
+        if checked.kind != *layer {
+            let name = layer_name(*layer);
+            let report = DiagnosticReport {
+                diagnostics: vec![Diagnostic::new(
+                    karakuri_ir::error::codes::E300_LAYER_MISMATCH,
+                    format!(
+                        "this is a {:?} procedure and it was addressed to slot {slot}'s {name} — \
+                         the two layers are not interchangeable, and what a file is is the `kind` \
+                         line inside it",
+                        checked.kind
+                    ),
+                    None,
+                    None,
+                    Some(format!(
+                        "Change `kind {:?}` to match `{name}` or address the appropriate slot layer.",
+                        checked.kind
+                    )),
+                )],
+                success: false,
+                hint: None,
+            };
+            return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
+        }
     }
 
-    // Identify any other slots sharing this backing path.
-    let also: Vec<String> = (0..state.slots.count())
-        .filter(|other| *other != slot)
-        .filter(|other| {
-            state
-                .slots
-                .nodes(*other)
-                .is_ok_and(|nodes| nodes.iter().any(|(_, _, held)| *held == path))
-        })
-        .map(|other| other.to_string())
-        .collect();
+    // 2. Ensure each node has a backing file (auto-allocating if unallocated) and write atomically.
+    let mut written_targets = Vec::new();
+    let mut newly_added_any = false;
+    for (layer, index, source) in updates {
+        let (path, newly_added) = state.slots.ensure_node(slot, *layer, *index)?;
+        if newly_added {
+            newly_added_any = true;
+        }
+        karakuri_environment::scratch::write_atomic(&path, source.as_bytes())?;
+        written_targets.push((*layer, *index, path));
+    }
 
-    karakuri_environment::scratch::write_atomic(&path, source.as_bytes())?;
-    let shared = if also.is_empty() {
-        String::new()
-    } else {
-        format!(
-            " This file is also slot{} {}, which now show the same procedure.",
-            if also.len() == 1 { "" } else { "s" },
-            also.join(", ")
-        )
-    };
-    // Inform the caller about the scratch replacement and edit history.
+    // 3. If any node was newly added, notify the render loop to re-aim if available.
+    if newly_added_any {
+        for (layer, index, source) in updates {
+            let (tx, _rx) = std::sync::mpsc::channel();
+            let _ = state.operating.try_send(OperateRequest {
+                operation: Operation::WriteProcedure {
+                    deck,
+                    node: NodeAddress {
+                        layer: layer_of(*layer),
+                        index: *index as u32,
+                    },
+                    source: source.clone(),
+                },
+                reply: Reply(tx),
+            });
+        }
+    }
+
+    // 4. Format response message.
     let kept = "This replaced the run's copy of the file, under the scratch the deck runs \
                 from — the paths named on the command line are not written to. The version \
                 it replaced is in the run's edit history under `<store>/history/`, so it can \
                 be got back, but not from here.";
-    Ok(if state.watching {
-        format!(
-            "compiled and written to slot {slot} {name}:{index}.{shared} It is being built on a \
-             worker thread and will swap in at a frame boundary; call `swap_outcome` to \
-             find out whether it landed or was overloaded.\n\n{kept} Every later \
-             version that compiles is kept there too."
-        )
+
+    if updates.len() == 1 {
+        let (layer, index, path) = &written_targets[0];
+        let name = layer_name(*layer);
+        let also: Vec<String> = (0..state.slots.count())
+            .filter(|other| *other != slot)
+            .filter(|other| {
+                state
+                    .slots
+                    .nodes(*other)
+                    .is_ok_and(|nodes| nodes.iter().any(|(_, _, held)| *held == *path))
+            })
+            .map(|other| other.to_string())
+            .collect();
+        let shared = if also.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " This file is also slot{} {}, which now show the same procedure.",
+                if also.len() == 1 { "" } else { "s" },
+                also.join(", ")
+            )
+        };
+        Ok(if state.watching {
+            format!(
+                "compiled and written to slot {slot} {name}:{index}.{shared} It is being built on a \
+                 worker thread and will swap in at a frame boundary; call `swap_outcome` to \
+                 find out whether it landed or was overloaded.\n\n{kept} Every later \
+                 version that compiles is kept there too."
+            )
+        } else {
+            format!(
+                "compiled and written to slot {slot} {name}:{index}.{shared} **This run was started \
+                 without `--watch`, so nothing will pick it up** — the file has changed and the \
+                 screen has not.\n\n{kept} Only the version the run started with is there: \
+                 nothing is snapshotting without `--watch`, so writing this node twice \
+                 replaces the first write with no record of it."
+            )
+        })
     } else {
-        format!(
-            "compiled and written to slot {slot} {name}:{index}.{shared} **This run was started \
-             without `--watch`, so nothing will pick it up** — the file has changed and the \
-             screen has not.\n\n{kept} Only the version the run started with is there: \
-             nothing is snapshotting without `--watch`, so writing this node twice \
-             replaces the first write with no record of it."
-        )
-    })
+        let names: Vec<String> = written_targets
+            .iter()
+            .map(|(l, i, _)| format!("{}:{i}", layer_name(*l)))
+            .collect();
+        let names_str = names.join(", ");
+        Ok(if state.watching {
+            format!(
+                "compiled and written {} nodes atomically to slot {slot} ({names_str}). They are being built on a \
+                 worker thread and will swap in together at a frame boundary; call `swap_outcome` to \
+                 find out whether they landed or were overloaded.\n\n{kept} Every later \
+                 version that compiles is kept there too.",
+                updates.len()
+            )
+        } else {
+            format!(
+                "compiled and written {} nodes to slot {slot} ({names_str}). **This run was started \
+                 without `--watch`, so nothing will pick it up** — the files have changed and the \
+                 screen has not.\n\n{kept}",
+                updates.len()
+            )
+        })
+    }
 }
