@@ -451,17 +451,28 @@ pub(crate) fn audited<'a>(
     state: &State,
 ) -> Result<Allowed<'a>, RefusalDetail> {
     let open = state.opening.read();
-    let deck_param_or_signal = match operation {
+    let all = state.slot_policies.all();
+    let live_decks: Vec<u8> = all
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.in_mix)
+        .map(|(i, _)| i as u8)
+        .collect();
+    let running = gate::Running::live(&live_decks);
+
+    let deck_target = match operation {
         Operation::WriteParam { deck, .. }
         | Operation::TakeParamBack { deck, .. }
-        | Operation::AttachSignal { deck, .. } => Some(usize::from(*deck)),
+        | Operation::AttachSignal { deck, .. }
+        | Operation::LoadProcedure { deck, .. }
+        | Operation::LoadSet { deck, .. } => Some(usize::from(*deck)),
         _ => None,
     };
-    if let Some(slot) = deck_param_or_signal {
+    if let Some(slot) = deck_target {
         match state.slot_policies.check_writable_detail(slot) {
             Ok(()) => {
                 let open_with_slot = open.with(gate::Class::LiveDeck, true);
-                return gate::audit_detail(operation, open_with_slot, gate::Running::unread());
+                return gate::audit_detail(operation, open_with_slot, running);
             }
             Err(detail) => {
                 // If the target slot policy refuses writes, report that directly.
@@ -469,7 +480,7 @@ pub(crate) fn audited<'a>(
             }
         }
     }
-    gate::audit_detail(operation, open, gate::Running::unread())
+    gate::audit_detail(operation, open, running)
 }
 
 /// Serialise a [`RefusalDetail`] into a JSON string for structured envelope reporting.

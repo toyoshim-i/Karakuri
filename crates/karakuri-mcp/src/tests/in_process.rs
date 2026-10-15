@@ -272,3 +272,41 @@ fn in_process_write_procedure_batch_and_dynamic_node_addition() {
         "L1 should remain at v2 due to atomic rollback"
     );
 }
+
+#[test]
+fn in_process_load_procedure_on_offline_and_writable_deck() {
+    let slots = slots();
+    let slot_policies = SlotPolicies::default();
+    // slot 1 is offline (in_mix = false by default)
+    let opening = Opening::closed();
+    let (reporter, mcp) = in_process(
+        slots,
+        PathBuf::from("a/store"),
+        true,
+        opening,
+        slot_policies,
+    );
+
+    // Call LoadProcedure on offline deck 1 with Program bay closed: should be allowed (Standing::Open)
+    let res = mcp.call_tool(
+        "operate",
+        json!({
+            "operation": "Load a procedure over a layer",
+            "with": {
+                "deck": 1,
+                "procedure": "orbit_wide"
+            }
+        }),
+    );
+    let mut pending = match res {
+        agent_man::mcp::HandlerResult::Pending(p) => p,
+        agent_man::mcp::HandlerResult::Ready(r) => {
+            panic!("expected Pending, got error: {:?}", r.content[0].as_text())
+        }
+    };
+    let ops: Vec<_> = reporter.operations().collect();
+    assert_eq!(ops.len(), 1);
+    ops[0].reply.clone().settled(Ok("loaded".into()));
+    let finished = pending.poll_settled().unwrap();
+    assert_eq!(finished.content[0].as_text(), Some("loaded"));
+}
