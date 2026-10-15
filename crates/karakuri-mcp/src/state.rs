@@ -324,7 +324,14 @@ impl Slots {
 
 /// Every layer a slot's files can be on, in the order they compose.
 /// The set of layers a slot can hold.
-pub(crate) const LAYERS: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
+pub(crate) const LAYERS: [Kind; 6] = [
+    Kind::L1,
+    Kind::L2,
+    Kind::L3,
+    Kind::L4,
+    Kind::Field,
+    Kind::L5,
+];
 
 /// Parses a case-insensitive layer name into a `Kind`.
 pub(crate) fn layer_named(name: &str) -> Option<Kind> {
@@ -334,6 +341,7 @@ pub(crate) fn layer_named(name: &str) -> Option<Kind> {
         "L3" => Kind::L3,
         "L4" => Kind::L4,
         "FIELD" => Kind::Field,
+        "L5" => Kind::L5,
         _ => return None,
     })
 }

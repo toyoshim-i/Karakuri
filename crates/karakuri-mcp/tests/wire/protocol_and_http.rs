@@ -242,8 +242,8 @@ fn the_advertised_layers_are_every_layer_a_slot_can_hold() {
     );
     let listed: Value = serde_json::from_str(&listed).expect("json");
     let tools = listed["result"]["tools"].as_array().expect("tools");
-    // Five layers (excluding L5) in `LAYERS`.
-    let expected = json!(["L1", "L2", "L3", "L4", "Field"]);
+    // Six layers in `LAYERS`.
+    let expected = json!(["L1", "L2", "L3", "L4", "Field", "L5"]);
     for name in ["read_procedure", "write_procedure"] {
         let tool = tools
             .iter()

@@ -186,6 +186,16 @@ position = vec3(radius, 0.0, 0.0);
 }
 "#;
 
+pub const PROBE_L5: &str = r#"
+proc probe_filter {
+kind L5
+
+frame {
+color = vec4(1.0, 1.0, 1.0, 1.0);
+}
+}
+"#;
+
 /// Starts a test server with a slot containing all layers in non-layer file order.
 pub fn start_chain() -> Server {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -201,6 +211,7 @@ pub fn start_chain() -> Server {
         write("camera.kir", PROBE_L3),
         write("blob.kir", PROBE_FIELD),
         write("l1_b.kir", PROBE_L1_B),
+        write("filter.kir", PROBE_L5),
     ];
     let opening = closed();
     let reporter = serve(

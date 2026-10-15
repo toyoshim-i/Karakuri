@@ -41,7 +41,7 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
             "Read the source of one node of a deck slot by layer and index, or by procedure name from the library/presets. Read before writing to guide your edit.",
         )
         .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", false)
-        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field)", false)
+        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field, L5)", false)
         .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
         .param("name", ParamType::String, "procedure name to read from library or presets (e.g. 'bloom')", false)
         .see("ir-spec")
@@ -57,7 +57,8 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
             "Check and write a procedure for a deck slot. The check is of this procedure alone; slot rebuild and swap errors are reported by swap_outcome. A `uses` declaration needs an `edge`, written by wire_input.",
         )
         .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
-        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field)", true)
+        .param("layer", ParamType::Enum(layers.clone()), "node layer (L1, L2, L3, L4, Field, L5)", true)
+
         .param("index", ParamType::Integer { min: Some(0), max: None }, "node index on that layer, from 0", false)
         .param("source", ParamType::String, "the whole procedure source", true)
         .see("swap-lifecycle")
@@ -161,8 +162,9 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
         // 11. read_slot
         ToolBuilder::new(
             "read_slot",
-            "Read all procedural nodes (L1, L2, L3, L4, Field) for a deck slot in a single call.",
+            "Read all procedural nodes (L1, L2, L3, L4, Field, L5) for a deck slot in a single call.",
         )
+
         .param("slot", ParamType::Integer { min: Some(0), max: None }, "deck slot, from 0", true)
         .see("set-storage")
         .example(json!({ "slot": 0 }))

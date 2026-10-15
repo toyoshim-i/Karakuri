@@ -207,7 +207,7 @@ fn an_unreadable_file_is_counted_as_a_renderer() {
 fn a_layer_this_language_does_not_have_is_refused_with_the_list() {
     let refused =
         slot_layer_index(&json!({ "slot": 0, "layer": "L9" })).expect_err("there is no L9");
-    assert!(refused.contains("L1, L2, L3, L4, Field"), "{refused}");
+    assert!(refused.contains("L1, L2, L3, L4, Field, L5"), "{refused}");
 
     // Case does not matter: `l1` and `field` are what a model tends to
     // type, and refusing them teaches nobody anything.
