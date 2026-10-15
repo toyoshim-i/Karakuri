@@ -631,19 +631,41 @@ impl ApplicationHandler<()> for WebApp {
 
         let pending_import = self.pending_import.clone();
         let import_proxy = self.proxy.clone();
-        wasm_bindgen_futures::spawn_local(async move {
-            match crate::share::load_url_hash_set().await {
-                Ok(Some(ndjson)) => {
-                    log::info!("Karakuri Web: Found Set bundle in URL hash, queueing import");
-                    *pending_import.borrow_mut() = Some(ndjson);
-                    let _ = import_proxy.send_event(());
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::warn!("Karakuri Web: Error reading Set from URL hash: {e}");
-                }
+        let queue_import = {
+            let pending_import = pending_import.clone();
+            let import_proxy = import_proxy.clone();
+            move || {
+                let pending_import = pending_import.clone();
+                let import_proxy = import_proxy.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    match crate::share::load_url_hash_set().await {
+                        Ok(Some(ndjson)) => {
+                            log::info!(
+                                "Karakuri Web: Found Set bundle in URL hash, queueing import"
+                            );
+                            *pending_import.borrow_mut() = Some(ndjson);
+                            let _ = import_proxy.send_event(());
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            log::warn!("Karakuri Web: Error reading Set from URL hash: {e}");
+                        }
+                    }
+                });
             }
-        });
+        };
+
+        // Queue initial URL hash check on startup
+        queue_import();
+
+        // Also register window callback for dynamic hash/query changes
+        let on_hash_change_cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(queue_import);
+        let _ = js_sys::Reflect::set(
+            &dom_window,
+            &wasm_bindgen::JsValue::from_str("__karakuri_on_hash_change"),
+            on_hash_change_cb.as_ref().unchecked_ref(),
+        );
+        on_hash_change_cb.forget();
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
@@ -788,18 +810,20 @@ impl ApplicationHandler<()> for WebApp {
             }
         }
 
-        if let Some(ndjson) = self.pending_import.borrow_mut().take() {
-            log::info!("Karakuri Web: Importing Set from URL hash...");
-            match self.app.import_and_load_bundle(&ndjson) {
-                Ok(set_id) => {
-                    log::info!("Karakuri Web: Successfully imported and loaded Set '{set_id}' from URL hash");
+        if self.app.has_gfx() {
+            if let Some(ndjson) = self.pending_import.borrow_mut().take() {
+                log::info!("Karakuri Web: Importing Set from URL hash/query...");
+                match self.app.import_and_load_bundle(&ndjson) {
+                    Ok(set_id) => {
+                        log::info!("Karakuri Web: Successfully imported and loaded Set '{set_id}' from URL hash/query");
+                    }
+                    Err(e) => {
+                        log::error!("Karakuri Web: Failed to import Set from URL hash/query: {e}");
+                    }
                 }
-                Err(e) => {
-                    log::error!("Karakuri Web: Failed to import Set from URL hash: {e}");
+                if let Some(ref window) = self.window {
+                    window.request_redraw();
                 }
-            }
-            if let Some(ref window) = self.window {
-                window.request_redraw();
             }
         }
 

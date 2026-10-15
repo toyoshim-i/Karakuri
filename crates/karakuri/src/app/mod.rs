@@ -944,4 +944,9 @@ impl App {
         }
         Ok(set_id)
     }
+
+    /// Returns true if the graphics subsystem and GPU presentation context have been attached.
+    pub fn has_gfx(&self) -> bool {
+        self.gfx.is_some()
+    }
 }

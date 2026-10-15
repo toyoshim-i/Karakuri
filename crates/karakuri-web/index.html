@@ -477,22 +477,25 @@
         },
         get_url_hash_set: async function() {
           try {
-            const hash = window.location.hash;
-            if (!hash) return null;
-            // 1. Check for remote external URL (#url=... or #load=...)
-            const urlMatch = hash.match(/[#&](?:url|load)=([^&]+)/);
+            const hash = window.location.hash || '';
+            const search = window.location.search || '';
+            const combined = hash + '&' + search;
+            if (!combined.replace(/[?#&]/g, '')) return null;
+
+            // 1. Check for remote external URL (#url=... or ?url=... or #load=...)
+            const urlMatch = combined.match(/[#&?](?:url|load)=([^&]+)/);
             if (urlMatch) {
               const targetUrl = decodeURIComponent(urlMatch[1]);
               console.log("Karakuri Web: Fetching remote Set bundle from:", targetUrl);
-              const res = await fetch(targetUrl);
+              const res = await fetch(targetUrl, { cache: 'no-cache' });
               if (!res.ok) {
                 throw new Error(`HTTP ${res.status} ${res.statusText}`);
               }
               return await res.text();
             }
 
-            // 2. Check for self-contained compressed bundle (#set=...)
-            const match = hash.match(/[#&]set=([^&]+)/);
+            // 2. Check for self-contained compressed bundle (#set=... or ?set=...)
+            const match = combined.match(/[#&?]set=([^&]+)/);
             if (match) {
               const rawVal = decodeURIComponent(match[1]);
               const bytes = base64UrlToUint8(rawVal);
@@ -500,7 +503,7 @@
             }
             return null;
           } catch (err) {
-            console.error("Karakuri Web: Failed to load Set from URL hash:", err);
+            console.error("Karakuri Web: Failed to load Set from URL hash/query:", err);
             return null;
           }
         },
@@ -717,8 +720,10 @@
           const canvas = document.getElementById('karakuri-recorder-canvas');
           if (canvas && typeof canvas.captureStream === 'function' && typeof MediaRecorder !== 'undefined') {
             try {
-              const stream = canvas.captureStream(30);
+              // Capture at 60 FPS for silky-smooth motion and particle fidelity
+              const stream = canvas.captureStream(60);
               const candidates = [
+                'video/mp4;codecs=avc1.640028,mp4a.40.2',
                 'video/mp4;codecs=avc1',
                 'video/mp4',
                 'video/webm;codecs=vp9',
@@ -734,7 +739,15 @@
               }
 
               const chunks = [];
-              const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+              const recorderOptions = {
+                // High bitrate (20 Mbps) guarantees pristine, artifact-free visual quality
+                // for complex procedural shaders. A 5-second video is ~12 MB, well within X's 512 MB limit.
+                videoBitsPerSecond: 20000000,
+              };
+              if (mimeType) {
+                recorderOptions.mimeType = mimeType;
+              }
+              const recorder = new MediaRecorder(stream, recorderOptions);
               recorder.ondataavailable = (e) => {
                 if (e.data && e.data.size > 0) chunks.push(e.data);
               };
@@ -825,6 +838,13 @@
 
       window.__karakuri_get_logs = window.__karakuri.get_logs;
     })();
+
+    // Listen for URL hash changes to dynamically import sets without full reload
+    window.addEventListener('hashchange', () => {
+      if (typeof window.__karakuri_on_hash_change === 'function') {
+        window.__karakuri_on_hash_change();
+      }
+    });
 
     // 1. Service Worker Registration (100% Offline Standalone Caching for Live Venues)
     if ('serviceWorker' in navigator) {

@@ -53,8 +53,17 @@ pub fn start_recorder(
         }
     };
     let canvas: web_sys::HtmlCanvasElement = wasm_bindgen::JsCast::unchecked_into(canvas_el);
-    canvas.set_width(1280);
-    canvas.set_height(720);
+    let (width, height) = if let Some(w) = window.inner_width().ok().and_then(|w| w.as_f64()) {
+        if w >= 1200.0 {
+            (1920, 1080)
+        } else {
+            (1280, 720)
+        }
+    } else {
+        (1280, 720)
+    };
+    canvas.set_width(width);
+    canvas.set_height(height);
 
     let instance = karakuri_engine::Gpu::instance();
     let surface = match instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas)) {
