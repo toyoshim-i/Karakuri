@@ -528,17 +528,42 @@ impl App {
                 reply.settled(Err(refused));
                 continue;
             }
-            // Report projector window creation outcome back to caller.
+            let record_summary = match written.as_ref() {
+                Some(Written::Records(records)) if !records.is_empty() => {
+                    let mut s = String::new();
+                    for rec in records {
+                        match rec {
+                            Record::Bind {
+                                layer,
+                                key,
+                                signal,
+                                curve,
+                                range,
+                                ..
+                            } => {
+                                s.push_str(&format!("\n  bound: {layer} {key} <- {signal} ({curve}, [{:.2}, {:.2}])", range[0], range[1]));
+                            }
+                            Record::Param { key, value, .. } => {
+                                s.push_str(&format!("\n  param: {key} = {value:?}"));
+                            }
+                            Record::Gain { slot, value } => {
+                                s.push_str(&format!("\n  gain: slot {} = {value:.2}", slot.0));
+                            }
+                            _ => {}
+                        }
+                    }
+                    s
+                }
+                _ => String::new(),
+            };
+            // Report operation outcome back to caller.
             reply.settled(Ok(format!(
-                "`{title}` was performed on the frame it arrived on, where the same \
-                 operation from the panel, a key or a mapped control is performed. What the \
-                 deck made of it is on this run's terminal. Anything it started rather than \
-                 finished is reported where it lands: ask `swap_outcome` for a rebuild, and \
-                 a scheduled move arrives on the grid.{}",
+                "`{title}` was performed on the frame it arrived on.{}{}",
                 match aside {
                     Some(line) => format!("\n{}", line.trim_start()),
                     None => String::new(),
-                }
+                },
+                record_summary
             )));
         }
     }
