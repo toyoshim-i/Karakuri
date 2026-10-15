@@ -1,0 +1,201 @@
+// Cyber Neon Bloom + Razor-Thin Raster Phase Shift / Partial Hue & Inversion (`kind L5`).
+// 1. Razor-Thin Raster-Line Phase Distortion:
+//    - Tight H-Sync wave packets (1%~2% screen height) where scanlines warp in phase
+//    - Fine scanline-level alternating comb phase offset (odd/even raster lines)
+//    - Crisp, thin horizontal scanline tears (0.3%~1.2% height)
+// 2. Partial Hue Shift & Chroma-Preserving Inversion:
+//    - HSV hue rotation (`rgb_to_hsv` / `hsv_to_rgb`) along sleek raster strips
+//    - Complementary color / contrast inversion that doesn't blow out black backgrounds
+// 3. Anti-Clip Neon Bloom (7x7 Wide Halo + 11-Tap Anamorphic Streak):
+//    - Preserves deep neon saturation in HSV space with a soft highlight shoulder
+//      so strong bloom glows vividly without clipping to pure white.
+
+proc cyber_bloom_glitch {
+  kind L5
+
+  param bloom_amt    : float [0.0, 10.0] = 2.60
+  param bloom_knee   : float [0.0, 1.5]  = 0.25
+  param bloom_radius : float [0.5, 4.0]  = 1.85
+  param neon_sat     : float [1.0, 3.0]  = 1.75
+  param raster_warp  : float [0.0, 2.0]  = 0.85
+  param hue_shift    : float [0.0, 2.0]  = 0.85
+  param invert_amt   : float [0.0, 2.0]  = 0.70
+  param rgb_split    : float [0.0, 0.15] = 0.024
+
+  // Audio-reactive signal target parameters (bound to band0..band3, onset):
+  param sub_bass     : float [0.0, 2.0]  = 0.45
+  param low_mid      : float [0.0, 2.0]  = 0.50
+  param high_mid     : float [0.0, 2.0]  = 0.45
+  param high_air     : float [0.0, 2.0]  = 0.45
+  param transient    : float [0.0, 2.0]  = 0.35
+
+  frame {
+    let bt = max(beats, 0.0);
+    let beat_hit = pow(1.0 - fract(bt), 3.0);
+    let kick  = clamp(sub_bass * 0.95 + beat_hit * 0.45, 0.0, 2.0);
+    let grit  = clamp(high_mid * 0.95 + low_mid * 0.35, 0.0, 2.0);
+    let air   = clamp(high_air * 0.95, 0.0, 2.0);
+    let flash = clamp(transient * 1.35 + beat_hit * 0.55, 0.0, 2.0);
+
+    let y = point_coord.y;
+    let x = point_coord.x;
+
+    // =========================================================================
+    // 1. RAZOR-THIN RASTER-LINE PHASE SHIFTING (走査線単位の鋭い位相ズレ)
+    // =========================================================================
+    let step_clk   = floor(bt * 4.0);
+    let fast_clk   = floor(t * 18.0);
+    let warp_drive = raster_warp * (0.40 + 0.55 * flash + 0.40 * grit + 0.35 * kick);
+
+    // Tight, thin horizontal raster distortion wave-packets (1% ~ 2% of screen height)
+    let band1_y = fract(step_clk * 0.37 + t * 0.22);
+    let dy1     = y - band1_y;
+    let env1    = exp(dy1 * dy1 * -2600.0);
+
+    let band2_y = fract(0.67 - step_clk * 0.29 - t * 0.15);
+    let dy2     = y - band2_y;
+    let env2    = exp(dy2 * dy2 * -4200.0);
+
+    let band3_y = fract(sin(fast_clk * 71.3) * 43758.5453);
+    let dy3     = y - band3_y;
+    let env3    = exp(dy3 * dy3 * -7000.0) * clamp(flash * 0.9 + grit * 0.5, 0.0, 1.5);
+
+    let band4_y = fract(sin(fast_clk * 137.9 + 1.7) * 43758.5453);
+    let dy4     = y - band4_y;
+    let env4    = exp(dy4 * dy4 * -8500.0) * clamp(kick * 0.8 + flash * 0.7, 0.0, 1.5);
+
+    // High-frequency scanline phase waves along Y
+    let wave1 = sin(y * 280.0 - t * 48.0) + 0.5 * sin(y * 620.0 + t * 85.0);
+    let wave2 = sin(y * 410.0 + t * 62.0) * cos(y * 140.0 - bt * 6.28318);
+    let wave3 = sin(y * 780.0 - t * 110.0);
+
+    let smooth_phase = (env1 * wave1 * 0.038 + env2 * wave2 * 0.030 + (env3 + env4) * wave3 * 0.055) * warp_drive;
+
+    // Fine 1-pixel scanline comb phase offset (odd/even raster lines pull apart)
+    let raster_line = floor(y * 540.0);
+    let odd_even    = mod(raster_line, 2.0) * 2.0 - 1.0;
+    let comb_env    = clamp(env1 * 0.8 + env2 * 0.7 + (env3 + env4) * 1.4, 0.0, 1.5);
+    let comb_phase  = odd_even * 0.009 * comb_env * warp_drive * (0.4 + 0.8 * grit);
+
+    // Thin Crisp Horizontal Scanline Tears (0.4% ~ 1.2% height)
+    let tear1_y   = fract(step_clk * 0.53 + 0.19);
+    let tear1_h   = 0.004 + 0.007 * clamp(kick, 0.0, 1.0);
+    let in_tear1  = step(abs(y - tear1_y), tear1_h * 0.5);
+    let tear1_dir = sign(sin(step_clk * 19.7));
+
+    let tear2_y   = fract(fast_clk * 0.31 + 0.57);
+    let tear2_h   = 0.003 + 0.005 * clamp(flash, 0.0, 1.0);
+    let in_tear2  = step(abs(y - tear2_y), tear2_h * 0.5) * step(0.30, flash + grit * 0.6);
+    let tear2_dir = sign(cos(fast_clk * 31.1));
+
+    let tear_shift = (in_tear1 * tear1_dir * 0.048 + in_tear2 * tear2_dir * 0.065) * warp_drive;
+
+    // Total horizontal raster phase offset
+    let dx_raster = smooth_phase + comb_phase + tear_shift;
+    let warped_coord = clamp(vec2(x + dx_raster, y), vec2(0.002), vec2(0.998));
+
+    // =========================================================================
+    // 2. RASTER-COUPLED CHROMATIC PHASE SEPARATION
+    // =========================================================================
+    let from_center = warped_coord - vec2(0.5, 0.5);
+    // R/G/B separate horizontally along the raster phase shift + radially on kicks
+    let split_vec = vec2(dx_raster * (0.75 + 14.0 * rgb_split), 0.0)
+                  + from_center * (rgb_split * (0.30 + 0.65 * kick));
+
+    let c_g_sample = tap(src, warped_coord);
+    let c_r = tap(src, clamp(warped_coord - split_vec, vec2(0.002), vec2(0.998))).x;
+    let c_g = c_g_sample.y;
+    let c_b = tap(src, clamp(warped_coord + split_vec, vec2(0.002), vec2(0.998))).z;
+    let base_rgb = vec3(c_r, c_g, c_b);
+
+    // =========================================================================
+    // 3. ANTI-CLIP NEON BLOOM (色飛びを防ぎつつ彩度と広がりを出すネオン発光)
+    // =========================================================================
+    let rad_scale = bloom_radius * (1.0 + 0.35 * kick + 0.25 * flash);
+    let d      = frame_step(0.0046 * rad_scale);
+    let d_wide = d.x * 2.4;
+    let knee   = vec3(bloom_knee);
+    let zero   = vec3(0.0);
+
+    // Stage A: 7x7 2D Gaussian Neon Halo
+    var sum_halo = vec3(0.0);
+    for i in -3..4 {
+      let fi = float(i);
+      let wi = exp(fi * fi * -0.14);
+      let ox = fi * d.x;
+      for j in -3..4 {
+        let fj = float(j);
+        let w  = wi * exp(fj * fj * -0.14);
+        let s  = tap(src, warped_coord + vec2(ox, fj * d.y));
+        sum_halo = sum_halo + w * max(s.xyz - knee, zero);
+      }
+    }
+
+    // Stage B: 11-Tap Wide Horizontal Anamorphic Cyber-Streak
+    var sum_streak = vec3(0.0);
+    for k in -5..6 {
+      let fk = float(k);
+      let wk = exp(fk * fk * -0.09);
+      let sk = tap(src, warped_coord + vec2(fk * d_wide, 0.0));
+      sum_streak = sum_streak + wk * max(sk.xyz - knee, zero);
+    }
+
+    let eff_bloom = bloom_amt * (0.85 + 0.40 * kick + 0.35 * flash);
+    let raw_bloom = (sum_halo * 0.032 + sum_streak * 0.042) * eff_bloom;
+
+    // Shape bloom in HSV space:
+    // - Boost saturation (`hsv.y`) towards 1.0 so the glow is pure neon color, not white!
+    // - Apply a soft-shoulder curve on brightness (`hsv.z`) so high `bloom_amt` expands
+    //   the outer halo strongly without blowing out the core to blinding white!
+    let b_hsv = rgb_to_hsv(max(raw_bloom, zero));
+    let b_sat = clamp(pow(b_hsv.y, 0.55) * neon_sat * 0.85, 0.0, 1.0);
+    let b_val = (b_hsv.z * 1.35) / (1.0 + b_hsv.z * 0.55);
+    let neon_halo = hsv_to_rgb(vec3(b_hsv.x, b_sat, b_val));
+
+    // Preserve base wireframe saturation & prevent core white-out via soft highlight compression
+    let base_hsv = rgb_to_hsv(max(base_rgb, zero));
+    let vibrant_base = hsv_to_rgb(vec3(
+      base_hsv.x,
+      clamp(base_hsv.y * (0.75 + 0.25 * neon_sat), 0.0, 1.0),
+      base_hsv.z / (1.0 + base_hsv.z * 0.30)
+    ));
+
+    // Screen-like chroma-preserving combine so overlapping bloom + line doesn't clip to white
+    var hdr_col = vibrant_base + neon_halo * (vec3(1.0) - vibrant_base * 0.45);
+
+    // =========================================================================
+    // 4. PARTIAL HUE ROTATION & CHROMA-PRESERVING INVERSION
+    // =========================================================================
+    let split_x   = fract(step_clk * 0.41 + 0.25);
+    let side_mask = step(split_x, x);
+    let hue_zone  = clamp(env1 + env2 + (in_tear1 + in_tear2) * side_mask, 0.0, 1.0);
+    let hue_mask_strength = clamp(hue_zone * hue_shift * (0.60 + 0.45 * grit + 0.35 * air), 0.0, 1.0);
+
+    let inv_slit = clamp(
+      in_tear2 + in_tear1 * (1.0 - side_mask) * step(0.35, flash + kick) + step(0.65, env3 + env4),
+      0.0,
+      1.0
+    );
+    let inv_strength = clamp(inv_slit * invert_amt * (0.65 + 0.50 * flash + 0.35 * kick), 0.0, 1.0);
+
+    // Perform both Hue Shift and Scanline Inversion cleanly in HSV space so colors
+    // never clip to white and black backgrounds don't flash blinding white!
+    let final_hsv = rgb_to_hsv(max(hdr_col, zero));
+    let hue_delta = 0.35 + 0.25 * sin(y * 95.0 + step_clk * 1.7) + 0.25 * in_tear1;
+
+    // Hue shift + 180-degree complementary hue flip on `inv_strength`
+    let target_hue = fract(final_hsv.x + hue_delta * hue_mask_strength + 0.50 * inv_strength);
+    let target_sat = clamp(final_hsv.y + 0.35 * inv_strength + 0.15 * hue_mask_strength, 0.0, 1.0);
+
+    // In `inv_strength` slits, invert luminance contrast within a controlled neon range
+    // [0.0, 0.88] so dark backgrounds become a sleek deep-neon slit (~0.45) while bright
+    // wireframe lines cut through as dark silhouettes (~0.05) — zero white-out!
+    let norm_v   = clamp(final_hsv.z, 0.0, 1.0);
+    let inv_v    = (1.0 - norm_v) * 0.52 * (0.7 + 0.3 * final_hsv.y) + (1.0 - norm_v) * 0.32;
+    let target_v = mix(final_hsv.z, inv_v, inv_strength);
+
+    hdr_col = hsv_to_rgb(vec3(target_hue, target_sat, target_v));
+
+    color = vec4(hdr_col, c_g_sample.w);
+  }
+}

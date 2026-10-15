@@ -1,0 +1,644 @@
+// Monolithic Kowloon-cyberpunk nanomachine capsule suspended inside a scrolling
+// 3D cyberspace data-cathedral.
+// Emits `normal` as the rigid polygon/module centroid (`poly_center`) and `size`
+// as the peeling weight + packed polygon hash seed so the downstream `L2`
+// deformer (`cyber_peel_deform`) can detach and tumble entire polygons/boxes
+// as intact rigid pieces in cyberspace.
+//
+//     cargo run -p karakuri-cli -- --take-in examples/kowloon_cyberspace.kset
+//     cargo run -p karakuri-cli -- --load-set kowloon_cyberspace
+
+proc kowloon_cyberspace {
+  kind     L1
+  topology lines
+  capacity [16384, 65536] = 49152
+
+  param radius      : float [0.5, 3.0]  = 1.60
+  param half_len    : float [0.5, 3.0]  = 1.80
+  param vent_open   : float [0.0, 2.0]  = 0.85
+  param fan_speed   : float [0.0, 6.0]  = 2.00
+  param tumble      : float [0.0, 1.0]  = 0.18
+  param cyber_glow  : float [0.2, 3.0]  = 1.40
+  param grid_scroll : float [0.0, 20.0] = 5.50
+
+  // Audio-reactive signal target parameters (bound to band0..band3, onset):
+  param sub_bass    : float [0.0, 2.0]  = 0.45
+  param low_mid     : float [0.0, 2.0]  = 0.50
+  param high_mid    : float [0.0, 2.0]  = 0.45
+  param high_air    : float [0.0, 2.0]  = 0.45
+  param transient   : float [0.0, 2.0]  = 0.35
+
+  emit position, velocity, tint, normal, size
+
+  element {
+    let bt = max(beats, 0.0);
+    let beat_hit = pow(1.0 - fract(bt), 3.5);
+    let kick   = clamp(sub_bass * 0.85 + beat_hit * 0.40, 0.0, 2.0);
+    let vent   = clamp(low_mid * 0.90 + (0.5 + 0.5 * sin(bt * 1.5707963)) * 0.30, 0.0, 2.0);
+    let grit   = clamp(high_mid * 0.95, 0.0, 2.0);
+    let air    = clamp(high_air * 0.95, 0.0, 2.0);
+    let flash  = clamp(transient * 1.1 + beat_hit * 0.35, 0.0, 2.0);
+
+    let eff_rad = radius;
+    let eff_len = half_len;
+
+    var p0 = vec3(0.0);
+    var p1 = vec3(0.0);
+    var col = vec3(0.0);
+    var is_env = 0.0;
+
+    // Shared rigid polygon centroid (`poly_center`) and `can_peel` weight
+    // passed downstream to L2 via `normal` and `size`.
+    var poly_id = 0u;
+    var poly_center = vec3(0.0);
+    var can_peel = 0.0;
+
+    if seed < 32768u {
+      // =========================================================================
+      // PART I: THE KOWLOON NANOMACHINE CAPSULE (0 .. 32767)
+      // =========================================================================
+      if seed < 4096u {
+        // -------------------- STRATUM A: TWIN POLAR VENT TURBINES --------------------
+        let s = seed;
+        let pole = float(s / 2048u) * 2.0 - 1.0;
+        let rem  = s % 2048u;
+        let ring = rem / 256u;
+        let idx  = rem % 256u;
+        let blade = idx / 4u;
+        let part  = idx % 4u;
+
+        poly_id = 1u + (s / 4u);
+        can_peel = 0.75;
+
+        let rf = (float(ring) + 1.0) / 8.5;
+        let dir = mix(1.0, -1.0, float(ring % 2u));
+        let spin = (t * fan_speed + kick * 0.35) * (1.2 + (1.0 - rf) * 1.5) * dir * pole;
+        let a0 = (float(blade) / 64.0) * 6.2831853 + spin;
+        let a1 = (float(blade + 1u) / 64.0) * 6.2831853 + spin;
+
+        let cap_lat = rf * 1.35;
+        let r_ring  = eff_rad * sin(cap_lat) * 0.92;
+        let r_inner = eff_rad * sin(max(cap_lat - 0.16, 0.04)) * 0.92;
+        let y_ring  = pole * (eff_len + eff_rad * cos(cap_lat) * 0.85);
+        let y_inner = pole * (eff_len + eff_rad * cos(max(cap_lat - 0.16, 0.04)) * 0.85);
+
+        let pitch_y = pole * 0.16 * (0.5 + 0.8 * vent_open * vent);
+        var is_blade = 0.0;
+
+        if part == 0u {
+          p0 = vec3(cos(a0) * r_inner, y_inner, sin(a0) * r_inner);
+          p1 = vec3(cos(a0 + 0.08 * dir) * r_ring, y_ring + pitch_y, sin(a0 + 0.08 * dir) * r_ring);
+          is_blade = 1.0;
+        } else {
+          if part == 1u {
+            p0 = vec3(cos(a0 + 0.08 * dir) * r_ring, y_ring + pitch_y, sin(a0 + 0.08 * dir) * r_ring);
+            p1 = vec3(cos(a0 + 0.08 * dir) * r_ring, y_ring - pitch_y * 0.5, sin(a0 + 0.08 * dir) * r_ring);
+          } else {
+            if part == 2u {
+              p0 = vec3(cos(a0) * r_ring, y_ring, sin(a0) * r_ring);
+              p1 = vec3(cos(a1) * r_ring, y_ring, sin(a1) * r_ring);
+            } else {
+              p0 = vec3(cos(a0) * r_inner, y_inner, sin(a0) * r_inner);
+              p1 = vec3(cos(a0) * r_inner, y_inner - pole * 0.22, sin(a0) * r_inner);
+            }
+          }
+        }
+
+        poly_center = vec3(cos(a0) * r_ring, y_ring, sin(a0) * r_ring);
+
+        let heat = clamp(pow(1.0 - rf, 1.4) * (0.65 + 0.75 * kick + 0.6 * flash), 0.0, 1.0);
+        col = mix(vec3(0.08, 0.75, 0.85), vec3(2.4, 0.45, 0.08), vec3(heat))
+            * (0.65 + 0.65 * is_blade);
+
+      } else {
+        if seed < 8192u {
+          // -------------------- STRATUM B: INNER REACTOR CORE & COOLANT HELICES --------------------
+          can_peel = 0.0;
+          let s = seed - 4096u;
+          let mode = s / 1024u;
+          let idx  = s % 1024u;
+
+          let u = float(idx) / 1024.0;
+          let flow = fract(u * 4.0 - t * 0.85 - kick * 0.3);
+          let surge = exp(-pow((flow - 0.5) * 6.0, 2.0));
+
+          if mode < 2u {
+            let strand = float(idx % 8u);
+            let step_u = float(idx / 8u) / 128.0;
+            let step_u1 = float((idx / 8u) + 1u) / 128.0;
+            let dir = float(mode) * 2.0 - 1.0;
+            let harmonic = 1.0 + 0.25 * kick * sin(step_u * 18.849556 + t * 6.0);
+            let r_core = eff_rad * (0.28 + 0.08 * float(mode)) * harmonic;
+            let a0 = (strand / 8.0 + step_u * 3.0 * dir - t * 0.25 * dir) * 6.2831853;
+            let a1 = (strand / 8.0 + step_u1 * 3.0 * dir - t * 0.25 * dir) * 6.2831853;
+            let yy0 = (step_u * 2.0 - 1.0) * eff_len * 1.1;
+            let yy1 = (step_u1 * 2.0 - 1.0) * eff_len * 1.1;
+            p0 = vec3(cos(a0) * r_core, yy0, sin(a0) * r_core);
+            p1 = vec3(cos(a1) * r_core, yy1, sin(a1) * r_core);
+            col = vec3(0.15, 1.4, 1.2) * (0.5 + 1.4 * surge + 0.8 * kick);
+          } else {
+            if mode == 2u {
+              let ring_i = idx / 32u;
+              let seg_i  = idx % 32u;
+              let ry = ((float(ring_i) / 31.0) * 2.0 - 1.0) * eff_len;
+              let pump = (0.06 + 0.12 * kick) * sin(t * 5.0 - float(ring_i) * 0.55);
+              let rr = eff_rad * (0.42 + 0.10 * kick * sin(float(ring_i) * 1.2 + t * 4.0));
+              let a0 = (float(seg_i) / 32.0) * 6.2831853;
+              let a1 = (float(seg_i + 1u) / 32.0) * 6.2831853;
+              p0 = vec3(cos(a0) * rr, ry + pump, sin(a0) * rr);
+              p1 = vec3(cos(a1) * rr, ry + pump, sin(a1) * rr);
+              col = vec3(1.9, 0.55, 0.12) * (0.45 + 0.9 * kick + 0.6 * surge);
+            } else {
+              let bar = idx;
+              let h = hash1(bar * 19u + 5u);
+              let by = (fract(h + t * 0.05) * 2.0 - 1.0) * eff_len;
+              let ba = floor(hash1(bar * 37u) * 24.0) / 24.0 * 6.2831853;
+              let r_in  = eff_rad * 0.25;
+              let r_out = eff_rad * (0.55 + 0.25 * hash1(bar * 53u));
+              p0 = vec3(cos(ba) * r_in, by, sin(ba) * r_in);
+              p1 = vec3(cos(ba) * r_out, by, sin(ba) * r_out);
+              col = vec3(1.1, 0.25, 0.85) * (0.35 + 1.4 * flash * pow(hash1(bar + uint(bt * 4.0)), 4.0));
+            }
+          }
+
+        } else {
+          if seed < 16384u {
+            // -------------------- STRATUM C: SEGMENTED QUAD ARMOR PANELS & LOUVER FACETS --------------------
+            let s = seed - 8192u;
+            let cell = s / 4u;
+            let edge = s % 4u;
+            let band = cell / 64u;
+            let sec  = cell % 64u;
+
+            poly_id = 2000u + cell;
+            can_peel = 1.0;
+
+            let v0 = float(band) / 32.0;
+            let v1 = float(band + 1u) / 32.0;
+            let u0 = float(sec) / 64.0;
+            let u1 = float(sec + 1u) / 64.0;
+
+            var y0 = 0.0;
+            var r0 = 0.0;
+            if v0 < 0.22 {
+              let th = (v0 / 0.22) * 1.5707963;
+              y0 = -eff_len - eff_rad * cos(th);
+              r0 = eff_rad * sin(th);
+            } else {
+              if v0 <= 0.78 {
+                let f = (v0 - 0.22) / 0.56;
+                y0 = mix(-eff_len, eff_len, f);
+                let trench = 1.0 - 0.14 * (exp(-pow((f - 0.25) * 18.0, 2.0))
+                                         + exp(-pow((f - 0.50) * 14.0, 2.0))
+                                         + exp(-pow((f - 0.75) * 18.0, 2.0)));
+                r0 = eff_rad * trench;
+              } else {
+                let th = ((v0 - 0.78) / 0.22) * 1.5707963;
+                y0 = eff_len + eff_rad * sin(th);
+                r0 = eff_rad * cos(th);
+              }
+            }
+
+            var y1 = 0.0;
+            var r1 = 0.0;
+            if v1 < 0.22 {
+              let th = (v1 / 0.22) * 1.5707963;
+              y1 = -eff_len - eff_rad * cos(th);
+              r1 = eff_rad * sin(th);
+            } else {
+              if v1 <= 0.78 {
+                let f = (v1 - 0.22) / 0.56;
+                y1 = mix(-eff_len, eff_len, f);
+                let trench = 1.0 - 0.14 * (exp(-pow((f - 0.25) * 18.0, 2.0))
+                                         + exp(-pow((f - 0.50) * 14.0, 2.0))
+                                         + exp(-pow((f - 0.75) * 18.0, 2.0)));
+                r1 = eff_rad * trench;
+              } else {
+                let th = ((v1 - 0.78) / 0.22) * 1.5707963;
+                y1 = eff_len + eff_rad * sin(th);
+                r1 = eff_rad * cos(th);
+              }
+            }
+
+            let a0 = u0 * 6.2831853;
+            let a1 = u1 * 6.2831853;
+
+            let c00 = vec3(cos(a0) * r0, y0, sin(a0) * r0);
+            let c10 = vec3(cos(a1) * r0, y0, sin(a1) * r0);
+            let c01 = vec3(cos(a0) * r1, y1, sin(a0) * r1);
+            let c11 = vec3(cos(a1) * r1, y1, sin(a1) * r1);
+
+            poly_center = (c00 + c10 + c01 + c11) * 0.25;
+
+            if edge == 0u {
+              p0 = c00;
+              p1 = c10;
+            } else {
+              if edge == 1u {
+                p0 = c10;
+                p1 = c11;
+              } else {
+                if edge == 2u {
+                  p0 = c11;
+                  p1 = c01;
+                } else {
+                  p0 = c01;
+                  p1 = c00;
+                }
+              }
+            }
+
+            col = vec3(0.06, 0.46, 0.58) * 0.75;
+
+          } else {
+            if seed < 26624u {
+              // -------------------- STRATUM D: KOWLOON MICRO-CHASSIS GREEBLE BOXES --------------------
+              let s = seed - 16384u;
+              let unit_id = s / 12u;
+              let edge_id = s % 12u;
+
+              poly_id = 6000u + unit_id;
+              can_peel = 1.0;
+
+              let h0 = hash1(unit_id * 41u + 1u);
+              let h1 = hash1(unit_id * 73u + 3u);
+              let h2 = hash1(unit_id * 97u + 9u);
+              let h3 = hash1(unit_id * 131u + 15u);
+
+              let q_u = floor(h0 * 36.0) / 36.0;
+              let q_v = 0.14 + floor(h1 * 28.0) / 28.0 * 0.72;
+              let phi = q_u * 6.2831853;
+
+              var hull_y = 0.0;
+              var hull_r = eff_rad;
+              if q_v < 0.22 {
+                let th = (q_v / 0.22) * 1.5707963;
+                hull_y = -eff_len - eff_rad * cos(th);
+                hull_r = eff_rad * sin(th);
+              } else {
+                if q_v <= 0.78 {
+                  let f = (q_v - 0.22) / 0.56;
+                  hull_y = mix(-eff_len, eff_len, f);
+                  hull_r = eff_rad;
+                } else {
+                  let th = ((q_v - 0.78) / 0.22) * 1.5707963;
+                  hull_y = eff_len + eff_rad * sin(th);
+                  hull_r = eff_rad * cos(th);
+                }
+              }
+
+              let N = vec3(cos(phi), 0.0, sin(phi));
+              let T = vec3(-sin(phi), 0.0, cos(phi));
+              let B = vec3(0.0, 1.0, 0.0);
+
+              let mount_r = hull_r + 0.06 + 0.22 * pow(h2, 1.4);
+              let mount_c = N * mount_r + B * hull_y;
+              poly_center = mount_c;
+
+              let bw = 0.05 + 0.11 * hash1(unit_id * 17u);
+              let bh = 0.045 + 0.15 * hash1(unit_id * 23u);
+              let bd = 0.04 + 0.13 * h2;
+
+              let axis_sel = edge_id / 4u;
+              let pair_sel = edge_id % 4u;
+              let s_a = float(pair_sel % 2u) * 2.0 - 1.0;
+              let s_b = float(pair_sel / 2u) * 2.0 - 1.0;
+
+              var loc0 = vec3(0.0);
+              var loc1 = vec3(0.0);
+              if axis_sel == 0u {
+                loc0 = vec3(-bw, s_a * bh, s_b * bd);
+                loc1 = vec3( bw, s_a * bh, s_b * bd);
+              } else {
+                if axis_sel == 1u {
+                  loc0 = vec3(s_a * bw, -bh, s_b * bd);
+                  loc1 = vec3(s_a * bw,  bh, s_b * bd);
+                } else {
+                  loc0 = vec3(s_a * bw, s_b * bh, -bd);
+                  loc1 = vec3(s_a * bw, s_b * bh,  bd);
+                }
+              }
+
+              p0 = mount_c + T * loc0.x + B * loc0.y + N * loc0.z;
+              p1 = mount_c + T * loc1.x + B * loc1.y + N * loc1.z;
+
+              let blink = step(0.84, fract(h3 * 13.0 + floor(t * 4.0 + h0 * 5.0) * 0.17));
+              var unit_col = vec3(0.08, 0.55, 0.62) * (0.45 + 0.55 * h1);
+              if h3 > 0.80 {
+                unit_col = vec3(1.9, 0.68, 0.12) * (0.55 + 0.95 * blink);
+              } else {
+                if h3 < 0.15 {
+                  unit_col = vec3(1.6, 0.18, 0.58) * (0.5 + 0.85 * blink);
+                }
+              }
+              col = unit_col;
+
+            } else {
+              // -------------------- STRATUM E: ORBITAL EXHAUST COLLARS & L-ROUTED PIPING --------------------
+              let s = seed - 26624u;
+              if s < 3072u {
+                let collar = s / 256u;
+                let seg    = s % 256u;
+                let step_i = seg / 2u;
+                let is_fin = seg % 2u;
+
+                poly_id = 10000u + collar * 16u + (step_i / 8u);
+                can_peel = 0.65;
+
+                let fc = (float(collar) + 0.5) / 12.0;
+                let cy = (fc * 2.0 - 1.0) * eff_len * 0.92;
+                let cr = eff_rad * (1.16 + 0.14 * sin(float(collar) * 2.1));
+                let dir = mix(1.0, -1.0, float(collar % 2u));
+                let spin = t * 0.22 * dir;
+
+                let a0 = (float(step_i) / 128.0) * 6.2831853 + spin;
+                let a1 = (float(step_i + 1u) / 128.0) * 6.2831853 + spin;
+                let a_sec = (float((step_i / 8u) * 8u + 4u) / 128.0) * 6.2831853 + spin;
+                poly_center = vec3(cos(a_sec) * cr, cy, sin(a_sec) * cr);
+
+                if is_fin == 0u {
+                  p0 = vec3(cos(a0) * cr, cy, sin(a0) * cr);
+                  p1 = vec3(cos(a1) * cr, cy, sin(a1) * cr);
+                  col = vec3(0.12, 0.72, 0.85) * 0.75;
+                } else {
+                  let fin_len = 0.12 * (0.5 + 0.5 * step(0.5, fract(float(step_i) * 0.25)));
+                  p0 = vec3(cos(a0) * cr, cy - 0.03, sin(a0) * cr);
+                  p1 = vec3(cos(a0) * (cr + fin_len), cy + 0.03, sin(a0) * (cr + fin_len));
+                  let fin_pulse = exp(-pow(fract(float(step_i) / 128.0 - t * 0.6 * dir) * 8.0, 2.0));
+                  col = mix(vec3(0.08, 0.48, 0.58), vec3(0.3, 1.7, 1.5), vec3(fin_pulse));
+                }
+              } else {
+                let pipe_s  = s - 3072u;
+                let pipe_id = pipe_s / 16u;
+                let step_id = pipe_s % 16u;
+
+                poly_id = 12000u + pipe_id;
+                can_peel = 0.50;
+
+                let hp0 = hash1(pipe_id * 59u + 2u);
+                let hp1 = hash1(pipe_id * 83u + 5u);
+                let hp2 = hash1(pipe_id * 107u + 11u);
+
+                let f0 = float(step_id) / 16.0;
+                let f1 = float(step_id + 1u) / 16.0;
+
+                let bend_pt = 0.3 + 0.4 * hp2;
+                let u_start = floor(hp0 * 32.0) / 32.0;
+                let v_start = -0.85 + 0.5 * hp1;
+                let pipe_r  = eff_rad * (1.06 + 0.16 * hash1(pipe_id * 19u));
+
+                var u_a = u_start;
+                var y_a = v_start * eff_len;
+                if f0 < bend_pt {
+                  y_a = (v_start + (f0 / bend_pt) * 0.9) * eff_len;
+                } else {
+                  y_a = (v_start + 0.9) * eff_len;
+                  u_a = u_start + ((f0 - bend_pt) / (1.0 - bend_pt)) * 0.22 * sign(hp1 - 0.5);
+                }
+
+                var u_b = u_start;
+                var y_b = v_start * eff_len;
+                if f1 < bend_pt {
+                  y_b = (v_start + (f1 / bend_pt) * 0.9) * eff_len;
+                } else {
+                  y_b = (v_start + 0.9) * eff_len;
+                  u_b = u_start + ((f1 - bend_pt) / (1.0 - bend_pt)) * 0.22 * sign(hp1 - 0.5);
+                }
+
+                let pa_ang = u_a * 6.2831853;
+                let pb_ang = u_b * 6.2831853;
+                p0 = vec3(cos(pa_ang) * pipe_r, y_a, sin(pa_ang) * pipe_r);
+                p1 = vec3(cos(pb_ang) * pipe_r, y_b, sin(pb_ang) * pipe_r);
+                poly_center = vec3(cos(u_start * 6.2831853) * pipe_r, (v_start + 0.45) * eff_len, sin(u_start * 6.2831853) * pipe_r);
+
+                let packet = exp(-pow(fract(f0 - t * (1.2 + hp0 * 1.5) - hp2) * 7.0, 2.0));
+                col = mix(vec3(0.07, 0.38, 0.45), vec3(2.0, 1.15, 0.25), vec3(packet));
+              }
+            }
+          }
+        }
+      }
+
+    } else {
+      // =========================================================================
+      // PART II: THE CYBERSPACE DATA-CATHEDRAL ENVIRONMENT (32768 .. 49151)
+      // =========================================================================
+      is_env = 1.0;
+      can_peel = 0.0;
+      let es = seed - 32768u;
+
+      if es < 6144u {
+        // -------------------- STRATUM F: SCROLLING CYBER FLOOR & CEILING GRIDS --------------------
+        let seg_i  = es % 32u;
+        let line_i = es / 32u;
+        let plane  = line_i / 96u;
+        let dir_xz = (line_i % 96u) / 48u;
+        let k      = (line_i % 48u);
+
+        let reach = 26.0;
+        let pitch = (reach * 2.0) / 48.0;
+        let scroll = mod(t * grid_scroll, pitch);
+        let at_coord = -reach + float(k) * pitch;
+        let seg_len  = (reach * 2.0) / 32.0;
+        let s_from   = -reach + float(seg_i) * seg_len;
+
+        let py_base = mix(-4.8, 6.2, float(plane));
+
+        var gp0 = vec3(0.0);
+        var gp1 = vec3(0.0);
+        if dir_xz == 0u {
+          gp0 = vec3(at_coord, py_base, s_from + scroll);
+          gp1 = vec3(at_coord, py_base, s_from + seg_len + scroll);
+        } else {
+          gp0 = vec3(s_from, py_base, at_coord + scroll);
+          gp1 = vec3(s_from + seg_len, py_base, at_coord + scroll);
+        }
+
+        let dist0 = length(vec2(gp0.x, gp0.z));
+        let dist1 = length(vec2(gp1.x, gp1.z));
+        let wave0 = sin(dist0 * 0.65 - t * 6.0) * exp(-dist0 * 0.08) * (0.35 + 1.15 * kick);
+        let wave1 = sin(dist1 * 0.65 - t * 6.0) * exp(-dist1 * 0.08) * (0.35 + 1.15 * kick);
+        gp0 = vec3(gp0.x, gp0.y + wave0, gp0.z);
+        gp1 = vec3(gp1.x, gp1.y + wave1, gp1.z);
+
+        let horizon_fade = exp(-dist0 * 0.085);
+        let sonar_wave = exp(-pow(fract(dist0 * 0.12 - bt * 0.5) * 6.0 - 3.0, 2.0));
+        let trace_glow = step(0.92, hash1(k * 37u + seg_i + uint(floor(t * 8.0)) * 13u));
+
+        p0 = gp0;
+        p1 = gp1;
+
+        let is_floor = 1.0 - float(plane);
+        let base_grid = mix(vec3(0.02, 0.22, 0.38), vec3(0.10, 0.90, 1.25), vec3(sonar_wave));
+        col = (base_grid * (0.45 + 0.55 * is_floor) + vec3(0.65, 0.15, 0.90) * trace_glow)
+            * horizon_fade * cyber_glow * (1.0 + 0.4 * flash);
+
+      } else {
+        if es < 12288u {
+          // -------------------- STRATUM G: MATRIX DATA RAIN & 3D SPECTRUM SERVER TOWERS --------------------
+          let ms = es - 6144u;
+          if ms < 4096u {
+            let col_id = ms / 8u;
+            let glyph  = ms % 8u;
+
+            let hc0 = hash1(col_id * 23u + 1u);
+            let hc1 = hash1(col_id * 53u + 7u);
+            let hc2 = hash1(col_id * 89u + 13u);
+
+            let r_col = 4.2 + 13.5 * sqrt(hc0);
+            let a_col = hc1 * 6.2831853 + t * 0.03 * (hc2 - 0.5);
+            let x_col = cos(a_col) * r_col;
+            let z_col = sin(a_col) * r_col;
+
+            let fall_spd = 2.5 + 5.5 * hc2;
+            let head_y = 6.5 - mod(t * fall_spd + hc0 * 16.0, 12.0);
+            let streak_scale = 1.0 + air * 1.4;
+            let gy0 = head_y + float(glyph) * 0.28 * streak_scale;
+            let gy1 = gy0 + 0.16 * streak_scale * (0.4 + 0.6 * hash1(col_id * 11u + glyph + uint(floor(t * 12.0))));
+
+            p0 = vec3(x_col, gy0, z_col);
+            p1 = vec3(x_col, gy1, z_col);
+
+            let tail_fade = pow(1.0 - float(glyph) / 8.0, 1.8);
+            let is_head = step(float(glyph), 0.5);
+            let rain_hue = mix(vec3(0.05, 0.85, 0.72), vec3(0.95, 0.20, 0.85), vec3(step(0.78, hc2)));
+            col = (rain_hue * tail_fade + vec3(1.2, 1.5, 1.6) * is_head)
+                * exp(-r_col * 0.05) * cyber_glow * (0.85 + 0.5 * air);
+
+          } else {
+            let ts = ms - 4096u;
+            let tower_id = ts / 16u;
+            let edge_id  = ts % 16u;
+
+            let ht0 = hash1(tower_id * 31u + 3u);
+            let ht1 = hash1(tower_id * 67u + 9u);
+            let ht2 = hash1(tower_id * 103u + 17u);
+
+            let r_tw = 7.5 + 12.5 * ht0;
+            let a_tw = (float(tower_id) / 128.0) * 6.2831853;
+            let cx = cos(a_tw) * r_tw;
+            let cz = sin(a_tw) * r_tw;
+
+            let tw_sector = tower_id % 4u;
+            var tw_audio = kick;
+            if tw_sector == 1u { tw_audio = vent; }
+            if tw_sector == 2u { tw_audio = grit; }
+            if tw_sector == 3u { tw_audio = air; }
+
+            let tw_w = 0.25 + 0.55 * ht1;
+            let tw_h = (1.5 + 3.5 * ht2) * (0.65 + 1.15 * tw_audio);
+            let base_y = -4.8;
+
+            if edge_id < 12u {
+              let ax_s = edge_id / 4u;
+              let pr_s = edge_id % 4u;
+              let sa = float(pr_s % 2u) * 2.0 - 1.0;
+              let sb = float(pr_s / 2u) * 2.0 - 1.0;
+              var b0 = vec3(0.0);
+              var b1 = vec3(0.0);
+              if ax_s == 0u {
+                b0 = vec3(-tw_w, (sa * 0.5 + 0.5) * tw_h, sb * tw_w);
+                b1 = vec3( tw_w, (sa * 0.5 + 0.5) * tw_h, sb * tw_w);
+              } else {
+                if ax_s == 1u {
+                  b0 = vec3(sa * tw_w, 0.0,  sb * tw_w);
+                  b1 = vec3(sa * tw_w, tw_h, sb * tw_w);
+                } else {
+                  b0 = vec3(sa * tw_w, (sb * 0.5 + 0.5) * tw_h, -tw_w);
+                  b1 = vec3(sa * tw_w, (sb * 0.5 + 0.5) * tw_h,  tw_w);
+                }
+              }
+              p0 = vec3(cx, base_y, cz) + b0;
+              p1 = vec3(cx, base_y, cz) + b1;
+              col = vec3(0.04, 0.35, 0.58) * exp(-r_tw * 0.06) * cyber_glow * (0.8 + 0.6 * tw_audio);
+            } else {
+              let rack = float(edge_id - 12u) + 1.0;
+              let ry = base_y + (rack / 5.0) * tw_h;
+              p0 = vec3(cx - tw_w, ry, cz - tw_w);
+              p1 = vec3(cx + tw_w, ry, cz - tw_w);
+              let rack_blink = step(0.60, fract(ht2 * 11.0 + floor(t * 4.0 + rack) * 0.23 + tw_audio));
+              col = mix(vec3(0.05, 0.45, 0.65), vec3(1.5, 0.25, 0.80), vec3(rack_blink))
+                  * exp(-r_tw * 0.05) * cyber_glow;
+            }
+          }
+
+        } else {
+          // -------------------- STRATUM H: ORBITAL HUD TELEMETRY RINGS & DATA HIGHWAYS --------------------
+          let hs = es - 12288u;
+          if hs < 2048u {
+            let hud_ring = hs / 256u;
+            let hud_seg  = hs % 256u;
+            let step_i   = hud_seg / 2u;
+            let is_tick  = hud_seg % 2u;
+
+            let hr = (3.2 + float(hud_ring) * 1.15) * (1.0 + 0.08 * flash * sin(float(hud_ring) * 2.0));
+            let hy = (float(hud_ring) - 3.5) * 0.85;
+            let dir = mix(1.0, -1.0, float(hud_ring % 2u));
+            let h_spin = t * 0.08 * dir;
+
+            let a0 = (float(step_i) / 128.0) * 6.2831853 + h_spin;
+            let a1 = (float(step_i + 1u) / 128.0) * 6.2831853 + h_spin;
+
+            let sector_on = step(0.28, fract(float(step_i) / 16.0 + float(hud_ring) * 0.37));
+
+            if is_tick == 0u {
+              p0 = vec3(cos(a0) * hr, hy, sin(a0) * hr);
+              p1 = mix(p0, vec3(cos(a1) * hr, hy, sin(a1) * hr), vec3(sector_on));
+              col = vec3(0.08, 0.68, 0.92) * 0.65 * cyber_glow;
+            } else {
+              let tick_on = step(2.5, float(step_i % 4u)) * sector_on;
+              let tick_len = (0.18 + 0.22 * grit) * tick_on;
+              p0 = vec3(cos(a0) * hr, hy, sin(a0) * hr);
+              p1 = vec3(cos(a0) * (hr + tick_len), hy + 0.06 * tick_on, sin(a0) * (hr + tick_len));
+              col = vec3(0.25, 1.1, 1.3) * 0.85 * cyber_glow;
+            }
+
+          } else {
+            let bus_s = hs - 2048u;
+            let bus_id = bus_s / 32u;
+            let seg_id = bus_s % 32u;
+
+            let hb0 = hash1(bus_id * 43u + 5u);
+            let hb1 = hash1(bus_id * 79u + 11u);
+
+            let f0 = float(seg_id) / 32.0;
+            let f1 = float(seg_id + 1u) / 32.0;
+
+            let r0 = mix(2.2, 16.0, f0);
+            let r1 = mix(2.2, 16.0, f1);
+            let bend = step(0.45, f0) * 0.18 * sign(hb0 - 0.5);
+            let bend1 = step(0.45, f1) * 0.18 * sign(hb0 - 0.5);
+            let ang0 = (hb0 + bend) * 6.2831853;
+            let ang1 = (hb0 + bend1) * 6.2831853;
+            let by = (hb1 * 2.0 - 1.0) * 3.8;
+
+            p0 = vec3(cos(ang0) * r0, by, sin(ang0) * r0);
+            p1 = vec3(cos(ang1) * r1, by, sin(ang1) * r1);
+
+            let pkt = exp(-pow(fract(f0 - t * (1.5 + hb1 * 2.0) * sign(hb0 - 0.5)) * 8.0 - 4.0, 2.0));
+            col = mix(vec3(0.03, 0.25, 0.42), vec3(0.4, 1.8, 1.9), vec3(pkt))
+                * exp(-r0 * 0.06) * cyber_glow * (1.0 + 0.5 * flash);
+          }
+        }
+      }
+    }
+
+    let tilt_x = 0.42 * sin(t * tumble * 1.3) + 0.28;
+    let tilt_z = 0.25 * cos(t * tumble * 0.9);
+    let spin_y = t * tumble * 0.7;
+
+    let cap_a = rot_y(rot_z(rot_x(p0, tilt_x), tilt_z), spin_y);
+    let cap_b = rot_y(rot_z(rot_x(p1, tilt_x), tilt_z), spin_y);
+    let cap_c = rot_y(rot_z(rot_x(poly_center, tilt_x), tilt_z), spin_y);
+
+    let wa = mix(cap_a, p0, vec3(is_env));
+    let wb = mix(cap_b, p1, vec3(is_env));
+    let wc = mix(cap_c, vec3(0.0), vec3(is_env));
+
+    position = wa;
+    velocity = wa - wb;
+    tint     = col;
+    normal   = wc;
+    size     = can_peel + float(poly_id) * 2.0;
+  }
+}

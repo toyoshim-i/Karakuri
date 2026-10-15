@@ -1,0 +1,72 @@
+// Audio-reactive Ultra-Wide / Fisheye-perspective Cyber Camera (`L3`).
+// Glides around the Kowloon nanomachine capsule on a swooping 3D orbit while
+// audio bass (`sub_bass`) and transients (`transient`) punch the lens FOV into
+// extreme ultra-wide perspective (`fov_y` up to ~2.35 rad / 135 deg), dolly the
+// eye inward toward the peeling armor panels, and bank the horizon with a
+// cyberpunk Dutch roll.
+
+proc cyber_fisheye_cam {
+  kind L3
+
+  param base_dist  : float [2.5, 16.0] = 5.40
+  param swoop      : float [0.0, 0.75] = 0.42
+  param orbit_rate : float [-2.0, 2.0] = 0.14
+  param base_fov   : float [0.6, 2.5]  = 1.55
+  param fov_punch  : float [0.0, 1.2]  = 0.65
+  param dutch_bank : float [0.0, 1.5]  = 0.55
+
+  // Audio-reactive signal target parameters (bound to band0..band3, onset):
+  param sub_bass   : float [0.0, 2.0]  = 0.45
+  param low_mid    : float [0.0, 2.0]  = 0.50
+  param high_mid   : float [0.0, 2.0]  = 0.45
+  param high_air   : float [0.0, 2.0]  = 0.45
+  param transient  : float [0.0, 2.0]  = 0.35
+
+  camera {
+    let bt = max(beats, 0.0);
+    let beat_hit = pow(1.0 - fract(bt), 3.5);
+    let kick  = clamp(sub_bass * 0.90 + beat_hit * 0.35, 0.0, 2.0);
+    let mid   = clamp(low_mid * 0.85, 0.0, 2.0);
+    let grit  = clamp(high_mid * 0.85, 0.0, 2.0);
+    let air   = clamp(high_air * 0.85, 0.0, 2.0);
+    let flash = clamp(transient * 1.15 + beat_hit * 0.30, 0.0, 2.0);
+
+    // Smooth orbital azimuth + subtle beat-driven speed surge
+    let ang = t * orbit_rate * 6.2831853 + sin(t * 0.35) * 0.45;
+
+    // Swoop in close to the peeling capsule hull and push in on bass kicks
+    // so the wide-angle / fisheye perspective dramatically looms the foreground panels
+    let dive = 1.0 - swoop * (0.5 + 0.5 * sin(ang * 2.0));
+    let kick_pull = clamp(1.0 - (kick * 0.22 + flash * 0.14), 0.45, 1.2);
+    let r = base_dist * dive * kick_pull;
+
+    // Vertical figure-8 crane motion from low heroic angle to high sweep
+    let elev = (1.85 * sin(ang * 1.0 - 0.4) - 0.55) + (mid - 0.4) * 0.65;
+
+    let cam_pos = vec3(cos(ang) * r, elev, sin(ang) * r);
+
+    // Subtle off-center aim drift + high-frequency transient micro-jolt
+    let tang = vec3(-sin(ang), 0.0, cos(ang));
+    let aim_lead = tang * (0.38 * cos(ang * 2.0) + 0.18 * (grit - 0.4) * sin(t * 9.0));
+    let aim_y    = 0.25 * sin(ang * 1.7) + 0.12 * (air - 0.4) * cos(t * 11.0);
+    let aim_pos  = vec3(0.0, aim_y, 0.0) + aim_lead;
+
+    // Dynamic Dutch roll banking into turns + audio kick/transient twist
+    let fwd   = normalize(aim_pos - cam_pos);
+    let right = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+    let top   = cross(right, fwd);
+
+    let turn_bank  = cos(ang * 2.0) * dutch_bank * 0.65;
+    let audio_roll = (kick * 0.28 + flash * 0.35) * sin(bt * 1.5707963 + ang) * dutch_bank;
+    let roll = turn_bank + audio_roll;
+
+    // Ultra-wide / fisheye-like FOV warp on bass & transient hits (clamped safely below PI)
+    let dyn_fov = clamp(base_fov + (kick * 0.42 + flash * 0.35) * fov_punch, 0.65, 2.42);
+
+    eye    = cam_pos;
+    target = aim_pos;
+    up     = top * cos(roll) + right * sin(roll);
+    fov_y  = dyn_fov;
+    far    = 80.0;
+  }
+}

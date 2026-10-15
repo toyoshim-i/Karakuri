@@ -1,0 +1,96 @@
+// Rigid Polygon / Panel Peeling Deformer (`L2`).
+// Consumes `normal` (carrying the shared polygon/module centroid `poly_center`
+// from `L1`) and `size` (carrying `can_peel + float(poly_id) * 2.0`).
+// Every 4-edge armor panel, 12-edge Kowloon greeble box, and turbine louver
+// detaches cleanly from the capsule hull, tumbles rigidly around its own local
+// centroid (`poly_center`), and floats outward into cyberspace on audio waves.
+
+proc cyber_peel_deform {
+  kind L2
+
+  consumes position, velocity, tint, normal, size
+
+  param peel_dist   : float [0.0, 4.0] = 1.80
+  param peel_spin   : float [0.0, 4.0] = 1.90
+  param peel_spread : float [0.0, 2.0] = 1.15
+  param wave_speed  : float [0.0, 2.0] = 0.45
+
+  // Audio-reactive signal target parameters (bound to band0..band3, onset):
+  param sub_bass    : float [0.0, 2.0] = 0.45
+  param low_mid     : float [0.0, 2.0] = 0.50
+  param high_mid    : float [0.0, 2.0] = 0.45
+  param high_air    : float [0.0, 2.0] = 0.45
+  param transient   : float [0.0, 2.0] = 0.35
+
+  mask {
+    strength = step(1.0, size);
+  }
+
+  deform {
+    let bt = max(beats, 0.0);
+    let beat_hit = pow(1.0 - fract(bt), 3.5);
+    let kick  = clamp(sub_bass * 0.85 + beat_hit * 0.40, 0.0, 2.0);
+    let vent  = clamp(low_mid * 0.90 + (0.5 + 0.5 * sin(bt * 1.5707963)) * 0.30, 0.0, 2.0);
+    let grit  = clamp(high_mid * 0.95, 0.0, 2.0);
+    let air   = clamp(high_air * 0.95, 0.0, 2.0);
+    let flash = clamp(transient * 1.1 + beat_hit * 0.35, 0.0, 2.0);
+
+    // Unpack `poly_id` and `can_peel` from `size`
+    let poly_id  = uint(floor(size * 0.5));
+    let can_peel = clamp(size - float(poly_id) * 2.0, 0.0, 1.0);
+    let poly_center = normal;
+
+    let p0 = position;
+    let p1 = position - velocity;
+
+    let ph0 = hash1(poly_id * 37u + 3u);
+    let ph1 = hash1(poly_id * 71u + 11u);
+    let ph2 = hash1(poly_id * 113u + 19u);
+
+    // Outward hull normal and tangent at the polygon centroid
+    let n_dir = normalize(vec3(poly_center.x, poly_center.y * 0.35, poly_center.z) + vec3(0.0001, 0.0, 0.0));
+    let tang  = normalize(cross(vec3(0.0, 1.0, 0.0), n_dir) + vec3(0.0, 0.0, 0.0001));
+
+    let az = atan2(poly_center.z, poly_center.x) / 6.2831853 + 0.5;
+    let yn = clamp((poly_center.y / 3.4) * 0.5 + 0.5, 0.0, 1.0);
+
+    var audio_drive = kick;
+    if yn > 0.25 { audio_drive = vent; }
+    if yn > 0.50 { audio_drive = grit; }
+    if yn > 0.75 { audio_drive = air; }
+
+    // Helical exfoliation wave sweeping across the capsule
+    let peel_wave = sin((yn * 2.5 - az * 2.0 - t * wave_speed) * 6.2831853);
+    let wave_mask = smoothstep(0.12 - 0.38 * audio_drive, 0.85, peel_wave);
+
+    let detach_amount = wave_mask * smoothstep(0.25, 0.90, ph0 + audio_drive * 0.48 + flash * 0.38) * can_peel;
+
+    // Local coordinates of both endpoints relative to the polygon's own centroid
+    let rel0 = p0 - poly_center;
+    let rel1 = p1 - poly_center;
+
+    // Rigid 3D rotation of the entire polygon/box around its own centroid
+    let rot_ax  = normalize(hash3(poly_id * 29u + 7u) - vec3(0.5) + vec3(0.0001));
+    let rot_ang = detach_amount * peel_spin * (1.2 + 1.5 * ph1) * sin(t * 1.4 + ph2 * 6.2831853);
+    let r_rel0  = rot_axis(rel0, rot_ax, rot_ang);
+    let r_rel1  = rot_axis(rel1, rot_ax, rot_ang);
+
+    // Outward radial lift, tangential slipstream drift, and vertical float
+    let lift_r  = detach_amount * peel_dist * (0.4 + 1.4 * pow(ph1, 1.5)) * (0.7 + 0.6 * audio_drive);
+    let drift_t = detach_amount * peel_spread * (ph2 - 0.5) * 1.6;
+    let float_y = detach_amount * peel_spread * (ph0 - 0.35) * 1.2;
+
+    let new_center = poly_center + n_dir * lift_r + tang * drift_t + vec3(0.0, float_y, 0.0);
+
+    let np0 = new_center + r_rel0;
+    let np1 = new_center + r_rel1;
+
+    // Energy glow on detached polygons
+    let peel_glow = clamp(detach_amount * 1.35, 0.0, 1.0);
+    let glow_hue  = mix(vec3(0.15, 1.45, 1.65), vec3(2.1, 0.75, 0.20), vec3(step(0.65, ph2)));
+
+    position = np0;
+    velocity = np0 - np1;
+    tint     = mix(tint, glow_hue, vec3(peel_glow * 0.75));
+  }
+}
