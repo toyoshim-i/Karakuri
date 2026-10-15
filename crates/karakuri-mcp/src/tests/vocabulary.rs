@@ -317,6 +317,14 @@ fn check_procedure_returns_structured_diagnostics() {
         serde_json::from_value(res_valid["structuredContent"]["report"].clone()).expect("report");
     assert!(report_valid.success);
     assert!(report_valid.diagnostics.is_empty());
+    assert!(
+        report_valid
+            .hash
+            .as_deref()
+            .is_some_and(|h| h.starts_with("sha256:")),
+        "check_procedure should report sha256 hash on success: {:?}",
+        report_valid.hash
+    );
 
     // 2. Broken procedure with unknown kind
     let broken_src = "proc broken {\n  kind L9\n}\n";
@@ -333,6 +341,7 @@ fn check_procedure_returns_structured_diagnostics() {
     let report_broken: DiagnosticReport =
         serde_json::from_value(res_broken["structuredContent"]["report"].clone()).expect("report");
     assert!(!report_broken.success);
+    assert_eq!(report_broken.hash, None);
     assert_eq!(report_broken.diagnostics.len(), 1);
     assert_eq!(
         report_broken.diagnostics[0].code,

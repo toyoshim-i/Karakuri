@@ -140,17 +140,21 @@ pub(crate) fn chain_param_of(with: &Value) -> Result<karakuri_operation::ChainPa
     }
 }
 
-/// Validates and parses a SHA-256 content address format (`sha256:<64 hex digits>`).
-pub(crate) fn address_of(with: &Value, key: &str) -> Result<String, String> {
+/// Extracts and validates a procedure reference from JSON input.
+/// Accepts either a SHA-256 content address (`sha256:<64 hex digits>`)
+/// or a valid procedure name (e.g. `bloom`, `glitch_slice`).
+pub(crate) fn procedure_of(with: &Value, key: &str) -> Result<String, String> {
     let said = text_of(with, key)?;
-    let digits = said.strip_prefix("sha256:").unwrap_or("");
-    if digits.len() == 64 && digits.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Ok(said.to_string());
+    if said.starts_with("sha256:") {
+        let digits = said.strip_prefix("sha256:").unwrap_or("");
+        if digits.len() == 64 && digits.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(said.to_string());
+        }
+        return Err(format!(
+            "`with.{key}` is `{said}`, and a procedure content address is `sha256:` followed by sixty-four hex digits"
+        ));
     }
-    Err(format!(
-        "`with.{key}` is `{said}`, and a procedure is named by the content address of its \
-          source — `sha256:` and sixty-four hex digits"
-    ))
+    named_of(with, key, "a procedure")
 }
 
 /// One value of a closed list, by the word the vocabulary spells it with, and

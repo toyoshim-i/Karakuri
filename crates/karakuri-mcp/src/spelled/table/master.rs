@@ -70,7 +70,7 @@ pub(crate) const MASTER: &[Spelled] = &[
         // Chain costs are the sum over slot procedures.
         make: Some(|with, _| {
             Ok(Operation::AddChainEffect {
-                procedure: address_of(with, "procedure")?,
+                procedure: procedure_of(with, "procedure")?,
                 cut: match with.get("cut") {
                     None | Some(Value::Null) => None,
                     Some(_) => Some(word_of(
@@ -86,7 +86,7 @@ pub(crate) const MASTER: &[Spelled] = &[
         shape: Some(|| {
             shaped(
                 json!({
-                    "procedure": p_string("the content address of a `kind L5` procedure's source, as a record spells one — `sha256:…`"),
+                    "procedure": p_string("the name (e.g. `bloom`) or content address (`sha256:…`) of a `kind L5` procedure"),
                     "cut": p_word(
                         words(&karakuri_operation::Cut::ALL, karakuri_operation::Cut::name),
                         "which retained frame the slot reads — said exactly where the procedure declares `retains`, and left out where it does not",

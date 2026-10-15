@@ -98,6 +98,8 @@ pub struct DiagnosticReport {
     pub diagnostics: Vec<Diagnostic>,
     pub success: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
 }
 
@@ -162,6 +164,7 @@ impl DiagnosticReport {
         Self {
             diagnostics: Vec::new(),
             success: true,
+            hash: None,
             hint: None,
         }
     }
@@ -170,6 +173,7 @@ impl DiagnosticReport {
         Self {
             diagnostics,
             success: false,
+            hash: None,
             hint: None,
         }
     }
@@ -181,6 +185,7 @@ impl DiagnosticReport {
                 .map(|e| Diagnostic::from_ir_error(e, src))
                 .collect(),
             success: errors.is_empty(),
+            hash: None,
             hint: None,
         }
     }

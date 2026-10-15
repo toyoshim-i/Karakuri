@@ -15,6 +15,8 @@ pub struct LibraryItem {
     pub layer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topology: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
     pub origin: String,
     pub summary: String,
 }
@@ -134,11 +136,13 @@ pub(crate) fn collect_library_items(state: &State, include_store: bool) -> Vec<L
                         .to_string();
                     let topology = declared_topology(&content);
                     let summary = extract_summary(&content);
+                    let hash = Some(karakuri_store::hash::Hash::of(content.as_bytes()).to_string());
                     items.push(LibraryItem {
                         name: stem,
                         file: file_name,
                         layer,
                         topology,
+                        hash,
                         origin: "preset".to_string(),
                         summary,
                     });
@@ -151,6 +155,7 @@ pub(crate) fn collect_library_items(state: &State, include_store: bool) -> Vec<L
                         file: file_name,
                         layer: "Set".to_string(),
                         topology: None,
+                        hash: None,
                         origin: "preset".to_string(),
                         summary,
                     });
@@ -176,6 +181,7 @@ pub(crate) fn collect_library_items(state: &State, include_store: bool) -> Vec<L
                         file: format!("{}.kbset", set.id),
                         layer: "Set".to_string(),
                         topology: None,
+                        hash: None,
                         origin: "store".to_string(),
                         summary,
                     });
@@ -193,11 +199,14 @@ pub(crate) fn collect_library_items(state: &State, include_store: bool) -> Vec<L
                                 .to_string();
                         let topology = declared_topology(&content);
                         let summary = extract_summary(&content);
+                        let hash =
+                            Some(karakuri_store::hash::Hash::of(content.as_bytes()).to_string());
                         items.push(LibraryItem {
                             name: proc.name.clone(),
                             file: format!("{}.kir", proc.name),
                             layer,
                             topology,
+                            hash,
                             origin: "store".to_string(),
                             summary,
                         });
@@ -376,9 +385,13 @@ pub(crate) fn list_library(args: &Value, state: &State) -> Result<String, String
         } else {
             format!(" — {}", item.summary)
         };
+        let hash_str = match &item.hash {
+            Some(h) => format!(" `{h}`"),
+            None => String::new(),
+        };
         out.push_str(&format!(
-            "- `{}` ({}{}) [{}]{}\n",
-            item.name, item.layer, topology_str, item.origin, summary_str
+            "- `{}` ({}{}) [{}]{}{}\n",
+            item.name, item.layer, topology_str, item.origin, hash_str, summary_str
         ));
     }
 

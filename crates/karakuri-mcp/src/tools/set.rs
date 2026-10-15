@@ -27,6 +27,7 @@ pub fn check_set_configuration(store_path: &std::path::Path, id: &str) -> Diagno
                     ),
                 )],
                 success: false,
+                hash: None,
                 hint: None,
             };
         }
@@ -45,6 +46,7 @@ pub fn check_set_configuration(store_path: &std::path::Path, id: &str) -> Diagno
                 ),
             )],
             success: false,
+            hash: None,
             hint: None,
         },
     }

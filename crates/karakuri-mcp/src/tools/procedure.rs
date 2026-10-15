@@ -25,9 +25,15 @@ pub fn check_procedure(source: &str) -> DiagnosticReport {
         },
     }
     let success = diagnostics.is_empty();
+    let hash = if success {
+        Some(karakuri_store::hash::Hash::of(source.as_bytes()).to_string())
+    } else {
+        None
+    };
     DiagnosticReport {
         diagnostics,
         success,
+        hash,
         hint: None,
     }
 }
@@ -160,6 +166,7 @@ pub(crate) fn write_procedures_batch(
                     None,
                 )],
                 success: false,
+                hash: None,
                 hint: None,
             };
             serde_json::to_string_pretty(&fallback).unwrap_or(e)
@@ -183,6 +190,7 @@ pub(crate) fn write_procedures_batch(
                     )),
                 )],
                 success: false,
+                hash: None,
                 hint: None,
             };
             return Err(serde_json::to_string_pretty(&report).unwrap_or_default());

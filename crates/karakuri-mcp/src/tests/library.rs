@@ -358,3 +358,32 @@ fn library_gate_enforces_permissions_and_privacy() {
         "{rep_all_store:?}"
     );
 }
+
+#[test]
+fn list_library_items_expose_content_hashes() {
+    let (_tx, rx) = mpsc::channel();
+    let state = Arc::new(Mutex::new(state(rx)));
+
+    let req = json!({
+        "jsonrpc": "2.0", "id": 18, "method": "tools/call",
+        "params": {
+            "name": "list_library",
+            "arguments": {
+                "layer": "L5",
+                "limit": 10
+            }
+        }
+    });
+
+    let rep = dispatch(&req, &state).settled().expect("rep");
+    assert_ne!(rep["result"]["isError"], true, "{rep:?}");
+    let text = rep["result"]["content"][0]["text"].as_str().expect("text");
+    assert!(
+        text.contains("`sha256:"),
+        "list_library output should expose content hashes: {text}"
+    );
+    assert!(
+        text.contains("`bloom` (L5) [preset] `sha256:"),
+        "bloom should include its sha256 hash: {text}"
+    );
+}

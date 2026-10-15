@@ -310,3 +310,78 @@ fn in_process_load_procedure_on_offline_and_writable_deck() {
     let finished = pending.poll_settled().unwrap();
     assert_eq!(finished.content[0].as_text(), Some("loaded"));
 }
+
+#[test]
+fn in_process_add_chain_effect_accepts_preset_name_and_content_address() {
+    let slots = slots();
+    let slot_policies = SlotPolicies::default();
+    let opening = Opening::closed();
+    opening.set(Open::CLOSED.with(Class::MasterEffects, true));
+    let (reporter, mcp) = in_process(
+        slots,
+        PathBuf::from("a/store"),
+        true,
+        opening,
+        slot_policies,
+    );
+
+    // 1. Calling with preset name "bloom"
+    let res_name = mcp.call_tool(
+        "operate",
+        json!({
+            "operation": "Add an effect to the master chain",
+            "with": {
+                "procedure": "bloom"
+            }
+        }),
+    );
+    let mut pending_name = match res_name {
+        agent_man::mcp::HandlerResult::Pending(p) => p,
+        agent_man::mcp::HandlerResult::Ready(r) => {
+            panic!("expected Pending, got: {:?}", r.content[0].as_text())
+        }
+    };
+    let ops: Vec<_> = reporter.operations().collect();
+    assert_eq!(ops.len(), 1);
+    match &ops[0].operation {
+        Operation::AddChainEffect { procedure, cut } => {
+            assert_eq!(procedure, "bloom");
+            assert_eq!(*cut, None);
+        }
+        other => panic!("expected AddChainEffect, got {other:?}"),
+    }
+    ops[0].reply.clone().settled(Ok("added bloom".into()));
+    let finished_name = pending_name.poll_settled().unwrap();
+    assert_eq!(finished_name.content[0].as_text(), Some("added bloom"));
+
+    // 2. Calling with sha256 content address
+    let sha = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let res_sha = mcp.call_tool(
+        "operate",
+        json!({
+            "operation": "Add an effect to the master chain",
+            "with": {
+                "procedure": sha,
+                "cut": "mix"
+            }
+        }),
+    );
+    let mut pending_sha = match res_sha {
+        agent_man::mcp::HandlerResult::Pending(p) => p,
+        agent_man::mcp::HandlerResult::Ready(r) => {
+            panic!("expected Pending, got: {:?}", r.content[0].as_text())
+        }
+    };
+    let ops2: Vec<_> = reporter.operations().collect();
+    assert_eq!(ops2.len(), 1);
+    match &ops2[0].operation {
+        Operation::AddChainEffect { procedure, cut } => {
+            assert_eq!(procedure, sha);
+            assert_eq!(*cut, Some(karakuri_operation::Cut::Mix));
+        }
+        other => panic!("expected AddChainEffect, got {other:?}"),
+    }
+    ops2[0].reply.clone().settled(Ok("added sha".into()));
+    let finished_sha = pending_sha.poll_settled().unwrap();
+    assert_eq!(finished_sha.content[0].as_text(), Some("added sha"));
+}

@@ -41,3 +41,11 @@ When an operation is refused due to the gate, the response includes actionable i
 
 - **`read_procedure`**: Read the full `.kir` source code of any procedure by `name` (e.g. `{"name": "bloom"}`) without needing to mount it onto an active deck slot. Can still read active slot nodes via `{"slot": 0, "layer": "L1"}`.
 - **`read_set`**: Read the complete structure and full `.kir` source code of all constituent nodes for any Set by `id` (e.g. `{"id": "beat_cloud"}`). Stored Sets require the Library gate set to `all`.
+
+## Content Addresses & Master Chain Effects
+
+Every procedure has a canonical SHA-256 content address (`sha256:<64 hex digits>`):
+- **`list_library`**: Exposes the `hash` field on each `.kir` item so clients know the procedure's exact content address.
+- **`check_procedure`**: When static checks succeed, returns `hash` in the diagnostic report alongside `success: true`.
+- **`operate("Add an effect to the master chain")`**: Accepts either a library procedure name (e.g. `"bloom"`, `"glitch_slice"`, `"zoom_blur"`) or a full SHA-256 content address (`"sha256:..."`).
+

@@ -288,6 +288,7 @@ fn refusal_and_diagnostic_reports_include_mcp_doc_read_hints() {
             None,
         )],
         success: false,
+        hash: None,
         hint: None,
     };
     let diag_res = crate::tools::tool_result(Err(serde_json::to_string(&diag_report).unwrap()));
