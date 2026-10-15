@@ -1491,6 +1491,7 @@ dependencies = [
  "pollster",
  "serde_json",
  "tempfile",
+ "web-time",
  "wgpu",
  "winit",
 ]

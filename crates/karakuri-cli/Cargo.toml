@@ -31,6 +31,8 @@ pollster = "1.0.1"
 wgpu = "30.0.1"
 winit = "0.30.13"
 agent-man = { workspace = true }
+web-time = "1.1"
+
 
 [dev-dependencies]
 # The run itself opens a store on a disk, and what it does to one is only worth

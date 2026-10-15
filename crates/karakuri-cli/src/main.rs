@@ -16,7 +16,8 @@ use karakuri_mcp as mcp;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use karakuri_engine::binding::{Curve, CONTROL_PREFIX, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
 use karakuri_engine::deck::MAX_SLOTS;
