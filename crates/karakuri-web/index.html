@@ -1012,10 +1012,22 @@
 
           // Modal close button handling
           let captureGeneration = 0;
+          let activeVideoEncoder = null;
+          function cleanupActiveEncoder() {
+            window.__karakuri_is_recorder_ready = () => false;
+            window.__karakuri_on_recorder_frame = null;
+            if (activeVideoEncoder) {
+              try {
+                if (activeVideoEncoder.state !== 'closed') activeVideoEncoder.close();
+              } catch (_) {}
+              activeVideoEncoder = null;
+            }
+          }
           const closeBtn = document.getElementById('karakuri-share-close-btn');
           if (closeBtn) {
             closeBtn.onclick = () => {
               captureGeneration++;
+              cleanupActiveEncoder();
               if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
               if (modal) modal.style.display = 'none';
             };
@@ -1075,11 +1087,12 @@
             };
           }
 
-          // Reusable loop capture with cancellation token support
+          // Reusable loop capture with cancellation token & lockstep non-realtime frame stepping
           async function startLoopCapture(targetRes) {
             captureGeneration++;
             const thisGen = captureGeneration;
 
+            cleanupActiveEncoder();
             if (window.__karakuri_stop_recording) {
               window.__karakuri_stop_recording();
             }
@@ -1092,7 +1105,7 @@
               video.style.display = 'none';
             }
             if (recIndicator) recIndicator.style.display = 'flex';
-            if (statusText) statusText.textContent = 'Recording visual loop (8s)...';
+            if (statusText) statusText.textContent = 'Preparing encoder...';
             if (dlBtn) {
               dlBtn.disabled = true;
               dlBtn.style.opacity = '0.5';
@@ -1151,23 +1164,13 @@
             let targetBitrate = activeTier.bitrate;
 
             const canvas = document.getElementById('karakuri-recorder-canvas');
-            if (canvas) {
-              canvas.width = targetWidth;
-              canvas.height = targetHeight;
-              canvas.style.width = targetWidth + 'px';
-              canvas.style.height = targetHeight + 'px';
-            }
-
-            if (window.__karakuri_start_recording) {
-              window.__karakuri_start_recording();
-            }
 
             let recordedSuccessfully = false;
             let videoBlob = null;
             let videoUrl = null;
             let videoFile = null;
 
-            // Primary Path: WebCodecs VideoEncoder (Hardware-accelerated 60fps CFR + 1s Closed GOP + Faststart MP4)
+            // Primary Path: WebCodecs VideoEncoder in deterministic 1-to-1 lockstep with Wasm redraws
             if (canvas && typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined') {
               try {
                 let supportedConfig = null;
@@ -1197,20 +1200,11 @@
                     } catch (_) {}
                   }
                   if (supportedConfig) {
+                    targetWidth = tier.width;
+                    targetHeight = tier.height;
+                    targetBitrate = tier.bitrate;
                     if (tIdx > 0) {
                       console.warn(`${fallbackOrder[0]} VideoEncoder not supported on this device, falling back to ${tierKey}`);
-                      targetWidth = tier.width;
-                      targetHeight = tier.height;
-                      targetBitrate = tier.bitrate;
-                      if (canvas) {
-                        canvas.width = targetWidth;
-                        canvas.height = targetHeight;
-                        canvas.style.width = targetWidth + 'px';
-                        canvas.style.height = targetHeight + 'px';
-                      }
-                      if (window.__karakuri_start_recording) {
-                        window.__karakuri_start_recording();
-                      }
                     }
                     break;
                   }
@@ -1237,47 +1231,81 @@
                     error: (err) => console.error("VideoEncoder error:", err),
                   });
                   encoder.configure(supportedConfig);
+                  activeVideoEncoder = encoder;
 
-                  const totalFrames = 480; // 8 seconds @ 60 fps
+                  const totalFrames = 480; // 8.000 seconds @ 60.0 fps CFR
                   const fps = 60;
-                  const frameIntervalMs = 1000 / fps;
                   let frameIndex = 0;
-                  const startRecTime = performance.now();
+                  const resLabel = targetWidth >= 3840 ? '4K' : (targetWidth >= 2560 ? '2K' : '1080p');
+                  if (statusText && thisGen === captureGeneration) {
+                    statusText.textContent = `Rendering ${resLabel} (60fps): 0 / ${totalFrames} (0%)`;
+                  }
 
                   await new Promise((resolve) => {
-                    function step(now) {
+                    let settled = false;
+                    function finishCapture() {
+                      if (settled) return;
+                      settled = true;
+                      window.__karakuri_is_recorder_ready = () => false;
+                      window.__karakuri_on_recorder_frame = null;
+                      resolve();
+                    }
+
+                    // Backpressure gate: only allow Wasm to step & render the next 1/60s frame
+                    // when the hardware encoder queue has room (<= 2 frames in flight).
+                    window.__karakuri_is_recorder_ready = () => {
                       if (thisGen !== captureGeneration) {
-                        try { encoder.close(); } catch (_) {}
-                        resolve();
+                        cleanupActiveEncoder();
+                        finishCapture();
+                        return false;
+                      }
+                      if (frameIndex >= totalFrames) return false;
+                      if (!encoder || encoder.state !== 'configured') return false;
+                      return encoder.encodeQueueSize <= 2;
+                    };
+
+                    // Invoked synchronously by Wasm immediately after compose() presents a fresh frame to recorder_sink
+                    window.__karakuri_on_recorder_frame = () => {
+                      if (thisGen !== captureGeneration) {
+                        cleanupActiveEncoder();
+                        finishCapture();
                         return;
                       }
-                      const elapsed = now - startRecTime;
-                      const expectedFrame = Math.floor(elapsed / frameIntervalMs);
-
-                      while (frameIndex <= expectedFrame && frameIndex < totalFrames) {
+                      if (frameIndex >= totalFrames || !encoder || encoder.state !== 'configured') {
+                        return;
+                      }
+                      try {
                         const timestampUs = Math.round(frameIndex * (1000000 / fps));
-                        const vf = new VideoFrame(canvas, { timestamp: timestampUs });
+                        const durationUs = Math.round(1000000 / fps);
+                        const vf = new VideoFrame(canvas, { timestamp: timestampUs, duration: durationUs });
                         encoder.encode(vf, { keyFrame: (frameIndex % 60 === 0) });
                         vf.close();
                         frameIndex++;
 
-                        if (frameIndex % 60 === 0) {
-                          const remaining = Math.max(0, 8 - Math.floor(frameIndex / 60));
+                        if (frameIndex % 6 === 0 || frameIndex === totalFrames) {
+                          const pct = Math.round((frameIndex / totalFrames) * 100);
                           if (statusText && thisGen === captureGeneration) {
-                            statusText.textContent = remaining > 0
-                              ? `Recording visual loop (${remaining}s)...`
-                              : `Encoding video...`;
+                            statusText.textContent = frameIndex < totalFrames
+                              ? `Rendering ${resLabel} (60fps): ${frameIndex} / ${totalFrames} (${pct}%)`
+                              : `Finalizing ${resLabel} MP4...`;
                           }
                         }
-                      }
 
-                      if (frameIndex >= totalFrames) {
-                        resolve();
-                      } else {
-                        requestAnimationFrame(step);
+                        if (frameIndex >= totalFrames) {
+                          finishCapture();
+                        }
+                      } catch (fErr) {
+                        console.error("Frame capture error:", fErr);
+                        finishCapture();
                       }
+                    };
+
+                    // Pass target dimensions via attributes so Rust detaches any old surface before resizing canvas
+                    canvas.setAttribute('data-target-width', String(targetWidth));
+                    canvas.setAttribute('data-target-height', String(targetHeight));
+                    if (window.__karakuri_start_recording) {
+                      window.__karakuri_start_recording();
                     }
-                    requestAnimationFrame(step);
                   });
 
                   if (thisGen !== captureGeneration) return;
@@ -1285,6 +1313,7 @@
                   if (statusText) statusText.textContent = 'Finalizing MP4...';
                   await encoder.flush();
                   encoder.close();
+                  if (activeVideoEncoder === encoder) activeVideoEncoder = null;
 
                   if (thisGen !== captureGeneration) return;
 
@@ -1292,7 +1321,7 @@
                     window.__karakuri_stop_recording();
                   }
 
-                  if (encodedChunks.length > 0 && avccDescription) {
+                  if (encodedChunks.length === totalFrames && avccDescription) {
                     const rawChunks = encodedChunks.map(c => c.data);
                     const keyframes = [];
                     for (let i = 0; i < encodedChunks.length; i++) {
@@ -1319,6 +1348,13 @@
             if (!recordedSuccessfully && canvas && typeof canvas.captureStream === 'function' && typeof MediaRecorder !== 'undefined') {
               let audioCtx = null;
               try {
+                window.__karakuri_is_recorder_ready = () => true;
+                window.__karakuri_on_recorder_frame = null;
+                canvas.setAttribute('data-target-width', String(targetWidth));
+                canvas.setAttribute('data-target-height', String(targetHeight));
+                if (window.__karakuri_start_recording) {
+                  window.__karakuri_start_recording();
+                }
                 const stream = canvas.captureStream(60);
                 try {
                   const AudioCtxClass = window.AudioContext || window.webkitAudioContext;

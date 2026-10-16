@@ -476,6 +476,9 @@ impl WebApp {
                 .borrow()
                 .set_is_fullscreen(self.app.is_fullscreen_stereo());
         }
+        if self.app.take_recorder_drawn() {
+            crate::share::notify_recorder_frame();
+        }
     }
 }
 
@@ -797,14 +800,7 @@ impl ApplicationHandler<()> for WebApp {
         }
 
         if let Some(action) = self.pending_recorder.borrow_mut().take() {
-            match action {
-                crate::share::RecorderAction::Attach(surface, size) => {
-                    self.app.attach_recorder_surface(surface, size);
-                }
-                crate::share::RecorderAction::Detach => {
-                    self.app.detach_recorder_surface();
-                }
-            }
+            crate::share::handle_recorder_action(&mut self.app, action);
             if let Some(ref window) = self.window {
                 window.request_redraw();
             }
@@ -827,16 +823,7 @@ impl ApplicationHandler<()> for WebApp {
             }
         }
 
-        let trigger_share = {
-            let mut b = self.pending_share.borrow_mut();
-            if *b {
-                *b = false;
-                true
-            } else {
-                false
-            }
-        };
-        if trigger_share {
+        if std::mem::take(&mut *self.pending_share.borrow_mut()) {
             log::info!("Karakuri Web: Exporting active Set for share...");
             match self.app.export_active_set_bundle() {
                 Ok((id, ndjson)) => {
@@ -902,6 +889,8 @@ impl ApplicationHandler<()> for WebApp {
                 // handed over, which is a frame older.
                 self.sync_stereo_matrices();
                 self.app
+                    .set_recorder_ready(crate::share::is_recorder_ready());
+                self.app
                     .on_window_event(_event_loop, id, WindowEvent::RedrawRequested);
                 self.note_stereo_drawn();
             }
@@ -915,6 +904,8 @@ impl ApplicationHandler<()> for WebApp {
             if !FIRST_DRAW.swap(true, std::sync::atomic::Ordering::Relaxed) {
                 log::info!("Karakuri Web: First RedrawRequested event received");
             }
+            self.app
+                .set_recorder_ready(crate::share::is_recorder_ready());
         }
         self.app.on_window_event(event_loop, id, event);
         self.note_stereo_drawn();

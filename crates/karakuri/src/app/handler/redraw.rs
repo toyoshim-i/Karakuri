@@ -19,8 +19,13 @@ impl App {
             return;
         };
         let now = Instant::now();
+        if gfx.recorder_sink.is_some() && !self.recorder_ready {
+            let _ = self.clock.steps(now);
+            gfx.window.request_redraw();
+            return;
+        }
         if let Some(last) = self.frame_drawn_at {
-            if now.duration_since(last) < Duration::from_millis(4) {
+            if gfx.recorder_sink.is_none() && now.duration_since(last) < Duration::from_millis(4) {
                 gfx.window.request_redraw();
                 return;
             }
@@ -191,7 +196,10 @@ impl App {
         }
 
         // Automatic watchdog gating if frame period overruns frame budget.
-        if let Some(gated) = gfx.engine.deck.watchdog_gate() {
+        // Suppress gating during offscreen video capture so high-res (2K/4K) renders never freeze slots.
+        if gfx.recorder_sink.is_some() {
+            gfx.engine.deck.grant_watchdog_grace(Duration::from_secs(5));
+        } else if let Some(gated) = gfx.engine.deck.watchdog_gate() {
             eprintln!("Deck slot {gated} automatically gated due to frame period overrun");
         }
 
@@ -201,7 +209,13 @@ impl App {
         // Query transport row metrics once per frame to coordinate frame-rate reporting and redraw scheduling.
         let live = live(&self.readout.view);
         // Measure frame step count once from real time after all early-exit points, advancing deck clock (ADR-0078, P-0092).
-        let steps = self.clock.steps(Instant::now());
+        // During offscreen video capture, step deterministically by 1 frame (1/60s) regardless of real-time GPU frame duration.
+        let steps = if gfx.recorder_sink.is_some() {
+            let _ = self.clock.steps(Instant::now());
+            1
+        } else {
+            self.clock.steps(Instant::now())
+        };
         // Sample audio room tempo correction before transport readouts are updated (`measure_audio`).
         measure_audio(
             &mut gfx.audio,
@@ -431,7 +445,7 @@ impl App {
             .as_ref()
             .map(|m| m.captures().collect())
             .unwrap_or_default();
-        let (composed, capture_jobs) = {
+        let (composed, capture_jobs, recorder_drawn) = {
             let Gfx {
                 window,
                 gpu,
@@ -542,10 +556,13 @@ impl App {
             if let Some(c) = cast_sink.as_mut() {
                 sinks_vec.push(c);
             }
+            let mut recorder_sink_idx = None;
             if let Some(r) = recorder_sink.as_mut() {
+                recorder_sink_idx = Some(sinks_vec.len());
                 sinks_vec.push(r);
             }
             let sinks: &mut [&mut dyn Sink] = &mut sinks_vec[..];
+            let mut recorder_skipped = false;
 
             let (capture_draws, capture_jobs) = super::capture::prepare_captures(
                 captures,
@@ -560,7 +577,10 @@ impl App {
                 deck,
                 present,
                 sinks,
-                &mut |_at, skip| {
+                &mut |at, skip| {
+                    if Some(at) == recorder_sink_idx {
+                        recorder_skipped = true;
+                    }
                     if let Skip::Fault(why) = skip {
                         println!("a sink stopped taking frames: {why}");
                     }
@@ -630,8 +650,13 @@ impl App {
                     }
                 },
             );
-            (composed, capture_jobs)
+            let recorder_drawn =
+                recorder_sink_idx.is_some() && !recorder_skipped && composed.is_ok();
+            (composed, capture_jobs, recorder_drawn)
         };
+        if recorder_drawn {
+            self.recorder_drawn = true;
+        }
         // Process background frame capture jobs off the render thread (P-0094).
         super::capture::dispatch_capture_jobs(capture_jobs, gfx.gpu.device.clone());
         // Track engine and panel paint duration across the encoder handover boundary.
@@ -699,7 +724,7 @@ impl App {
         // Query panel repaint requests to maintain smooth UI animations.
         self.costs.declared = self.readout.view.animating(self.readout.panel.layout());
         let building = gfx.engine.chain_swap.building().is_some();
-        if live || building {
+        if live || building || gfx.recorder_sink.is_some() {
             gfx.window.request_redraw();
             if let Some(projector) = &gfx.projector {
                 if let Some(ref window) = projector.window {

@@ -128,6 +128,10 @@ pub struct App {
     pub(crate) stereo_drawn: bool,
     /// One WebXR eye's size; see [`App::set_stereo_eye_size`].
     pub(crate) stereo_eye_size: Option<(u32, u32)>,
+    /// True when the offscreen video recorder is ready to accept the next frame.
+    pub(crate) recorder_ready: bool,
+    /// Set when a redraw composed and presented a frame to `recorder_sink`.
+    pub(crate) recorder_drawn: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -298,6 +302,8 @@ impl App {
             stereo_matrices: None,
             stereo_drawn: false,
             stereo_eye_size: None,
+            recorder_ready: true,
+            recorder_drawn: false,
         }
     }
 
@@ -306,6 +312,16 @@ impl App {
     /// layer needs to know which head pose its picture was drawn for.
     pub fn take_stereo_drawn(&mut self) -> bool {
         std::mem::take(&mut self.stereo_drawn)
+    }
+
+    /// Updates whether the offscreen video recorder is ready to encode a new frame.
+    pub fn set_recorder_ready(&mut self, ready: bool) {
+        self.recorder_ready = ready;
+    }
+
+    /// Returns true if the last redraw rendered and presented a frame to the offscreen recorder sink.
+    pub fn take_recorder_drawn(&mut self) -> bool {
+        std::mem::take(&mut self.recorder_drawn)
     }
 
     /// Registers a callback to be invoked when the user interacts with audio input controls

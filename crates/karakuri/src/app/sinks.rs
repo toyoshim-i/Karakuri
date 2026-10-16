@@ -319,7 +319,16 @@ impl App {
     /// Attaches an offscreen clean visual recorder surface on wasm32 for video loop capture without UI overlays.
     #[cfg(target_arch = "wasm32")]
     pub fn attach_recorder_surface(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
+        self.recorder_drawn = false;
         if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(10));
+            for slot in 0..gfx.engine.deck.slot_count() {
+                gfx.engine
+                    .deck
+                    .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+            }
             let caps = surface.get_capabilities(&gfx.gpu.adapter);
             let format = caps
                 .formats
@@ -332,8 +341,11 @@ impl App {
             } else {
                 vec![]
             };
+            let usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+                | (caps.usages
+                    & (wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING));
             let config = wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                usage,
                 format,
                 color_space: wgpu::SurfaceColorSpace::Auto,
                 width: size.0.max(1),
@@ -352,7 +364,17 @@ impl App {
     /// Detaches the offscreen recorder surface on wasm32 after video capture completes.
     #[cfg(target_arch = "wasm32")]
     pub fn detach_recorder_surface(&mut self) {
+        self.recorder_drawn = false;
+        self.recorder_ready = false;
         if let Some(ref mut gfx) = self.gfx {
+            gfx.engine
+                .deck
+                .grant_watchdog_grace(std::time::Duration::from_secs(3));
+            for slot in 0..gfx.engine.deck.slot_count() {
+                gfx.engine
+                    .deck
+                    .set_overloaded(karakuri_engine::DeckSlot(slot as u8), false);
+            }
             gfx.recorder_sink = None;
             gfx.window.request_redraw();
         }
