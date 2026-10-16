@@ -140,8 +140,36 @@ fn tonemap_apply(c_in: vec3<f32>) -> vec3<f32> {
     return min(c, vec3<f32>(1.0));
 }
 
+// Interleaved Gradient Noise (Jorge Jimenez, 2014)
+fn ign(p: vec2<f32>) -> f32 {
+    let magic = vec3<f32>(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(p, magic.xy)));
+}
+
+// Subtle triangular probability density function (TPDF) dither to prevent banding
+// and macroblock collapse in dark gradients during video re-encoding.
+fn apply_channel_dither(val: f32, dither: f32) -> f32 {
+    if (val > 1e-5 && val < 0.999) {
+        return clamp(val + dither, 0.0, 1.0);
+    }
+    return val;
+}
+
+fn apply_dither(color: vec3<f32>, p: vec2<f32>) -> vec3<f32> {
+    let r1 = ign(p);
+    let r2 = ign(p + vec2<f32>(47.0, 19.0));
+    let dither = (r1 + r2 - 1.0) * (0.5 / 255.0);
+    return vec3<f32>(
+        apply_channel_dither(color.r, dither),
+        apply_channel_dither(color.g, dither),
+        apply_channel_dither(color.b, dither),
+    );
+}
+
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(hdr, hdr_sampler, in.uv).rgb;
-    return vec4<f32>(tonemap_apply(c), 1.0);
+    let mapped = tonemap_apply(c);
+    let dithered = apply_dither(mapped, in.clip.xy);
+    return vec4<f32>(dithered, 1.0);
 }

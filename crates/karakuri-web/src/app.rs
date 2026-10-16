@@ -798,8 +798,8 @@ impl ApplicationHandler<()> for WebApp {
 
         if let Some(action) = self.pending_recorder.borrow_mut().take() {
             match action {
-                crate::share::RecorderAction::Attach(surface) => {
-                    self.app.attach_recorder_surface(surface, (1280, 720));
+                crate::share::RecorderAction::Attach(surface, size) => {
+                    self.app.attach_recorder_surface(surface, size);
                 }
                 crate::share::RecorderAction::Detach => {
                     self.app.detach_recorder_surface();

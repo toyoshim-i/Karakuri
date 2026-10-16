@@ -535,7 +535,7 @@
           if (dlBtn) {
             dlBtn.disabled = true;
             dlBtn.style.opacity = '0.5';
-            dlBtn.innerHTML = '<span>⬇</span> Step 1: Download Loop Video (5s)';
+            dlBtn.innerHTML = '<span>⬇</span> Step 1: Download Loop Video (8s)';
             dlBtn.style.background = 'rgba(255,255,255,0.08)';
             dlBtn.style.borderColor = 'rgba(255,255,255,0.2)';
           }
@@ -708,88 +708,698 @@
             };
           }
 
-          // Start clean visual recording
-          let videoBlob = null;
-          let videoUrl = null;
-          let videoFile = null;
+          // Pure JS ISO BMFF Faststart MP4 Muxer for 60fps H.264 + 48kHz Stereo Sequential Silent AAC-LC Track
+          function buildFaststartMp4(width, height, videoChunks, keyframeIndices, avccDesc) {
+            function buildBox(type, ...payloads) {
+              let len = 0;
+              for (const p of payloads) len += p.byteLength || p.length;
+              const buf = new Uint8Array(8 + len);
+              const view = new DataView(buf.buffer);
+              view.setUint32(0, 8 + len);
+              for (let i = 0; i < 4; i++) buf[4 + i] = type.charCodeAt(i);
+              let offset = 8;
+              for (const p of payloads) {
+                if (p instanceof Uint8Array) {
+                  buf.set(p, offset);
+                  offset += p.byteLength;
+                } else if (typeof p === 'string') {
+                  for (let i = 0; i < p.length; i++) buf[offset + i] = p.charCodeAt(i);
+                  offset += p.length;
+                }
+              }
+              return buf;
+            }
 
-          if (window.__karakuri_start_recording) {
-            window.__karakuri_start_recording();
+            function buildFullBox(type, version, flags, payload) {
+              const h = new Uint8Array(4);
+              h[0] = version;
+              h[1] = (flags >> 16) & 0xff;
+              h[2] = (flags >> 8) & 0xff;
+              h[3] = flags & 0xff;
+              return buildBox(type, h, payload);
+            }
+
+            function concatBufs(...bufs) {
+              let total = 0;
+              for (const b of bufs) total += b.byteLength;
+              const out = new Uint8Array(total);
+              let offset = 0;
+              for (const b of bufs) {
+                out.set(b, offset);
+                offset += b.byteLength;
+              }
+              return out;
+            }
+
+            function u32BE(val) {
+              const b = new Uint8Array(4);
+              new DataView(b.buffer).setUint32(0, val);
+              return b;
+            }
+
+            const brands = new Uint8Array([
+              0x69, 0x73, 0x6f, 0x6d, // isom
+              0x00, 0x00, 0x02, 0x00, // minor_version = 512
+              0x69, 0x73, 0x6f, 0x6d, // isom
+              0x69, 0x73, 0x6f, 0x32, // iso2
+              0x61, 0x76, 0x63, 0x31, // avc1
+              0x6d, 0x70, 0x34, 0x31, // mp41
+            ]);
+            const ftyp = buildBox('ftyp', brands);
+
+            const durationMs = 8000; // 8.0s for X multi-rendition HLS generation
+            const sampleSizes = videoChunks.map(c => c.byteLength);
+
+            function buildMvhd() {
+              const buf = new Uint8Array(96);
+              const view = new DataView(buf.buffer);
+              view.setUint32(8, 1000); // movie timescale
+              view.setUint32(12, durationMs); // duration 8000ms
+              view.setUint32(16, 0x00010000); // rate 1.0
+              view.setUint16(20, 0x0100); // volume 1.0
+              view.setUint32(32, 0x00010000); // unity matrix
+              view.setUint32(48, 0x00010000);
+              view.setUint32(64, 0x40000000);
+              view.setUint32(92, 3); // next_track_ID = 3
+              return buildFullBox('mvhd', 0, 0, buf);
+            }
+
+            function buildVideoTrak(chunkOffsets) {
+              const tkhdBuf = new Uint8Array(80);
+              const tkhdView = new DataView(tkhdBuf.buffer);
+              tkhdView.setUint32(8, 1); // track_ID = 1
+              tkhdView.setUint32(16, durationMs);
+              tkhdView.setUint32(36, 0x00010000);
+              tkhdView.setUint32(52, 0x00010000);
+              tkhdView.setUint32(68, 0x40000000);
+              tkhdView.setUint32(72, width << 16);
+              tkhdView.setUint32(76, height << 16);
+              const tkhd = buildFullBox('tkhd', 0, 7, tkhdBuf);
+
+              const mdhdBuf = new Uint8Array(20);
+              const mdhdView = new DataView(mdhdBuf.buffer);
+              mdhdView.setUint32(8, 60000); // timescale 60000 for exact CFR 60fps
+              mdhdView.setUint32(12, sampleSizes.length * 1000); // 480000 ticks for 480 frames
+              mdhdView.setUint16(16, 0x55c4); // 'und'
+              const mdhd = buildFullBox('mdhd', 0, 0, mdhdBuf);
+
+              const hdlrBuf = new Uint8Array(20 + 13);
+              hdlrBuf.set([0x76, 0x69, 0x64, 0x65], 4); // 'vide'
+              const name = "VideoHandler";
+              for (let i = 0; i < name.length; i++) hdlrBuf[20 + i] = name.charCodeAt(i);
+              const hdlr = buildFullBox('hdlr', 0, 0, hdlrBuf);
+
+              const vmhd = buildFullBox('vmhd', 0, 1, new Uint8Array(8));
+
+              const urlBox = buildFullBox('url ', 0, 1, new Uint8Array(0));
+              const dinf = buildBox('dinf', buildFullBox('dref', 0, 0, concatBufs(u32BE(1), urlBox)));
+
+              // stsd -> avc1 -> avcC, colr, pasp (QuickTime / X metadata compatibility)
+              const avcC = buildBox('avcC', avccDesc);
+              const colr = buildBox('colr', new Uint8Array([0x6e, 0x63, 0x6c, 0x78, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00]));
+              const pasp = buildBox('pasp', u32BE(1), u32BE(1));
+              const avc1Header = new Uint8Array(78);
+              const avc1View = new DataView(avc1Header.buffer);
+              avc1View.setUint16(6, 1);
+              avc1View.setUint16(24, width);
+              avc1View.setUint16(26, height);
+              avc1View.setUint32(28, 0x00480000); // 72 dpi
+              avc1View.setUint32(32, 0x00480000); // 72 dpi
+              avc1View.setUint16(40, 1);
+              avc1View.setUint16(74, 0x0018); // depth 24
+              avc1View.setInt16(76, -1);
+              const avc1 = buildBox('avc1', avc1Header, avcC, colr, pasp);
+              const stsd = buildFullBox('stsd', 0, 0, concatBufs(u32BE(1), avc1));
+
+              // stts: sample_delta = 1000 at timescale 60000 = exact 60.0 fps CFR
+              const stts = buildFullBox('stts', 0, 0, concatBufs(u32BE(1), u32BE(sampleSizes.length), u32BE(1000)));
+
+              // stss: 1-based sync sample indices
+              const stssPayload = new Uint8Array(4 + keyframeIndices.length * 4);
+              const stssView = new DataView(stssPayload.buffer);
+              stssView.setUint32(0, keyframeIndices.length);
+              for (let i = 0; i < keyframeIndices.length; i++) {
+                stssView.setUint32(4 + i * 4, keyframeIndices[i]);
+              }
+              const stss = buildFullBox('stss', 0, 0, stssPayload);
+
+              // stsc: 1 chunk per sample
+              const stsc = buildFullBox('stsc', 0, 0, concatBufs(u32BE(1), u32BE(1), u32BE(1), u32BE(1)));
+
+              // stsz: sample sizes
+              const stszPayload = new Uint8Array(8 + sampleSizes.length * 4);
+              const stszView = new DataView(stszPayload.buffer);
+              stszView.setUint32(0, 0); // variable size
+              stszView.setUint32(4, sampleSizes.length);
+              for (let i = 0; i < sampleSizes.length; i++) {
+                stszView.setUint32(8 + i * 4, sampleSizes[i]);
+              }
+              const stsz = buildFullBox('stsz', 0, 0, stszPayload);
+
+              // stco: absolute file chunk offsets
+              const stcoPayload = new Uint8Array(4 + chunkOffsets.length * 4);
+              const stcoView = new DataView(stcoPayload.buffer);
+              stcoView.setUint32(0, chunkOffsets.length);
+              for (let i = 0; i < chunkOffsets.length; i++) {
+                stcoView.setUint32(4 + i * 4, chunkOffsets[i]);
+              }
+              const stco = buildFullBox('stco', 0, 0, stcoPayload);
+
+              const stbl = buildBox('stbl', stsd, stts, stss, stsc, stsz, stco);
+              const minf = buildBox('minf', vmhd, dinf, stbl);
+              const mdia = buildBox('mdia', mdhd, hdlr, minf);
+              return buildBox('trak', tkhd, mdia);
+            }
+
+            function buildAudioTrak(audioBaseOffset) {
+              const numFrames = 375; // 375 * 1024 = 384000 ticks @ 48kHz = exact 8.000s
+              const tkhdBuf = new Uint8Array(80);
+              const tkhdView = new DataView(tkhdBuf.buffer);
+              tkhdView.setUint32(8, 2); // track_ID = 2
+              tkhdView.setUint32(16, durationMs);
+              tkhdView.setUint16(32, 0x0100); // volume 1.0
+              tkhdView.setUint32(36, 0x00010000);
+              tkhdView.setUint32(52, 0x00010000);
+              tkhdView.setUint32(68, 0x40000000);
+              const tkhd = buildFullBox('tkhd', 0, 7, tkhdBuf);
+
+              const mdhdBuf = new Uint8Array(20);
+              const mdhdView = new DataView(mdhdBuf.buffer);
+              mdhdView.setUint32(8, 48000); // 48kHz
+              mdhdView.setUint32(12, numFrames * 1024); // 384000 ticks
+              mdhdView.setUint16(16, 0x55c4); // 'und'
+              const mdhd = buildFullBox('mdhd', 0, 0, mdhdBuf);
+
+              const hdlrBuf = new Uint8Array(20 + 13);
+              hdlrBuf.set([0x73, 0x6f, 0x75, 0x6e], 4); // 'soun'
+              const name = "SoundHandler";
+              for (let i = 0; i < name.length; i++) hdlrBuf[20 + i] = name.charCodeAt(i);
+              const hdlr = buildFullBox('hdlr', 0, 0, hdlrBuf);
+
+              const smhd = buildFullBox('smhd', 0, 0, new Uint8Array(4));
+
+              const urlBox = buildFullBox('url ', 0, 1, new Uint8Array(0));
+              const dinf = buildBox('dinf', buildFullBox('dref', 0, 0, concatBufs(u32BE(1), urlBox)));
+
+              // esds with AudioSpecificConfig [0x11, 0x90] (AAC-LC, 48kHz, Stereo)
+              const esdsData = new Uint8Array([
+                0x03, 0x19, // ES_DescrTag, length 25
+                0x00, 0x02, // ES_ID = 2
+                0x00,       // flags = 0
+                0x04, 0x11, // DecoderConfigDescrTag, length 17
+                0x40,       // objectTypeIndication = 0x40 (Audio MPEG-4 AAC)
+                0x15,       // streamType = 5 (Audio), upstream = 0, reserved = 1
+                0x00, 0x03, 0x00, // bufferSizeDB = 768 bytes
+                0x00, 0x01, 0xF4, 0x00, // maxBitrate = 128000 bps
+                0x00, 0x01, 0xF4, 0x00, // avgBitrate = 128000 bps
+                0x05, 0x02, // DecSpecificInfoTag, length 2
+                0x11, 0x90, // AudioSpecificConfig: AAC-LC, 48kHz, 2 channels
+                0x06, 0x01, // SLConfigDescrTag, length 1
+                0x02        // predefined = 2
+              ]);
+              const esds = buildFullBox('esds', 0, 0, esdsData);
+
+              const mp4aHeader = new Uint8Array(28);
+              const mp4aView = new DataView(mp4aHeader.buffer);
+              mp4aView.setUint16(6, 1);
+              mp4aView.setUint16(16, 2); // 2 channels
+              mp4aView.setUint16(18, 16); // 16-bit
+              mp4aView.setUint32(24, 48000 << 16); // 48000 Hz
+              const mp4a = buildBox('mp4a', mp4aHeader, esds);
+              const stsd = buildFullBox('stsd', 0, 0, concatBufs(u32BE(1), mp4a));
+
+              const stts = buildFullBox('stts', 0, 0, concatBufs(u32BE(1), u32BE(numFrames), u32BE(1024)));
+              const stsc = buildFullBox('stsc', 0, 0, concatBufs(u32BE(1), u32BE(1), u32BE(1), u32BE(1)));
+
+              const stszPayload = new Uint8Array(8 + numFrames * 4);
+              const stszView = new DataView(stszPayload.buffer);
+              stszView.setUint32(0, 0);
+              stszView.setUint32(4, numFrames);
+              for (let i = 0; i < numFrames; i++) stszView.setUint32(8 + i * 4, 7);
+              const stsz = buildFullBox('stsz', 0, 0, stszPayload);
+
+              // Strictly monotonic increasing chunk offsets for 375 non-overlapping sequential frames
+              const stcoPayload = new Uint8Array(4 + numFrames * 4);
+              const stcoView = new DataView(stcoPayload.buffer);
+              stcoView.setUint32(0, numFrames);
+              for (let i = 0; i < numFrames; i++) {
+                stcoView.setUint32(4 + i * 4, audioBaseOffset + i * 7);
+              }
+              const stco = buildFullBox('stco', 0, 0, stcoPayload);
+
+              const stbl = buildBox('stbl', stsd, stts, stsc, stsz, stco);
+              const minf = buildBox('minf', smhd, dinf, stbl);
+              const mdia = buildBox('mdia', mdhd, hdlr, minf);
+              return buildBox('trak', tkhd, mdia);
+            }
+
+            // Measure exact moov size
+            const dummyOffsets = new Array(sampleSizes.length).fill(0);
+            const dummyMoov = buildBox('moov',
+              buildMvhd(),
+              buildVideoTrak(dummyOffsets),
+              buildAudioTrak(0)
+            );
+
+            const moovSize = dummyMoov.byteLength;
+            const baseOffset = ftyp.byteLength + moovSize + 8; // ftyp + moov + mdat header
+
+            const realOffsets = [];
+            let cur = baseOffset;
+            for (let i = 0; i < sampleSizes.length; i++) {
+              realOffsets.push(cur);
+              cur += sampleSizes[i];
+            }
+            const audioBaseOffset = cur;
+
+            // Generate Faststart moov with exact absolute chunk offsets
+            const realMoov = buildBox('moov',
+              buildMvhd(),
+              buildVideoTrak(realOffsets),
+              buildAudioTrak(audioBaseOffset)
+            );
+
+            // 375 sequential 7-byte silent raw AAC-LC frames (total 2625 bytes)
+            const numFrames = 375;
+            const totalAudioBytes = numFrames * 7;
+            const silentAacFrame = new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c, 0x00]);
+            let totalVideoBytes = 0;
+            for (const sz of sampleSizes) totalVideoBytes += sz;
+
+            const mdatPayload = new Uint8Array(totalVideoBytes + totalAudioBytes);
+            let p = 0;
+            for (const chunk of videoChunks) {
+              mdatPayload.set(chunk, p);
+              p += chunk.byteLength;
+            }
+            for (let i = 0; i < numFrames; i++) {
+              mdatPayload.set(silentAacFrame, p);
+              p += 7;
+            }
+            const mdat = buildBox('mdat', mdatPayload);
+
+            return concatBufs(ftyp, realMoov, mdat);
           }
 
-          const canvas = document.getElementById('karakuri-recorder-canvas');
-          if (canvas && typeof canvas.captureStream === 'function' && typeof MediaRecorder !== 'undefined') {
-            try {
-              // Capture at 60 FPS for silky-smooth motion and particle fidelity
-              const stream = canvas.captureStream(60);
-              const candidates = [
-                'video/mp4;codecs=avc1.640028,mp4a.40.2',
-                'video/mp4;codecs=avc1',
-                'video/mp4',
-                'video/webm;codecs=vp9',
-                'video/webm;codecs=vp8',
-                'video/webm',
+          // Modal close button handling
+          let captureGeneration = 0;
+          const closeBtn = document.getElementById('karakuri-share-close-btn');
+          if (closeBtn) {
+            closeBtn.onclick = () => {
+              captureGeneration++;
+              if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
+              if (modal) modal.style.display = 'none';
+            };
+          }
+
+          // Quality selector & localStorage persistence
+          const btn1080p = document.getElementById('karakuri-res-1080p-btn');
+          const btn2k = document.getElementById('karakuri-res-2k-btn');
+          let currentRes = '1080p';
+          try {
+            const saved = localStorage.getItem('karakuri_share_video_res');
+            if (saved === '2k' || saved === '1080p') currentRes = saved;
+          } catch (_) {}
+
+          function updateResPillUI(activeRes) {
+            if (btn1080p) {
+              btn1080p.style.background = (activeRes === '1080p') ? '#3498db' : 'transparent';
+              btn1080p.style.color = (activeRes === '1080p') ? '#fff' : '#888';
+            }
+            if (btn2k) {
+              btn2k.style.background = (activeRes === '2k') ? '#3498db' : 'transparent';
+              btn2k.style.color = (activeRes === '2k') ? '#fff' : '#888';
+            }
+          }
+          updateResPillUI(currentRes);
+
+          if (btn1080p) {
+            btn1080p.onclick = () => {
+              if (currentRes === '1080p') return;
+              currentRes = '1080p';
+              try { localStorage.setItem('karakuri_share_video_res', '1080p'); } catch (_) {}
+              updateResPillUI('1080p');
+              startLoopCapture('1080p');
+            };
+          }
+          if (btn2k) {
+            btn2k.onclick = () => {
+              if (currentRes === '2k') return;
+              currentRes = '2k';
+              try { localStorage.setItem('karakuri_share_video_res', '2k'); } catch (_) {}
+              updateResPillUI('2k');
+              startLoopCapture('2k');
+            };
+          }
+
+          // Reusable loop capture with cancellation token support
+          async function startLoopCapture(targetRes) {
+            captureGeneration++;
+            const thisGen = captureGeneration;
+
+            if (window.__karakuri_stop_recording) {
+              window.__karakuri_stop_recording();
+            }
+
+            // Reset video preview & status
+            if (video) {
+              video.pause();
+              video.removeAttribute('src');
+              video.load();
+              video.style.display = 'none';
+            }
+            if (recIndicator) recIndicator.style.display = 'flex';
+            if (statusText) statusText.textContent = 'Recording visual loop (8s)...';
+            if (dlBtn) {
+              dlBtn.disabled = true;
+              dlBtn.style.opacity = '0.5';
+              dlBtn.innerHTML = '<span>⬇</span> Step 1: Download Loop Video (8s)';
+              dlBtn.style.background = 'rgba(255,255,255,0.08)';
+              dlBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+            }
+            if (openXBtn) {
+              openXBtn.disabled = true;
+              openXBtn.style.opacity = '0.5';
+            }
+
+            let targetWidth = 1920;
+            let targetHeight = 1080;
+            let targetBitrate = 16000000;
+            let candidateProfiles = [
+              'avc1.64002A', // High Profile Level 4.2
+              'avc1.640028', // High Profile Level 4.0
+              'avc1.4D402A', // Main Profile Level 4.2
+              'avc1.42E02A', // Baseline Profile Level 4.2
+            ];
+
+            if (targetRes === '2k') {
+              targetWidth = 2560;
+              targetHeight = 1440;
+              targetBitrate = 28000000;
+              candidateProfiles = [
+                'avc1.640033', // High Profile Level 5.1
+                'avc1.640032', // High Profile Level 5.0
+                'avc1.4D4033', // Main Profile Level 5.1
+                'avc1.42E033', // Baseline Profile Level 5.1
               ];
-              let mimeType = '';
-              for (const type of candidates) {
-                if (MediaRecorder.isTypeSupported(type)) {
-                  mimeType = type;
-                  break;
-                }
-              }
+            }
 
-              const chunks = [];
-              const recorderOptions = {
-                // High bitrate (20 Mbps) guarantees pristine, artifact-free visual quality
-                // for complex procedural shaders. A 5-second video is ~12 MB, well within X's 512 MB limit.
-                videoBitsPerSecond: 20000000,
-              };
-              if (mimeType) {
-                recorderOptions.mimeType = mimeType;
-              }
-              const recorder = new MediaRecorder(stream, recorderOptions);
-              recorder.ondataavailable = (e) => {
-                if (e.data && e.data.size > 0) chunks.push(e.data);
-              };
+            const canvas = document.getElementById('karakuri-recorder-canvas');
+            if (canvas) {
+              canvas.width = targetWidth;
+              canvas.height = targetHeight;
+              canvas.style.width = targetWidth + 'px';
+              canvas.style.height = targetHeight + 'px';
+            }
 
-              let secondsLeft = 5;
-              if (statusText) statusText.textContent = `Recording visual loop (${secondsLeft}s)...`;
-              const countdown = setInterval(() => {
-                secondsLeft--;
-                if (secondsLeft > 0) {
-                  if (statusText) statusText.textContent = `Recording visual loop (${secondsLeft}s)...`;
-                } else {
-                  clearInterval(countdown);
-                  if (statusText) statusText.textContent = `Encoding video...`;
-                }
-              }, 1000);
+            if (window.__karakuri_start_recording) {
+              window.__karakuri_start_recording();
+            }
 
-              const recPromise = new Promise((resolve, reject) => {
-                recorder.onstop = () => resolve();
-                recorder.onerror = (e) => reject(e.error || new Error('Recorder error'));
-                recorder.start();
-                setTimeout(() => {
+            let recordedSuccessfully = false;
+            let videoBlob = null;
+            let videoUrl = null;
+            let videoFile = null;
+
+            // Primary Path: WebCodecs VideoEncoder (Hardware-accelerated 60fps CFR + 1s Closed GOP + Faststart MP4)
+            if (canvas && typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined') {
+              try {
+                let supportedConfig = null;
+                for (const codec of candidateProfiles) {
+                  const probeConfig = {
+                    codec,
+                    width: targetWidth,
+                    height: targetHeight,
+                    bitrate: targetBitrate,
+                    framerate: 60,
+                    latencyMode: 'quality',
+                    hardwareAcceleration: 'prefer-hardware',
+                    avc: { format: 'avc' },
+                  };
                   try {
-                    recorder.stop();
-                  } catch (err) {
-                    reject(err);
+                    const res = await VideoEncoder.isConfigSupported(probeConfig);
+                    if (res && res.supported) {
+                      supportedConfig = Object.assign({}, probeConfig, res.config || {}, {
+                        avc: { format: 'avc' },
+                      });
+                      break;
+                    }
+                  } catch (_) {}
+                }
+
+                // If 2K unsupported on this GPU, automatically fall back to 1080p
+                if (!supportedConfig && targetRes === '2k') {
+                  console.warn("2K VideoEncoder not supported on this device, falling back to 1080p");
+                  targetWidth = 1920;
+                  targetHeight = 1080;
+                  targetBitrate = 16000000;
+                  if (canvas) {
+                    canvas.width = 1920;
+                    canvas.height = 1080;
+                    canvas.style.width = '1920px';
+                    canvas.style.height = '1080px';
                   }
-                }, 5000);
-              });
+                  if (window.__karakuri_start_recording) {
+                    window.__karakuri_start_recording();
+                  }
+                  const fallback1080Profiles = [
+                    'avc1.64002A',
+                    'avc1.640028',
+                    'avc1.4D402A',
+                    'avc1.42E02A',
+                  ];
+                  for (const codec of fallback1080Profiles) {
+                    const probeConfig = {
+                      codec,
+                      width: 1920,
+                      height: 1080,
+                      bitrate: 16000000,
+                      framerate: 60,
+                      latencyMode: 'quality',
+                      hardwareAcceleration: 'prefer-hardware',
+                      avc: { format: 'avc' },
+                    };
+                    try {
+                      const res = await VideoEncoder.isConfigSupported(probeConfig);
+                      if (res && res.supported) {
+                        supportedConfig = Object.assign({}, probeConfig, res.config || {}, {
+                          avc: { format: 'avc' },
+                        });
+                        break;
+                      }
+                    } catch (_) {}
+                  }
+                }
 
-              await recPromise;
-              clearInterval(countdown);
+                if (thisGen !== captureGeneration) return;
 
-              if (window.__karakuri_stop_recording) {
-                window.__karakuri_stop_recording();
+                if (supportedConfig) {
+                  let avccDescription = null;
+                  const encodedChunks = [];
+                  const encoder = new VideoEncoder({
+                    output: (chunk, metadata) => {
+                      if (metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
+                        avccDescription = new Uint8Array(metadata.decoderConfig.description);
+                      }
+                      const buf = new Uint8Array(chunk.byteLength);
+                      chunk.copyTo(buf);
+                      encodedChunks.push({
+                        data: buf,
+                        type: chunk.type,
+                        timestamp: chunk.timestamp,
+                      });
+                    },
+                    error: (err) => console.error("VideoEncoder error:", err),
+                  });
+                  encoder.configure(supportedConfig);
+
+                  const totalFrames = 480; // 8 seconds @ 60 fps
+                  const fps = 60;
+                  const frameIntervalMs = 1000 / fps;
+                  let frameIndex = 0;
+                  const startRecTime = performance.now();
+
+                  await new Promise((resolve) => {
+                    function step(now) {
+                      if (thisGen !== captureGeneration) {
+                        try { encoder.close(); } catch (_) {}
+                        resolve();
+                        return;
+                      }
+                      const elapsed = now - startRecTime;
+                      const expectedFrame = Math.floor(elapsed / frameIntervalMs);
+
+                      while (frameIndex <= expectedFrame && frameIndex < totalFrames) {
+                        const timestampUs = Math.round(frameIndex * (1000000 / fps));
+                        const vf = new VideoFrame(canvas, { timestamp: timestampUs });
+                        encoder.encode(vf, { keyFrame: (frameIndex % 60 === 0) });
+                        vf.close();
+                        frameIndex++;
+
+                        if (frameIndex % 60 === 0) {
+                          const remaining = Math.max(0, 8 - Math.floor(frameIndex / 60));
+                          if (statusText && thisGen === captureGeneration) {
+                            statusText.textContent = remaining > 0
+                              ? `Recording visual loop (${remaining}s)...`
+                              : `Encoding video...`;
+                          }
+                        }
+                      }
+
+                      if (frameIndex >= totalFrames) {
+                        resolve();
+                      } else {
+                        requestAnimationFrame(step);
+                      }
+                    }
+                    requestAnimationFrame(step);
+                  });
+
+                  if (thisGen !== captureGeneration) return;
+
+                  if (statusText) statusText.textContent = 'Finalizing MP4...';
+                  await encoder.flush();
+                  encoder.close();
+
+                  if (thisGen !== captureGeneration) return;
+
+                  if (window.__karakuri_stop_recording) {
+                    window.__karakuri_stop_recording();
+                  }
+
+                  if (encodedChunks.length > 0 && avccDescription) {
+                    const rawChunks = encodedChunks.map(c => c.data);
+                    const keyframes = [];
+                    for (let i = 0; i < encodedChunks.length; i++) {
+                      if (encodedChunks[i].type === 'key') keyframes.push(i + 1);
+                    }
+                    if (keyframes.length === 0) keyframes.push(1);
+
+                    const mp4Bytes = buildFaststartMp4(targetWidth, targetHeight, rawChunks, keyframes, avccDescription);
+                    videoBlob = new Blob([mp4Bytes], { type: 'video/mp4' });
+                    videoUrl = URL.createObjectURL(videoBlob);
+                    const resTag = targetWidth >= 2560 ? '2k' : '1080p';
+                    videoFile = new File([videoBlob], `${id || 'karakuri'}_${resTag}_loop.mp4`, { type: 'video/mp4' });
+                    recordedSuccessfully = true;
+                  }
+                }
+              } catch (wErr) {
+                console.warn("WebCodecs recording failed, attempting MediaRecorder fallback:", wErr);
               }
+            }
 
-              const actualMime = mimeType || 'video/webm';
-              videoBlob = new Blob(chunks, { type: actualMime });
-              videoUrl = URL.createObjectURL(videoBlob);
-              const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
-              videoFile = new File([videoBlob], `${id || 'karakuri'}_loop.${ext}`, { type: actualMime });
+            if (thisGen !== captureGeneration) return;
 
+            // Fallback Path: MediaRecorder with silent audio track from AudioContext
+            if (!recordedSuccessfully && canvas && typeof canvas.captureStream === 'function' && typeof MediaRecorder !== 'undefined') {
+              let audioCtx = null;
+              try {
+                const stream = canvas.captureStream(60);
+                try {
+                  const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                  if (AudioCtxClass) {
+                    audioCtx = new AudioCtxClass();
+                    const dst = audioCtx.createMediaStreamDestination();
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    gain.gain.value = 0; // complete silence
+                    osc.connect(gain);
+                    gain.connect(dst);
+                    osc.start();
+                    const aTrack = dst.stream.getAudioTracks()[0];
+                    if (aTrack) stream.addTrack(aTrack);
+                  }
+                } catch (aErr) {
+                  console.warn("Silent audio track generation skipped:", aErr);
+                }
+
+                const candidates = [
+                  'video/mp4;codecs=avc1.640033,mp4a.40.2',
+                  'video/mp4;codecs=avc1.64002A,mp4a.40.2',
+                  'video/mp4;codecs=avc1.640028,mp4a.40.2',
+                  'video/mp4;codecs=avc1',
+                  'video/mp4',
+                  'video/webm;codecs=vp9,opus',
+                  'video/webm;codecs=vp8,opus',
+                  'video/webm',
+                ];
+                let mimeType = '';
+                for (const type of candidates) {
+                  if (MediaRecorder.isTypeSupported(type)) {
+                    mimeType = type;
+                    break;
+                  }
+                }
+
+                const chunks = [];
+                const recorderOptions = {
+                  videoBitsPerSecond: targetBitrate,
+                  audioBitsPerSecond: 128000,
+                };
+                if (mimeType) {
+                  recorderOptions.mimeType = mimeType;
+                }
+                const recorder = new MediaRecorder(stream, recorderOptions);
+                recorder.ondataavailable = (e) => {
+                  if (e.data && e.data.size > 0) chunks.push(e.data);
+                };
+
+                let secondsLeft = 8;
+                if (statusText) statusText.textContent = `Recording visual loop (${secondsLeft}s)...`;
+                const countdown = setInterval(() => {
+                  if (thisGen !== captureGeneration) {
+                    clearInterval(countdown);
+                    try { recorder.stop(); } catch (_) {}
+                    return;
+                  }
+                  secondsLeft--;
+                  if (secondsLeft > 0) {
+                    if (statusText) statusText.textContent = `Recording visual loop (${secondsLeft}s)...`;
+                  } else {
+                    clearInterval(countdown);
+                    if (statusText) statusText.textContent = 'Encoding video...';
+                  }
+                }, 1000);
+
+                await new Promise((resolve, reject) => {
+                  recorder.onstop = () => resolve();
+                  recorder.onerror = (e) => reject(e.error || new Error('Recorder error'));
+                  recorder.start();
+                  setTimeout(() => {
+                    try { recorder.stop(); } catch (err) { reject(err); }
+                  }, 8000);
+                });
+
+                clearInterval(countdown);
+                if (audioCtx) {
+                  try { audioCtx.close(); } catch (_) {}
+                }
+
+                if (thisGen !== captureGeneration) return;
+
+                if (window.__karakuri_stop_recording) {
+                  window.__karakuri_stop_recording();
+                }
+
+                const actualMime = mimeType || 'video/webm';
+                videoBlob = new Blob(chunks, { type: actualMime });
+                videoUrl = URL.createObjectURL(videoBlob);
+                const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
+                const resTag = targetWidth >= 2560 ? '2k' : '1080p';
+                videoFile = new File([videoBlob], `${id || 'karakuri'}_${resTag}_loop.${ext}`, { type: actualMime });
+                recordedSuccessfully = true;
+              } catch (vErr) {
+                console.warn("MediaRecorder fallback error:", vErr);
+                if (audioCtx) {
+                  try { audioCtx.close(); } catch (_) {}
+                }
+                if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
+              }
+            }
+
+            if (thisGen !== captureGeneration) return;
+
+            if (recordedSuccessfully && videoFile && videoUrl) {
               if (video) {
                 video.src = videoUrl;
                 video.style.display = 'block';
@@ -811,17 +1421,15 @@
                   dlBtn.style.borderColor = '#2ecc71';
                 };
               }
-            } catch (vErr) {
-              console.warn("Recording error:", vErr);
+            } else {
               if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
               if (recIndicator) recIndicator.style.display = 'none';
-              if (statusText) statusText.textContent = 'Recording not available';
+              if (statusText) statusText.textContent = 'Video capture not supported';
             }
-          } else {
-            if (window.__karakuri_stop_recording) window.__karakuri_stop_recording();
-            if (recIndicator) recIndicator.style.display = 'none';
-            if (statusText) statusText.textContent = 'Video capture not supported';
           }
+
+          // Trigger initial capture with user's persisted resolution preference
+          startLoopCapture(currentRes);
 
           // Enable Step 2 Open X button (NO SURPRISE DOWNLOAD)
           if (openXBtn) {
@@ -926,8 +1534,8 @@
   <link rel="copy-file" data-trunk href="icon.svg" />
 </head>
 <body>
-  <!-- Clean Visual Recorder Canvas (1280x720) without Console UI Overlays -->
-  <canvas id="karakuri-recorder-canvas" width="1280" height="720" style="position:fixed;left:0;top:0;width:1280px;height:720px;opacity:0.001;pointer-events:none;z-index:-3;"></canvas>
+  <!-- Clean Visual Recorder Canvas (1920x1080) without Console UI Overlays -->
+  <canvas id="karakuri-recorder-canvas" width="1920" height="1080" style="position:fixed;left:0;top:0;width:1920px;height:1080px;opacity:0.001;pointer-events:none;z-index:-3;"></canvas>
 
   <!-- On-Screen Error Notification Banner -->
   <div id="karakuri-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:rgba(200,30,30,0.92);color:#fff;padding:8px 12px;font-family:monospace;font-size:12px;z-index:99999;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:none;align-items:center;justify-content:space-between;">
@@ -945,7 +1553,16 @@
         <h3 id="karakuri-share-title" style="margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;">
           <span>𝕏</span> Share Set
         </h3>
-        <button title="Close share dialog" onclick="document.getElementById('karakuri-share-modal').style.display='none';" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+        <button id="karakuri-share-close-btn" title="Close share dialog" onclick="document.getElementById('karakuri-share-modal').style.display='none';" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+      </div>
+
+      <!-- Resolution Selector Bar (1080p vs 2K) -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:11px;">
+        <span style="color:#aaa;font-weight:500;">Capture Quality:</span>
+        <div style="display:flex;background:#0a0b0e;border:1px solid rgba(255,255,255,0.15);border-radius:14px;padding:2px;gap:2px;">
+          <button id="karakuri-res-1080p-btn" type="button" title="Full HD (1920x1080, 16 Mbps) — Standard for all 𝕏 accounts" style="border:none;border-radius:12px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;background:#3498db;color:#fff;">1080p (FHD)</button>
+          <button id="karakuri-res-2k-btn" type="button" title="2K QHD (2560x1440, 28 Mbps) — Unlocks 𝕏 2K quality selector tier" style="border:none;border-radius:12px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;background:transparent;color:#888;">2K (1440p)</button>
+        </div>
       </div>
 
       <!-- Video Preview & Recording Status -->
@@ -953,7 +1570,7 @@
         <video id="karakuri-share-video" autoplay loop muted playsinline style="display:none;width:100%;max-height:180px;object-fit:contain;background:#000;border-radius:4px;"></video>
         <div id="karakuri-share-recording-indicator" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;text-align:center;">
           <div style="width:20px;height:20px;border-radius:50%;background:#e74c3c;animation:karakuri-pulse 1s infinite alternate;"></div>
-          <span id="karakuri-share-status" style="font-size:12px;color:#ccc;">Recording visual loop (5s)...</span>
+          <span id="karakuri-share-status" style="font-size:12px;color:#ccc;">Recording visual loop (8s)...</span>
         </div>
       </div>
 
@@ -992,8 +1609,8 @@
 
       <!-- 2-Step Share on X Flow -->
       <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">
-        <button id="karakuri-share-dl-btn" disabled title="Step 1: Download 5-second clean loop video (MP4/WebM) to your device" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
-          <span>⬇</span> Step 1: Download Loop Video (5s)
+        <button id="karakuri-share-dl-btn" disabled title="Step 1: Download 8-second clean loop video (MP4/WebM) to your device" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
+          <span>⬇</span> Step 1: Download Loop Video (8s)
         </button>
         <button id="karakuri-share-open-x-btn" disabled title="Step 2: Open 𝕏 post composer with Set URL and tags; attach downloaded video to post" style="background:#1d9bf0;color:#fff;border:none;padding:9px 14px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:0.5;">
           <span>𝕏</span> Step 2: Open 𝕏 Post Composer

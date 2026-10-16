@@ -29,7 +29,7 @@ pub async fn load_url_hash_set() -> Result<Option<String>, String> {
 }
 
 pub enum RecorderAction {
-    Attach(wgpu::Surface<'static>),
+    Attach(wgpu::Surface<'static>, (u32, u32)),
     Detach,
 }
 
@@ -53,17 +53,14 @@ pub fn start_recorder(
         }
     };
     let canvas: web_sys::HtmlCanvasElement = wasm_bindgen::JsCast::unchecked_into(canvas_el);
-    let (width, height) = if let Some(w) = window.inner_width().ok().and_then(|w| w.as_f64()) {
-        if w >= 1200.0 {
-            (1920, 1080)
-        } else {
-            (1280, 720)
-        }
+    let (width, height) = if canvas.width() >= 1280 && canvas.height() >= 720 {
+        (canvas.width(), canvas.height())
     } else {
-        (1280, 720)
+        let (w, h) = (1920, 1080);
+        canvas.set_width(w);
+        canvas.set_height(h);
+        (w, h)
     };
-    canvas.set_width(width);
-    canvas.set_height(height);
 
     let instance = karakuri_engine::Gpu::instance();
     let surface = match instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas)) {
@@ -74,7 +71,7 @@ pub fn start_recorder(
         }
     };
 
-    *pending.borrow_mut() = Some(RecorderAction::Attach(surface));
+    *pending.borrow_mut() = Some(RecorderAction::Attach(surface, (width, height)));
     let _ = proxy.send_event(());
 }
 

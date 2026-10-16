@@ -153,9 +153,12 @@ impl App {
         let scale = self.scale as f32;
         // Read projector size before borrowing engine in aim call.
         let projector = gfx.projector.as_ref().map(|p| p.size);
-        let selected_res = (!self.readout.view.vr_mode)
-            .then(|| self.readout.view.selected_resolution())
-            .flatten();
+        let recorder_res = gfx.recorder_sink.as_ref().map(|r| r.size());
+        let selected_res = recorder_res.or_else(|| {
+            (!self.readout.view.vr_mode)
+                .then(|| self.readout.view.selected_resolution())
+                .flatten()
+        });
         let stereo_eye = self.stereo_matrices.and(self.stereo_eye_size);
         let (picture, previews) = gfx.engine.aim(
             &gfx.gpu,
