@@ -767,8 +767,10 @@
             ]);
             const ftyp = buildBox('ftyp', brands);
 
-            const durationMs = 8000; // 8.0s for X multi-rendition HLS generation
             const sampleSizes = videoChunks.map(c => c.byteLength);
+            let totalVideoBytes = 0;
+            for (const sz of sampleSizes) totalVideoBytes += sz;
+            const durationMs = Math.round((sampleSizes.length * 1000) / 60); // 8000ms for 480 frames
 
             function buildMvhd() {
               const buf = new Uint8Array(96);
@@ -784,7 +786,17 @@
               return buildFullBox('mvhd', 0, 0, buf);
             }
 
-            function buildVideoTrak(chunkOffsets) {
+            function buildEdts(segDurationMs) {
+              const elstPayload = new Uint8Array(16);
+              const elstView = new DataView(elstPayload.buffer);
+              elstView.setUint32(0, 1); // entry_count = 1
+              elstView.setUint32(4, segDurationMs); // segment_duration
+              elstView.setInt32(8, 0); // media_time = 0
+              elstView.setUint32(12, 0x00010000); // media_rate = 1.0
+              return buildBox('edts', buildFullBox('elst', 0, 0, elstPayload));
+            }
+
+            function buildVideoTrak(videoBaseOffset) {
               const tkhdBuf = new Uint8Array(80);
               const tkhdView = new DataView(tkhdBuf.buffer);
               tkhdView.setUint32(8, 1); // track_ID = 1
@@ -794,12 +806,13 @@
               tkhdView.setUint32(68, 0x40000000);
               tkhdView.setUint32(72, width << 16);
               tkhdView.setUint32(76, height << 16);
-              const tkhd = buildFullBox('tkhd', 0, 7, tkhdBuf);
+              const tkhd = buildFullBox('tkhd', 0, 3, tkhdBuf);
+              const edts = buildEdts(durationMs);
 
               const mdhdBuf = new Uint8Array(20);
               const mdhdView = new DataView(mdhdBuf.buffer);
-              mdhdView.setUint32(8, 60000); // timescale 60000 for exact CFR 60fps
-              mdhdView.setUint32(12, sampleSizes.length * 1000); // 480000 ticks for 480 frames
+              mdhdView.setUint32(8, 15360); // FFmpeg standard 60fps timescale (256 ticks/frame)
+              mdhdView.setUint32(12, sampleSizes.length * 256); // 122880 ticks for 480 frames = 8.000s
               mdhdView.setUint16(16, 0x55c4); // 'und'
               const mdhd = buildFullBox('mdhd', 0, 0, mdhdBuf);
 
@@ -814,10 +827,11 @@
               const urlBox = buildFullBox('url ', 0, 1, new Uint8Array(0));
               const dinf = buildBox('dinf', buildFullBox('dref', 0, 0, concatBufs(u32BE(1), urlBox)));
 
-              // stsd -> avc1 -> avcC, colr, pasp (QuickTime / X metadata compatibility)
+              // stsd -> avc1 -> avcC, pasp, btrt (exact FFmpeg layout)
               const avcC = buildBox('avcC', avccDesc);
-              const colr = buildBox('colr', new Uint8Array([0x6e, 0x63, 0x6c, 0x78, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00]));
               const pasp = buildBox('pasp', u32BE(1), u32BE(1));
+              const avgBps = Math.round((totalVideoBytes * 8 * 1000) / Math.max(1, durationMs));
+              const btrt = buildBox('btrt', u32BE(0), u32BE(avgBps), u32BE(avgBps));
               const avc1Header = new Uint8Array(78);
               const avc1View = new DataView(avc1Header.buffer);
               avc1View.setUint16(6, 1);
@@ -828,11 +842,11 @@
               avc1View.setUint16(40, 1);
               avc1View.setUint16(74, 0x0018); // depth 24
               avc1View.setInt16(76, -1);
-              const avc1 = buildBox('avc1', avc1Header, avcC, colr, pasp);
+              const avc1 = buildBox('avc1', avc1Header, avcC, pasp, btrt);
               const stsd = buildFullBox('stsd', 0, 0, concatBufs(u32BE(1), avc1));
 
-              // stts: sample_delta = 1000 at timescale 60000 = exact 60.0 fps CFR
-              const stts = buildFullBox('stts', 0, 0, concatBufs(u32BE(1), u32BE(sampleSizes.length), u32BE(1000)));
+              // stts: sample_delta = 256 at timescale 15360 = exact 60.0 fps CFR
+              const stts = buildFullBox('stts', 0, 0, concatBufs(u32BE(1), u32BE(sampleSizes.length), u32BE(256)));
 
               // stss: 1-based sync sample indices
               const stssPayload = new Uint8Array(4 + keyframeIndices.length * 4);
@@ -843,8 +857,13 @@
               }
               const stss = buildFullBox('stss', 0, 0, stssPayload);
 
-              // stsc: 1 chunk per sample
-              const stsc = buildFullBox('stsc', 0, 0, concatBufs(u32BE(1), u32BE(1), u32BE(1), u32BE(1)));
+              // stsc: 1 contiguous chunk containing all video samples (matches 1-entry stco!)
+              const stsc = buildFullBox('stsc', 0, 0, concatBufs(
+                u32BE(1), // entry_count = 1
+                u32BE(1), // first_chunk = 1
+                u32BE(sampleSizes.length), // samples_per_chunk = all video samples
+                u32BE(1)  // sample_description_index = 1
+              ));
 
               // stsz: sample sizes
               const stszPayload = new Uint8Array(8 + sampleSizes.length * 4);
@@ -856,37 +875,36 @@
               }
               const stsz = buildFullBox('stsz', 0, 0, stszPayload);
 
-              // stco: absolute file chunk offsets
-              const stcoPayload = new Uint8Array(4 + chunkOffsets.length * 4);
-              const stcoView = new DataView(stcoPayload.buffer);
-              stcoView.setUint32(0, chunkOffsets.length);
-              for (let i = 0; i < chunkOffsets.length; i++) {
-                stcoView.setUint32(4 + i * 4, chunkOffsets[i]);
-              }
-              const stco = buildFullBox('stco', 0, 0, stcoPayload);
+              // stco: 1 chunk offset pointing to start of contiguous video stream in mdat
+              const stco = buildFullBox('stco', 0, 0, concatBufs(u32BE(1), u32BE(videoBaseOffset)));
 
               const stbl = buildBox('stbl', stsd, stts, stss, stsc, stsz, stco);
               const minf = buildBox('minf', vmhd, dinf, stbl);
               const mdia = buildBox('mdia', mdhd, hdlr, minf);
-              return buildBox('trak', tkhd, mdia);
+              return buildBox('trak', tkhd, edts, mdia);
             }
 
+            // 6-byte valid FFmpeg stereo silent AAC-LC frame: [0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c]
+            const numAudioFrames = 375; // 375 * 1024 = 384000 ticks @ 48kHz = exact 8.000s
+            const aacFrameSize = 6;
+
             function buildAudioTrak(audioBaseOffset) {
-              const numFrames = 375; // 375 * 1024 = 384000 ticks @ 48kHz = exact 8.000s
               const tkhdBuf = new Uint8Array(80);
               const tkhdView = new DataView(tkhdBuf.buffer);
               tkhdView.setUint32(8, 2); // track_ID = 2
               tkhdView.setUint32(16, durationMs);
+              tkhdView.setUint16(28, 1); // alternate_group = 1
               tkhdView.setUint16(32, 0x0100); // volume 1.0
               tkhdView.setUint32(36, 0x00010000);
               tkhdView.setUint32(52, 0x00010000);
               tkhdView.setUint32(68, 0x40000000);
-              const tkhd = buildFullBox('tkhd', 0, 7, tkhdBuf);
+              const tkhd = buildFullBox('tkhd', 0, 3, tkhdBuf);
+              const edts = buildEdts(durationMs);
 
               const mdhdBuf = new Uint8Array(20);
               const mdhdView = new DataView(mdhdBuf.buffer);
               mdhdView.setUint32(8, 48000); // 48kHz
-              mdhdView.setUint32(12, numFrames * 1024); // 384000 ticks
+              mdhdView.setUint32(12, numAudioFrames * 1024); // 384000 ticks
               mdhdView.setUint16(16, 0x55c4); // 'und'
               const mdhd = buildFullBox('mdhd', 0, 0, mdhdBuf);
 
@@ -904,12 +922,12 @@
               // esds with AudioSpecificConfig [0x11, 0x90] (AAC-LC, 48kHz, Stereo)
               const esdsData = new Uint8Array([
                 0x03, 0x19, // ES_DescrTag, length 25
-                0x00, 0x02, // ES_ID = 2
+                0x00, 0x01, // ES_ID = 1
                 0x00,       // flags = 0
                 0x04, 0x11, // DecoderConfigDescrTag, length 17
                 0x40,       // objectTypeIndication = 0x40 (Audio MPEG-4 AAC)
                 0x15,       // streamType = 5 (Audio), upstream = 0, reserved = 1
-                0x00, 0x03, 0x00, // bufferSizeDB = 768 bytes
+                0x00, 0x00, 0x00, // bufferSizeDB = 0
                 0x00, 0x01, 0xF4, 0x00, // maxBitrate = 128000 bps
                 0x00, 0x01, 0xF4, 0x00, // avgBitrate = 128000 bps
                 0x05, 0x02, // DecSpecificInfoTag, length 2
@@ -918,6 +936,7 @@
                 0x02        // predefined = 2
               ]);
               const esds = buildFullBox('esds', 0, 0, esdsData);
+              const btrt = buildBox('btrt', u32BE(0), u32BE(128000), u32BE(128000));
 
               const mp4aHeader = new Uint8Array(28);
               const mp4aView = new DataView(mp4aHeader.buffer);
@@ -925,66 +944,56 @@
               mp4aView.setUint16(16, 2); // 2 channels
               mp4aView.setUint16(18, 16); // 16-bit
               mp4aView.setUint32(24, 48000 << 16); // 48000 Hz
-              const mp4a = buildBox('mp4a', mp4aHeader, esds);
+              const mp4a = buildBox('mp4a', mp4aHeader, esds, btrt);
               const stsd = buildFullBox('stsd', 0, 0, concatBufs(u32BE(1), mp4a));
 
-              const stts = buildFullBox('stts', 0, 0, concatBufs(u32BE(1), u32BE(numFrames), u32BE(1024)));
-              const stsc = buildFullBox('stsc', 0, 0, concatBufs(u32BE(1), u32BE(1), u32BE(1), u32BE(1)));
+              const stts = buildFullBox('stts', 0, 0, concatBufs(u32BE(1), u32BE(numAudioFrames), u32BE(1024)));
 
-              const stszPayload = new Uint8Array(8 + numFrames * 4);
+              // stsc: 1 contiguous chunk containing all 375 audio samples (matches 1-entry stco!)
+              const stsc = buildFullBox('stsc', 0, 0, concatBufs(
+                u32BE(1), // entry_count = 1
+                u32BE(1), // first_chunk = 1
+                u32BE(numAudioFrames), // samples_per_chunk = 375
+                u32BE(1)  // sample_description_index = 1
+              ));
+
+              // stsz: constant sample_size = 6 bytes for all 375 frames
+              const stszPayload = new Uint8Array(8);
               const stszView = new DataView(stszPayload.buffer);
-              stszView.setUint32(0, 0);
-              stszView.setUint32(4, numFrames);
-              for (let i = 0; i < numFrames; i++) stszView.setUint32(8 + i * 4, 7);
+              stszView.setUint32(0, aacFrameSize); // uniform 6-byte sample size
+              stszView.setUint32(4, numAudioFrames);
               const stsz = buildFullBox('stsz', 0, 0, stszPayload);
 
-              // Strictly monotonic increasing chunk offsets for 375 non-overlapping sequential frames
-              const stcoPayload = new Uint8Array(4 + numFrames * 4);
-              const stcoView = new DataView(stcoPayload.buffer);
-              stcoView.setUint32(0, numFrames);
-              for (let i = 0; i < numFrames; i++) {
-                stcoView.setUint32(4 + i * 4, audioBaseOffset + i * 7);
-              }
-              const stco = buildFullBox('stco', 0, 0, stcoPayload);
+              // stco: 1 chunk offset pointing to start of contiguous audio stream in mdat
+              const stco = buildFullBox('stco', 0, 0, concatBufs(u32BE(1), u32BE(audioBaseOffset)));
 
               const stbl = buildBox('stbl', stsd, stts, stsc, stsz, stco);
               const minf = buildBox('minf', smhd, dinf, stbl);
               const mdia = buildBox('mdia', mdhd, hdlr, minf);
-              return buildBox('trak', tkhd, mdia);
+              return buildBox('trak', tkhd, edts, mdia);
             }
 
             // Measure exact moov size
-            const dummyOffsets = new Array(sampleSizes.length).fill(0);
             const dummyMoov = buildBox('moov',
               buildMvhd(),
-              buildVideoTrak(dummyOffsets),
+              buildVideoTrak(0),
               buildAudioTrak(0)
             );
 
             const moovSize = dummyMoov.byteLength;
-            const baseOffset = ftyp.byteLength + moovSize + 8; // ftyp + moov + mdat header
-
-            const realOffsets = [];
-            let cur = baseOffset;
-            for (let i = 0; i < sampleSizes.length; i++) {
-              realOffsets.push(cur);
-              cur += sampleSizes[i];
-            }
-            const audioBaseOffset = cur;
+            const videoBaseOffset = ftyp.byteLength + moovSize + 8; // ftyp + moov + mdat header
+            const audioBaseOffset = videoBaseOffset + totalVideoBytes;
 
             // Generate Faststart moov with exact absolute chunk offsets
             const realMoov = buildBox('moov',
               buildMvhd(),
-              buildVideoTrak(realOffsets),
+              buildVideoTrak(videoBaseOffset),
               buildAudioTrak(audioBaseOffset)
             );
 
-            // 375 sequential 7-byte silent raw AAC-LC frames (total 2625 bytes)
-            const numFrames = 375;
-            const totalAudioBytes = numFrames * 7;
-            const silentAacFrame = new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c, 0x00]);
-            let totalVideoBytes = 0;
-            for (const sz of sampleSizes) totalVideoBytes += sz;
+            // 375 sequential 6-byte silent raw AAC-LC stereo frames (total 2250 bytes)
+            const totalAudioBytes = numAudioFrames * aacFrameSize;
+            const silentAacFrame = new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c]);
 
             const mdatPayload = new Uint8Array(totalVideoBytes + totalAudioBytes);
             let p = 0;
@@ -992,9 +1001,9 @@
               mdatPayload.set(chunk, p);
               p += chunk.byteLength;
             }
-            for (let i = 0; i < numFrames; i++) {
+            for (let i = 0; i < numAudioFrames; i++) {
               mdatPayload.set(silentAacFrame, p);
-              p += 7;
+              p += aacFrameSize;
             }
             const mdat = buildBox('mdat', mdatPayload);
 
@@ -1084,7 +1093,7 @@
 
             let targetWidth = 1920;
             let targetHeight = 1080;
-            let targetBitrate = 16000000;
+            let targetBitrate = 12000000;
             let candidateProfiles = [
               'avc1.64002A', // High Profile Level 4.2
               'avc1.640028', // High Profile Level 4.0
@@ -1095,7 +1104,7 @@
             if (targetRes === '2k') {
               targetWidth = 2560;
               targetHeight = 1440;
-              targetBitrate = 28000000;
+              targetBitrate = 20000000;
               candidateProfiles = [
                 'avc1.640033', // High Profile Level 5.1
                 'avc1.640032', // High Profile Level 5.0
@@ -1131,6 +1140,7 @@
                     width: targetWidth,
                     height: targetHeight,
                     bitrate: targetBitrate,
+                    bitrateMode: 'constant',
                     framerate: 60,
                     latencyMode: 'quality',
                     hardwareAcceleration: 'prefer-hardware',
@@ -1152,7 +1162,7 @@
                   console.warn("2K VideoEncoder not supported on this device, falling back to 1080p");
                   targetWidth = 1920;
                   targetHeight = 1080;
-                  targetBitrate = 16000000;
+                  targetBitrate = 12000000;
                   if (canvas) {
                     canvas.width = 1920;
                     canvas.height = 1080;
@@ -1173,7 +1183,8 @@
                       codec,
                       width: 1920,
                       height: 1080,
-                      bitrate: 16000000,
+                      bitrate: 12000000,
+                      bitrateMode: 'constant',
                       framerate: 60,
                       latencyMode: 'quality',
                       hardwareAcceleration: 'prefer-hardware',
