@@ -1024,10 +1024,11 @@
           // Quality selector & localStorage persistence
           const btn1080p = document.getElementById('karakuri-res-1080p-btn');
           const btn2k = document.getElementById('karakuri-res-2k-btn');
+          const btn4k = document.getElementById('karakuri-res-4k-btn');
           let currentRes = '1080p';
           try {
             const saved = localStorage.getItem('karakuri_share_video_res');
-            if (saved === '2k' || saved === '1080p') currentRes = saved;
+            if (saved === '4k' || saved === '2k' || saved === '1080p') currentRes = saved;
           } catch (_) {}
 
           function updateResPillUI(activeRes) {
@@ -1038,6 +1039,10 @@
             if (btn2k) {
               btn2k.style.background = (activeRes === '2k') ? '#3498db' : 'transparent';
               btn2k.style.color = (activeRes === '2k') ? '#fff' : '#888';
+            }
+            if (btn4k) {
+              btn4k.style.background = (activeRes === '4k') ? '#3498db' : 'transparent';
+              btn4k.style.color = (activeRes === '4k') ? '#fff' : '#888';
             }
           }
           updateResPillUI(currentRes);
@@ -1058,6 +1063,15 @@
               try { localStorage.setItem('karakuri_share_video_res', '2k'); } catch (_) {}
               updateResPillUI('2k');
               startLoopCapture('2k');
+            };
+          }
+          if (btn4k) {
+            btn4k.onclick = () => {
+              if (currentRes === '4k') return;
+              currentRes = '4k';
+              try { localStorage.setItem('karakuri_share_video_res', '4k'); } catch (_) {}
+              updateResPillUI('4k');
+              startLoopCapture('4k');
             };
           }
 
@@ -1091,27 +1105,50 @@
               openXBtn.style.opacity = '0.5';
             }
 
-            let targetWidth = 1920;
-            let targetHeight = 1080;
-            let targetBitrate = 12000000;
-            let candidateProfiles = [
-              'avc1.64002A', // High Profile Level 4.2
-              'avc1.640028', // High Profile Level 4.0
-              'avc1.4D402A', // Main Profile Level 4.2
-              'avc1.42E02A', // Baseline Profile Level 4.2
-            ];
+            const tiers = {
+              '4k': {
+                width: 3840,
+                height: 2160,
+                bitrate: 35000000,
+                profiles: [
+                  'avc1.640034', // High Profile Level 5.2 (4K60 standard)
+                  'avc1.640033', // High Profile Level 5.1
+                  'avc1.4D4034', // Main Profile Level 5.2
+                  'avc1.42E034', // Baseline Profile Level 5.2
+                ],
+              },
+              '2k': {
+                width: 2560,
+                height: 1440,
+                bitrate: 20000000,
+                profiles: [
+                  'avc1.640033', // High Profile Level 5.1
+                  'avc1.640032', // High Profile Level 5.0
+                  'avc1.4D4033', // Main Profile Level 5.1
+                  'avc1.42E033', // Baseline Profile Level 5.1
+                ],
+              },
+              '1080p': {
+                width: 1920,
+                height: 1080,
+                bitrate: 12000000,
+                profiles: [
+                  'avc1.64002A', // High Profile Level 4.2
+                  'avc1.640028', // High Profile Level 4.0
+                  'avc1.4D402A', // Main Profile Level 4.2
+                  'avc1.42E02A', // Baseline Profile Level 4.2
+                ],
+              },
+            };
 
-            if (targetRes === '2k') {
-              targetWidth = 2560;
-              targetHeight = 1440;
-              targetBitrate = 20000000;
-              candidateProfiles = [
-                'avc1.640033', // High Profile Level 5.1
-                'avc1.640032', // High Profile Level 5.0
-                'avc1.4D4033', // Main Profile Level 5.1
-                'avc1.42E033', // Baseline Profile Level 5.1
-              ];
-            }
+            const fallbackOrder = targetRes === '4k'
+              ? ['4k', '2k', '1080p']
+              : (targetRes === '2k' ? ['2k', '1080p'] : ['1080p']);
+
+            let activeTier = tiers[fallbackOrder[0]];
+            let targetWidth = activeTier.width;
+            let targetHeight = activeTier.height;
+            let targetBitrate = activeTier.bitrate;
 
             const canvas = document.getElementById('karakuri-recorder-canvas');
             if (canvas) {
@@ -1134,56 +1171,15 @@
             if (canvas && typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined') {
               try {
                 let supportedConfig = null;
-                for (const codec of candidateProfiles) {
-                  const probeConfig = {
-                    codec,
-                    width: targetWidth,
-                    height: targetHeight,
-                    bitrate: targetBitrate,
-                    bitrateMode: 'constant',
-                    framerate: 60,
-                    latencyMode: 'quality',
-                    hardwareAcceleration: 'prefer-hardware',
-                    avc: { format: 'avc' },
-                  };
-                  try {
-                    const res = await VideoEncoder.isConfigSupported(probeConfig);
-                    if (res && res.supported) {
-                      supportedConfig = Object.assign({}, probeConfig, res.config || {}, {
-                        avc: { format: 'avc' },
-                      });
-                      break;
-                    }
-                  } catch (_) {}
-                }
-
-                // If 2K unsupported on this GPU, automatically fall back to 1080p
-                if (!supportedConfig && targetRes === '2k') {
-                  console.warn("2K VideoEncoder not supported on this device, falling back to 1080p");
-                  targetWidth = 1920;
-                  targetHeight = 1080;
-                  targetBitrate = 12000000;
-                  if (canvas) {
-                    canvas.width = 1920;
-                    canvas.height = 1080;
-                    canvas.style.width = '1920px';
-                    canvas.style.height = '1080px';
-                  }
-                  if (window.__karakuri_start_recording) {
-                    window.__karakuri_start_recording();
-                  }
-                  const fallback1080Profiles = [
-                    'avc1.64002A',
-                    'avc1.640028',
-                    'avc1.4D402A',
-                    'avc1.42E02A',
-                  ];
-                  for (const codec of fallback1080Profiles) {
+                for (let tIdx = 0; tIdx < fallbackOrder.length; tIdx++) {
+                  const tierKey = fallbackOrder[tIdx];
+                  const tier = tiers[tierKey];
+                  for (const codec of tier.profiles) {
                     const probeConfig = {
                       codec,
-                      width: 1920,
-                      height: 1080,
-                      bitrate: 12000000,
+                      width: tier.width,
+                      height: tier.height,
+                      bitrate: tier.bitrate,
                       bitrateMode: 'constant',
                       framerate: 60,
                       latencyMode: 'quality',
@@ -1199,6 +1195,24 @@
                         break;
                       }
                     } catch (_) {}
+                  }
+                  if (supportedConfig) {
+                    if (tIdx > 0) {
+                      console.warn(`${fallbackOrder[0]} VideoEncoder not supported on this device, falling back to ${tierKey}`);
+                      targetWidth = tier.width;
+                      targetHeight = tier.height;
+                      targetBitrate = tier.bitrate;
+                      if (canvas) {
+                        canvas.width = targetWidth;
+                        canvas.height = targetHeight;
+                        canvas.style.width = targetWidth + 'px';
+                        canvas.style.height = targetHeight + 'px';
+                      }
+                      if (window.__karakuri_start_recording) {
+                        window.__karakuri_start_recording();
+                      }
+                    }
+                    break;
                   }
                 }
 
@@ -1289,7 +1303,7 @@
                     const mp4Bytes = buildFaststartMp4(targetWidth, targetHeight, rawChunks, keyframes, avccDescription);
                     videoBlob = new Blob([mp4Bytes], { type: 'video/mp4' });
                     videoUrl = URL.createObjectURL(videoBlob);
-                    const resTag = targetWidth >= 2560 ? '2k' : '1080p';
+                    const resTag = targetWidth >= 3840 ? '4k' : (targetWidth >= 2560 ? '2k' : '1080p');
                     videoFile = new File([videoBlob], `${id || 'karakuri'}_${resTag}_loop.mp4`, { type: 'video/mp4' });
                     recordedSuccessfully = true;
                   }
@@ -1325,6 +1339,7 @@
                 }
 
                 const candidates = [
+                  'video/mp4;codecs=avc1.640034,mp4a.40.2',
                   'video/mp4;codecs=avc1.640033,mp4a.40.2',
                   'video/mp4;codecs=avc1.64002A,mp4a.40.2',
                   'video/mp4;codecs=avc1.640028,mp4a.40.2',
@@ -1396,7 +1411,7 @@
                 videoBlob = new Blob(chunks, { type: actualMime });
                 videoUrl = URL.createObjectURL(videoBlob);
                 const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
-                const resTag = targetWidth >= 2560 ? '2k' : '1080p';
+                const resTag = targetWidth >= 3840 ? '4k' : (targetWidth >= 2560 ? '2k' : '1080p');
                 videoFile = new File([videoBlob], `${id || 'karakuri'}_${resTag}_loop.${ext}`, { type: actualMime });
                 recordedSuccessfully = true;
               } catch (vErr) {
@@ -1567,12 +1582,13 @@
         <button id="karakuri-share-close-btn" title="Close share dialog" onclick="document.getElementById('karakuri-share-modal').style.display='none';" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
       </div>
 
-      <!-- Resolution Selector Bar (1080p vs 2K) -->
+      <!-- Resolution Selector Bar (1080p vs 2K vs 4K) -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:11px;">
         <span style="color:#aaa;font-weight:500;">Capture Quality:</span>
         <div style="display:flex;background:#0a0b0e;border:1px solid rgba(255,255,255,0.15);border-radius:14px;padding:2px;gap:2px;">
-          <button id="karakuri-res-1080p-btn" type="button" title="Full HD (1920x1080, 16 Mbps) — Standard for all 𝕏 accounts" style="border:none;border-radius:12px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;background:#3498db;color:#fff;">1080p (FHD)</button>
-          <button id="karakuri-res-2k-btn" type="button" title="2K QHD (2560x1440, 28 Mbps) — Unlocks 𝕏 2K quality selector tier" style="border:none;border-radius:12px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;background:transparent;color:#888;">2K (1440p)</button>
+          <button id="karakuri-res-1080p-btn" type="button" title="Full HD (1920x1080, 12 Mbps) — Standard for all 𝕏 accounts" style="border:none;border-radius:12px;padding:3px 9px;font-size:10px;font-weight:600;cursor:pointer;background:#3498db;color:#fff;">1080p</button>
+          <button id="karakuri-res-2k-btn" type="button" title="2K QHD (2560x1440, 20 Mbps) — Unlocks 𝕏 1440p quality selector tier" style="border:none;border-radius:12px;padding:3px 9px;font-size:10px;font-weight:600;cursor:pointer;background:transparent;color:#888;">1440p (2K)</button>
+          <button id="karakuri-res-4k-btn" type="button" title="4K UHD (3840x2160, 35 Mbps) — Unlocks 𝕏 2160p (4K) highest quality tier" style="border:none;border-radius:12px;padding:3px 9px;font-size:10px;font-weight:600;cursor:pointer;background:transparent;color:#888;">2160p (4K)</button>
         </div>
       </div>
 

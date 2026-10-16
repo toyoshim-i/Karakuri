@@ -33,16 +33,15 @@ However, several architectural constraints collided in early web prototypes:
    - **Unified Hydration:** Regardless of storage provider, the loader transparently resolves `#url=https://...` (or `#load=...`) alongside `#set=...`, fetching the raw bundle text and hydrating directly onto Deck A.
 
 2. **Pure Visual Offscreen Recording:**
-   - Add `recorder_sink: Option<WindowSink>` to `Gfx`, targeting a dedicated offscreen canvas (`#karakuri-recorder-canvas`), dynamically sized to 1080p (1920×1080) or 2K (2560×1440).
+   - Add `recorder_sink: Option<WindowSink>` to `Gfx`, targeting a dedicated offscreen canvas (`#karakuri-recorder-canvas`), dynamically sized to `1080p` (1920×1080), `1440p (2K)` (2560×1440), or `2160p (4K)` (3840×2160).
    - During 8.0-second video loop capture (480 frames @ 60.0 fps CFR), the engine attaches this surface and overrides internal rendering resolution (`selected_res`) to native canvas resolution, directing tone-mapped render output through `compose` before egui overlays are drawn.
-   - The Share modal includes an interactive resolution toggle (1080p FHD @ 16 Mbps vs 2K 1440p @ 28 Mbps) persisted across sessions in `localStorage` (`karakuri_share_video_res`), triggering live canvas resize and recorder sink re-attachment with an asynchronous cancellation token (`captureGeneration`).
+   - The Share modal includes an interactive 3-tier resolution toggle (`1080p` @ 12 Mbps vs `1440p (2K)` @ 20 Mbps vs `2160p (4K)` @ 35 Mbps) persisted across sessions in `localStorage` (`karakuri_share_video_res`), triggering live canvas resize and recorder sink re-attachment with an asynchronous cancellation token (`captureGeneration`).
    - Tone mapping (`present.wgsl`) applies subtle Interleaved Gradient Noise (IGN) TPDF dithering to protect smooth dark gradients against macroblock collapse during social platform re-encoding.
-   - The primary capture pipeline uses the hardware-accelerated **WebCodecs API** (`VideoEncoder` + `VideoFrame`), probing 2K profiles (`avc1.640033` / `avc1.640032`, 28 Mbps) with automatic fallback to 1080p (`avc1.64002A`, 16 Mbps), with 1-second Closed GOP and `prefer-hardware` (Apple VideoToolbox).
+   - The primary capture pipeline uses the hardware-accelerated **WebCodecs API** (`VideoEncoder` + `VideoFrame`), probing 4K (`avc1.640034` Level 5.2 / `avc1.640033` Level 5.1, 35 Mbps), 2K (`avc1.640033` / `avc1.640032`, 20 Mbps), and 1080p (`avc1.64002A` Level 4.2, 12 Mbps) with cascading fallback (`4k -> 2k -> 1080p`), 1-second Closed GOP, `bitrateMode: 'constant'`, and `prefer-hardware` (Apple VideoToolbox).
    - An in-memory Faststart ISO BMFF MP4 muxer integrates:
-     - Non-fragmented box hierarchy (`ftyp` -> `moov` -> `mdat`).
-     - QuickTime/VideoToolbox-compatible `colr` (`nclx` Rec.709) and `pasp` (1:1 square pixel) visual sample entry boxes inside `avc1`.
-     - 375 distinct, sequential 7-byte silent AAC-LC frames (`mp4a.40.2`, 2,625 bytes total in `mdat`) with strictly monotonic increasing `stco` chunk offsets (ensuring 𝕏's ingestion engine does not drop the audio track due to duplicate offsets).
-     - Full 8.0-second duration to guarantee 𝕏 transcodes multi-rendition HLS ladders with the high-resolution gear enabled.
+     - Non-fragmented box hierarchy (`ftyp` -> `moov` -> `mdat`) with `edts`/`elst`, `pasp` (1:1 square pixel), and `btrt` boxes.
+     - 375 distinct, sequential 6-byte stereo silent AAC-LC frames (`[0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c]`, `mp4a.40.2`, 2,250 bytes total in `mdat`) in a contiguous single chunk (`stsc` matching total sample count, 1-entry `stco`).
+     - Full 8.0-second duration to guarantee 𝕏 transcodes multi-rendition HLS ladders with the high-resolution gear (`1080p` / `1440p` / `2160p`) enabled.
    - Platforms lacking WebCodecs seamlessly fall back to `canvas.captureStream(60)` and `MediaRecorder` with an `AudioContext` silent audio track and 8-second MP4/WebM encoding.
 
 3. **Explicit Two-Step Social Workflow:**
