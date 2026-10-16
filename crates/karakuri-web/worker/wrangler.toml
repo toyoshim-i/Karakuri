@@ -1,0 +1,8 @@
+name = "karakuri-share"
+main = "worker.js"
+compatibility_date = "2026-10-11"
+
+# KV namespace binding for storing shared .kbset bundles
+[[kv_namespaces]]
+binding = "SETS"
+id = "7ce6fdfef394493da24e9759bfe2acfb"
