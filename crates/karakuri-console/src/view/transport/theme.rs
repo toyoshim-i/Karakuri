@@ -86,6 +86,26 @@ impl ThemePill {
             None
         }
     }
+
+    /// Translates the theme pill and its dropdown menu horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            let offset = vec2(dx, 0.0);
+            self.pill = self.pill.translate(offset);
+            self.text = self.text.translate(offset);
+            self.chevron = self.chevron.translate(offset);
+            if let Some(menu) = self.menu {
+                self.menu = Some(held_inside(
+                    &viewport,
+                    self.pill.min.x,
+                    menu.min.y,
+                    menu.width(),
+                    menu.height(),
+                ));
+            }
+        }
+        self
+    }
 }
 
 /// Measures and positions the theme selector pill in the transport row.
@@ -137,15 +157,14 @@ pub fn theme_pill(
         (None, None, None, None, None) => row.bar.max.x,
     };
 
+    let mcp_reserve = size::PILL_PAD_X * 2.0 + 80.0 + size::SINK_GAP + CHEVRON_W;
+    let min_left = after + size::TRANSPORT_GAP + mcp_reserve + size::TRANSPORT_GAP;
     let right = row.frame.min.x - size::TRANSPORT_GAP;
+    let left = (right - pill_w).max(min_left);
     let pill = Rect::from_min_size(
-        Pos2::new(right - pill_w, mid - size::PILL_H * 0.5),
+        Pos2::new(left, mid - size::PILL_H * 0.5),
         vec2(pill_w, size::PILL_H),
     );
-
-    if !strip.contains_rect(pill) || pill.min.x < after + size::TRANSPORT_GAP {
-        return None;
-    }
 
     let text = Rect::from_min_size(
         Pos2::new(pill.min.x + size::PILL_PAD_X, mid - size::PILL_H * 0.5),
@@ -159,9 +178,13 @@ pub fn theme_pill(
     let menu = if open {
         let menu_w = 90.0f32.max(pill_w);
         let menu_h = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * ThemeMode::ALL.len() as f32;
-        Some(Rect::from_min_size(
-            Pos2::new(pill.min.x, pill.max.y + size::PILL_GAP),
-            vec2(menu_w, menu_h),
+        let viewport = to_egui(layout.viewport());
+        Some(held_inside(
+            &viewport,
+            pill.min.x,
+            pill.max.y + size::PILL_GAP,
+            menu_w,
+            menu_h,
         ))
     } else {
         None

@@ -230,6 +230,26 @@ impl McpServerPill {
         }
         Some(McpAsk::Shut)
     }
+
+    /// Translates the MCP server pill and its dropdown menu horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            let offset = vec2(dx, 0.0);
+            self.pill = self.pill.translate(offset);
+            self.text = self.text.translate(offset);
+            self.chevron = self.chevron.translate(offset);
+            if let Some(menu) = self.menu {
+                self.menu = Some(held_inside(
+                    &viewport,
+                    self.pill.min.x,
+                    menu.min.y,
+                    menu.width(),
+                    menu.height(),
+                ));
+            }
+        }
+        self
+    }
 }
 
 /// Formats the pill text depending on server status.
@@ -277,18 +297,6 @@ pub fn mcp_server_pill(
     let pill_w = size::PILL_PAD_X * 2.0 + text_w + size::SINK_GAP + CHEVRON_W;
     let mid = strip.center().y;
 
-    let right = match theme_pill(
-        ctx, layout, values, audio, tracker, map, arr, theme_mode, theme_open,
-    ) {
-        Some(theme) => theme.pill.min.x - size::TRANSPORT_GAP,
-        None => row.frame.min.x - size::TRANSPORT_GAP,
-    };
-
-    let pill = Rect::from_min_size(
-        Pos2::new(right - pill_w, mid - size::PILL_H * 0.5),
-        vec2(pill_w, size::PILL_H),
-    );
-
     // Anchor after arrangement, map, learn, tracker, audio-in, or bar.
     let after = match (
         arrangement(ctx, layout, values, audio, tracker, map, arr),
@@ -305,9 +313,20 @@ pub fn mcp_server_pill(
         (None, None, None, None, None) => row.bar.max.x,
     };
 
-    if !strip.contains_rect(pill) || pill.min.x < after + size::TRANSPORT_GAP {
-        return None;
-    }
+    let right = match theme_pill(
+        ctx, layout, values, audio, tracker, map, arr, theme_mode, theme_open,
+    ) {
+        Some(theme) => theme.pill.min.x - size::TRANSPORT_GAP,
+        None => row.frame.min.x - size::TRANSPORT_GAP,
+    };
+
+    let min_left = after + size::TRANSPORT_GAP;
+    let left = (right - pill_w).max(min_left);
+
+    let pill = Rect::from_min_size(
+        Pos2::new(left, mid - size::PILL_H * 0.5),
+        vec2(pill_w, size::PILL_H),
+    );
 
     let text = Rect::from_min_size(
         Pos2::new(pill.min.x + size::PILL_PAD_X, mid - size::PILL_H * 0.5),

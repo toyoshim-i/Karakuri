@@ -156,6 +156,25 @@ impl TrackerGroup {
             ms: offset_at((p.x - offset.track.min.x) / offset.track.width()),
         })
     }
+
+    /// Translates all tracker group controls horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, _viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            let offset = egui::vec2(dx, 0.0);
+            if let Some(ref mut off) = self.offset {
+                off.label = off.label.translate(offset);
+                off.track = off.track.translate(offset);
+                off.fill = off.fill.translate(offset);
+                off.grip = off.grip.translate(offset);
+                off.value = off.value.translate(offset);
+            }
+            self.tap = self.tap.translate(offset);
+            self.tap_text = self.tap_text.translate(offset);
+            self.halve = self.halve.translate(offset);
+            self.double = self.double.translate(offset);
+        }
+        self
+    }
 }
 
 /// Computes layout for the tracker group controls (offset track, tap tempo, octave multipliers).
@@ -250,16 +269,6 @@ pub fn tracker_group(
     };
     let halve = chip(tap.max.x + size::PILL_GAP, HALVE_MARK);
     let double = chip(halve.max.x + size::OCTAVE_GAP, DOUBLE_MARK);
-
-    // The rule [`arrangement`], [`look`] and `outputs_row` all state: a control
-    // that does not fit in the row it is drawn in is no control at all, rather
-    // than half of one over the frame readout.
-    if !strip.contains_rect(tap)
-        || !strip.contains_rect(double)
-        || double.max.x + size::TRANSPORT_GAP > row.frame.min.x
-    {
-        return None;
-    }
 
     Some(TrackerGroup {
         offset,

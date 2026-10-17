@@ -3,10 +3,8 @@ use karakuri_operation::gate::Class;
 
 use crate::panel::Panel;
 use crate::view::{
-    arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
-    library, look, map_pill, mcp_pill, mixer, outputs_with_plugin_details, program_bay,
-    program_head, sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, View,
-    REGIONS,
+    bay_grip, deck_head, deck_name, inspector, keep_pill, library, mcp_pill, mixer, program_bay,
+    program_head, sequencer, slot_mcp_pill, staging, transition, View, REGIONS,
 };
 
 /// Hit-tests Sequencer bay controls (cells, labels, minus button, mode pill)
@@ -36,30 +34,7 @@ pub(super) fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: P
 /// Hit-tests active sinks in the Outputs row. Plugin chips return `false`
 /// so pointer events fall through to underlying layers.
 pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    outputs_with_plugin_details(
-        ctx,
-        panel.layout(),
-        view.opening,
-        view.pip_available,
-        view.plugin_available,
-        view.plugin_name,
-        view.plugin_1_available,
-        view.plugin_1_name,
-        view.xr_mode,
-        view.xr_menu_open,
-    )
-    .map(|row| {
-        row.told(view.projector)
-            .told_pip(view.pip)
-            .told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name)
-            .told_plugin_name(
-                1,
-                view.plugin_1,
-                view.plugin_1_available,
-                view.plugin_1_name,
-            )
-    })
-    .is_some_and(|row| {
+    view.outputs_layout(ctx, panel.layout()).is_some_and(|row| {
         row.chip_at(p).is_some()
             || row.xr_pill.is_some_and(|pill| pill.hit(p))
             || row.action_at(p).is_some()
@@ -68,34 +43,23 @@ pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
 
 /// Hit-tests the audio-in pill in the top row.
 pub(super) fn on_audio(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    audio_in(ctx, panel.layout(), view.transport, view.audio.as_ref())
+    view.transport_layout(ctx, panel.layout())
+        .and_then(|tl| tl.audio)
         .is_some_and(|pill| pill.hit(p))
 }
 
 /// Hit-tests the arrangement pill in the transport bar.
 pub(super) fn on_pill(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    arrangement(
-        ctx,
-        panel.layout(),
-        view.transport,
-        view.audio.as_ref(),
-        view.tracker,
-        None,
-        &view.arrangement,
-    )
-    .is_some_and(|pill| pill.hit(p))
+    view.transport_layout(ctx, panel.layout())
+        .and_then(|tl| tl.arrangement)
+        .is_some_and(|pill| pill.hit(p))
 }
 
 /// Hit-tests controls in the tracker group (offset figure, octave, tap) derived once.
 pub(super) fn on_tracker(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    tracker_group(
-        ctx,
-        panel.layout(),
-        view.transport,
-        view.audio.as_ref(),
-        view.tracker,
-    )
-    .is_some_and(|group| group.owns(p))
+    view.transport_layout(ctx, panel.layout())
+        .and_then(|tl| tl.tracker)
+        .is_some_and(|group| group.owns(p))
 }
 
 /// Hit-tests Mixer bay controls across all strips (knob, blend, tally, mask mini, and strip selection).
@@ -118,54 +82,35 @@ pub(super) fn on_transition(panel: &Panel, ctx: &egui::Context, view: &View, p: 
 
 /// Hit-tests the `learn` pill at the end of the transport row.
 pub(super) fn on_learn(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    learn_pill(
-        ctx,
-        panel.layout(),
-        view.transport,
-        view.audio.as_ref(),
-        view.tracker,
-        view.map.as_ref(),
-        view.learn,
-    )
-    .is_some_and(|pill| pill.hit(p))
+    view.transport_layout(ctx, panel.layout())
+        .and_then(|tl| tl.learn)
+        .is_some_and(|pill| pill.hit(p))
 }
 
 /// Hit-tests the map pill in the transport bar.
 pub(super) fn on_map(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    map_pill(
-        ctx,
-        panel.layout(),
-        view.transport,
-        view.audio.as_ref(),
-        view.tracker,
-        view.map.as_ref(),
-    )
-    .is_some_and(|row| row.pill.contains(egui::Pos2::new(p.x, p.y)))
+    view.transport_layout(ctx, panel.layout())
+        .and_then(|tl| tl.map)
+        .is_some_and(|row| row.pill.contains(egui::Pos2::new(p.x, p.y)))
 }
 
 pub(super) fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    look(
-        ctx,
-        panel.layout(),
-        view.transport,
-        view.audio.as_ref(),
-        view.tracker,
-        None,
-        &view.arrangement,
-        view.look,
-    )
-    .is_some_and(|row| row.owns(p))
+    view.transport_layout(ctx, panel.layout())
+        .and_then(|tl| tl.look)
+        .is_some_and(|row| row.owns(p))
 }
 
 /// Hit-tests the `rec` pill at the end of the transport row.
 pub(super) fn on_rec(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    transport(ctx, panel.layout(), view.transport).is_some_and(|row| row.on_rec(p))
+    view.transport_layout(ctx, panel.layout())
+        .is_some_and(|tl| tl.row.on_rec(p))
 }
 
 /// Hit-tests the tempo figure at the head of the transport row.
 /// Hits on the surrounding guard band fall through to egui (ADR-0291).
 pub(super) fn on_tempo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    transport(ctx, panel.layout(), view.transport).is_some_and(|row| row.on_tempo(p))
+    view.transport_layout(ctx, panel.layout())
+        .is_some_and(|tl| tl.row.on_tempo(p))
 }
 
 /// Hit-tests Master bay controls (out knob, effect knobs, feedback cut chip) in one derivation.

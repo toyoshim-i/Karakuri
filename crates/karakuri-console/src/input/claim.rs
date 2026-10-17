@@ -56,36 +56,25 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                     }
                 }
             }
-            if let Some(pill) = crate::view::mcp_server_pill(
-                ctx,
-                panel.layout(),
-                view.transport,
-                view.audio.as_ref(),
-                view.tracker,
-                view.map.as_ref(),
-                &view.arrangement,
-                &view.mcp_server,
-                view.theme_mode,
-                view.theme_menu_open,
-            ) {
-                if pill.hit(p) {
+            if let Some(tl) = view.transport_layout(ctx, panel.layout()) {
+                if tl.max_scroll > 0.0 && tl.row.strip.contains(egui::Pos2::new(p.x, p.y)) {
                     return Claim::Panel;
+                }
+                if let Some(ref pill) = tl.mcp {
+                    if pill.hit(p) {
+                        return Claim::Panel;
+                    }
+                }
+                if let Some(ref pill) = tl.theme {
+                    if pill.hit(p) {
+                        return Claim::Panel;
+                    }
                 }
             }
-            if let Some(pill) = crate::view::theme_pill(
-                ctx,
-                panel.layout(),
-                view.transport,
-                view.audio.as_ref(),
-                view.tracker,
-                view.map.as_ref(),
-                &view.arrangement,
-                view.theme_mode,
-                view.theme_menu_open,
-            ) {
-                if pill.hit(p) {
-                    return Claim::Panel;
-                }
+            if view.outputs_layout(ctx, panel.layout()).is_some_and(|out| {
+                out.max_scroll() > 0.0 && out.strip.contains(egui::Pos2::new(p.x, p.y))
+            }) {
+                return Claim::Panel;
             }
             match PROBES.iter().any(|probe| (probe.ask)(panel, ctx, view, p)) {
                 true => Claim::Panel,

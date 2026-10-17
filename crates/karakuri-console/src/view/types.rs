@@ -189,10 +189,27 @@ pub struct View {
     pub(crate) master_soloed: Option<u32>,
     /// Inspector node groups that are folded by (pane_index, node_index).
     pub(crate) inspector_folded: std::collections::BTreeSet<(usize, usize)>,
+    /// Horizontal scroll offset of the transport row in logical pixels.
+    pub transport_scroll: f32,
+    /// Horizontal scroll offset of the outputs row in logical pixels.
+    pub outputs_scroll: f32,
     pub(crate) placed: Vec<Placed>,
 }
 
 impl View {
+    /// Scrolls the transport row horizontally by `by` pixels clamped to `max_scroll`, returning true if changed.
+    pub fn scroll_transport_by(&mut self, by: f32, max_scroll: f32) -> bool {
+        let prev = self.transport_scroll;
+        self.transport_scroll = (prev + by).clamp(0.0, max_scroll);
+        self.transport_scroll != prev
+    }
+
+    /// Scrolls the outputs row horizontally by `by` pixels clamped to `max_scroll`, returning true if changed.
+    pub fn scroll_outputs_by(&mut self, by: f32, max_scroll: f32) -> bool {
+        let prev = self.outputs_scroll;
+        self.outputs_scroll = (prev + by).clamp(0.0, max_scroll);
+        self.outputs_scroll != prev
+    }
     /// Returns the currently selected output resolution, if any.
     pub fn selected_resolution(&self) -> Option<(u32, u32)> {
         self.output_resolutions

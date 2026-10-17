@@ -7,14 +7,14 @@ pub(crate) use karakuri_console::panel::{
 pub(crate) use karakuri_console::room::Room;
 #[cfg(test)]
 pub(crate) use karakuri_console::view::outputs;
+#[cfg(test)]
+pub(crate) use karakuri_console::view::transport as transport_row;
 pub(crate) use karakuri_console::view::{
-    self, arrangement as arrangement_pill, audio_in as audio_in_pill, bay_grip,
-    deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
-    library as library_bay, library_mcp_pill, look as look_row, mcp_pill, mixer as mixer_bay,
+    self, bay_grip, deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
+    library as library_bay, library_mcp_pill, mcp_pill, mixer as mixer_bay,
     outputs_with_plugin_name, program_bay, program_head, sequencer as sequencer_bay, slot_mcp_pill,
-    staging as staging_bay, tracker_group, transition as transition_row,
-    transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Chose, Chosen, Go, McpPill, Picked,
-    Read, Scope, Taken, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
+    staging as staging_bay, transition as transition_row, Aim, Ask, AudioAsk, AudioIn, Chose,
+    Chosen, Go, McpPill, Picked, Read, Scope, Taken, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
 };
 #[cfg(test)]
 pub(crate) use karakuri_engine::governor::Reason;
@@ -67,6 +67,8 @@ pub(crate) struct Readout {
     pub(crate) playhead: karakuri_pattern::Playhead,
     /// Active VR projection parameter drag gesture, if any.
     pub(crate) vr_drag: Option<VrDrag>,
+    /// Active horizontal drag-scroll gesture on the transport or outputs bar.
+    pub(crate) bar_drag: Option<(Turned, Point)>,
 }
 
 /// Active drag tracking for built-in VR projection parameters.
@@ -95,6 +97,7 @@ impl Readout {
             // Default playhead initialized at start before first poll.
             playhead: karakuri_pattern::Playhead::default(),
             vr_drag: None,
+            bar_drag: None,
         }
     }
 

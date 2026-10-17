@@ -47,51 +47,54 @@ pub(super) fn transport_row(
         egui::vec2(bar_w, span_h),
     );
     let right = row.max.x - size::TRANSPORT_PAD_X;
-    let rec = rec_w.map(|w| {
-        Rect::from_min_size(
-            Pos2::new(right - w, mid - size::PILL_H * 0.5),
-            egui::vec2(w, size::PILL_H),
-        )
-    });
-    let health_end = match rec {
-        Some(pill) => pill.min.x - size::TRANSPORT_GAP,
-        None => right,
-    };
-    let health = health_w.map(|w| {
-        Rect::from_min_size(
-            Pos2::new(health_end - w, mid - size::PILL_H * 0.5),
-            egui::vec2(w, size::PILL_H),
-        )
-    });
-    let frame_end = match health {
-        Some(pill) => pill.min.x - size::TRANSPORT_GAP,
-        None => health_end,
-    };
+    let min_frame_x = bar.max.x + size::TRANSPORT_GAP;
+    let needed_after_frame = health_w.map_or(0.0, |hw| size::TRANSPORT_GAP + hw)
+        + rec_w.map_or(0.0, |rw| size::TRANSPORT_GAP + rw);
+    let ideal_frame_x = right - needed_after_frame - frame_w;
+    let frame_x = ideal_frame_x.max(min_frame_x);
     let frame = Rect::from_min_size(
-        Pos2::new(frame_end - frame_w, mid - span_h * 0.5),
+        Pos2::new(frame_x, mid - span_h * 0.5),
         egui::vec2(frame_w, span_h),
     );
 
-    match row.contains_rect(bpm)
-        && row.contains_rect(frame)
-        && health.is_none_or(|pill| row.contains_rect(pill))
-        && rec.is_none_or(|pill| row.contains_rect(pill))
-        && frame.min.x >= bar.max.x + size::TRANSPORT_GAP
+    let health = health_w.map(|w| {
+        let ideal_health_x = right - rec_w.map_or(0.0, |rw| size::TRANSPORT_GAP + rw) - w;
+        let health_x = ideal_health_x.max(frame.max.x + size::TRANSPORT_GAP);
+        Rect::from_min_size(
+            Pos2::new(health_x, mid - size::PILL_H * 0.5),
+            egui::vec2(w, size::PILL_H),
+        )
+    });
+
+    let rec = rec_w.map(|w| {
+        let min_rec_x = health.as_ref().map_or(frame.max.x, |h| h.max.x) + size::TRANSPORT_GAP;
+        let rec_x = (right - w).max(min_rec_x);
+        Rect::from_min_size(
+            Pos2::new(rec_x, mid - size::PILL_H * 0.5),
+            egui::vec2(w, size::PILL_H),
+        )
+    });
+
+    if !row.contains_rect(bpm)
+        || !row.contains_rect(bar)
+        || bar.max.x + size::TRANSPORT_PAD_X > row.max.x
     {
-        true => Some(TransportRow {
-            bpm,
-            label,
-            grid,
-            dots,
-            at: t.position(),
-            bar,
-            frame,
-            health,
-            rec,
-            values: *t,
-        }),
-        false => None,
+        return None;
     }
+
+    Some(TransportRow {
+        strip: row,
+        bpm,
+        label,
+        grid,
+        dots,
+        at: t.position(),
+        bar,
+        frame,
+        health,
+        rec,
+        values: *t,
+    })
 }
 
 /// Layout job for the tempo value, formatting to one decimal place and applying

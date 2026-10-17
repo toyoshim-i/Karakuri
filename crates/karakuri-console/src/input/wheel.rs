@@ -39,6 +39,24 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
             return Some(Turned::Master);
         }
     }
+    if let Some(transport_rect) = panel
+        .layout()
+        .find("transport")
+        .map(|id| panel.layout().rect(id))
+    {
+        if crate::view::to_egui(transport_rect).contains(at) {
+            return Some(Turned::Transport);
+        }
+    }
+    if let Some(outputs_rect) = panel
+        .layout()
+        .find("outputs")
+        .map(|id| panel.layout().rect(id))
+    {
+        if crate::view::to_egui(outputs_rect).contains(at) {
+            return Some(Turned::Outputs);
+        }
+    }
     view.inspector.iter().enumerate().find_map(|(index, pane)| {
         let laid = inspector(panel.layout(), index, pane, view.scroll_in(index))?;
         laid.head
@@ -58,4 +76,8 @@ pub enum Turned {
     Library,
     /// The Master bay slot list.
     Master,
+    /// The Transport row.
+    Transport,
+    /// The Outputs row.
+    Outputs,
 }

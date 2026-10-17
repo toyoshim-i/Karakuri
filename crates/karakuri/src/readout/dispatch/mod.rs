@@ -19,7 +19,7 @@ impl Readout {
             _ => self.panel.cursor(),
         };
         // Evaluate claim before acting to preserve drag state consistency across events.
-        let mut claim = if self.vr_drag.is_some() {
+        let mut claim = if self.vr_drag.is_some() || self.bar_drag.is_some() {
             Claim::Panel
         } else {
             claim(&mut self.panel, ctx, &self.view, at)
@@ -76,6 +76,32 @@ impl Readout {
                     let value = low + (high - low) * along;
                     self.view.set_vr_param(drag.key.label(), value);
                     did = Acted::Pointed;
+                } else if !self.panel.dragging() {
+                    if let Some((turned, ref mut last)) = self.bar_drag {
+                        let dx = last.x - p.x;
+                        *last = p;
+                        let moved = match turned {
+                            Turned::Transport => {
+                                let max = self
+                                    .view
+                                    .transport_layout(ctx, self.panel.layout())
+                                    .map_or(0.0, |tl| tl.max_scroll);
+                                self.view.scroll_transport_by(dx, max)
+                            }
+                            Turned::Outputs => {
+                                let max = self
+                                    .view
+                                    .outputs_layout(ctx, self.panel.layout())
+                                    .map_or(0.0, |out| out.max_scroll());
+                                self.view.scroll_outputs_by(dx, max)
+                            }
+                            _ => false,
+                        };
+                        if moved {
+                            did = Acted::Pointed;
+                        }
+                        claim = Claim::Panel;
+                    }
                 } else {
                     let fading = matches!(self.panel.in_hand(), Some(InHand::Fader));
                     let operation = self.moved(p);
@@ -100,11 +126,36 @@ impl Readout {
                     .or_else(|| self.dispatch_sequencer_press(ctx, at))
                     .or_else(|| self.dispatch_program_press(ctx, at))
                     .unwrap_or_else(|| self.dispatch_mixer_and_master_press(ctx, at));
+
+                if !self.panel.dragging()
+                    && self.vr_drag.is_none()
+                    && !self.view.has_modal_overlay()
+                {
+                    if let Some(turned @ (Turned::Transport | Turned::Outputs)) =
+                        wheeled(&mut self.panel, &self.view, at)
+                    {
+                        let can_scroll = match turned {
+                            Turned::Transport => self
+                                .view
+                                .transport_layout(ctx, self.panel.layout())
+                                .is_some_and(|tl| tl.max_scroll > 0.0),
+                            Turned::Outputs => self
+                                .view
+                                .outputs_layout(ctx, self.panel.layout())
+                                .is_some_and(|out| out.max_scroll() > 0.0),
+                            _ => false,
+                        };
+                        if can_scroll {
+                            self.bar_drag = Some((turned, at));
+                        }
+                    }
+                }
                 return (claim, did);
             }
             // Resolve drop target for carried items across mixer, program bay, and master chain (ADR-0273).
             (Pointer::Up, _) => {
                 self.vr_drag = None;
+                self.bar_drag = None;
                 if claim != Claim::Panel {
                     return (claim, did);
                 }
@@ -153,13 +204,27 @@ impl Readout {
                 };
                 did = self.released(onto);
             }
-            // Scroll inspector panes, master bay, or library list based on target region (ADR-0312).
+            // Scroll inspector panes, master bay, library list, transport row, or outputs row based on target region.
             (Pointer::Wheel(by), _) => {
                 if let Some(turned) = wheeled(&mut self.panel, &self.view, at) {
                     let moved = match turned {
                         Turned::Pane(pane) => self.view.scroll_by(pane, by),
                         Turned::Library => self.view.scroll_library_by(by),
                         Turned::Master => self.view.scroll_master_by(by),
+                        Turned::Transport => {
+                            let max = self
+                                .view
+                                .transport_layout(ctx, self.panel.layout())
+                                .map_or(0.0, |tl| tl.max_scroll);
+                            self.view.scroll_transport_by(by, max)
+                        }
+                        Turned::Outputs => {
+                            let max = self
+                                .view
+                                .outputs_layout(ctx, self.panel.layout())
+                                .map_or(0.0, |out| out.max_scroll());
+                            self.view.scroll_outputs_by(by, max)
+                        }
                     };
                     if moved {
                         did = Acted::Pointed;

@@ -55,6 +55,14 @@ impl LearnPill {
     pub fn next(&self) -> bool {
         !self.armed
     }
+
+    /// Translates the learn pill horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, _viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            self.pill = self.pill.translate(egui::vec2(dx, 0.0));
+        }
+        self
+    }
 }
 
 /// Layout bounding rectangle for the map filename readout pill.
@@ -62,6 +70,16 @@ impl LearnPill {
 pub struct MapRow {
     /// The capsule, painted.
     pub pill: Rect,
+}
+
+impl MapRow {
+    /// Translates the map readout pill horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, _viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            self.pill = self.pill.translate(egui::vec2(dx, 0.0));
+        }
+        self
+    }
 }
 
 /// Computes layout for the `learn` pill button, or `None` if unconfigured or insufficient room.
@@ -93,11 +111,6 @@ pub fn learn_pill(
         Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
         egui::vec2(pill_w, size::PILL_H),
     );
-    // [`outputs_row`]'s rule: a capsule that does not fit in its row is no
-    // control at all rather than half of one over the frame readout.
-    if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
-        return None;
-    }
     Some(LearnPill { pill, armed })
 }
 
@@ -130,9 +143,6 @@ pub fn map_pill(
         Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
         egui::vec2(pill_w, size::PILL_H),
     );
-    if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
-        return None;
-    }
     Some(MapRow { pill })
 }
 

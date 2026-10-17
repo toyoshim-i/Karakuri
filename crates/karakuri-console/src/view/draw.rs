@@ -25,16 +25,11 @@ impl View {
         let overloaded = self.overloaded;
         // Frame computation costs per deck cell.
         let costs = self.costs;
-        let values = self.transport;
         let arr = &self.arrangement;
         // Audio input settings for pill layout.
         let audio = self.audio.as_ref();
-        // Beat tracking state for tracker pill layout.
-        let tracking = self.tracker;
-        // MIDI mapping and learn mode states.
+        // MIDI mapping state.
         let map = self.map.as_ref();
-        let armed = self.learn;
-        let look_at = self.look;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
         // Item kind tags aligned with library rows (ADR-0338).
@@ -80,16 +75,6 @@ impl View {
         let phase = self.phase;
         // Bay drawer opening state snapshot.
         let opening = self.opening;
-        // Projector, PiP, and plugin sink states.
-        let projector = self.projector;
-        let pip = self.pip;
-        let pip_available = self.pip_available;
-        let plugin = self.plugin;
-        let plugin_available = self.plugin_available;
-        let plugin_name = self.plugin_name;
-        let plugin_1 = self.plugin_1;
-        let plugin_1_available = self.plugin_1_available;
-        let plugin_1_name = self.plugin_1_name;
 
         // Resolution tracking across closure boundary.
         let output_resolutions = self.output_resolutions.as_slice();
@@ -98,14 +83,23 @@ impl View {
         let xr_mode = self.xr_mode;
         let xr_menu_open = self.xr_menu_open;
 
+        let is_prompt_focused = self.focused(panel).map(|r| r.name) == Some("prompt");
+        if (!is_prompt_focused || self.prompt.menu_open) && self.prompt.is_captured() {
+            self.prompt.set_captured(false);
+        }
+        let master_chain_building = self.master_chain_building;
+        let master_row = self.master_row_layout(ui.ctx(), panel.layout());
+        let transport_layout = self.transport_layout(ui.ctx(), panel.layout());
+        let outputs_layout = self.outputs_layout(ui.ctx(), panel.layout());
+
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
-            for placed in &self.placed {
+            let draw_placed = |ui: &mut Ui, placed: &Placed| {
                 let rect = to_egui(placed.rect);
                 if panel.layout().is_collapsed(placed.id) {
                     let title = head_of(placed.region).map_or("", |head| head.title);
                     folded_head_into(ui, &pal, rect, title);
-                    continue;
+                    return;
                 }
                 match placed.region.kind {
                     Kind::Bay { .. } => {
@@ -139,50 +133,21 @@ impl View {
                     // Transport row readouts and controls.
                     Kind::Transport => {
                         bay_card(ui, &pal, rect);
-                        if let Some(row) = transport(ui.ctx(), panel.layout(), values) {
-                            transport::transport_into(ui, &pal, &row);
-                        }
-                        // Tracker controls and look parameters within the Transport bay.
-                        if let Some(group) =
-                            tracker_group(ui.ctx(), panel.layout(), values, audio, tracking)
-                        {
-                            transport::tracker_into(ui, &pal, &group);
-                        }
-                        if let Some(row) = look(
-                            ui.ctx(),
-                            panel.layout(),
-                            values,
-                            audio,
-                            tracking,
-                            None,
-                            arr,
-                            look_at,
-                        ) {
-                            transport::look_into(ui, &pal, &row);
+                        if let Some(ref tl) = transport_layout {
+                            transport::transport_into(ui, &pal, &tl.row);
+                            if let Some(ref group) = tl.tracker {
+                                transport::tracker_into(ui, &pal, group);
+                            }
+                            if let Some(ref row) = tl.look {
+                                transport::look_into(ui, &pal, row);
+                            }
                         }
                     }
                     // Outputs control bay.
                     Kind::Outputs => {
                         bay_card(ui, &pal, rect);
-                        if let Some(row) = outputs_with_plugin_details(
-                            ui.ctx(),
-                            panel.layout(),
-                            opening,
-                            pip_available,
-                            plugin_available,
-                            plugin_name,
-                            plugin_1_available,
-                            plugin_1_name,
-                            xr_mode,
-                            xr_menu_open,
-                        )
-                        .map(|r| {
-                            r.told(projector)
-                                .told_pip(pip)
-                                .told_plugin_name(0, plugin, plugin_available, plugin_name)
-                                .told_plugin_name(1, plugin_1, plugin_1_available, plugin_1_name)
-                        }) {
-                            outputs::outputs_into(ui, &pal, &row);
+                        if let Some(ref row) = outputs_layout {
+                            outputs::outputs_into(ui, &pal, row);
                         }
                     }
                     // Mixer bay strips and volume controls.
@@ -220,13 +185,13 @@ impl View {
                         bay_card(ui, &pal, rect);
                         match head_of(placed.region) {
                             Some(head) => {
-                                let head = head.with_building(self.master_chain_building);
+                                let head = head.with_building(master_chain_building);
                                 bay_head(ui, &pal, rect, &head, opening);
                             }
                             None => head_into(ui, &pal, rect, placed.region, opening),
                         }
-                        if let Some(row) = self.master_row_layout(ui.ctx(), panel.layout()) {
-                            master::master_into(ui, &pal, &row);
+                        if let Some(ref row) = master_row {
+                            master::master_into(ui, &pal, row);
                             // Chain list drop landing indicator (ADR-0273).
                             if let Some(list) = carried.and_then(|at| row.dropped(at)) {
                                 drop_ring(ui, &pal, list, f32::from(size::FX_RADIUS));
@@ -275,11 +240,7 @@ impl View {
                         bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         prompt::prompt_head_into(ui, &pal, rect, &self.prompt);
-                        let is_focused = self.focused(panel).map(|r| r.name) == Some("prompt");
-                        if (!is_focused || self.prompt.menu_open) && self.prompt.is_captured() {
-                            self.prompt.set_captured(false);
-                        }
-                        prompt::prompt_into(ui, &pal, rect, &self.prompt, is_focused);
+                        prompt::prompt_into(ui, &pal, rect, &self.prompt, is_prompt_focused);
                     }
                     // A pane draws nothing of its own. It has no card — it is
                     // inside the bay's — and no head, and its body is as empty
@@ -299,6 +260,10 @@ impl View {
                     // Previews region placeholder; drawn post-pass to avoid clipping.
                     Kind::Previews => {}
                 }
+            };
+
+            for placed in &self.placed {
+                draw_placed(ui, placed);
             }
 
             // Deck preview cells rendered over the Program bay.
@@ -419,59 +384,25 @@ impl View {
             }
 
             // Audio-in and arrangement cards/menus rendered above the bays (Rule 2).
-            if let Some(audio) = audio {
-                if let Some(pill) = audio_in(ui.ctx(), panel.layout(), values, Some(audio)) {
-                    transport::audio_in_into(ui, &pal, &pill, audio);
+            if let Some(ref tl) = transport_layout {
+                if let (Some(ref pill), Some(audio)) = (&tl.audio, audio) {
+                    transport::audio_in_into(ui, &pal, pill, audio);
                 }
-            }
-            // Learn, map, and arrangement controls laid out in order.
-            if let Some(pill) = learn_pill(
-                ui.ctx(),
-                panel.layout(),
-                values,
-                audio,
-                tracking,
-                map,
-                armed,
-            ) {
-                transport::learn_into(ui, &pal, &pill);
-            }
-            if let Some((pill, map)) =
-                map_pill(ui.ctx(), panel.layout(), values, audio, tracking, map).zip(map)
-            {
-                transport::map_into(ui, &pal, &pill, map);
-            }
-            if let Some(pill) =
-                arrangement(ui.ctx(), panel.layout(), values, audio, tracking, map, arr)
-            {
-                transport::arrangement_into(ui, &pal, &pill, arr);
-            }
-            if let Some(pill) = mcp_server_pill(
-                ui.ctx(),
-                panel.layout(),
-                values,
-                audio,
-                tracking,
-                map,
-                arr,
-                &self.mcp_server,
-                self.theme_mode,
-                self.theme_menu_open,
-            ) {
-                transport::mcp_server_into(ui, &pal, &pill, &self.mcp_server);
-            }
-            if let Some(pill) = theme_pill(
-                ui.ctx(),
-                panel.layout(),
-                values,
-                audio,
-                tracking,
-                map,
-                arr,
-                self.theme_mode,
-                self.theme_menu_open,
-            ) {
-                transport::theme_into(ui, &pal, &pill, self.theme_mode, self.theme_menu_open);
+                if let Some(ref pill) = tl.learn {
+                    transport::learn_into(ui, &pal, pill);
+                }
+                if let (Some(ref pill), Some(map)) = (&tl.map, map) {
+                    transport::map_into(ui, &pal, pill, map);
+                }
+                if let Some(ref pill) = tl.arrangement {
+                    transport::arrangement_into(ui, &pal, pill, arr);
+                }
+                if let Some(ref pill) = tl.mcp {
+                    transport::mcp_server_into(ui, &pal, pill, &self.mcp_server);
+                }
+                if let Some(ref pill) = tl.theme {
+                    transport::theme_into(ui, &pal, pill, self.theme_mode, self.theme_menu_open);
+                }
             }
             // Inspector wiring card rendered above bays (Rule 2).
             if let Some((pane_at, node, input)) = wiring {
@@ -582,15 +513,7 @@ impl View {
             }
             // Outputs WebXR mode dropdown menu rendered above bays (Rule 2).
             if xr_menu_open {
-                if let Some(row) = outputs_with_plugin_name(
-                    ui.ctx(),
-                    panel.layout(),
-                    opening,
-                    plugin_available,
-                    plugin_name,
-                    xr_mode,
-                    true,
-                ) {
+                if let Some(ref row) = outputs_layout {
                     if let Some(ref xr_pill) = row.xr_pill {
                         outputs::xr_menu_into(ui, &pal, xr_pill, xr_mode);
                     }

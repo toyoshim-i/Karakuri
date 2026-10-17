@@ -110,13 +110,17 @@ impl App {
             WindowEvent::MouseWheel { delta, .. } => {
                 let tip = self.hover.dismiss();
                 let tip_repaint = Change::Tip(tip).repaint();
-                // Convert vertical scroll delta to logical pixels (`LineDelta` scaled by `WHEEL_STEP`, `PixelDelta` scaled by DPI).
-                // Negate delta so positive wheel deflection scrolls down content.
+                // Convert scroll delta to logical pixels (`LineDelta` scaled by `WHEEL_STEP`, `PixelDelta` scaled by DPI).
+                // Use whichever axis has the larger magnitude so horizontal trackpad scrolling also works on bars.
                 let by = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => {
-                        -y * karakuri_console::room::size::WHEEL_STEP
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        let d = if y.abs() >= x.abs() { y } else { x };
+                        -d * karakuri_console::room::size::WHEEL_STEP
                     }
-                    MouseScrollDelta::PixelDelta(at) => -(at.y / self.scale) as f32,
+                    MouseScrollDelta::PixelDelta(at) => {
+                        let d = if at.y.abs() >= at.x.abs() { at.y } else { at.x };
+                        -(d / self.scale) as f32
+                    }
                 };
                 let ctx = gfx.egui.egui_ctx().clone();
                 let (claim, acted) = self.readout.pointer(&ctx, Pointer::Wheel(by));
@@ -163,8 +167,34 @@ impl App {
                         );
                     }
                     TouchPhase::Moved => {
+                        let prev = self.readout.panel.cursor();
+                        let dy = prev.y - p.y;
                         let ctx = gfx.egui.egui_ctx().clone();
-                        let (claim, acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
+                        let (claim, mut acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
+                        if acted == Acted::Nothing
+                            && dy.abs() > 0.0
+                            && !self.readout.panel.dragging()
+                            && self.readout.vr_drag.is_none()
+                            && self.readout.bar_drag.is_none()
+                            && !self.readout.view.has_modal_overlay()
+                            && matches!(
+                                karakuri_console::input::wheeled(
+                                    &mut self.readout.panel,
+                                    &self.readout.view,
+                                    p
+                                ),
+                                Some(
+                                    karakuri_console::input::Turned::Pane(_)
+                                        | karakuri_console::input::Turned::Library
+                                        | karakuri_console::input::Turned::Master
+                                )
+                            )
+                        {
+                            let (_, wheel_acted) = self.readout.pointer(&ctx, Pointer::Wheel(dy));
+                            if wheel_acted == Acted::Pointed {
+                                acted = Acted::Pointed;
+                            }
+                        }
                         App::to_egui(&mut gfx, &mut self.costs, &event);
                         let repaint = App::performed(
                             &mut gfx,

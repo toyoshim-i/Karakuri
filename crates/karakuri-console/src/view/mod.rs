@@ -34,10 +34,10 @@ pub use transport::{
     offset_at, theme_pill, tracker_group, transport, unit_of, unit_of_offset, Arrangement,
     ArrangementPill, Ask, AudioAsk, AudioIn, AudioInPill, Item, LearnPill, Look, LookRow, MapPill,
     MapRow, McpAsk, McpServer, McpServerMenu, McpServerPill, Menu, Rec, ThemeAsk, ThemePill,
-    Tracker, TrackerGroup, Transport, TransportRow, BEAT_PITCH, BEAT_STALENESS, DEFAULT_MCP_ADDR,
-    EXPOSURE_MAX, EXPOSURE_MIN, EXPOSURE_TRACK_W, LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS,
-    LATENCY_OFFSET_STEP_MS, MCP_MENU_ROWS, OFFSET_TRACK_W, PRESET_ADDRS, TEMPO_BAND, TEMPO_SPAN,
-    WEBMCP_MENU_ROWS,
+    Tracker, TrackerGroup, Transport, TransportLayout, TransportRow, BEAT_PITCH, BEAT_STALENESS,
+    DEFAULT_MCP_ADDR, EXPOSURE_MAX, EXPOSURE_MIN, EXPOSURE_TRACK_W, LATENCY_OFFSET_MAX_MS,
+    LATENCY_OFFSET_MIN_MS, LATENCY_OFFSET_STEP_MS, MCP_MENU_ROWS, OFFSET_TRACK_W, PRESET_ADDRS,
+    TEMPO_BAND, TEMPO_SPAN, WEBMCP_MENU_ROWS,
 };
 
 mod mixer;
@@ -298,6 +298,8 @@ impl View {
             master_muted: std::collections::BTreeSet::new(),
             master_soloed: None,
             inspector_folded: std::collections::BTreeSet::new(),
+            transport_scroll: 0.0,
+            outputs_scroll: 0.0,
             // Pre-allocate region layout cache up to REGIONS capacity.
             placed: Vec::with_capacity(REGIONS.len()),
         }

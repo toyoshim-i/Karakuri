@@ -196,6 +196,8 @@ impl SinkChip {
 /// Sink status is derived directly from layout node visibility (ADR-0161).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Outputs {
+    /// Bounding rectangle of the outputs strip / row.
+    pub strip: Rect,
     /// Where the word OUTPUTS is painted: its top-left, and the box the galley
     /// fills.
     pub label: Rect,
@@ -325,6 +327,67 @@ impl Outputs {
         }
         None
     }
+
+    /// Computes the rightmost extent across all content elements in the Outputs row.
+    pub fn content_right(&self) -> f32 {
+        let mut right = self.sink.max.x;
+        for c in &self.more {
+            right = right.max(c.chip.max.x);
+        }
+        if let Some(ref xr) = self.xr_pill {
+            right = right.max(xr.pill.max.x);
+        }
+        if let Some(share) = self.share {
+            right = right.max(share.max.x);
+        }
+        if let Some(logs) = self.logs {
+            right = right.max(logs.max.x);
+        }
+        right
+    }
+
+    /// Returns the maximum horizontal scroll offset needed to reveal all outputs content.
+    pub fn max_scroll(&self) -> f32 {
+        (self.content_right() + size::OUTPUTS_PAD_X - self.strip.max.x).max(0.0)
+    }
+
+    /// Returns a new Outputs instance shifted horizontally by the given scroll offset.
+    pub fn scrolled(mut self, scroll: f32) -> Self {
+        let dx = -scroll.clamp(0.0, self.max_scroll());
+        if dx.abs() > f32::EPSILON {
+            let offset = vec2(dx, 0.0);
+            self.label = self.label.translate(offset);
+            self.mcp = self.mcp.translate(offset);
+            self.sink = self.sink.translate(offset);
+            self.dot = self.dot.translate(offset);
+            for c in &mut self.more {
+                c.chip = c.chip.translate(offset);
+                c.dot = c.dot.translate(offset);
+            }
+            if let Some(ref mut xr) = self.xr_pill {
+                xr.pill = xr.pill.translate(offset);
+                xr.text = xr.text.translate(offset);
+                xr.chevron = xr.chevron.translate(offset);
+                if let Some(menu) = xr.menu {
+                    let min_x = xr.pill.min.x.clamp(
+                        self.strip.min.x,
+                        (self.strip.max.x - menu.width()).max(self.strip.min.x),
+                    );
+                    xr.menu = Some(Rect::from_min_size(
+                        Pos2::new(min_x, menu.min.y),
+                        menu.size(),
+                    ));
+                }
+            }
+            if let Some(ref mut share) = self.share {
+                *share = share.translate(offset);
+            }
+            if let Some(ref mut logs) = self.logs {
+                *logs = logs.translate(offset);
+            }
+        }
+        self
+    }
 }
 
 /// Computes layout geometry for the Outputs row and its sinks.
@@ -412,106 +475,50 @@ pub fn outputs_with_plugin_details(
 
     #[cfg(target_arch = "wasm32")]
     let pip_name = if pip_available { PIP } else { PIP_ABSENT };
-    let custom_0_name = plugin_name.unwrap_or(PLUGIN_0_NAME);
-    #[cfg(target_arch = "wasm32")]
-    let custom_1_name = plugin_1_name.unwrap_or(PLUGIN_1_NAME);
-
-    #[cfg(not(target_arch = "wasm32"))]
-    let widths: [f32; TOTAL_CHIPS] = std::array::from_fn(|i| {
-        let word = match i {
-            0 => PROGRAM_VIEW,
-            1 => PROJECTOR,
-            2 => {
-                if plugin_available {
-                    custom_0_name
-                } else {
-                    PLUGIN_SINKS[0]
-                }
-            }
-            _ => unreachable!(),
-        };
-        ctx.fonts_mut(|f| {
-            f.layout_no_wrap(
-                word.to_owned(),
-                FontId::new(size::BASE, FontFamily::Proportional),
-                Color32::PLACEHOLDER,
-            )
-            .size()
-            .x
-        })
-    });
-
-    #[cfg(target_arch = "wasm32")]
-    let widths: [f32; TOTAL_CHIPS] = std::array::from_fn(|i| {
-        let word = match i {
-            0 => PROGRAM_VIEW,
-            1 => PROJECTOR,
-            2 => pip_name,
-            3 => {
-                if plugin_available {
-                    custom_0_name
-                } else {
-                    PLUGIN_SINKS[0]
-                }
-            }
-            4 => {
-                if plugin_1_available {
-                    custom_1_name
-                } else {
-                    PLUGIN_SINKS[1]
-                }
-            }
-            _ => unreachable!(),
-        };
-        ctx.fonts_mut(|f| {
-            f.layout_no_wrap(
-                word.to_owned(),
-                FontId::new(size::BASE, FontFamily::Proportional),
-                Color32::PLACEHOLDER,
-            )
-            .size()
-            .x
-        })
-    });
-
-    #[cfg(target_arch = "wasm32")]
-    let xr_info = if plugin_available && plugin_name == Some("WebXR") {
-        let mode_label = xr_mode.label();
-        let text_w = ctx.fonts_mut(|f| {
-            f.layout_no_wrap(
-                mode_label.to_owned(),
-                FontId::new(size::BASE, FontFamily::Proportional),
-                Color32::PLACEHOLDER,
-            )
-            .size()
-            .x
-        });
-        Some((xr_mode, xr_menu_open, text_w))
+    let custom_0_name = if plugin_available {
+        plugin_name.unwrap_or(PLUGIN_0_NAME)
     } else {
-        None
+        PLUGIN_SINKS[0]
+    };
+    #[cfg(target_arch = "wasm32")]
+    let custom_1_name = if plugin_1_available {
+        plugin_1_name.unwrap_or(PLUGIN_1_NAME)
+    } else {
+        PLUGIN_SINKS[1]
     };
 
+    #[cfg(not(target_arch = "wasm32"))]
+    let chip_words: [&str; TOTAL_CHIPS] = [PROGRAM_VIEW, PROJECTOR, custom_0_name];
     #[cfg(target_arch = "wasm32")]
-    let share_w = ctx.fonts_mut(|f| {
-        f.layout_no_wrap(
-            SHARE_LABEL.to_owned(),
-            FontId::new(size::BASE, FontFamily::Proportional),
-            Color32::PLACEHOLDER,
-        )
-        .size()
-        .x
-    }) + size::PILL_PAD_X * 2.0;
+    let chip_words: [&str; TOTAL_CHIPS] = [
+        PROGRAM_VIEW,
+        PROJECTOR,
+        pip_name,
+        custom_0_name,
+        custom_1_name,
+    ];
+
+    let measure_text = |word: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                word.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    let widths: [f32; TOTAL_CHIPS] = std::array::from_fn(|i| measure_text(chip_words[i]));
 
     #[cfg(target_arch = "wasm32")]
-    let logs_w = ctx.fonts_mut(|f| {
-        f.layout_no_wrap(
-            LOGS_LABEL.to_owned(),
-            FontId::new(size::BASE, FontFamily::Proportional),
-            Color32::PLACEHOLDER,
-        )
-        .size()
-        .x
-    }) + size::PILL_PAD_X * 2.0;
+    let xr_info = (plugin_available && plugin_name == Some("WebXR"))
+        .then(|| (xr_mode, xr_menu_open, measure_text(xr_mode.label())));
+
+    #[cfg(target_arch = "wasm32")]
+    let share_w = measure_text(SHARE_LABEL) + size::PILL_PAD_X * 2.0;
+    #[cfg(target_arch = "wasm32")]
+    let logs_w = measure_text(LOGS_LABEL) + size::PILL_PAD_X * 2.0;
 
     #[cfg(target_arch = "wasm32")]
     let row_opt = outputs_row(row, viewport, label, pill, widths, share_w, logs_w, xr_info);
@@ -520,6 +527,7 @@ pub fn outputs_with_plugin_details(
 
     row_opt.map(
         |OutputsRow {
+             strip,
              label,
              mcp,
              chips,
@@ -527,6 +535,7 @@ pub fn outputs_with_plugin_details(
              share,
              logs,
          }| Outputs {
+            strip,
             label,
             mcp,
             open: opened,
@@ -559,36 +568,7 @@ pub fn outputs_with_plugin_details(
                     1 => plugin_available,
                     _ => false,
                 },
-                name: match i {
-                    0 => PROJECTOR,
-                    #[cfg(target_arch = "wasm32")]
-                    1 => pip_name,
-                    #[cfg(target_arch = "wasm32")]
-                    2 => {
-                        if plugin_available {
-                            custom_0_name
-                        } else {
-                            PLUGIN_SINKS[0]
-                        }
-                    }
-                    #[cfg(target_arch = "wasm32")]
-                    3 => {
-                        if plugin_1_available {
-                            custom_1_name
-                        } else {
-                            PLUGIN_SINKS[1]
-                        }
-                    }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    1 => {
-                        if plugin_available {
-                            custom_0_name
-                        } else {
-                            PLUGIN_SINKS[0]
-                        }
-                    }
-                    _ => "",
-                },
+                name: chip_words[i + 1],
             }),
             xr_pill,
             share,
@@ -599,6 +579,7 @@ pub fn outputs_with_plugin_details(
 
 /// Layout results for the outputs row: label, MCP class pill, and sink chips with indicator dots.
 struct OutputsRow {
+    strip: Rect,
     label: Rect,
     mcp: Rect,
     /// The capsule and its dot, per chip, left to right.
@@ -706,34 +687,30 @@ fn outputs_row(
     }
 
     let right = row.max.x - size::OUTPUTS_PAD_X;
-    let logs_pill = Rect::from_min_size(
-        Pos2::new(right - logs_w, mid - size::PILL_H * 0.5),
-        vec2(logs_w, size::PILL_H),
-    );
+    let share_x = (right - logs_w - size::OUTPUTS_GAP - share_w).max(x + size::OUTPUTS_GAP);
+    let logs_x = share_x + share_w + size::OUTPUTS_GAP;
     let share_pill = Rect::from_min_size(
-        Pos2::new(
-            logs_pill.min.x - size::OUTPUTS_GAP - share_w,
-            mid - size::PILL_H * 0.5,
-        ),
+        Pos2::new(share_x, mid - size::PILL_H * 0.5),
         vec2(share_w, size::PILL_H),
     );
+    let logs_pill = Rect::from_min_size(
+        Pos2::new(logs_x, mid - size::PILL_H * 0.5),
+        vec2(logs_w, size::PILL_H),
+    );
 
-    // Require all chips and right-aligned action pills to fit within the row bounds without wrapping.
-    match row.contains_rect(chips[TOTAL_CHIPS - 1].0)
-        && row.contains_rect(logs_pill)
-        && row.contains_rect(share_pill)
-        && share_pill.min.x >= x + size::OUTPUTS_GAP
-    {
-        true => Some(OutputsRow {
-            label,
-            mcp,
-            chips,
-            xr_pill,
-            share: Some(share_pill),
-            logs: Some(logs_pill),
-        }),
-        false => None,
+    if !row.contains_rect(chips[0].0) {
+        return None;
     }
+
+    Some(OutputsRow {
+        strip: row,
+        label,
+        mcp,
+        chips,
+        xr_pill,
+        share: Some(share_pill),
+        logs: Some(logs_pill),
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -772,17 +749,19 @@ fn outputs_row(
         chips[i] = (chip, dot);
     }
 
-    match row.contains_rect(chips[TOTAL_CHIPS - 1].0) {
-        true => Some(OutputsRow {
-            label,
-            mcp,
-            chips,
-            xr_pill: None,
-            share: None,
-            logs: None,
-        }),
-        false => None,
+    if !row.contains_rect(chips[0].0) {
+        return None;
     }
+
+    Some(OutputsRow {
+        strip: row,
+        label,
+        mcp,
+        chips,
+        xr_pill: None,
+        share: None,
+        logs: None,
+    })
 }
 
 /// The word OUTPUTS as one laid-out run, so that measuring it and painting it
@@ -872,8 +851,10 @@ pub fn xr_menu_into(ui: &mut Ui, pal: &Palette, pill: &XrPill, current_mode: XrS
 }
 
 /// Renders Outputs row contents: section label, MCP pill, and sink chips.
-pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
-    let painter = ui.painter();
+pub(super) fn outputs_into(ui: &mut Ui, pal: &Palette, row: &Outputs) {
+    let mut clipped_ui = ui.new_child(egui::UiBuilder::new().max_rect(row.strip));
+    clipped_ui.set_clip_rect(clipped_ui.clip_rect().intersect(row.strip));
+    let painter = clipped_ui.painter();
 
     // The word: `.bay-head`'s type on a row that has no head — see
     // `OUTPUTS_LABEL`.
@@ -881,7 +862,7 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     painter.galley(row.label.min, galley, pal.faint);
 
     // Renders the class pill matching bay head style.
-    pill_into(ui, pal, row.mcp, mcp_word(row.open), row.open);
+    pill_into(&clipped_ui, pal, row.mcp, mcp_word(row.open), row.open);
 
     // Renders program view and auxiliary sink chips according to state (present, on, absent).
     let chip_into = |chip: Rect, dot_at: Rect, name: &str, on: bool, present: bool| {
@@ -923,16 +904,49 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
         #[cfg(target_arch = "wasm32")]
         if i == 2 {
             if let Some(ref xr_pill) = row.xr_pill {
-                xr_pill_into(ui, pal, xr_pill, false);
+                xr_pill_into(&clipped_ui, pal, xr_pill, false);
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
         let _ = i;
     }
     if let Some(share) = row.share {
-        pill_into(ui, pal, share, SHARE_LABEL, false);
+        pill_into(&clipped_ui, pal, share, SHARE_LABEL, false);
     }
     if let Some(logs) = row.logs {
-        pill_into(ui, pal, logs, LOGS_LABEL, false);
+        pill_into(&clipped_ui, pal, logs, LOGS_LABEL, false);
+    }
+}
+
+impl View {
+    /// Derives the fully configured Outputs row layout shifted by active scroll offset.
+    pub fn outputs_layout(
+        &self,
+        ctx: &egui::Context,
+        layout: &karakuri_layout::Layout,
+    ) -> Option<Outputs> {
+        let row = outputs_with_plugin_details(
+            ctx,
+            layout,
+            self.opening,
+            self.pip_available,
+            self.plugin_available,
+            self.plugin_name,
+            self.plugin_1_available,
+            self.plugin_1_name,
+            self.xr_mode,
+            self.xr_menu_open,
+        )?;
+        let configured = row
+            .told(self.projector)
+            .told_pip(self.pip)
+            .told_plugin_name(0, self.plugin, self.plugin_available, self.plugin_name)
+            .told_plugin_name(
+                1,
+                self.plugin_1,
+                self.plugin_1_available,
+                self.plugin_1_name,
+            );
+        Some(configured.scrolled(self.outputs_scroll))
     }
 }

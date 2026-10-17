@@ -100,6 +100,21 @@ impl LookRow {
             exposure: exposure_at((p.x - self.track.min.x) / self.track.width()),
         })
     }
+
+    /// Translates all look controls horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, _viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            let offset = egui::vec2(dx, 0.0);
+            self.tone = self.tone.translate(offset);
+            self.tone_text = self.tone_text.translate(offset);
+            self.label = self.label.translate(offset);
+            self.track = self.track.translate(offset);
+            self.fill = self.fill.translate(offset);
+            self.grip = self.grip.translate(offset);
+            self.value = self.value.translate(offset);
+        }
+        self
+    }
 }
 
 /// Returns the next tonemapping operator in the cycle order (P-0090).
@@ -142,7 +157,7 @@ pub fn look(
     // answers the first for the whole module and `arrangement` is laid out
     // from it, so this is that one answer read one item further along.
     let pill = arrangement(ctx, layout, values, audio, tracker, map, arr)?;
-    let row = transport(ctx, layout, values)?;
+    let _row = transport(ctx, layout, values)?;
     let strip = to_egui(layout.rect(layout.find("transport")?));
     let width = |text: &str| {
         ctx.fonts_mut(|f| {
@@ -195,16 +210,6 @@ pub fn look(
         Pos2::new(track.max.x + size::TRIM_GAP, mid - span_h * 0.5),
         egui::vec2(width(&exposure_text(look.exposure)), span_h),
     );
-
-    // The rule `arrangement` and `outputs_row` both state: a control that does
-    // not fit in the row it is drawn in is no control at all, rather than half
-    // of one over the frame readout.
-    if !strip.contains_rect(tone)
-        || !strip.contains_rect(grip)
-        || value.max.x + size::TRANSPORT_GAP > row.frame.min.x
-    {
-        return None;
-    }
 
     Some(LookRow {
         tone,

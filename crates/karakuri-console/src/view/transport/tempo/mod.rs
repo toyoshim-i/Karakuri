@@ -93,6 +93,8 @@ pub fn transport(
 /// is lit.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TransportRow {
+    /// Bounding rectangle of the transport row.
+    pub strip: Rect,
     /// The tempo, in `.bpm`'s 20px box.
     pub bpm: Rect,
     /// The faint `BPM` beside it.
@@ -126,6 +128,62 @@ pub const TEMPO_BAND: f32 = 0.15;
 pub const TEMPO_SPAN: f32 = TEMPO_BAND * 2.0;
 
 impl TransportRow {
+    /// Returns the rightmost extent of the readouts in the transport row.
+    pub fn content_right(&self) -> f32 {
+        let mut right = self.frame.max.x;
+        if let Some(h) = self.health {
+            right = right.max(h.max.x);
+        }
+        if let Some(r) = self.rec {
+            right = right.max(r.max.x);
+        }
+        right
+    }
+
+    /// Computes the maximum scroll offset needed to reveal all readouts.
+    pub fn max_scroll(&self) -> f32 {
+        (self.content_right() + size::TRANSPORT_PAD_X - self.strip.max.x).max(0.0)
+    }
+
+    /// Repositions the trailing readouts (`frame`, `health`, `rec`) to sit after
+    /// pills whose right boundary extends past the default frame position.
+    pub fn after_pills(mut self, pills_right: f32) -> Self {
+        if pills_right > 0.0 {
+            let min_frame_x = pills_right + size::TRANSPORT_GAP;
+            if min_frame_x > self.frame.min.x {
+                let dx = min_frame_x - self.frame.min.x;
+                let offset = egui::vec2(dx, 0.0);
+                self.frame = self.frame.translate(offset);
+                if let Some(ref mut h) = self.health {
+                    *h = h.translate(offset);
+                }
+                if let Some(ref mut r) = self.rec {
+                    *r = r.translate(offset);
+                }
+            }
+        }
+        self
+    }
+
+    /// Translates all transport row elements horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, _viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            let offset = egui::vec2(dx, 0.0);
+            self.bpm = self.bpm.translate(offset);
+            self.label = self.label.translate(offset);
+            self.grid = self.grid.translate(offset);
+            self.bar = self.bar.translate(offset);
+            self.frame = self.frame.translate(offset);
+            if let Some(ref mut h) = self.health {
+                *h = h.translate(offset);
+            }
+            if let Some(ref mut r) = self.rec {
+                *r = r.translate(offset);
+            }
+        }
+        self
+    }
+
     /// One dot of the beat grid, from the left.
     pub fn dot(&self, index: u32) -> Rect {
         assert!(index < self.dots, "dot {index} of a grid of {}", self.dots);

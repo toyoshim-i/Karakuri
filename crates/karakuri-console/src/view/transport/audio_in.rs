@@ -160,6 +160,26 @@ impl AudioInPill {
             },
         )
     }
+
+    /// Translates the pill and its dropdown menu horizontally by `dx`.
+    pub fn translated(mut self, dx: f32, viewport: Rect) -> Self {
+        if dx.abs() > f32::EPSILON {
+            let offset = egui::vec2(dx, 0.0);
+            self.pill = self.pill.translate(offset);
+            self.text = self.text.translate(offset);
+            self.chevron = self.chevron.translate(offset);
+            if let Some(menu) = self.menu {
+                self.menu = Some(held_inside(
+                    &viewport,
+                    self.pill.min.x,
+                    menu.min.y,
+                    menu.width(),
+                    menu.height(),
+                ));
+            }
+        }
+        self
+    }
 }
 
 /// Computes layout rectangles for the audio input selector pill and dropdown card.
@@ -196,12 +216,6 @@ pub fn audio_in(
         ),
         egui::vec2(pill_w, size::PILL_H),
     );
-    // The same rule `arrangement` and `outputs_row` state: a capsule that does
-    // not fit in the row it is drawn in is no control at all, rather than half
-    // of one over the frame readout.
-    if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
-        return None;
-    }
     let text = Rect::from_min_size(
         Pos2::new(pill.min.x + size::PILL_PAD_X, mid - size::PILL_H * 0.5),
         egui::vec2(text_w, size::PILL_H),

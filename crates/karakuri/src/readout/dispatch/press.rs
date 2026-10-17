@@ -32,15 +32,12 @@ impl Readout {
             return Some(self.menued(picked.unwrap_or(Picked::Shut)));
         }
 
+        let tl = self.view.transport_layout(ctx, self.panel.layout());
+
         // Audio-in device selection pill and card
-        let listing = audio_in_pill(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-        );
-        let heard = listing
+        let heard = tl
             .as_ref()
+            .and_then(|tl| tl.audio.as_ref())
             .zip(self.view.audio.as_ref())
             .and_then(|(pill, audio)| pill.ask(audio, at));
         if self.view.audio.as_ref().is_some_and(AudioIn::open) {
@@ -51,17 +48,9 @@ impl Readout {
         }
 
         // Arrangement preset pill and card
-        let pill = arrangement_pill(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-            self.view.map.as_ref(),
-            &self.view.arrangement,
-        );
-        let asked = pill
+        let asked = tl
             .as_ref()
+            .and_then(|tl| tl.arrangement.as_ref())
             .and_then(|pill| pill.ask(&self.view.arrangement, at));
         if self.view.arrangement.open() {
             return Some(self.arranged(asked.unwrap_or(Ask::Shut)));
@@ -71,19 +60,9 @@ impl Readout {
         }
 
         // Theme selector pill and card
-        let theme = view::theme_pill(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-            self.view.map.as_ref(),
-            &self.view.arrangement,
-            self.view.theme_mode,
-            self.view.theme_menu_open,
-        );
-        let asked = theme
+        let asked = tl
             .as_ref()
+            .and_then(|tl| tl.theme.as_ref())
             .and_then(|pill| pill.ask(self.view.theme_menu_open, at));
         if self.view.theme_menu_open {
             return Some(self.themed(ctx, asked.unwrap_or(view::ThemeAsk::Shut)));
@@ -93,20 +72,9 @@ impl Readout {
         }
 
         // MCP server configuration pill and card
-        let mcp = view::mcp_server_pill(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-            self.view.map.as_ref(),
-            &self.view.arrangement,
-            &self.view.mcp_server,
-            self.view.theme_mode,
-            self.view.theme_menu_open,
-        );
-        let asked = mcp
+        let asked = tl
             .as_ref()
+            .and_then(|tl| tl.mcp.as_ref())
             .and_then(|pill| pill.ask(&self.view.mcp_server, at));
         if self.view.mcp_server.open() {
             return Some(self.mcp_configured(asked.unwrap_or(view::McpAsk::Shut)));
@@ -287,48 +255,28 @@ impl Readout {
         ctx: &egui::Context,
         at: Point,
     ) -> Option<Acted> {
-        let group = tracker_group(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-        );
-        let tracked = group.as_ref().and_then(|group| {
-            group
-                .tapped(at)
-                .or_else(|| group.octave(at))
-                .or_else(|| group.nudge(at))
-        });
+        let tl = self.view.transport_layout(ctx, self.panel.layout());
+        let tracked = tl
+            .as_ref()
+            .and_then(|tl| tl.tracker.as_ref())
+            .and_then(|group| {
+                group
+                    .tapped(at)
+                    .or_else(|| group.octave(at))
+                    .or_else(|| group.nudge(at))
+            });
         if let Some(operation) = tracked {
             return Some(Acted::Emitted(Some(operation)));
         }
 
-        let look = look_row(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-            self.view.map.as_ref(),
-            &self.view.arrangement,
-            self.view.look,
-        );
-        let tone = look.as_ref().and_then(|row| row.tonemap(at));
-        let exposure = look.as_ref().and_then(|row| row.exposure(at));
+        let look = tl.as_ref().and_then(|tl| tl.look.as_ref());
+        let tone = look.and_then(|row| row.tonemap(at));
+        let exposure = look.and_then(|row| row.exposure(at));
         if let Some(operation) = tone.or(exposure) {
             return Some(Acted::Emitted(Some(operation)));
         }
 
-        if let Some(pill) = view::learn_pill(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-            self.view.map.as_ref(),
-            self.view.learn,
-        ) {
+        if let Some(pill) = tl.as_ref().and_then(|tl| tl.learn.as_ref()) {
             if pill.hit(at) {
                 self.view.learn = pill.next();
                 println!(
@@ -343,26 +291,20 @@ impl Readout {
             }
         }
 
-        if view::map_pill(
-            ctx,
-            self.panel.layout(),
-            self.view.transport,
-            self.view.audio.as_ref(),
-            self.view.tracker,
-            self.view.map.as_ref(),
-        )
-        .is_some_and(|row| row.pill.contains(egui::Pos2::new(at.x, at.y)))
+        if tl
+            .as_ref()
+            .and_then(|tl| tl.map.as_ref())
+            .is_some_and(|row| row.pill.contains(egui::Pos2::new(at.x, at.y)))
         {
             return Some(Acted::MidiRequest);
         }
 
-        let row = transport_row(ctx, self.panel.layout(), self.view.transport);
-        let recording = row.as_ref().and_then(|row| row.record(at));
+        let recording = tl.as_ref().and_then(|tl| tl.row.record(at));
         if let Some(operation) = recording {
             return Some(Acted::Emitted(Some(operation)));
         }
 
-        let tempo = row.as_ref().and_then(|row| row.tempo(at));
+        let tempo = tl.as_ref().and_then(|tl| tl.row.tempo(at));
         if let Some(operation) = tempo {
             return Some(Acted::Emitted(Some(operation)));
         }
@@ -781,34 +723,7 @@ impl Readout {
         ctx: &egui::Context,
         at: Point,
     ) -> Acted {
-        let outputs_row = karakuri_console::view::outputs_with_plugin_details(
-            ctx,
-            self.panel.layout(),
-            self.view.opening,
-            self.view.pip_available,
-            self.view.plugin_available,
-            self.view.plugin_name,
-            self.view.plugin_1_available,
-            self.view.plugin_1_name,
-            self.view.xr_mode,
-            self.view.xr_menu_open,
-        )
-        .map(|row| {
-            row.told(self.view.projector)
-                .told_pip(self.view.pip)
-                .told_plugin_name(
-                    0,
-                    self.view.plugin,
-                    self.view.plugin_available,
-                    self.view.plugin_name,
-                )
-                .told_plugin_name(
-                    1,
-                    self.view.plugin_1,
-                    self.view.plugin_1_available,
-                    self.view.plugin_1_name,
-                )
-        });
+        let outputs_row = self.view.outputs_layout(ctx, self.panel.layout());
         if let Some(ref row) = outputs_row {
             if let Some(action) = row.action_at(at) {
                 return match action {
