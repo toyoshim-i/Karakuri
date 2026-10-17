@@ -89,101 +89,105 @@ fn run(args: &[&str]) -> (bool, String) {
     (out.status.success(), stderr)
 }
 
-#[test]
-fn cli_load_set_with_and_without_watch_includes_all_six_layers_and_l5_params() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let store_path = dir.path().join("store");
-    let store = Store::open(&store_path).expect("store");
+mod gpu {
+    use super::*;
 
-    let sources = [
-        (karakuri_ir::Kind::L1, L1, "test_l1"),
-        (karakuri_ir::Kind::L2, L2, "test_l2"),
-        (karakuri_ir::Kind::L3, L3, "test_l3"),
-        (karakuri_ir::Kind::Field, FIELD, "test_field"),
-        (karakuri_ir::Kind::L4, L4, "test_l4"),
-        (karakuri_ir::Kind::L5, L5, "test_l5"),
-    ];
+    #[test]
+    fn cli_load_set_with_and_without_watch_includes_all_six_layers_and_l5_params() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store_path = dir.path().join("store");
+        let store = Store::open(&store_path).expect("store");
 
-    let nodes: Vec<setfile::Node> = sources
-        .iter()
-        .map(|(kind, src, name)| {
-            let hash = Hash::of(src.as_bytes());
-            store.put_artifact(src.as_bytes()).expect("store artifact");
-            setfile::Node {
-                hash,
-                layer: *kind,
-                index: 0,
-                name: Some((*name).to_string()),
-            }
-        })
-        .collect();
+        let sources = [
+            (karakuri_ir::Kind::L1, L1, "test_l1"),
+            (karakuri_ir::Kind::L2, L2, "test_l2"),
+            (karakuri_ir::Kind::L3, L3, "test_l3"),
+            (karakuri_ir::Kind::Field, FIELD, "test_field"),
+            (karakuri_ir::Kind::L4, L4, "test_l4"),
+            (karakuri_ir::Kind::L5, L5, "test_l5"),
+        ];
 
-    let params = vec![karakuri_engine::ParamWrite::at(
-        karakuri_ir::Kind::L5,
-        0,
-        "scanline",
-        0.8,
-    )];
+        let nodes: Vec<setfile::Node> = sources
+            .iter()
+            .map(|(kind, src, name)| {
+                let hash = Hash::of(src.as_bytes());
+                store.put_artifact(src.as_bytes()).expect("store artifact");
+                setfile::Node {
+                    hash,
+                    layer: *kind,
+                    index: 0,
+                    name: Some((*name).to_string()),
+                }
+            })
+            .collect();
 
-    setfile::save(
-        &store,
-        karakuri_environment::Asked::Operator,
-        "all_six",
-        setfile::Saving {
-            nodes: &nodes,
-            capacities: &[512],
-            params: &params,
-            bindings: &[],
-            edges: &[],
-            camera: &karakuri_engine::camera::Orbit::default(),
-            layering: karakuri_engine::set::Layering::Overdraw,
-            live: None,
-            seeds: &[1],
-        },
-    )
-    .expect("save all_six set");
+        let params = vec![karakuri_engine::ParamWrite::at(
+            karakuri_ir::Kind::L5,
+            0,
+            "scanline",
+            0.8,
+        )];
 
-    let store_str = store_path.to_str().unwrap();
-    let out_no_watch = dir.path().join("out_no_watch.png");
-    let out_no_watch_str = out_no_watch.to_str().unwrap();
+        setfile::save(
+            &store,
+            karakuri_environment::Asked::Operator,
+            "all_six",
+            setfile::Saving {
+                nodes: &nodes,
+                capacities: &[512],
+                params: &params,
+                bindings: &[],
+                edges: &[],
+                camera: &karakuri_engine::camera::Orbit::default(),
+                layering: karakuri_engine::set::Layering::Overdraw,
+                live: None,
+                seeds: &[1],
+            },
+        )
+        .expect("save all_six set");
 
-    let (ok, stderr_no_watch) = run(&[
-        "--store",
-        store_str,
-        "--load-set",
-        "all_six",
-        "--render",
-        out_no_watch_str,
-        "--frames",
-        "2",
-    ]);
-    assert!(ok, "run without --watch failed:\n{stderr_no_watch}");
-    assert!(
-        !stderr_no_watch.contains("no parameter named `scanline`"),
-        "stderr without --watch rejected scanline parameter:\n{stderr_no_watch}"
-    );
+        let store_str = store_path.to_str().unwrap();
+        let out_no_watch = dir.path().join("out_no_watch.png");
+        let out_no_watch_str = out_no_watch.to_str().unwrap();
 
-    let out_watch = dir.path().join("out_watch.png");
-    let out_watch_str = out_watch.to_str().unwrap();
+        let (ok, stderr_no_watch) = run(&[
+            "--store",
+            store_str,
+            "--load-set",
+            "all_six",
+            "--render",
+            out_no_watch_str,
+            "--frames",
+            "2",
+        ]);
+        assert!(ok, "run without --watch failed:\n{stderr_no_watch}");
+        assert!(
+            !stderr_no_watch.contains("no parameter named `scanline`"),
+            "stderr without --watch rejected scanline parameter:\n{stderr_no_watch}"
+        );
 
-    let (ok, stderr_watch) = run(&[
-        "--store",
-        store_str,
-        "--load-set",
-        "all_six",
-        "--watch",
-        "--render",
-        out_watch_str,
-        "--frames",
-        "2",
-    ]);
-    assert!(ok, "run with --watch failed:\n{stderr_watch}");
-    assert!(
-        !stderr_watch.contains("no parameter named `scanline`"),
-        "stderr with --watch rejected scanline parameter:\n{stderr_watch}"
-    );
-    assert!(
-        stderr_watch.contains("test_l5"),
-        "stderr with --watch must include test_l5 in nodes/slot:\n{stderr_watch}"
-    );
+        let out_watch = dir.path().join("out_watch.png");
+        let out_watch_str = out_watch.to_str().unwrap();
+
+        let (ok, stderr_watch) = run(&[
+            "--store",
+            store_str,
+            "--load-set",
+            "all_six",
+            "--watch",
+            "--render",
+            out_watch_str,
+            "--frames",
+            "2",
+        ]);
+        assert!(ok, "run with --watch failed:\n{stderr_watch}");
+        assert!(
+            !stderr_watch.contains("no parameter named `scanline`"),
+            "stderr with --watch rejected scanline parameter:\n{stderr_watch}"
+        );
+        assert!(
+            stderr_watch.contains("test_l5"),
+            "stderr with --watch must include test_l5 in nodes/slot:\n{stderr_watch}"
+        );
+    }
 }
