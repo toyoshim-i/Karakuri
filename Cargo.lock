@@ -1516,6 +1516,7 @@ dependencies = [
  "karakuri-pattern",
  "portable-pty",
  "serde_json",
+ "unicode-width",
  "web-sys",
 ]
 

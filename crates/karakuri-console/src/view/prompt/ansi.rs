@@ -1,6 +1,7 @@
 //! ANSI terminal escape sequence parser, color rendition, and screen buffer.
 
 use egui::Color32;
+use unicode_width::UnicodeWidthChar;
 
 /// Character cell style including foreground, background, and text decorations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -19,6 +20,25 @@ pub struct CellStyle {
 pub struct Cell {
     pub ch: char,
     pub style: CellStyle,
+}
+
+impl Cell {
+    /// Sentinel character used for the trailing/continuation cell of double-width (CJK) characters.
+    pub const CONTINUATION_CHAR: char = '\0';
+
+    /// Creates a continuation cell for a wide character with the specified style.
+    pub fn continuation(style: CellStyle) -> Self {
+        Self {
+            ch: Self::CONTINUATION_CHAR,
+            style,
+        }
+    }
+
+    /// Whether this cell is a trailing continuation placeholder for a preceding double-width character.
+    #[inline]
+    pub fn is_continuation(&self) -> bool {
+        self.ch == Self::CONTINUATION_CHAR
+    }
 }
 
 impl Default for Cell {
@@ -407,23 +427,70 @@ impl Scrollback {
         }
         match ev {
             AnsiEvent::Print(c) => {
+                let width = c.width().unwrap_or(1);
+                if width == 0 {
+                    return;
+                }
+
                 while self.rows.len() <= self.cursor.0 {
                     self.rows.push(Vec::new());
                 }
                 let row = &mut self.rows[self.cursor.0];
-                if self.cursor.1 >= row.len() {
-                    row.resize(self.cursor.1, Cell::default());
-                    row.push(Cell {
-                        ch: c,
-                        style: self.current_style,
-                    });
-                } else {
-                    row[self.cursor.1] = Cell {
-                        ch: c,
-                        style: self.current_style,
-                    };
+
+                // If overwriting existing cells, maintain buffer consistency for wide characters:
+                // 1. If landing on an existing continuation cell, erase its leading wide character to a space.
+                if self.cursor.1 < row.len() && row[self.cursor.1].is_continuation() {
+                    if self.cursor.1 > 0 {
+                        row[self.cursor.1 - 1] = Cell::default();
+                    }
+                    row[self.cursor.1] = Cell::default();
                 }
-                self.cursor.1 += 1;
+
+                // 2. If landing on a wide character's leading cell, erase its following continuation cell.
+                if self.cursor.1 + 1 < row.len() && row[self.cursor.1 + 1].is_continuation() {
+                    row[self.cursor.1 + 1] = Cell::default();
+                }
+
+                if width == 1 {
+                    if self.cursor.1 >= row.len() {
+                        row.resize(self.cursor.1, Cell::default());
+                        row.push(Cell {
+                            ch: c,
+                            style: self.current_style,
+                        });
+                    } else {
+                        row[self.cursor.1] = Cell {
+                            ch: c,
+                            style: self.current_style,
+                        };
+                    }
+                    self.cursor.1 += 1;
+                } else {
+                    // Double-width character (CJK fullwidth / ideographs): occupies 2 terminal cells.
+                    if self.cursor.1 + 2 < row.len() && row[self.cursor.1 + 2].is_continuation() {
+                        row[self.cursor.1 + 2] = Cell::default();
+                    }
+
+                    if self.cursor.1 >= row.len() {
+                        row.resize(self.cursor.1, Cell::default());
+                        row.push(Cell {
+                            ch: c,
+                            style: self.current_style,
+                        });
+                        row.push(Cell::continuation(self.current_style));
+                    } else {
+                        row[self.cursor.1] = Cell {
+                            ch: c,
+                            style: self.current_style,
+                        };
+                        if self.cursor.1 + 1 < row.len() {
+                            row[self.cursor.1 + 1] = Cell::continuation(self.current_style);
+                        } else {
+                            row.push(Cell::continuation(self.current_style));
+                        }
+                    }
+                    self.cursor.1 += 2;
+                }
             }
             AnsiEvent::Newline => {
                 self.cursor.0 += 1;
@@ -447,18 +514,31 @@ impl Scrollback {
             }
             AnsiEvent::ClearLine(mode) => {
                 if self.cursor.0 < self.rows.len() {
+                    let row = &mut self.rows[self.cursor.0];
                     match mode {
                         2 => {
-                            self.rows[self.cursor.0].clear();
+                            row.clear();
                         }
                         1 => {
-                            let row = &mut self.rows[self.cursor.0];
-                            for cell in row.iter_mut().take(self.cursor.1 + 1) {
+                            let end_idx = if self.cursor.1 + 1 < row.len()
+                                && row[self.cursor.1 + 1].is_continuation()
+                            {
+                                self.cursor.1 + 2
+                            } else {
+                                self.cursor.1 + 1
+                            };
+                            for cell in row.iter_mut().take(end_idx) {
                                 *cell = Cell::default();
                             }
                         }
                         _ => {
-                            self.rows[self.cursor.0].truncate(self.cursor.1);
+                            if self.cursor.1 < row.len()
+                                && row[self.cursor.1].is_continuation()
+                                && self.cursor.1 > 0
+                            {
+                                row[self.cursor.1 - 1] = Cell::default();
+                            }
+                            row.truncate(self.cursor.1);
                         }
                     }
                 }
@@ -475,14 +555,28 @@ impl Scrollback {
                     }
                     if self.cursor.0 < self.rows.len() {
                         let row = &mut self.rows[self.cursor.0];
-                        for cell in row.iter_mut().take(self.cursor.1 + 1) {
+                        let end_idx = if self.cursor.1 + 1 < row.len()
+                            && row[self.cursor.1 + 1].is_continuation()
+                        {
+                            self.cursor.1 + 2
+                        } else {
+                            self.cursor.1 + 1
+                        };
+                        for cell in row.iter_mut().take(end_idx) {
                             *cell = Cell::default();
                         }
                     }
                 }
                 _ => {
                     if self.cursor.0 < self.rows.len() {
-                        self.rows[self.cursor.0].truncate(self.cursor.1);
+                        let row = &mut self.rows[self.cursor.0];
+                        if self.cursor.1 < row.len()
+                            && row[self.cursor.1].is_continuation()
+                            && self.cursor.1 > 0
+                        {
+                            row[self.cursor.1 - 1] = Cell::default();
+                        }
+                        row.truncate(self.cursor.1);
                         self.rows.truncate(self.cursor.0 + 1);
                     }
                 }
@@ -536,8 +630,16 @@ impl Scrollback {
             AnsiEvent::EraseChars(n) => {
                 if self.cursor.0 < self.rows.len() {
                     let row = &mut self.rows[self.cursor.0];
-                    for idx in self.cursor.1..(self.cursor.1 + n).min(row.len()) {
-                        row[idx] = Cell::default();
+                    let start = self.cursor.1;
+                    let end = (self.cursor.1 + n).min(row.len());
+                    if start < row.len() && row[start].is_continuation() && start > 0 {
+                        row[start - 1] = Cell::default();
+                    }
+                    if end < row.len() && row[end].is_continuation() {
+                        row[end] = Cell::default();
+                    }
+                    for cell in row.iter_mut().take(end).skip(start) {
+                        *cell = Cell::default();
                     }
                 }
             }
@@ -614,7 +716,11 @@ impl Scrollback {
         self.rows
             .iter()
             .map(|row| {
-                let s: String = row.iter().map(|c| c.ch).collect();
+                let s: String = row
+                    .iter()
+                    .filter(|c| !c.is_continuation())
+                    .map(|c| c.ch)
+                    .collect();
                 s.trim_end().to_string()
             })
             .collect()
@@ -702,5 +808,62 @@ mod tests {
         let chars: String = sb.rows[1].iter().map(|c| c.ch).collect();
         println!("CHARS: {:?}", chars);
         assert_eq!(chars, "    ▀");
+    }
+
+    #[test]
+    fn wide_cjk_character_occupies_two_cells_and_advances_cursor_by_two() {
+        let mut sb = Scrollback::default();
+        sb.push_str("スロットAに");
+        // 'ス' (2) + 'ロ' (2) + 'ッ' (2) + 'ト' (2) + 'A' (1) + 'に' (2) = 11 columns
+        assert_eq!(sb.cursor, (0, 11));
+        assert_eq!(sb.rows[0].len(), 11);
+
+        assert_eq!(sb.rows[0][0].ch, 'ス');
+        assert!(sb.rows[0][1].is_continuation());
+        assert_eq!(sb.rows[0][2].ch, 'ロ');
+        assert!(sb.rows[0][3].is_continuation());
+        assert_eq!(sb.rows[0][4].ch, 'ッ');
+        assert!(sb.rows[0][5].is_continuation());
+        assert_eq!(sb.rows[0][6].ch, 'ト');
+        assert!(sb.rows[0][7].is_continuation());
+        assert_eq!(sb.rows[0][8].ch, 'A');
+        assert!(!sb.rows[0][8].is_continuation());
+        assert_eq!(sb.rows[0][9].ch, 'に');
+        assert!(sb.rows[0][10].is_continuation());
+
+        // lines() should return the original string without null chars or extra spaces
+        assert_eq!(sb.lines()[0], "スロットAに");
+    }
+
+    #[test]
+    fn wide_cjk_absolute_cursor_positioning_avoids_spurious_spaces() {
+        let mut sb = Scrollback::default();
+        // Simulate TUI diff-renderer outputting wide characters with absolute column jumps:
+        // 'ス' at col 1 -> cursor advances to col 3 (0-indexed col 2).
+        // Then TUI jumps to col 3 explicitly (\x1b[3G) and prints 'ロ'.
+        sb.push_str("ス\x1b[3Gロ\x1b[5Gッ");
+        assert_eq!(sb.cursor, (0, 6));
+        assert_eq!(sb.lines()[0], "スロッ");
+        assert_eq!(sb.rows[0].len(), 6);
+        assert_eq!(sb.rows[0][0].ch, 'ス');
+        assert!(sb.rows[0][1].is_continuation());
+        assert_eq!(sb.rows[0][2].ch, 'ロ');
+        assert!(sb.rows[0][3].is_continuation());
+        assert_eq!(sb.rows[0][4].ch, 'ッ');
+        assert!(sb.rows[0][5].is_continuation());
+    }
+
+    #[test]
+    fn wide_cjk_cell_overwriting_cleans_up_orphaned_continuation() {
+        let mut sb = Scrollback::default();
+        sb.push_str("テスト"); // 6 columns
+        assert_eq!(sb.lines()[0], "テスト");
+
+        // Move cursor back to col 1 (0-indexed col 0) and overwrite with single-width 'A'
+        sb.push_str("\x1b[1GA");
+        // Overwriting 'テ' (cols 0, 1) with 'A' (col 0) should clear continuation at col 1 to space
+        assert_eq!(sb.rows[0][0].ch, 'A');
+        assert_eq!(sb.rows[0][1].ch, ' ');
+        assert_eq!(sb.lines()[0], "A スト");
     }
 }

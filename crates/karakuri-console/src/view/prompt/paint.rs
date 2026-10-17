@@ -50,18 +50,31 @@ pub fn extract_selected_text(
     let mut lines = Vec::new();
     let max_r = end.0.min(cell_rows.len().saturating_sub(1));
     for (r, row) in cell_rows.iter().enumerate().take(max_r + 1).skip(start.0) {
-        let c_start = if r == start.0 {
+        let mut c_start = if r == start.0 {
             start.1.min(row.len())
         } else {
             0
         };
-        let c_end = if r == end.0 {
+        // If selection starts on a continuation cell, snap left to include the wide char
+        if c_start > 0 && c_start < row.len() && row[c_start].is_continuation() {
+            c_start -= 1;
+        }
+
+        let mut c_end = if r == end.0 {
             end.1.min(row.len())
         } else {
             row.len()
         };
+        // If selection ends on a continuation cell, snap right to include the wide char
+        if c_end < row.len() && row[c_end].is_continuation() {
+            c_end += 1;
+        }
+
         if c_start < c_end {
-            let line: String = (c_start..c_end).map(|c| row[c].ch).collect();
+            let line: String = (c_start..c_end)
+                .filter(|&c| !row[c].is_continuation())
+                .map(|c| row[c].ch)
+                .collect();
             lines.push(line.trim_end().to_string());
         } else {
             lines.push(String::new());
@@ -483,13 +496,23 @@ pub fn prompt_into(
                                     }
                                 }
 
+                                if c_idx < row.len() && row[c_idx].is_continuation() {
+                                    // Continuation cell of a double-width character:
+                                    // The leading cell already occupies two monospace glyph columns,
+                                    // so skip emitting an extra glyph to prevent unwanted spaces and drift.
+                                    continue;
+                                }
+
                                 let (ch, cell_style) = if c_idx < row.len() {
                                     (row[c_idx].ch, row[c_idx].style)
                                 } else {
                                     (' ', Default::default())
                                 };
 
-                                let is_cursor_cell = is_cursor_row && c_idx == cursor.1;
+                                let is_wide =
+                                    c_idx + 1 < row.len() && row[c_idx + 1].is_continuation();
+                                let is_cursor_cell = is_cursor_row
+                                    && (c_idx == cursor.1 || (is_wide && c_idx + 1 == cursor.1));
 
                                 let mut format = TextFormat {
                                     font_id: font_id.clone(),
@@ -539,9 +562,11 @@ pub fn prompt_into(
                                     }
                                 }
 
-                                // Apply text selection highlight
+                                // Apply text selection highlight across single and double-width cells
                                 if state.selection_range().is_some_and(|(start, end)| {
                                     is_cell_selected(r_idx, c_idx, start, end)
+                                        || (is_wide
+                                            && is_cell_selected(r_idx, c_idx + 1, start, end))
                                 }) {
                                     format.background = pal.mint;
                                     format.color = pal.panel;
@@ -629,6 +654,25 @@ mod tests {
         // Reversed coordinates selection (drag backwards)
         let sel_rev = extract_selected_text(&rows, (1, 8), (0, 7));
         assert_eq!(sel_rev, "world!\nKarakuri");
+    }
+
+    #[test]
+    fn test_extract_selected_text_wide_cjk() {
+        use crate::view::prompt::ansi::Scrollback;
+        let mut sb = Scrollback::default();
+        sb.push_str("スロットAに映像を追加");
+
+        // Select from col 0 to col 8 ("スロット")
+        let sel = extract_selected_text(&sb.rows, (0, 0), (0, 8));
+        assert_eq!(sel, "スロット");
+
+        // Select with boundary landing on continuation cell (col 1), should snap to include "ス"
+        let sel_snap_start = extract_selected_text(&sb.rows, (0, 1), (0, 8));
+        assert_eq!(sel_snap_start, "スロット");
+
+        // Select from col 8 to 11 ("Aに")
+        let sel_tail = extract_selected_text(&sb.rows, (0, 8), (0, 11));
+        assert_eq!(sel_tail, "Aに");
     }
 
     #[test]
