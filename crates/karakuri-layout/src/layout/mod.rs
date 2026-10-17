@@ -58,6 +58,7 @@ impl Layout {
                 root,
                 soloed: None,
                 saved,
+                overlay: None,
             },
             viewport: Rect::new(0.0, 0.0, 0.0, 0.0),
             solved: Solved {
@@ -173,7 +174,11 @@ impl Layout {
     pub fn visible(&self, id: NodeId) -> bool {
         let mut cur = Some(id);
         while let Some(NodeId(i)) = cur {
-            if self.arrangement.out_of_layout(i) {
+            if self.arrangement.overlay.is_some_and(|(ov, _)| ov.0 == i) {
+                if self.node(i).collapsed {
+                    return false;
+                }
+            } else if self.arrangement.out_of_layout(i) {
                 return false;
             }
             cur = self.node(i).parent;
@@ -261,6 +266,27 @@ impl Layout {
         if self.node(id.0).aside != aside {
             self.node_mut(id.0).aside = aside;
             self.dirty = true;
+        }
+    }
+
+    /// Sets or clears the active overlay target node and its solved rectangle.
+    pub fn set_overlay(&mut self, overlay: Option<(NodeId, Rect)>) {
+        if self.arrangement.overlay != overlay {
+            self.arrangement.overlay = overlay;
+            self.dirty = true;
+        }
+    }
+
+    /// Returns the currently active overlay, if any.
+    pub fn overlay(&self) -> Option<(NodeId, Rect)> {
+        self.arrangement.overlay
+    }
+
+    /// Returns true if `id` is within the active overlay subtree.
+    pub fn is_in_overlay(&self, id: NodeId) -> bool {
+        match self.arrangement.overlay {
+            Some((ov, _)) => self.arrangement.is_ancestor(ov.0, id.0),
+            None => false,
         }
     }
 
@@ -554,6 +580,12 @@ impl Layout {
         measure(arrangement, solved, arrangement.root.0, None);
         solved.rects[arrangement.root.0] = *viewport;
         solve_subtree(arrangement, solved, arrangement.root.0);
+        if let Some((NodeId(ov), rect)) = arrangement.overlay {
+            if !arrangement.nodes[ov].collapsed {
+                solved.rects[ov] = rect;
+                solve_subtree(arrangement, solved, ov);
+            }
+        }
         *dirty = false;
     }
 
@@ -597,7 +629,16 @@ impl Layout {
         if self.arrangement.out_of_layout(self.arrangement.root.0) {
             return Hit::Nothing;
         }
-        let mut cur = self.arrangement.root.0;
+        if let Some((ov, _)) = self.arrangement.overlay {
+            if self.visible(ov) && self.solved.rects[ov.0].contains(p) {
+                return self.hit_from(ov.0, p, grab);
+            }
+        }
+        self.hit_from(self.arrangement.root.0, p, grab)
+    }
+
+    fn hit_from(&self, start: usize, p: Point, grab: f32) -> Hit {
+        let mut cur = start;
         loop {
             let Some((axis, _)) = self.arrangement.split_of(cur) else {
                 return Hit::View(NodeId(cur));
@@ -670,5 +711,78 @@ impl Layout {
     /// construction rather than by convention: see [`Layout::solve`].
     fn node_mut(&mut self, i: usize) -> &mut Node {
         &mut self.arrangement.nodes[i]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overlay_subtree_solves_into_rect_and_prioritizes_hit() {
+        let spec = Spec::row(
+            0.0,
+            vec![
+                Spec::view("base").flex(1.0),
+                Spec::column(
+                    0.0,
+                    vec![
+                        Spec::view("child1").fixed(50.0),
+                        Spec::view("child2").flex(1.0),
+                    ],
+                )
+                .named("drawer")
+                .fixed(100.0),
+            ],
+        );
+        let mut layout = Layout::new(spec);
+        layout.set_viewport(Rect::new(0.0, 0.0, 500.0, 500.0));
+        let drawer_id = layout.find("drawer").unwrap();
+        let child1_id = layout.find("child1").unwrap();
+        let child2_id = layout.find("child2").unwrap();
+        let base_id = layout.find("base").unwrap();
+
+        // Put drawer aside.
+        layout.set_aside(drawer_id, true);
+        layout.solve();
+
+        assert!(!layout.visible(drawer_id));
+        assert!(!layout.visible(child1_id));
+        assert_eq!(layout.rect(base_id), Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        // Now set overlay on the aside drawer.
+        let ov_rect = Rect::new(0.0, 0.0, 100.0, 500.0);
+        layout.set_overlay(Some((drawer_id, ov_rect)));
+        layout.solve();
+
+        assert_eq!(layout.overlay(), Some((drawer_id, ov_rect)));
+        assert!(layout.is_in_overlay(drawer_id));
+        assert!(layout.is_in_overlay(child1_id));
+        assert!(layout.is_in_overlay(child2_id));
+        assert!(!layout.is_in_overlay(base_id));
+
+        assert!(layout.visible(drawer_id));
+        assert!(layout.visible(child1_id));
+        assert!(layout.visible(child2_id));
+
+        assert_eq!(layout.rect(drawer_id), ov_rect);
+        assert_eq!(layout.rect(child1_id), Rect::new(0.0, 0.0, 100.0, 50.0));
+        assert_eq!(layout.rect(child2_id), Rect::new(0.0, 50.0, 100.0, 450.0));
+
+        // Hit testing over the overlay returns the overlay child, not the base underneath.
+        assert_eq!(
+            layout.hit(Point::new(10.0, 10.0), 0.0),
+            Hit::View(child1_id)
+        );
+        assert_eq!(
+            layout.hit(Point::new(10.0, 100.0), 0.0),
+            Hit::View(child2_id)
+        );
+
+        // Hit testing outside the overlay returns base.
+        assert_eq!(
+            layout.hit(Point::new(200.0, 200.0), 0.0),
+            Hit::View(base_id)
+        );
     }
 }

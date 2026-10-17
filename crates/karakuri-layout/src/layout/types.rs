@@ -105,6 +105,7 @@ pub(crate) struct Arrangement {
     /// Currently soloed node (if any) and backed-up collapsed flags for [`Layout::unsolo`].
     pub(crate) soloed: Option<NodeId>,
     pub(crate) saved: Vec<bool>,
+    pub(crate) overlay: Option<(NodeId, Rect)>,
 }
 
 impl Arrangement {
