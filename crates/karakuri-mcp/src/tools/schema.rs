@@ -143,9 +143,12 @@ pub(crate) fn build_tools(state: Arc<Mutex<State>>) -> Vec<Tool> {
             "Execute an instrument operation by heading name from the operations vocabulary. Audited against current console openings.",
         )
         .param("operation", ParamType::Enum(operable_titles), "heading of the operation to perform", true)
+        .param("with", ParamType::Object, "payload object carrying operation parameters (see karakuri://doc/operations)", false)
+        .additional_properties(true)
         .skip_validation(true)
         .see("operations")
         .example(json!({ "operation": "Choose which renderer of a deck is live" }))
+        .example(json!({ "operation": "Nudge the latency offset", "with": { "ms": 5.0 } }))
         .handler(tool_handler("operate", state.clone()))
         .build(),
 

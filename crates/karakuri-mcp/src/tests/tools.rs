@@ -285,3 +285,24 @@ fn vr_projection_resource_is_published_and_readable() {
     assert!(content.text.contains("Dome"));
     assert!(content.text.contains("point_coord"));
 }
+
+#[test]
+fn operate_schema_publishes_with_object_and_allows_additional_properties() {
+    let published = tools();
+    let operate = published
+        .as_array()
+        .expect("tools() is an array")
+        .iter()
+        .find(|t| t["name"] == json!("operate"))
+        .expect("operate tool is published");
+
+    let schema = &operate["inputSchema"];
+    assert_eq!(
+        schema["additionalProperties"],
+        json!(true),
+        "operate tool schema must permit additionalProperties"
+    );
+    let with_prop = &schema["properties"]["with"];
+    assert_eq!(with_prop["type"], json!("object"));
+    assert_eq!(with_prop["additionalProperties"], json!(true));
+}
