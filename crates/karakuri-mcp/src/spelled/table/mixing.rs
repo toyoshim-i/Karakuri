@@ -106,32 +106,6 @@ pub(crate) const MIXING: &[Spelled] = &[
     Spelled {
         sample: || {
             (
-                Operation::SetOnline {
-                    deck: 0,
-                    online: true,
-                },
-                json!({ "deck": 0, "online": true }),
-            )
-        },
-        make: Some(|with, slots| {
-            Ok(Operation::SetOnline {
-                deck: deck_of(with, "deck", slots)?,
-                online: bool_of(with, "online")?,
-            })
-        }),
-        shape: Some(|| {
-            shaped(
-                json!({
-                    "deck": p_deck(),
-                    "online": p_bool("whether this deck's slot is online in the composite mix"),
-                }),
-                &["deck", "online"],
-            )
-        }),
-    },
-    Spelled {
-        sample: || {
-            (
                 Operation::SetBlendMode {
                     deck: 0,
                     blend: karakuri_operation::BlendMode::Over,

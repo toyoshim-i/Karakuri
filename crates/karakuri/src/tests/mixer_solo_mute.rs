@@ -190,19 +190,6 @@ mod gpu {
         // Slot 0 and 2 are unmuted, so online
         assert!(deck.is_online(EngineSlot(0)));
         assert!(deck.is_online(EngineSlot(2)));
-
-        // Apply Record::Online
-        let log = apply(
-            &Record::Online {
-                slot: DeckSlot(0),
-                online: false,
-            },
-            deck,
-            look,
-            &mut chain,
-        );
-        assert!(log.is_some());
-        assert!(!deck.is_online(EngineSlot(0)));
     }
 
     #[test]

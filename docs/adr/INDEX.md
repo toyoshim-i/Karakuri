@@ -391,7 +391,7 @@ number; new records continue from the end.
 | [ADR-0363](0363-agent-workflow-operations-are-read-slot-copy-slot-and-get-permissions-staged-through-atomic-rename.md) | Agent workflow operations are read_slot, copy_slot, and get_permissions, staged through atomic rename | 2026-09-16 | accepted |
 | [ADR-0364](0364-every-bay-head-renders-the-menu-dice-and-double-clicking-the-header-toggles-folding.md) | Every bay head renders the menu dice, and double-clicking the header toggles folding | 2026-09-27 | accepted |
 | [ADR-0365](0365-the-prompt-bay-embeds-an-interactive-multi-session-terminal-multiplexer-with-cursor-anchored-input.md) | The Prompt bay embeds an interactive multi-session terminal multiplexer with cursor-anchored input | 2026-09-27 | accepted |
-| [ADR-0366](0366-mix-participation-is-decoupled-from-residency-and-solo-and-mute-are-destination-operations.md) | Mix participation is decoupled from residency, and solo and mute are destination operations | 2026-09-19 | accepted |
+| [ADR-0366](0366-mix-participation-is-decoupled-from-residency-and-solo-and-mute-are-destination-operations.md) | Mix participation is decoupled from residency, and solo and mute are destination operations | 2026-09-19 | superseded by [ADR-0395](0395-mix-participation-is-arbitrated-internally-by-solo-and-mute-operations.md) |
 | [ADR-0367](0367-gate-refusals-carry-structured-machine-readable-codes-and-slot-policies-persist-in-the-store.md) | Gate refusals carry structured machine-readable codes, and slot policies persist in the store | 2026-09-21 | accepted |
 | [ADR-0368](0368-the-audio-signal-bus-resolves-eight-acoustic-frequency-bands-by-semantic-names-at-frame-boundaries.md) | The audio signal bus resolves eight acoustic frequency bands by semantic names at frame boundaries | 2026-09-21 | accepted |
 | [ADR-0369](0369-gpu-output-plugins-are-isolated-processes-discovered-dynamically-over-pipes-and-sharing-zero-copy-surfaces.md) | GPU output plugins are isolated processes discovered dynamically over pipes and sharing zero-copy surfaces | 2026-09-26 | accepted |
@@ -420,6 +420,7 @@ number; new records continue from the end.
 | [ADR-0392](0392-library-bay-tri-state-privacy-gate.md) | Library bay tri-state privacy gate | 2026-10-13 | accepted |
 | [ADR-0393](0393-mcp-capture-frame-image-tool-with-non-blocking-readback.md) | MCP capture_frame image tool with non-blocking readback | 2026-10-13 | accepted |
 | [ADR-0394](0394-render-resolution-is-settled-solely-by-program-bay-selection-and-scaled-to-outputs.md) | Render resolution is settled solely by the Program bay selection and scaled to outputs | 2026-10-14 | accepted |
+| [ADR-0395](0395-mix-participation-is-arbitrated-internally-by-solo-and-mute-operations.md) | Mix participation is arbitrated internally by solo and mute operations | 2026-10-17 | accepted |
 
 
 ## Retired numbers

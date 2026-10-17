@@ -103,9 +103,6 @@ operations! {
     /// Clears any active solo across all decks.
     ClearSolo => "Clear solo",
 
-    /// Sets whether a deck's slot is online in the composite mix.
-    SetOnline { deck: u8, online: bool } => "Set a slot's online state",
-
     /// Names the mode, where `karakuri-midi`'s `Action::CycleBlend` could only
     /// step. A pad that means *over* is a mapping this made writable, and `note 40
     /// -> blend 0 over` is that mapping.

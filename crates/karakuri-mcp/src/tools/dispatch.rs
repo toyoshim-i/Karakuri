@@ -42,7 +42,6 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
         | Operation::SetMute { .. }
         | Operation::SetSolo { .. }
         | Operation::ClearSolo
-        | Operation::SetOnline { .. }
         | Operation::SetBlendMode { .. }
         | Operation::FadeDeck { .. }
         | Operation::Crossfade { .. }

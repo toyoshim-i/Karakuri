@@ -18,13 +18,14 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
                 open.with(*class, true)
             }),
     );
+    let slot_policies = policies();
     let reporter = serve(
         0,
         Slots::of(vec![(l1, vec![l4])]),
         store_root(&dir),
         true,
         opening,
-        policies(),
+        slot_policies.clone(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -99,7 +100,9 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
         );
     }
 
-    // Verify that loading an unresident procedure is audited and rejected by the audit layer.
+    // Verify that loading onto a deck active in the mix is audited and rejected by policy/audit.
+    slot_policies.set_policy(0, karakuri_operation::SlotPolicy::Auto);
+    slot_policies.set_in_mix(0, true);
     let (failed, said) = call(
         port,
         "operate",
@@ -108,10 +111,7 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
             "with": {"deck": 0, "procedure": "orbit_wide"},
         }),
     );
-    assert!(
-        failed,
-        "the load was accepted with no residency read: {said}"
-    );
+    assert!(failed, "the load was accepted on a live deck: {said}");
     assert!(
         !said.contains("no operation `") && !said.contains("no route on this surface"),
         "the load was refused by this file's spelling rather than by the audit: {said}"

@@ -75,10 +75,6 @@ fn every_operation() -> Vec<Operation> {
             solo: false,
         },
         Operation::ClearSolo,
-        Operation::SetOnline {
-            deck: 0,
-            online: true,
-        },
         Operation::SetBlendMode {
             deck: 0,
             blend: BlendMode::Add,
@@ -317,7 +313,7 @@ fn the_classification_is_the_split_adr_0235_states() {
             Standing::Closed(_) | Standing::ClosedUnclassed(_) | Standing::Unread(_) => closed += 1,
         }
     }
-    assert_eq!((closed, open, closed + open), (46, 27, 73));
+    assert_eq!((closed, open, closed + open), (45, 27, 72));
 }
 
 fn members(class: Class) -> Vec<&'static str> {
@@ -367,7 +363,6 @@ fn the_mix_faders_are_closed_until_the_mixer_bay_opens_them() {
             "Mute a deck",
             "Solo a deck",
             "Clear solo",
-            "Set a slot's online state",
             "Blend mode",
             "Fade a deck out or in",
             "Crossfade to the next deck",

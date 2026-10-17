@@ -51,7 +51,6 @@ impl Record {
             | Record::Opacity { .. }
             | Record::Mute { .. }
             | Record::Solo { .. }
-            | Record::Online { .. }
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Policy { .. }

@@ -61,7 +61,6 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Opacity { .. }
         | Record::Mute { .. }
         | Record::Solo { .. }
-        | Record::Online { .. }
         | Record::Blend { .. }
         | Record::Residency { .. }
         | Record::Policy { .. }

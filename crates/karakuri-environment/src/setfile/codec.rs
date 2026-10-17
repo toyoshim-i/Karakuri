@@ -395,7 +395,6 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Opacity { .. }
             | Record::Mute { .. }
             | Record::Solo { .. }
-            | Record::Online { .. }
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }

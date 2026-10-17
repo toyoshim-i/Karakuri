@@ -4,7 +4,7 @@ title: Mix participation is decoupled from residency, and solo and mute are dest
 status: accepted
 date: 2026-09-19
 supersedes: []
-superseded_by: []
+superseded_by: [0395]
 principles: [0085, 0090, 0094]
 tags: [engine, mixer, residency, operations, m7]
 ---

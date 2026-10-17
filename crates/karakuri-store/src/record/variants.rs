@@ -135,11 +135,6 @@ pub enum Record {
         slot: DeckSlot,
         soloed: bool,
     },
-    /// A deck slot's online mix state.
-    Online {
-        slot: DeckSlot,
-        online: bool,
-    },
     /// How a deck slot's layer meets the ones under it (`add`, `over`, or `max`).
     Blend {
         slot: DeckSlot,

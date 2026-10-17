@@ -33,10 +33,6 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             slot: DeckSlot(*deck),
             soloed: *solo,
         }),
-        Operation::SetOnline { deck, online } => one(Record::Online {
-            slot: DeckSlot(*deck),
-            online: *online,
-        }),
         Operation::SetBlendMode { deck, blend } => one(Record::Blend {
             slot: DeckSlot(*deck),
             mode: blend.name().to_string(),

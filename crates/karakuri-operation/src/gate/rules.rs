@@ -161,7 +161,6 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SetMute { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetSolo { .. } => Standing::Closed(Class::MixFaders),
         Operation::ClearSolo => Standing::Closed(Class::MixFaders),
-        Operation::SetOnline { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetBlendMode { .. } => Standing::Closed(Class::MixFaders),
         Operation::FadeDeck { .. } => Standing::Closed(Class::MixFaders),
         Operation::Crossfade { .. } => Standing::Closed(Class::MixFaders),

@@ -43,16 +43,6 @@ pub(crate) fn apply_strip_record(record: &Record, deck: &mut Deck) -> Option<Str
                 deck.is_soloed(slot)
             ))
         }
-        Record::Online { slot, online } => {
-            let slot = held(deck, slot.0)?;
-            deck.set_online(slot, online);
-            Some(format!(
-                "  online: deck {} -> SetOnline {{ deck: {slot}, online: {online} }} \
-                 -> Record::Online -> deck.is_online({slot}) = {}",
-                deck_letter(slot.0),
-                deck.is_online(slot)
-            ))
-        }
         Record::Blend { slot, ref mode } => {
             let slot = held(deck, slot.0)?;
             let blend = Blend::from_name(mode)?;
