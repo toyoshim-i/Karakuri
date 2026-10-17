@@ -11,10 +11,10 @@ pub(crate) use karakuri_console::view::outputs;
 pub(crate) use karakuri_console::view::transport as transport_row;
 pub(crate) use karakuri_console::view::{
     self, bay_grip, deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
-    library as library_bay, library_mcp_pill, mcp_pill, mixer as mixer_bay,
-    outputs_with_plugin_name, program_bay, program_head, sequencer as sequencer_bay, slot_mcp_pill,
-    staging as staging_bay, transition as transition_row, Aim, Ask, AudioAsk, AudioIn, Chose,
-    Chosen, Go, McpPill, Picked, Read, Scope, Taken, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
+    library as library_bay, library_mcp_pill, mcp_pill, mixer as mixer_bay, program_bay,
+    program_head, sequencer as sequencer_bay, slot_mcp_pill, staging as staging_bay,
+    transition as transition_row, Aim, Ask, AudioAsk, AudioIn, Chose, Chosen, Go, McpPill, Picked,
+    Read, Scope, Taken, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
 };
 #[cfg(test)]
 pub(crate) use karakuri_engine::governor::Reason;

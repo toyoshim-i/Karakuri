@@ -225,6 +225,8 @@ pub struct Outputs {
     pub share: Option<Rect>,
     /// Diagnostic logs toggle pill at right end of Outputs row.
     pub logs: Option<Rect>,
+    /// Horizontal scroll offset already applied to the element rectangles.
+    pub scroll_offset: f32,
 }
 
 impl Outputs {
@@ -348,13 +350,16 @@ impl Outputs {
 
     /// Returns the maximum horizontal scroll offset needed to reveal all outputs content.
     pub fn max_scroll(&self) -> f32 {
-        (self.content_right() + size::OUTPUTS_PAD_X - self.strip.max.x).max(0.0)
+        (self.content_right() + self.scroll_offset + size::OUTPUTS_PAD_X - self.strip.max.x)
+            .max(0.0)
     }
 
     /// Returns a new Outputs instance shifted horizontally by the given scroll offset.
     pub fn scrolled(mut self, scroll: f32) -> Self {
-        let dx = -scroll.clamp(0.0, self.max_scroll());
+        let clamped = scroll.clamp(0.0, self.max_scroll());
+        let dx = -clamped;
         if dx.abs() > f32::EPSILON {
+            self.scroll_offset += clamped;
             let offset = vec2(dx, 0.0);
             self.label = self.label.translate(offset);
             self.mcp = self.mcp.translate(offset);
@@ -573,6 +578,7 @@ pub fn outputs_with_plugin_details(
             xr_pill,
             share,
             logs,
+            scroll_offset: 0.0,
         },
     )
 }

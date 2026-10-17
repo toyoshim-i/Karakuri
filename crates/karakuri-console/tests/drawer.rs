@@ -163,3 +163,109 @@ fn wide_viewport_clears_active_drawer() {
     assert!(panel.layout().overlay().is_none());
     assert!(!panel.is_narrow_body());
 }
+
+#[test]
+fn narrow_transport_row_places_pills_without_overlap_and_scrolls_to_right_end() {
+    let panel = narrow_panel(430.0);
+    let ctx = common::drawn_once();
+    let mut view = common::running();
+    view.look = Some(karakuri_console::view::Look {
+        tonemap: karakuri_operation::Tonemap::Aces,
+        exposure: 1.0,
+    });
+
+    let tl = view
+        .transport_layout(&ctx, panel.layout())
+        .expect("transport layout present");
+    let look = tl.look.expect("look row present");
+    let mcp = tl.mcp.expect("mcp pill present");
+    let theme = tl.theme.expect("theme pill present");
+
+    // Look, MCP, Theme, and right-aligned frame readout must be strictly ordered left-to-right
+    // without overlapping even on a narrow 430px iPhone viewport.
+    assert!(
+        look.value.max.x <= mcp.pill.min.x,
+        "look ({:?}) must not overlap mcp ({:?})",
+        look.value,
+        mcp.pill
+    );
+    assert!(
+        mcp.pill.max.x <= theme.pill.min.x,
+        "mcp ({:?}) must not overlap theme ({:?})",
+        mcp.pill,
+        theme.pill
+    );
+    assert!(
+        theme.pill.max.x <= tl.row.frame.min.x,
+        "theme ({:?}) must not overlap frame readout ({:?})",
+        theme.pill,
+        tl.row.frame
+    );
+
+    // Scrolling to max_scroll must bring the rightmost element inside the visible strip.
+    assert!(tl.max_scroll > 0.0);
+    view.transport_scroll = tl.max_scroll;
+    let scrolled = view
+        .transport_layout(&ctx, panel.layout())
+        .expect("scrolled transport layout present");
+    let right_edge = scrolled.row.health.unwrap_or(scrolled.row.frame).max.x;
+    assert!(
+        right_edge <= scrolled.row.strip.max.x + common::EPS,
+        "rightmost transport item ({right_edge}) should fit within strip max_x ({}) at max_scroll",
+        scrolled.row.strip.max.x
+    );
+}
+
+#[test]
+fn narrow_outputs_row_preserves_max_scroll_and_reaches_right_end() {
+    let panel = narrow_panel(375.0);
+    let ctx = common::drawn_once();
+    let mut view = common::running();
+
+    let out0 = view
+        .outputs_layout(&ctx, panel.layout())
+        .expect("outputs layout present");
+    let max_scroll = out0.max_scroll();
+    assert!(
+        max_scroll > 0.0,
+        "375px viewport must allow scrolling outputs row"
+    );
+
+    // Before scrolling, the rightmost content extends past the right edge of the strip.
+    assert!(out0.content_right() > out0.strip.max.x);
+
+    // Scrolling to max_scroll must not shrink max_scroll (which previously clamped at half scroll)
+    // and must bring the rightmost element (including share/logs on wasm32) inside the strip.
+    view.outputs_scroll = max_scroll;
+    let out_scrolled = view
+        .outputs_layout(&ctx, panel.layout())
+        .expect("scrolled outputs layout present");
+    assert!(
+        common::near(out_scrolled.max_scroll(), max_scroll),
+        "max_scroll must be invariant under scroll offset (got {}, expected {})",
+        out_scrolled.max_scroll(),
+        max_scroll
+    );
+    assert!(
+        out_scrolled.content_right() <= out_scrolled.strip.max.x + common::EPS,
+        "rightmost outputs item ({}) must be visible within strip ({:?}) at max_scroll",
+        out_scrolled.content_right(),
+        out_scrolled.strip
+    );
+    if let Some(share_scrolled) = out_scrolled.share {
+        assert!(
+            share_scrolled.min.x >= out_scrolled.strip.min.x
+                && share_scrolled.max.x <= out_scrolled.strip.max.x + common::EPS,
+            "share pill ({share_scrolled:?}) must be visible within strip ({:?}) at max_scroll",
+            out_scrolled.strip
+        );
+    }
+    if let Some(logs_scrolled) = out_scrolled.logs {
+        assert!(
+            logs_scrolled.min.x >= out_scrolled.strip.min.x
+                && logs_scrolled.max.x <= out_scrolled.strip.max.x + common::EPS,
+            "logs pill ({logs_scrolled:?}) must be visible within strip ({:?}) at max_scroll",
+            out_scrolled.strip
+        );
+    }
+}

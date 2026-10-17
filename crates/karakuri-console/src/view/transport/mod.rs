@@ -185,6 +185,43 @@ impl View {
             self.theme_menu_open,
         );
 
+        let viewport = to_egui(layout.viewport());
+        let left_end = [
+            look_row.as_ref().map(|l| l.value.max.x),
+            arr.as_ref().map(|a| a.pill.max.x),
+            map.as_ref().map(|m| m.pill.max.x),
+            learn.as_ref().map(|l| l.pill.max.x),
+            tracker.as_ref().map(|g| g.double.max.x),
+            audio.as_ref().map(|a| a.pill.max.x),
+        ]
+        .into_iter()
+        .flatten()
+        .fold(row.bar.max.x, f32::max);
+
+        let mcp_w = mcp.as_ref().map_or(0.0, |m| m.pill.width());
+        let theme_w = theme.as_ref().map_or(0.0, |t| t.pill.width());
+        let ideal_theme_left = row.frame.min.x - size::TRANSPORT_GAP - theme_w;
+        let ideal_mcp_left = if theme.is_some() {
+            ideal_theme_left - size::TRANSPORT_GAP - mcp_w
+        } else {
+            row.frame.min.x - size::TRANSPORT_GAP - mcp_w
+        };
+        let mcp_left = ideal_mcp_left.max(left_end + size::TRANSPORT_GAP);
+        let theme_left = if mcp.is_some() {
+            ideal_theme_left.max(mcp_left + mcp_w + size::TRANSPORT_GAP)
+        } else {
+            ideal_theme_left.max(left_end + size::TRANSPORT_GAP)
+        };
+
+        let mcp = mcp.map(|m| {
+            let shift = mcp_left - m.pill.min.x;
+            m.translated(shift, viewport)
+        });
+        let theme = theme.map(|t| {
+            let shift = theme_left - t.pill.min.x;
+            t.translated(shift, viewport)
+        });
+
         let pills_right = [
             theme.as_ref().map(|t| t.pill.max.x),
             mcp.as_ref().map(|m| m.pill.max.x),
@@ -214,7 +251,6 @@ impl View {
         let max_scroll = transport_max_scroll(content_right, row.strip);
         let scroll = self.transport_scroll.clamp(0.0, max_scroll);
         let dx = -scroll;
-        let viewport = to_egui(layout.viewport());
 
         Some(TransportLayout {
             max_scroll,

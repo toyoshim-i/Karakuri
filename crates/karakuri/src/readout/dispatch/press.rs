@@ -226,15 +226,7 @@ impl Readout {
         }
 
         // Outputs WebXR mode dropdown menu and pill
-        if let Some(row) = outputs_with_plugin_name(
-            ctx,
-            self.panel.layout(),
-            self.view.opening,
-            self.view.plugin_available,
-            self.view.plugin_name,
-            self.view.xr_mode,
-            self.view.xr_menu_open,
-        ) {
+        if let Some(row) = self.view.outputs_layout(ctx, self.panel.layout()) {
             if let Some(ref pill) = row.xr_pill {
                 let asked = pill.ask(self.view.xr_menu_open, at);
                 if self.view.xr_menu_open {
@@ -509,8 +501,13 @@ impl Readout {
         }
 
         if let Some(pill) = Class::ALL.iter().find_map(|class| {
-            mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)
-                .filter(|pill| pill.hit(at))
+            let mut pill = mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)?;
+            if *class == Class::InputsAndOutputs {
+                if let Some(out) = self.view.outputs_layout(ctx, self.panel.layout()) {
+                    pill.pill = out.mcp;
+                }
+            }
+            pill.hit(at).then_some(pill)
         }) {
             return Some(self.opened(&pill));
         }

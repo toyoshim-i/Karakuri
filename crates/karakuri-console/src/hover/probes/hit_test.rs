@@ -14,29 +14,7 @@ use crate::view::{
 // specific sub-controls without diverging from frame layout.
 
 fn view_outputs(panel: &Panel, ctx: &egui::Context, view: &View) -> Option<crate::view::Outputs> {
-    crate::view::outputs_with_plugin_details(
-        ctx,
-        panel.layout(),
-        view.opening,
-        view.pip_available,
-        view.plugin_available,
-        view.plugin_name,
-        view.plugin_1_available,
-        view.plugin_1_name,
-        view.xr_mode,
-        view.xr_menu_open,
-    )
-    .map(|row| {
-        row.told(view.projector)
-            .told_pip(view.pip)
-            .told_plugin_name(0, view.plugin, view.plugin_available, view.plugin_name)
-            .told_plugin_name(
-                1,
-                view.plugin_1,
-                view.plugin_1_available,
-                view.plugin_1_name,
-            )
-    })
+    view.outputs_layout(ctx, panel.layout())
 }
 
 pub(crate) fn on_program_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
