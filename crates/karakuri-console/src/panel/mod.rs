@@ -9,12 +9,20 @@ pub use types::*;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
 use karakuri_operation::Operation;
 
+/// Which responsive body overlay drawer is targeted or active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawerSide {
+    Left,
+    Right,
+}
+
 pub struct Panel {
     layout: Layout,
     /// The tree, flattened, rebuilt whenever the layout is.
     nodes: Vec<Node>,
     cursor: Point,
     drag: Option<Drag>,
+    active_drawer: Option<DrawerSide>,
 }
 
 impl Panel {
@@ -25,6 +33,7 @@ impl Panel {
             nodes: Vec::new(),
             cursor: Point::new(-1.0, -1.0),
             drag: None,
+            active_drawer: None,
         };
         panel.rebuild();
         panel.set_viewport(width, height);
@@ -39,6 +48,129 @@ impl Panel {
 
     pub fn layout_mut(&mut self) -> &mut Layout {
         &mut self.layout
+    }
+
+    /// Sets or clears the active layout overlay.
+    pub fn set_overlay(&mut self, overlay: Option<(NodeId, Rect)>) {
+        self.layout.set_overlay(overlay);
+    }
+
+    /// Returns the currently open overlay drawer, if any.
+    pub fn active_drawer(&self) -> Option<DrawerSide> {
+        self.active_drawer
+    }
+
+    /// Sets or clears the active overlay drawer.
+    pub fn set_active_drawer(&mut self, drawer: Option<DrawerSide>) {
+        self.active_drawer = drawer;
+    }
+
+    /// Toggles the specified drawer side open or closed, returning the new active drawer.
+    pub fn toggle_drawer(&mut self, side: DrawerSide) -> Option<DrawerSide> {
+        if self.active_drawer == Some(side) {
+            self.active_drawer = None;
+        } else {
+            self.active_drawer = Some(side);
+        }
+        self.active_drawer
+    }
+
+    /// Returns true if narrow body responsive layout is active.
+    pub fn is_narrow_body(&self) -> bool {
+        !self.layout.is_soloed()
+            && self.layout.viewport().w > 0.0
+            && self.layout.viewport().w < crate::MINIMUM_VIEWPORT.0
+    }
+
+    /// Returns the NodeId of the body split or container, if found.
+    pub fn body_node(&self) -> Option<NodeId> {
+        self.layout.find("body").or_else(|| {
+            self.layout
+                .find("centre")
+                .and_then(|c| self.layout.parent(c))
+        })
+    }
+
+    /// Returns the solved rectangle of the body node, if visible.
+    pub fn body_rect(&self) -> Option<Rect> {
+        let body_id = self.body_node()?;
+        if !self.layout.visible(body_id) {
+            return None;
+        }
+        let body = self.layout.rect(body_id);
+        if body.w <= 0.0 || body.h <= 0.0 {
+            return None;
+        }
+        Some(body)
+    }
+
+    /// Returns the bounding rectangle of the drawer toggle tab for `side` in narrow mode.
+    pub fn drawer_tab_rect(&self, side: DrawerSide) -> Option<Rect> {
+        if !self.is_narrow_body() {
+            return None;
+        }
+        let body = self.body_rect()?;
+
+        let tab_w = 24.0;
+        let tab_h = 64.0;
+        let y = (body.y + 44.0).min((body.y + body.h - tab_h).max(body.y));
+
+        let x = match side {
+            DrawerSide::Left => {
+                if self.active_drawer == Some(DrawerSide::Left) {
+                    if let Some((_, ov_rect)) = self.layout.overlay() {
+                        ov_rect.x + ov_rect.w
+                    } else {
+                        body.x
+                    }
+                } else {
+                    body.x
+                }
+            }
+            DrawerSide::Right => {
+                if self.active_drawer == Some(DrawerSide::Right) {
+                    if let Some((_, ov_rect)) = self.layout.overlay() {
+                        ov_rect.x - tab_w
+                    } else {
+                        (body.x + body.w - tab_w).max(body.x)
+                    }
+                } else {
+                    (body.x + body.w - tab_w).max(body.x)
+                }
+            }
+        };
+
+        Some(Rect::new(x, y, tab_w, tab_h))
+    }
+
+    /// Returns which drawer tab point `p` falls into, if any.
+    pub fn drawer_tab_at(&self, p: Point) -> Option<DrawerSide> {
+        if let Some(active) = self.active_drawer {
+            if self.drawer_tab_rect(active).is_some_and(|r| r.contains(p)) {
+                return Some(active);
+            }
+            let other = match active {
+                DrawerSide::Left => DrawerSide::Right,
+                DrawerSide::Right => DrawerSide::Left,
+            };
+            if self.drawer_tab_rect(other).is_some_and(|r| r.contains(p)) {
+                return Some(other);
+            }
+        } else {
+            if self
+                .drawer_tab_rect(DrawerSide::Left)
+                .is_some_and(|r| r.contains(p))
+            {
+                return Some(DrawerSide::Left);
+            }
+            if self
+                .drawer_tab_rect(DrawerSide::Right)
+                .is_some_and(|r| r.contains(p))
+            {
+                return Some(DrawerSide::Right);
+            }
+        }
+        None
     }
 
     /// The tree, flattened in tree order.
@@ -401,6 +533,7 @@ impl Panel {
                 self.layout.set_viewport(viewport);
                 self.rebuild();
                 self.drag = None;
+                self.active_drawer = None;
                 Outcome::Reset
             }
             Op::Report => {

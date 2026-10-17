@@ -263,6 +263,9 @@ impl View {
             };
 
             for placed in &self.placed {
+                if panel.layout().is_in_overlay(placed.id) {
+                    continue;
+                }
                 draw_placed(ui, placed);
             }
 
@@ -381,6 +384,93 @@ impl View {
             }
             if let Some(mark) = focused {
                 wfocus_into(ui, &pal, mark);
+            }
+
+            // Semi-transparent backdrop scrim and overlay drawer pass (ADR-0338 / responsive overlay).
+            if let Some((_ov_id, ov_rect)) = panel.layout().overlay() {
+                let egui_ov = to_egui(ov_rect);
+                if let Some(body_rect) = panel.body_rect() {
+                    let egui_body = to_egui(body_rect);
+                    ui.painter().rect_filled(
+                        egui_body,
+                        CornerRadius::ZERO,
+                        Color32::from_rgba_unmultiplied(0, 0, 0, 140),
+                    );
+                }
+                let radius = CornerRadius::same(size::BAY_RADIUS as u8);
+                ui.painter().add(pal.shadow.as_shape(egui_ov, radius));
+                ui.painter().rect_filled(egui_ov, radius, pal.panel);
+                ui.painter().rect_stroke(
+                    egui_ov,
+                    radius,
+                    Stroke::new(size::HAIRLINE, pal.line),
+                    StrokeKind::Inside,
+                );
+
+                for placed in &self.placed {
+                    if !panel.layout().is_in_overlay(placed.id) {
+                        continue;
+                    }
+                    draw_placed(ui, placed);
+                }
+            }
+
+            // Protruding drawer tabs in narrow viewports (Option 1-B).
+            if panel.is_narrow_body() {
+                for side in [DrawerSide::Left, DrawerSide::Right] {
+                    if let Some(tab_rect) = panel.drawer_tab_rect(side).map(to_egui) {
+                        let is_active = panel.active_drawer() == Some(side);
+                        let radius = match side {
+                            DrawerSide::Left => CornerRadius {
+                                nw: 0,
+                                sw: 0,
+                                ne: 6,
+                                se: 6,
+                            },
+                            DrawerSide::Right => CornerRadius {
+                                nw: 6,
+                                sw: 6,
+                                ne: 0,
+                                se: 0,
+                            },
+                        };
+                        ui.painter().add(pal.shadow.as_shape(tab_rect, radius));
+                        ui.painter().rect_filled(
+                            tab_rect,
+                            radius,
+                            if is_active { pal.well } else { pal.panel },
+                        );
+                        ui.painter().rect_stroke(
+                            tab_rect,
+                            radius,
+                            Stroke::new(
+                                size::HAIRLINE,
+                                if is_active { pal.mint } else { pal.line },
+                            ),
+                            StrokeKind::Inside,
+                        );
+
+                        let ink = if is_active { pal.mint } else { pal.dim };
+                        let label = match side {
+                            DrawerSide::Left => "LIB",
+                            DrawerSide::Right => "MIX",
+                        };
+                        let chars: Vec<char> = label.chars().collect();
+                        let line_h = 14.0;
+                        let total_h = line_h * chars.len() as f32;
+                        let start_y = tab_rect.center().y - total_h * 0.5;
+                        for (i, ch) in chars.iter().enumerate() {
+                            let galley = ui.painter().layout_no_wrap(
+                                ch.to_string(),
+                                FontId::new(size::HEAD_SIZE, FontFamily::Proportional),
+                                ink,
+                            );
+                            let x = tab_rect.center().x - galley.size().x * 0.5;
+                            let y = start_y + i as f32 * line_h + (line_h - galley.size().y) * 0.5;
+                            ui.painter().galley(Pos2::new(x, y), galley, ink);
+                        }
+                    }
+                }
             }
 
             // Audio-in and arrangement cards/menus rendered above the bays (Rule 2).

@@ -19,7 +19,12 @@ pub fn inspector(
     pane: &Pane,
     scroll: f32,
 ) -> Option<InspectorPane> {
-    let region = to_egui(layout.rect(layout.find(PANE_NAMES.get(index)?)?));
+    let name = PANE_NAMES.get(index)?;
+    let id = layout.find(name)?;
+    if !layout.visible(id) {
+        return None;
+    }
+    let region = to_egui(layout.rect(id));
     let under_head = Rect::from_min_max(
         Pos2::new(region.min.x, region.min.y + size::HEAD_H),
         region.max,

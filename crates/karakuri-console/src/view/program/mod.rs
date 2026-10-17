@@ -1,4 +1,5 @@
 use super::*;
+use crate::panel::DrawerSide;
 
 // ---------------------------------------------------------------------------
 // The Program bay
@@ -264,19 +265,131 @@ fn kept(rect: Rect) -> Option<Rect> {
     }
 }
 
-/// Updates layout when preview row moves between below and beside placements per [ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md) and ADR-0164.
+/// Minimum width required for two side-by-side inspector panes (425.0).
+const INSPECTOR_TWO_PANE_MIN: f32 = (size::PARAM_PAD_L
+    + size::PARAM_ORD_W
+    + size::PARAM_GAP * 3.0
+    + size::PARAM_NAME_W
+    + size::PARAM_VAL_W
+    + size::PARAM_PAD_R
+    + 1.0)
+    * 2.0
+    + size::PANE_DIVIDER;
+
+/// Updates layout when preview row moves between below and beside placements per [ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md) and ADR-0164,
+/// and manages responsive body drawers and single-pane inspector degeneration.
 pub fn rearrange(panel: &mut Panel, canvas: (u32, u32)) -> bool {
+    let mut moved = false;
     panel.solve();
+
+    let vw = panel.layout().viewport().w;
+    let left_id = panel.layout().find("left-pane");
+    let right_id = panel.layout().find("right-pane");
+
+    // 2. Narrow body responsive drawer arrangement
+    if vw > 0.0 && vw < crate::MINIMUM_VIEWPORT.0 {
+        if let Some(left) = left_id {
+            moved |= panel.set_aside(left, true);
+        }
+        if let Some(right) = right_id {
+            moved |= panel.set_aside(right, true);
+        }
+        panel.solve();
+
+        if let Some(side) = panel.active_drawer() {
+            if !panel.layout().is_soloed() {
+                let body_id = panel.layout().find("body").or_else(|| {
+                    panel
+                        .layout()
+                        .find("centre")
+                        .and_then(|c| panel.layout().parent(c))
+                });
+                if let Some(body_id) = body_id {
+                    let body = panel.layout().rect(body_id);
+                    let tab_w = 24.0;
+                    match side {
+                        DrawerSide::Left => {
+                            if let Some(left) = left_id {
+                                let w = 340.0_f32.min((body.w - tab_w).max(160.0)).min(body.w);
+                                let ov_rect = karakuri_layout::Rect::new(body.x, body.y, w, body.h);
+                                if panel.layout().overlay() != Some((left, ov_rect)) {
+                                    panel.layout_mut().set_overlay(Some((left, ov_rect)));
+                                    moved = true;
+                                }
+                            }
+                        }
+                        DrawerSide::Right => {
+                            if let Some(right) = right_id {
+                                let w = 400.0_f32.min((body.w - tab_w).max(172.0)).min(body.w);
+                                let ov_rect = karakuri_layout::Rect::new(
+                                    (body.x + body.w - w).max(body.x),
+                                    body.y,
+                                    w,
+                                    body.h,
+                                );
+                                if panel.layout().overlay() != Some((right, ov_rect)) {
+                                    panel.layout_mut().set_overlay(Some((right, ov_rect)));
+                                    moved = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if panel.layout().overlay().is_some() {
+                panel.layout_mut().set_overlay(None);
+                moved = true;
+            }
+        } else if panel.layout().overlay().is_some() {
+            panel.layout_mut().set_overlay(None);
+            moved = true;
+        }
+    } else {
+        if let Some(left) = left_id {
+            moved |= panel.set_aside(left, false);
+        }
+        if let Some(right) = right_id {
+            moved |= panel.set_aside(right, false);
+        }
+        if panel.layout().overlay().is_some() {
+            panel.layout_mut().set_overlay(None);
+            moved = true;
+        }
+        if vw >= crate::MINIMUM_VIEWPORT.0 {
+            panel.set_active_drawer(None);
+        }
+    }
+
+    // 3. Single-pane inspector degeneration
+    panel.solve();
+    if let (Some(inspector_id), Some(inspector_2_id)) = (
+        panel.layout().find("inspector"),
+        panel.layout().find("inspector-2"),
+    ) {
+        let inspector_w = if panel.layout().is_collapsed(inspector_id) {
+            panel
+                .layout()
+                .find("centre")
+                .map(|c| panel.layout().rect(c).w)
+                .unwrap_or_else(|| panel.layout().rect(inspector_id).w)
+        } else {
+            panel.layout().rect(inspector_id).w
+        };
+        let single_pane = inspector_w > 0.0 && inspector_w < INSPECTOR_TWO_PANE_MIN;
+        if panel.set_aside(inspector_2_id, single_pane) {
+            moved = true;
+            panel.solve();
+        }
+    }
+
+    // 4. Existing program bay placement and deck-previews aside
     let beside = matches!(
         program_bay(panel.layout(), canvas).map(|bay| bay.placement),
         Some(Placement::Beside)
     );
-    let Some(row) = panel.layout().find("deck-previews") else {
-        return false;
-    };
-    let moved = panel.set_aside(row, beside);
-    // The second solve, and on all but the frame the placement changed it is
-    // the flag test the first one was.
+    if let Some(row) = panel.layout().find("deck-previews") {
+        moved |= panel.set_aside(row, beside);
+    }
+
     panel.solve();
     moved
 }

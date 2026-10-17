@@ -433,18 +433,19 @@ fn under_the_minimum_viewport_the_bay_draws_no_strips_and_the_previews_remain() 
     );
 
     // And the strip is what a press reaches a deck through, so with no strips
-    // there is nothing on the bay that selects one.
+    // (or with the right pane folded into a drawer) there is nothing on the bay that selects one.
     let mut panel = Panel::new(w - 0.1, h);
     karakuri_console::view::rearrange(&mut panel, canvas);
-    let bay = mixer(&ctx, panel.layout(), &strips).expect("the bay is still laid out");
-    let region = rect_of(panel.layout(), "mixer");
-    for x in 0..20 {
-        for y in 0..20 {
-            let p = Point::new(
-                region.x + region.w * x as f32 / 19.0,
-                region.y + region.h * y as f32 / 19.0,
-            );
-            assert_eq!(bay.select(p), None, "a press at {p:?} selected a deck");
+    if let Some(bay) = mixer(&ctx, panel.layout(), &strips) {
+        let region = rect_of(panel.layout(), "mixer");
+        for x in 0..20 {
+            for y in 0..20 {
+                let p = Point::new(
+                    region.x + region.w * x as f32 / 19.0,
+                    region.y + region.h * y as f32 / 19.0,
+                );
+                assert_eq!(bay.select(p), None, "a press at {p:?} selected a deck");
+            }
         }
     }
 }

@@ -70,6 +70,14 @@ impl Readout {
             // Update pointer coordinates and emit operation if dragging an active fader.
             (Pointer::Moved(p), _) => {
                 self.panel.set_cursor(p);
+                // When carrying an item, auto-dismiss drawer if pointer moves outside the overlay.
+                if matches!(self.panel.in_hand(), Some(InHand::Carrying)) {
+                    if let Some((_ov_id, ov_rect)) = self.panel.layout().overlay() {
+                        if !ov_rect.contains(p) {
+                            self.panel.set_active_drawer(None);
+                        }
+                    }
+                }
                 if let Some(drag) = self.vr_drag {
                     let along = ((p.x - drag.track_min_x) / drag.track_width).clamp(0.0, 1.0);
                     let [low, high] = drag.range;
@@ -113,6 +121,12 @@ impl Readout {
             // Dispatches panel-claimed button-down to controls and focused bay handlers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
+                // Protruding drawer tab clicks toggle the corresponding drawer.
+                if let Some(side) = self.panel.drawer_tab_at(at) {
+                    self.panel.toggle_drawer(side);
+                    return (claim, Acted::Pointed);
+                }
+
                 // Decomposed pointer press dispatch across modal overlays and individual bays.
                 // Each bay handler returns `Some(Acted)` if it claims the press, or `None` to pass through.
                 let did = self
@@ -125,6 +139,25 @@ impl Readout {
                     .or_else(|| self.dispatch_transition_press(ctx, at))
                     .or_else(|| self.dispatch_sequencer_press(ctx, at))
                     .or_else(|| self.dispatch_program_press(ctx, at))
+                    .or_else(|| {
+                        // When an overlay drawer is open, clicking the backdrop scrim dismisses it.
+                        if self.panel.active_drawer().is_some() {
+                            if let Some(body_rect) = self.panel.body_rect() {
+                                if body_rect.contains(at) {
+                                    let outside_overlay = self
+                                        .panel
+                                        .layout()
+                                        .overlay()
+                                        .is_none_or(|(_, ov_rect)| !ov_rect.contains(at));
+                                    if outside_overlay {
+                                        self.panel.set_active_drawer(None);
+                                        return Some(Acted::Pointed);
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    })
                     .unwrap_or_else(|| self.dispatch_mixer_and_master_press(ctx, at));
 
                 if !self.panel.dragging()

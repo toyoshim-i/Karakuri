@@ -24,9 +24,21 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         return Claim::Panel;
     }
     panel.solve();
+    // Drawer tabs claim input in narrow viewports.
+    if panel.drawer_tab_at(p).is_some() {
+        return Claim::Panel;
+    }
     // Modal overlays and popups claim all input until dismissed (ADR-0156).
     if view.has_modal_overlay() {
         return Claim::Panel;
+    }
+    // Open drawer overlay and backdrop scrim claim input over the body region.
+    if panel.active_drawer().is_some() {
+        if let Some(body_rect) = panel.body_rect() {
+            if body_rect.contains(p) {
+                return Claim::Panel;
+            }
+        }
     }
     // Layout boundaries take precedence over view controls.
     match panel.layout().hit(p, GRAB) {

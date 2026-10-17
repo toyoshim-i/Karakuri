@@ -19,6 +19,7 @@ use karakuri_operation::{
 
 use crate::budget::{Declared, PANEL_PASS};
 use crate::focus::{self, Focus};
+pub use crate::panel::DrawerSide;
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 pub use crate::room::ThemeMode;
 use crate::room::{size, Palette, Room};
