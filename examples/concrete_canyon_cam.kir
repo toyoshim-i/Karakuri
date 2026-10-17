@@ -1,0 +1,52 @@
+// concrete_canyon_cam (`L3`) — one-point-perspective camera that walks the canyon.
+//
+// Loops on the same clock as L1: the eye and target offsets are harmonics of
+// a = beats * 2*pi/32, so after 32 beats the camera returns to its start pose.
+
+proc concrete_canyon_cam {
+  kind L3
+
+  param dist     : float [3.0, 22.0] = 9.00
+  param sway     : float [0.0, 3.0]  = 0.85
+  param base_fov : float [0.6, 2.4]  = 1.30
+  param punch    : float [0.0, 1.0]  = 0.30
+  param bank     : float [0.0, 1.0]  = 0.30
+  param look_y   : float [-2.0, 6.0] = 2.30
+
+  param sub_bass  : float [0.0, 2.0] = 0.45
+  param low_mid   : float [0.0, 2.0] = 0.50
+  param high_mid  : float [0.0, 2.0] = 0.45
+  param high_air  : float [0.0, 2.0] = 0.45
+  param transient : float [0.0, 2.0] = 0.35
+
+  camera {
+    let a  = beats * 0.19634954084936207;
+    let a2 = a * 2.0;
+    let beat_hit = pow(1.0 - fract(beats), 3.5);
+    let kick  = clamp(sub_bass * 0.90 + beat_hit * 0.35, 0.0, 2.0);
+    let mid   = clamp(low_mid * 0.85, 0.0, 2.0);
+    let grit  = clamp(high_mid * 0.85, 0.0, 2.0);
+    let flash = clamp(transient * 1.15 + beat_hit * 0.30, 0.0, 2.0);
+
+    let ex = sway * 0.90 * sin(a);
+    let ey = 2.30 + sway * 0.45 * sin(a2 + 0.7) + 0.35 * (mid - 0.45);
+    let ez = dist - sway * 1.60 * (0.5 + 0.5 * cos(a));
+
+    let tx = sway * 0.35 * sin(a + 1.1);
+    let ty = look_y + sway * 0.30 * sin(a2 - 0.4) + 0.40 * (kick - 0.5);
+    let tz = -12.0;
+
+    let fwd   = normalize(vec3(tx - ex, ty - ey, tz - ez));
+    let right = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)) + vec3(0.0001, 0.0, 0.0));
+    let top   = cross(right, fwd);
+    let roll  = bank * (0.35 * sin(a) + 0.30 * (flash - 0.40) + 0.15 * (grit - 0.45));
+
+    eye    = vec3(ex, ey, ez);
+    target = vec3(tx, ty, tz);
+    up     = top * cos(roll) + right * sin(roll);
+
+    fov_y  = clamp(base_fov + punch * (kick * 0.30 + flash * 0.22), 0.50, 2.45);
+    near   = 0.30;
+    far    = 160.0;
+  }
+}

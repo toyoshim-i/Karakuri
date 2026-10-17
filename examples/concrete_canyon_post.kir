@@ -1,0 +1,94 @@
+// concrete_canyon_post (`L5`) — projected-through-smoke master.
+//
+// Chain: chromatic spread -> bloom (box halo + streak) -> volumetric smoke that
+// only lights up where the scene does -> concrete mottle -> scan bar -> grain ->
+// vignette. Every animated term is a harmonic of a = beats * 2*pi/32, so the
+// post chain is loop-exact over 8 bars as well.
+
+proc concrete_canyon_post {
+  kind L5
+
+  param bloom    : float [0.0, 10.0] = 3.00
+  param knee     : float [0.0, 1.5]  = 0.30
+  param radius   : float [0.5, 4.0]  = 2.20
+  param haze     : float [0.0, 2.0]  = 1.30
+  param scan     : float [0.0, 1.0]  = 0.20
+  param chroma   : float [0.0, 0.08] = 0.0012
+  param vignette : float [0.0, 2.0]  = 0.80
+  param grain    : float [0.0, 1.0]  = 0.06
+  param mottle   : float [0.0, 1.0]  = 0.20
+
+  param sub_bass  : float [0.0, 2.0] = 0.45
+  param low_mid   : float [0.0, 2.0] = 0.50
+  param high_mid  : float [0.0, 2.0] = 0.45
+  param high_air  : float [0.0, 2.0] = 0.45
+  param transient : float [0.0, 2.0] = 0.35
+
+  frame {
+    let p  = point_coord;
+    let a  = beats * 0.19634954084936207;
+    let beat_hit = pow(1.0 - fract(beats), 3.0);
+    let kick  = clamp(sub_bass * 0.95 + beat_hit * 0.45, 0.0, 2.0);
+    let flash = clamp(transient * 1.30 + beat_hit * 0.50, 0.0, 2.0);
+    let zero3 = vec3(0.0);
+
+    // ---- chromatic spread (subtle: this is a projection, not a glitch)
+    let amt = chroma * (0.60 + 0.90 * kick + 0.70 * flash);
+    let centre = tap(src, p);
+    let cr = tap(src, clamp(p + vec2(amt, 0.0), vec2(0.001), vec2(0.999))).x;
+    let cb = tap(src, clamp(p - vec2(amt, 0.0), vec2(0.001), vec2(0.999))).z;
+    let base_col = vec3(cr, centre.y, cb);
+
+    // ---- bloom: one box halo + a horizontal streak, both scaled by the kick
+    let rad = radius * (1.0 + 0.30 * kick + 0.25 * flash);
+    let d   = frame_step(0.0046 * rad);
+    let knee3 = vec3(knee);
+    var halo = vec3(0.0);
+    for i in -1..2 {
+      let fi = float(i);
+      let wi = exp(fi * fi * -0.40);
+      for j in -1..2 {
+        let fj = float(j);
+        let wj = wi * exp(fj * fj * -0.40);
+        let sm = tap(src, clamp(p + vec2(fi * d.x, fj * d.y), vec2(0.001), vec2(0.999)));
+        halo = halo + wj * max(sm.xyz - knee3, zero3);
+      }
+    }
+    var streak = vec3(0.0);
+    for q in -2..3 {
+      let fq = float(q);
+      let wq = exp(fq * fq * -0.30);
+      let sq = tap(src, clamp(p + vec2(fq * d.x * 2.4, 0.0), vec2(0.001), vec2(0.999)));
+      streak = streak + wq * max(sq.xyz - knee3, zero3);
+    }
+    let glow = (halo * 0.085 + streak * 0.075) * bloom * (0.85 + 0.40 * kick + 0.35 * flash);
+
+    // ---- smoke: two drifting layers; the haze only lights up where the scene does,
+    //      which is how a real beam reads through a smoke-filled room.
+    let s1 = fbm(vec3(p.x * 2.20 + 0.30 * sin(a), p.y * 2.20 + 0.10 * cos(a), 0.35 * sin(a)), 3);
+    let s2 = fbm(vec3(p.x * 4.60 - 0.18 * sin(a * 2.0), p.y * 4.60 + 0.12 * cos(a * 2.0), 1.10 + 0.35 * cos(a)), 3);
+    let smoke = clamp(s1 * 0.90 + s2 * 0.35, 0.0, 1.5);
+    let lum = dot(max(centre.xyz, zero3), vec3(0.2126, 0.7152, 0.0722));
+
+    var outc = base_col + glow;
+    outc = outc + vec3(0.13, 0.20, 0.28) * smoke * haze * (0.25 + 1.10 * clamp(lum, 0.0, 2.0));
+
+    // ---- rough concrete: low-frequency mottle across the projected surface
+    let mo = fbm(vec3(p.x * 1.40 + 0.08 * sin(a), p.y * 1.40, 2.30), 3);
+    outc = outc * (1.0 - mottle * (0.50 - 0.50 * mo));
+
+    // ---- a slow scan bar travelling across the wall
+    let comb  = 0.5 + 0.5 * sin(p.y * 720.0);
+    let sweep = 0.5 + 0.5 * sin(a * 3.0);
+    outc = outc * (1.0 - scan * 0.28 * comb * (0.35 + 0.65 * sweep));
+
+    let gn = hash1(uint(p.x * 1920.0) * 1973u + uint(p.y * 1080.0) * 9277u + (uint(floor(beats * 4.0)) % 128u) * 26699u);
+    outc = outc + vec3((gn - 0.5) * grain * 0.16);
+
+    let rr = length((p - vec2(0.5, 0.5)) * vec2(1.15, 1.0)) * 1.7;
+    let vg = 1.0 - vignette * clamp(rr * rr, 0.0, 1.0);
+    outc = outc * max(vg, 0.0);
+
+    color = vec4(outc, centre.w);
+  }
+}

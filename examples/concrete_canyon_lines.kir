@@ -1,0 +1,41 @@
+// concrete_canyon_lines (`L4`) — additive line renderer.
+//
+// Additive is the physically honest choice for a projected line drawing, and it
+// keeps the crossings hot without an extra resolve pass. `point_glow` is left at
+// 0: end-brightening on tiled segments reads as beading once bloom lifts it.
+
+proc concrete_canyon_lines {
+  kind L4
+  blend additive
+
+  param width     : float [0.0006, 0.020] = 0.0020
+  param exposure  : float [0.10, 8.0]  = 1.15
+  param opacity   : float [0.05, 1.0]  = 0.85
+  param core_hot  : float [0.0, 4.0]   = 0.40
+  param node_glow : float [0.0, 3.0]   = 0.00
+  param falloff   : float [0.5, 8.0]   = 2.20
+
+  consumes position, velocity, tint, size
+
+  vertex {
+    clip   = camera * vec4(position, 1.0);
+    clip_b = camera * vec4(position - velocity, 1.0);
+    point_rate = width * size;
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let along  = point_coord.x;
+
+    let edge = pow(max(0.0, 1.0 - across), falloff);
+    let core = pow(max(0.0, 1.0 - across), falloff * 4.0);
+
+    let end_dist = min(along, 1.0 - along) * 2.0;
+    let junction = pow(max(0.0, 1.0 - end_dist * 4.0), 2.0) * node_glow;
+
+    let stroke = tint * exposure * (1.0 + junction) + vec3(core * core_hot);
+    let emis   = edge * opacity * (0.85 + 0.30 * junction);
+
+    color = vec4(stroke, emis);
+  }
+}
