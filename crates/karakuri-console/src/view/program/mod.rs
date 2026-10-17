@@ -265,16 +265,22 @@ fn kept(rect: Rect) -> Option<Rect> {
     }
 }
 
-/// Minimum width required for two side-by-side inspector panes (425.0).
-const INSPECTOR_TWO_PANE_MIN: f32 = (size::PARAM_PAD_L
+/// Minimum fader track width per pane required in narrow/drawer mode (`vw < MINIMUM_VIEWPORT.0`).
+const INSPECTOR_NARROW_MIN_FADER_W: f32 = 100.0;
+
+/// Minimum width required for two side-by-side inspector panes in narrow/drawer mode (623.0).
+const INSPECTOR_NARROW_TWO_PANE_MIN: f32 = (size::PARAM_PAD_L
     + size::PARAM_ORD_W
     + size::PARAM_GAP * 3.0
     + size::PARAM_NAME_W
     + size::PARAM_VAL_W
     + size::PARAM_PAD_R
-    + 1.0)
+    + INSPECTOR_NARROW_MIN_FADER_W)
     * 2.0
     + size::PANE_DIVIDER;
+
+/// Minimum width required for two side-by-side inspector panes in 3-column mode (484.0, matching ADR-0279's 1244px mock console).
+const INSPECTOR_TWO_PANE_MIN: f32 = 484.0;
 
 /// Updates layout when preview row moves between below and beside placements per [ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md) and ADR-0164,
 /// and manages responsive body drawers and single-pane inspector degeneration.
@@ -374,7 +380,12 @@ pub fn rearrange(panel: &mut Panel, canvas: (u32, u32)) -> bool {
         } else {
             panel.layout().rect(inspector_id).w
         };
-        let single_pane = inspector_w > 0.0 && inspector_w < INSPECTOR_TWO_PANE_MIN;
+        let two_pane_min = if panel.is_narrow_body() {
+            INSPECTOR_NARROW_TWO_PANE_MIN
+        } else {
+            INSPECTOR_TWO_PANE_MIN
+        };
+        let single_pane = inspector_w > 0.0 && inspector_w < two_pane_min;
         if panel.set_aside(inspector_2_id, single_pane) {
             moved = true;
             panel.solve();

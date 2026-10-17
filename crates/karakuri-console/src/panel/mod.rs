@@ -113,7 +113,7 @@ impl Panel {
 
         let tab_w = 24.0;
         let tab_h = 64.0;
-        let y = (body.y + 44.0).min((body.y + body.h - tab_h).max(body.y));
+        let y = (body.y + body.h - tab_h).max(body.y);
 
         let x = match side {
             DrawerSide::Left => {

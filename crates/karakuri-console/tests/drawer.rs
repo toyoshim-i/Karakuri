@@ -47,10 +47,12 @@ fn narrow_viewport_collapses_side_panes_and_exposes_drawer_tabs() {
     assert_eq!(right_tab.w, 24.0);
     assert_eq!(right_tab.h, 64.0);
 
-    // Left tab is at left edge, right tab is at right edge of body.
+    // Left tab is at left edge, right tab is at right edge of body, both bottom-aligned.
     let body = panel.body_rect().expect("body rect exists");
     assert_eq!(left_tab.x, body.x);
     assert_eq!(right_tab.x, (body.x + body.w - 24.0).max(body.x));
+    assert_eq!(left_tab.y, (body.y + body.h - 64.0).max(body.y));
+    assert_eq!(right_tab.y, (body.y + body.h - 64.0).max(body.y));
 
     // Hit-testing drawer tabs.
     let left_center = Point::new(left_tab.x + left_tab.w * 0.5, left_tab.y + left_tab.h * 0.5);
@@ -127,11 +129,12 @@ fn toggling_right_drawer_solves_overlay_and_shifts_tab() {
 
 #[test]
 fn single_pane_inspector_degenerates_below_threshold() {
-    let panel = narrow_panel(400.0);
+    let panel = narrow_panel(430.0);
     let inspector_1 = id_of(panel.layout(), "inspector-1");
     let inspector_2 = id_of(panel.layout(), "inspector-2");
 
-    // Under 400px viewport, inspector width is 400px (< 425px threshold), so inspector-2 is set aside.
+    // Under 430px viewport (e.g. iPhone portrait), inspector width is < 623px threshold,
+    // so inspector-2 is set aside and inspector-1 takes the full width.
     assert!(panel.layout().is_set_aside(inspector_2));
     assert!(!panel.layout().visible(inspector_2));
     assert!(panel.layout().visible(inspector_1));
