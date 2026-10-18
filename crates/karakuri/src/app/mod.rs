@@ -987,4 +987,14 @@ impl App {
     pub fn has_gfx(&self) -> bool {
         self.gfx.is_some()
     }
+
+    /// Returns the active scale factor (e.g. device pixel ratio).
+    pub fn scale(&self) -> f64 {
+        self.scale
+    }
+
+    /// Sets the active scale factor (e.g. from DOM devicePixelRatio on Web).
+    pub fn set_scale(&mut self, scale: f64) {
+        self.scale = scale;
+    }
 }
