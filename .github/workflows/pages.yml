@@ -29,17 +29,20 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache cargo registry and build
+      - name: Cache Cargo and Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Trunk tools (wasm-bindgen, wasm-opt)
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+            ~/.cache/trunk
+          key: ${{ runner.os }}-trunk-tools-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-wasm-
+            ${{ runner.os }}-trunk-tools-
+
 
       - name: Download Trunk binary
         run: |
