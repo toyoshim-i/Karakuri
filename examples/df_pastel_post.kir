@@ -1,0 +1,70 @@
+// df_pastel_post (`L5`) — High-contrast pastel acrylic halation & hue-preserving
+// gallery tone mapping locked to an exact 8.0-second loop.
+//
+// Delivers rich light-and-shadow dynamics (deep architectural shadows in unlit corners
+// vs. vivid pastel light washes and glowing fluorescent tubes) without color bleaching!
+
+proc df_pastel_post {
+  kind L5
+
+  param bloom      : float [0.0, 4.0] = 1.25
+  param radius     : float [0.5, 4.0] = 1.35
+  param saturation : float [0.5, 2.5] = 1.55
+  param contrast   : float [0.5, 2.0] = 1.25
+
+  param sub_bass  : float [0.0, 2.0] = 0.45
+  param transient : float [0.0, 2.0] = 0.35
+
+  frame {
+    let p      = point_coord;
+    let loop_u = fract(t * 0.125);
+    let a      = loop_u * 6.2831853;
+    let b16    = loop_u * 16.0;
+
+    let beat_hit = pow(1.0 - fract(b16), 3.5);
+    let kick     = clamp(sub_bass * 0.55 + beat_hit * 0.50, 0.0, 2.0);
+    let zero3    = vec3(0.0);
+
+    let centre = tap(src, p);
+    let rad    = radius * (1.0 + 0.10 * kick);
+    let d      = frame_step(0.0014 * rad);
+
+    // Tightly overlapping 5x5 Gaussian halation (silky acrylic diffusion, zero grid separation)
+    var halo = vec3(0.0);
+    for i in -2..3 {
+      let fi = float(i);
+      let wi = exp(fi * fi * -0.30);
+      for j in -2..3 {
+        let fj = float(j);
+        let wj = wi * exp(fj * fj * -0.30);
+        let sm = tap(src, clamp(p + vec2(fi * d.x, fj * d.y), vec2(0.001), vec2(0.999)));
+        halo = halo + wj * max(sm.xyz - vec3(0.28), zero3);
+      }
+    }
+    let glow_col = halo * 0.050 * bloom * (0.92 + 0.20 * kick);
+
+    let hdr = max(centre.xyz + glow_col, zero3);
+
+    // Boost pastel chroma in linear space while keeping true darks in unlit shadow areas
+    let luma    = dot(hdr, vec3(0.299, 0.587, 0.114));
+    let boosted = max(vec3(luma) + (hdr - vec3(luma)) * saturation, vec3(luma * 0.06));
+
+    // Hue-preserving peak compression + very gentle pastel core highlight
+    let peak             = max(boosted.x, max(boosted.y, boosted.z));
+    let tone_rgb         = boosted / (1.0 + peak * 0.42);
+    let tube_pastel_glow = clamp((peak - 1.15) * 0.18, 0.0, 0.20);
+    let mapped           = mix(tone_rgb, vec3(0.98), vec3(tube_pastel_glow));
+
+    // Rich S-curve contrast for strong light-and-shadow dynamics (no flat milky washout!)
+    let c_in   = clamp(mapped, vec3(0.0), vec3(1.0));
+    let scurve = c_in * c_in * (vec3(3.0) - c_in * 2.0);
+    var outc   = mix(c_in, scurve, vec3(clamp((contrast - 0.8) * 0.65, 0.0, 0.65)));
+
+    // Architectural gallery corner vignette to anchor the 3D space
+    let dv   = (p - vec2(0.5, 0.5)) * vec2(1.18, 1.0);
+    let edge = clamp(dot(dv, dv) * 1.35, 0.0, 1.0);
+    outc = outc * (1.0 - edge * 0.26);
+
+    color = vec4(clamp(outc, vec3(0.0), vec3(1.0)), centre.w);
+  }
+}

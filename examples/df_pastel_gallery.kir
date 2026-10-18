@@ -1,0 +1,237 @@
+// df_pastel_gallery (`L4`, fullscreen) — White & translucent acrylic gallery space
+// with rich light-and-shadow dynamics, smooth 3D ceiling strobe pools, and
+// digital pixel-matrix animations on the frosted acrylic panels (8.0s loop).
+
+proc df_pastel_gallery {
+  kind  L4
+  blend additive
+
+  param wall_wash   : float [0.0, 2.5] = 1.25
+  param gallery_lit : float [0.0, 2.0] = 0.42
+  param acrylic_op  : float [0.0, 2.0] = 1.10
+  param floor_gloss : float [0.0, 2.5] = 1.10
+
+  param sub_bass    : float [0.0, 2.0] = 0.45
+  param low_mid     : float [0.0, 2.0] = 0.50
+  param high_air    : float [0.0, 2.0] = 0.45
+  param transient   : float [0.0, 2.0] = 0.35
+
+  fragment {
+    let loop_u = fract(t * 0.125);
+    let a      = loop_u * 6.2831853;
+    let b16    = loop_u * 16.0;
+
+    let t64    = loop_u * 64.0;
+    let tick64 = floor(t64);
+    let frac64 = fract(t64);
+
+    let t128    = loop_u * 128.0;
+    let tick128 = floor(t128);
+    let frac128 = fract(t128);
+
+    let beat_hit = pow(1.0 - fract(b16), 3.5);
+    let bar_hit  = pow(1.0 - fract(b16 * 0.25), 5.0);
+    let kick     = clamp(sub_bass * 0.55 + beat_hit * 0.55, 0.0, 2.0);
+    let pulse    = 0.88 + 0.22 * kick + 0.16 * bar_hit;
+
+    // Room bounds: x in [-6.2, 6.2], y in [0.0, 5.8], z in [-12.5, 6.0]
+    let d  = normalize(ray);
+    var tx = 100.0;
+    if d.x > 0.0001 {
+      tx = (6.2 - eye.x) / d.x;
+    } else {
+      if d.x < -0.0001 {
+        tx = (-6.2 - eye.x) / d.x;
+      }
+    }
+
+    var ty = 100.0;
+    if d.y > 0.0001 {
+      ty = (5.8 - eye.y) / d.y;
+    } else {
+      if d.y < -0.0001 {
+        ty = (0.0 - eye.y) / d.y;
+      }
+    }
+
+    var tz = 100.0;
+    if d.z > 0.0001 {
+      tz = (6.0 - eye.z) / d.z;
+    } else {
+      if d.z < -0.0001 {
+        tz = (-12.5 - eye.z) / d.z;
+      }
+    }
+
+    let t_hit = max(min(tx, min(ty, tz)), 0.1);
+    let hit   = eye + d * t_hit;
+
+    let is_floor = step(ty, tx) * step(ty, tz) * step(0.0, -d.y);
+    let is_ceil  = step(ty, tx) * step(ty, tz) * step(0.0, d.y);
+    let is_back  = step(tz, tx) * step(tz, ty);
+    let is_side  = 1.0 - max(is_floor, max(is_ceil, is_back));
+
+    // Saturated pastel palette for wall color washes
+    let c_sakura = vec3(1.00, 0.22, 0.64);
+    let c_coral  = vec3(1.00, 0.48, 0.24);
+    let c_lemon  = vec3(0.98, 0.84, 0.18);
+    let c_sky    = vec3(0.16, 0.74, 1.00);
+    let c_mint   = vec3(0.16, 0.94, 0.64);
+    let c_lilac  = vec3(0.66, 0.30, 1.00);
+    let c_white  = vec3(0.20, 0.21, 0.26);
+
+    let w_left  = mix(c_sakura, c_coral, vec3(0.50 + 0.45 * sin(a + hit.y * 0.35)));
+    let w_right = mix(c_sky,    c_mint,  vec3(0.50 + 0.45 * cos(a - hit.y * 0.35)));
+    let w_backL = mix(c_lilac,  c_sakura,vec3(0.50 + 0.45 * sin(a * 2.0)));
+    let w_backR = mix(c_mint,   c_lemon, vec3(0.50 + 0.45 * cos(a * 2.0)));
+    let w_cute  = mix(c_sakura, c_lemon, vec3(0.50 + 0.45 * sin(a * 2.0 + 1.1)));
+
+    // 3D distances from `hit` to the fluorescent light banks
+    let dl1 = length((hit - vec3(-5.9, 2.2, -4.5)) * vec3(1.0, 0.45, 0.70));
+    let dl2 = length((hit - vec3(-5.9, 2.2, -8.2)) * vec3(1.0, 0.45, 0.70));
+    let dr1 = length((hit - vec3(5.9, 2.2, -4.5))  * vec3(1.0, 0.45, 0.70));
+    let dr2 = length((hit - vec3(5.9, 2.2, -8.2))  * vec3(1.0, 0.45, 0.70));
+    let dbl = length((hit - vec3(-4.7, 2.5, -10.8)) * vec3(0.55, 0.42, 0.55));
+    let dbr = length((hit - vec3(4.7, 2.5, -10.8))  * vec3(0.55, 0.42, 0.55));
+    let dc  = length((hit - vec3(0.0, 2.6, -8.9))   * vec3(0.45, 0.45, 0.65));
+
+    // Synchronized dynamic wall-wash flicker matching the "pi-pi-pi" side-wall towers
+    let pipi_l1 = 0.50 + 0.70 * step(0.40, fract(sin(tick64 * 13.7 + 1.0) * 43758.5453));
+    let pipi_l2 = 0.50 + 0.70 * step(0.40, fract(sin(tick64 * 13.7 + 2.0) * 43758.5453));
+    let pipi_r1 = 0.50 + 0.70 * step(0.40, fract(sin(tick64 * 13.7 + 3.0) * 43758.5453));
+    let pipi_r2 = 0.50 + 0.70 * step(0.40, fract(sin(tick64 * 13.7 + 4.0) * 43758.5453));
+
+    let gl_l  = pipi_l1 / (0.85 + dl1 * dl1 * 0.34) + pipi_l2 / (0.85 + dl2 * dl2 * 0.34);
+    let gl_r  = pipi_r1 / (0.85 + dr1 * dr1 * 0.34) + pipi_r2 / (0.85 + dr2 * dr2 * 0.34);
+    let gl_bl = 1.0 / (0.85 + dbl * dbl * 0.24);
+    let gl_br = 1.0 / (0.85 + dbr * dbr * 0.24);
+    let gl_c  = 1.0 / (0.90 + dc * dc * 0.26);
+
+    // Smooth 3D ceiling "peka-peka" strobe pools around the 4 ceiling raceway rows
+    let pk0 = step(0.42, fract(sin(0.0 * 37.3 + tick128 * 17.1) * 43758.5453)) * (0.4 + 0.6 * (1.0 - frac128));
+    let pk1 = step(0.42, fract(sin(1.0 * 37.3 + tick128 * 17.1) * 43758.5453)) * (0.4 + 0.6 * (1.0 - frac128));
+    let pk2 = step(0.42, fract(sin(2.0 * 37.3 + tick128 * 17.1) * 43758.5453)) * (0.4 + 0.6 * (1.0 - frac128));
+    let pk3 = step(0.42, fract(sin(3.0 * 37.3 + tick128 * 17.1) * 43758.5453)) * (0.4 + 0.6 * (1.0 - frac128));
+
+    let cy_att = exp(-abs(hit.y - 5.55) * 0.90) * exp(-max(abs(hit.x) - 3.6, 0.0) * 0.8);
+    let c_pool = cy_att * (
+      exp(-pow((hit.z + 2.20) * 0.85, 2.0)) * (0.25 + 1.10 * pk0) +
+      exp(-pow((hit.z + 4.65) * 0.85, 2.0)) * (0.25 + 1.10 * pk1) +
+      exp(-pow((hit.z + 7.10) * 0.85, 2.0)) * (0.25 + 1.10 * pk2) +
+      exp(-pow((hit.z + 9.55) * 0.85, 2.0)) * (0.25 + 1.10 * pk3)
+    );
+    let w_ceil = mix(c_lilac, c_sky, vec3(0.5 + 0.5 * sin(a - hit.z * 0.35)));
+
+    // Architectural room corner ambient occlusion & shadow creases
+    let dx = 6.2 - abs(hit.x);
+    let dy = min(hit.y, 5.8 - hit.y);
+    let dz = hit.z + 12.5;
+    let edge_dist = min(min(dx + dy, dx + dz), dy + dz);
+    let corner_ao = 0.38 + 0.62 * smoothstep(0.0, 1.35, edge_dist);
+    let seam_line = smoothstep(0.0, 0.08, min(dx, min(dy, dz)));
+
+    let plane_shade = is_side * 1.05 + is_back * 0.82 + is_ceil * 0.88 + is_floor * 0.72;
+
+    let mount_shadow = 1.0 - 0.55 * clamp(
+      exp(-dl1 * dl1 * 1.8) +
+      exp(-dl2 * dl2 * 1.8) +
+      exp(-dr1 * dr1 * 1.8) +
+      exp(-dr2 * dr2 * 1.8) +
+      exp(-dbl * dbl * 1.4) +
+      exp(-dbr * dbr * 1.4) +
+      exp(-dc * dc * 1.5),
+      0.0, 1.0
+    );
+
+    let pastel_wash = (w_left * gl_l * 0.72 + w_right * gl_r * 0.72 + w_backL * gl_bl + w_backR * gl_br + w_cute * gl_c * (0.95 + 0.30 * beat_hit) + w_ceil * c_pool * 0.48)
+                    * wall_wash * pulse;
+
+    let wall_col = (c_white * gallery_lit * plane_shade * corner_ao + pastel_wash * 0.58)
+                 * (0.72 + 0.28 * seam_line) * mount_shadow;
+
+    // Glossy white epoxy/acrylic gallery floor reflection
+    var floor_col = vec3(0.0);
+    if hit.y < 0.03 && d.y < 0.0 {
+      let rip = 0.04 * sin(hit.x * 3.2 + a) * cos(hit.z * 2.6 - a);
+      let fx  = hit.x + rip;
+      let fz  = hit.z;
+
+      let rl  = exp(-abs(fx + 5.6) * 0.95) * exp(-abs(fz + 6.2) * 0.18) * 0.5 * (pipi_l1 + pipi_l2);
+      let rr  = exp(-abs(fx - 5.6) * 0.95) * exp(-abs(fz + 6.2) * 0.18) * 0.5 * (pipi_r1 + pipi_r2);
+      let rbl = exp(-abs(fx + 4.6) * 0.80) * exp(-abs(fz + 11.2) * 0.22);
+      let rbr = exp(-abs(fx - 4.6) * 0.80) * exp(-abs(fz + 11.2) * 0.22);
+      let rc  = exp(-abs(fx) * 0.68)       * exp(-abs(fz + 9.0) * 0.22);
+
+      let gx = smoothstep(0.0, 0.025, abs(fract(hit.x * 0.5) - 0.5));
+      let gz = smoothstep(0.0, 0.025, abs(fract(hit.z * 0.5) - 0.5));
+      let tile = 0.80 + 0.20 * (gx * gz);
+
+      let fresnel = 0.32 + 0.68 * pow(clamp(1.0 + d.y, 0.0, 1.0), 2.2);
+      floor_col = (w_left * rl + w_right * rr + w_backL * rbl + w_backR * rbr + w_cute * rc)
+                * tile * fresnel * floor_gloss * pulse * 0.45;
+    }
+
+    // Translucent Frosted Acrylic Partition Panels at z = -3.80 and z = -6.90
+    // with embedded digital pixel-grid & scrolling LED-matrix animations!
+    var acrylic_col = vec3(0.0);
+    if d.z < -0.001 {
+      let ta1 = (-3.80 - eye.z) / d.z;
+      if ta1 > 0.2 && ta1 < t_hit {
+        let ha1 = eye + d * ta1;
+        let ax1 = abs(ha1.x);
+        if ax1 > 2.65 && ax1 < 4.35 && ha1.y > 0.02 && ha1.y < 4.35 {
+          let u_pan = (ax1 - 2.65) / 1.70;
+          let v_pan = (ha1.y - 0.02) / 4.33;
+
+          let cx = floor(u_pan * 8.0);
+          let cy = floor(v_pan * 16.0);
+          let gx = smoothstep(0.08, 0.16, fract(u_pan * 8.0)) * (1.0 - smoothstep(0.84, 0.92, fract(u_pan * 8.0)));
+          let gy = smoothstep(0.08, 0.16, fract(v_pan * 16.0)) * (1.0 - smoothstep(0.84, 0.92, fract(v_pan * 16.0)));
+          let cell_mask = gx * gy;
+
+          let dig_wave = sin(cx * 0.8 + cy * 0.5 - a * 4.0 * sign(ha1.x));
+          let dig_hash = fract(sin(cx * 19.1 + cy * 37.7 + tick64 * 7.3) * 43758.5453);
+          let dig_on   = step(0.45, dig_wave) * step(0.35, dig_hash) * cell_mask;
+
+          let bx = min(ax1 - 2.65, 4.35 - ax1);
+          let by = min(ha1.y - 0.02, 4.35 - ha1.y);
+          let bevel = exp(-min(bx, by) * 24.0);
+          let frost_tint = mix(w_left, w_right, vec3(step(0.0, ha1.x)));
+          let dig_tint   = mix(c_lemon, frost_tint, vec3(0.6));
+          acrylic_col = acrylic_col + (frost_tint * 0.08 + dig_tint * dig_on * 0.24 + vec3(0.75, 0.88, 1.0) * bevel * 0.42) * acrylic_op;
+        }
+      }
+
+      let ta2 = (-6.90 - eye.z) / d.z;
+      if ta2 > 0.2 && ta2 < t_hit {
+        let ha2 = eye + d * ta2;
+        let ax2 = abs(ha2.x);
+        if ax2 > 3.50 && ax2 < 5.00 && ha2.y > 0.02 && ha2.y < 4.00 {
+          let u_pan2 = (ax2 - 3.50) / 1.50;
+          let v_pan2 = (ha2.y - 0.02) / 3.98;
+
+          let cx2 = floor(u_pan2 * 8.0);
+          let cy2 = floor(v_pan2 * 16.0);
+          let gx2 = smoothstep(0.08, 0.16, fract(u_pan2 * 8.0)) * (1.0 - smoothstep(0.84, 0.92, fract(u_pan2 * 8.0)));
+          let gy2 = smoothstep(0.08, 0.16, fract(v_pan2 * 16.0)) * (1.0 - smoothstep(0.84, 0.92, fract(v_pan2 * 16.0)));
+          let cell_mask2 = gx2 * gy2;
+
+          let dig_wave2 = cos(cx2 * 0.9 - cy2 * 0.6 + a * 4.0);
+          let dig_hash2 = fract(sin(cx2 * 23.3 + cy2 * 41.9 + tick64 * 11.1) * 43758.5453);
+          let dig_on2   = step(0.45, dig_wave2) * step(0.35, dig_hash2) * cell_mask2;
+
+          let bx2 = min(ax2 - 3.50, 5.00 - ax2);
+          let by2 = min(ha2.y - 0.02, 4.00 - ha2.y);
+          let bevel2 = exp(-min(bx2, by2) * 24.0);
+          let frost_tint2 = mix(w_backL, w_backR, vec3(step(0.0, ha2.x)));
+          acrylic_col = acrylic_col + (frost_tint2 * 0.07 + frost_tint2 * dig_on2 * 0.22 + vec3(0.85, 0.80, 1.0) * bevel2 * 0.36) * acrylic_op;
+        }
+      }
+    }
+
+    let dist_keep = 0.45 + 0.55 * exp(-t_hit * 0.085);
+    let total = wall_col * dist_keep + floor_col + acrylic_col;
+
+    color = vec4(total, 1.0);
+  }
+}

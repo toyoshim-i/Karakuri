@@ -1,0 +1,598 @@
+// df_pastel_tubes (`L1`, topology lines) — Pastel fluorescent tube installation
+// with high-contrast dynamic lighting, "peka-peka" ceiling strobe flashes,
+// "pi-pi-pi-pi-pi" irregular digital side-wall blinking, multi-pattern heart
+// choreography, and rectilinear digital matrix animations on the acrylic panels!
+// Locked to an exact 8.0-second loop (`fract(t * 0.125)`).
+
+proc df_pastel_tubes {
+  kind     L1
+  topology lines
+  capacity [8192, 92160] = 16384
+
+  param glow       : float [0.2, 3.0] = 1.20
+  param cute_pulse : float [0.0, 2.0] = 1.10
+  param refl_gain  : float [0.0, 2.0] = 0.90
+  param acrylic_ed : float [0.0, 2.0] = 1.05
+
+  param sub_bass   : float [0.0, 2.0] = 0.45
+  param low_mid    : float [0.0, 2.0] = 0.50
+  param high_mid   : float [0.0, 2.0] = 0.45
+  param high_air   : float [0.0, 2.0] = 0.45
+  param transient  : float [0.0, 2.0] = 0.35
+
+  emit position, velocity, tint, size
+
+  element {
+    let loop_u = fract(t * 0.125);
+    let a      = loop_u * 6.2831853;
+    let b16    = loop_u * 16.0;
+    let beat_f = fract(b16);
+    let beat_i = floor(b16);
+    let bar_i  = floor(loop_u * 4.0);
+
+    // High-resolution digital clock ticks (64 and 128 sub-steps per 8s loop)
+    // for rapid "pi-pi-pi-pi-pi" & "peka-peka" fluorescent starter-discharge patterns
+    let t64    = loop_u * 64.0;
+    let tick64 = floor(t64);
+    let frac64 = fract(t64);
+
+    let t128    = loop_u * 128.0;
+    let tick128 = floor(t128);
+    let frac128 = fract(t128);
+
+    let beat_hit = pow(1.0 - beat_f, 3.8);
+    let off_hit  = pow(1.0 - fract(b16 + 0.5), 4.2);
+    let bar_hit  = pow(1.0 - fract(b16 * 0.25), 5.0);
+
+    let kick  = clamp(sub_bass * 0.65 + beat_hit * 0.75, 0.0, 2.0);
+    let flash = clamp(transient * 0.70 + beat_hit * 0.45, 0.0, 2.0);
+
+    // Vivid pastel-neon phosphor palette (high chroma so colors never bleach out)
+    let f_sakura = vec3(1.85, 0.14, 0.72);
+    let f_coral  = vec3(1.88, 0.46, 0.16);
+    let f_lemon  = vec3(1.75, 1.42, 0.08);
+    let f_sky    = vec3(0.08, 1.12, 1.90);
+    let f_mint   = vec3(0.08, 1.80, 0.82);
+    let f_lilac  = vec3(0.86, 0.18, 1.90);
+    let f_milk   = vec3(1.25, 1.22, 1.38);
+
+    var p0  = vec3(0.0);
+    var p1  = vec3(0.0);
+    var col = vec3(0.0);
+    var wid = 1.0;
+
+    if seed < 8192u {
+      // Seeds 0..4095 are real tubes above floor; 4096..8191 are glossy floor reflections
+      let is_refl = seed / 4096u;
+      let s       = seed % 4096u;
+
+      let tube_id = s / 32u;
+      let seg     = s % 32u;
+      let u0      = float(seg) / 32.0;
+      let u1      = float(seg + 1u) / 32.0;
+      let um      = (u0 + u1) * 0.5;
+
+      var end_mask = smoothstep(0.0, 0.06, um) * smoothstep(0.0, 0.06, 1.0 - um);
+      if seg == 0u || seg == 31u {
+        end_mask = 0.10;
+      }
+
+      var ta = vec3(0.0);
+      var tb = vec3(0.0);
+      var tc = vec3(0.0);
+      var tw = 1.0;
+
+      if tube_id < 32u {
+        // ------------------------------------------------------------------
+        // Zone A (tubes 0..31): 4 Stepped vertical wall monuments
+        // Irregular "pi-pi-pi-pi-pi" digital morse-like blinking per tube!
+        // ------------------------------------------------------------------
+        let tower = tube_id / 8u;
+        let bar   = tube_id % 8u;
+        let bf    = float(bar) - 3.5;
+        let sym   = abs(bf);
+
+        let h_top = 4.25 - sym * 0.66;
+        let h_bot = 0.45 + sym * 0.08;
+
+        let side_x = mix(-5.92, 5.92, float(tower / 2u));
+        let base_z = mix(-4.50, -8.20, float(tower % 2u));
+        let tz     = base_z + bf * 0.16;
+
+        ta = vec3(side_x, h_bot, tz);
+        tb = vec3(side_x, h_top, tz);
+
+        // Deterministic 128-tick digital blink pattern ("pi-pi-pi... pi-pi!")
+        let h_blink1     = fract(sin(float(tube_id) * 19.37 + tick128 * 7.13) * 43758.5453);
+        let h_blink2     = fract(sin(float(tube_id) * 41.83 + tick64 * 13.71) * 28461.3291);
+        let burst_window = step(0.32, h_blink2);
+        let rapid_pipi   = step(0.38, h_blink1) * burst_window * (0.45 + 0.55 * (1.0 - frac128));
+
+        // Segmented digital packet shooting up/down the tube during blinks
+        let dir_sign = mix(-1.0, 1.0, float(bar % 2u));
+        let packet_u = fract(t64 * 0.125 * dir_sign + float(tube_id) * 0.17);
+        let packet   = exp(-pow((um - packet_u) * 6.5, 2.0));
+
+        if tower == 0u {
+          tc = mix(f_sakura, f_coral, vec3(step(1.5, sym)));
+        }
+        if tower == 1u {
+          tc = mix(f_lilac, f_sakura, vec3(step(1.5, sym)));
+        }
+        if tower == 2u {
+          tc = mix(f_sky, f_mint, vec3(step(1.5, sym)));
+        }
+        if tower == 3u {
+          tc = mix(f_mint, f_lemon, vec3(step(1.5, sym)));
+        }
+
+        // High dynamic contrast: dim standby glass (0.08) vs intense "pi-pi-pi" blink (1.65)!
+        let dyn_gain = 0.08 + 1.35 * rapid_pipi + 0.75 * packet * burst_window + 0.25 * beat_hit * step(0.6, h_blink2);
+        tc = tc * dyn_gain;
+        tw = 0.85 + 0.45 * rapid_pipi;
+
+      } else {
+        if tube_id < 64u {
+          // ------------------------------------------------------------------
+          // Zone B (tubes 32..63): Corner Barriers, 45° Leaners & "Peka-Peka" Ceiling Strobe!
+          // ------------------------------------------------------------------
+          let k = tube_id - 32u;
+
+          if k < 16u {
+            // Corner barriers with syncopated cross-grid digital blinking
+            let c_side = k / 8u;
+            let idx    = k % 8u;
+            let sx     = mix(-1.0, 1.0, float(c_side));
+
+            if idx < 4u {
+              let yy = 1.05 + float(idx) * 0.92;
+              ta = vec3(sx * 5.95, yy, -9.40 - float(idx) * 0.25);
+              tb = vec3(sx * 3.30, yy, -12.05 + float(idx) * 0.25);
+              tc = mix(f_sakura, f_sky, vec3(float(c_side)));
+            } else {
+              let vi = idx - 4u;
+              let frac = (float(vi) + 0.5) * 0.25;
+              let xx = mix(sx * 5.75, sx * 3.65, frac);
+              let zz = mix(-9.75, -11.85, frac);
+              ta = vec3(xx, 0.55, zz);
+              tb = vec3(xx, 4.55, zz);
+              tc = mix(f_lilac, f_mint, vec3(float(vi % 2u)));
+            }
+            let c_hash  = fract(sin(float(k) * 29.1 + tick64 * 11.3) * 43758.5453);
+            let c_blink = step(0.42, c_hash) * (0.4 + 0.6 * pow(1.0 - frac64, 1.5));
+            let chaser  = exp(-pow((um - fract(b16 * 0.5 + float(idx) * 0.25)) * 5.0, 2.0));
+            tc = tc * (0.12 + 1.15 * c_blink + 0.85 * chaser);
+            tw = 0.90 + 0.35 * c_blink;
+
+          } else {
+            if k < 24u {
+              // 8 Diagonal 45-degree leaning tubes with rapid "pi-pi" double-blinks
+              let di   = k - 16u;
+              let pair = di / 2u;
+              let twin = float(di % 2u) * 0.14;
+              let sx   = mix(-1.0, 1.0, float(pair % 2u));
+
+              if pair < 2u {
+                let bx = sx * (3.20 + twin);
+                ta = vec3(bx - sx * 0.85, 0.90, -11.90);
+                tb = vec3(bx + sx * 0.85, 3.80, -11.90);
+                tc = mix(f_coral, f_mint, vec3(float(pair)));
+              } else {
+                let mz = -2.40 - twin;
+                ta = vec3(sx * 5.92, 0.80, mz - 1.10);
+                tb = vec3(sx * 5.92, 3.60, mz + 1.10);
+                tc = mix(f_lemon, f_sky, vec3(float(pair - 2u)));
+              }
+              let d_hash = fract(sin(float(di) * 53.7 + tick128 * 9.7) * 31947.23);
+              let pipi   = step(0.48, d_hash) * (0.5 + 0.5 * (1.0 - frac128));
+              let dash   = step(0.35, sin(um * 18.8495 + a * 4.0 * mix(-1.0, 1.0, float(di % 2u))));
+              tc = tc * (0.10 + 1.35 * pipi * (0.5 + 0.5 * dash) + 0.45 * off_hit);
+              tw = 0.88 + 0.38 * pipi;
+
+            } else {
+              // ----------------------------------------------------------------
+              // 8 Overhead Ceiling Raceway Tubes (y = 5.55):
+              // Intense "Peka-Peka" fluorescent strobe & starter-flicker chase!
+              // ----------------------------------------------------------------
+              let ci   = k - 24u;
+              let row  = ci / 2u;
+              let side = mix(-1.0, 1.0, float(ci % 2u));
+              let zz   = -2.20 - float(row) * 2.45;
+              ta = vec3(side * 1.15, 5.55, zz);
+              tb = vec3(side * 3.85, 5.55, zz);
+
+              // Row chaser + rapid 128-tick "peka-peka" double-strike fluorescent flash
+              let row_phase  = fract(b16 * 0.5 - float(row) * 0.25 - float(ci % 2u) * 0.125);
+              let row_active = step(row_phase, 0.42);
+              let peka_hash  = fract(sin(float(ci) * 37.3 + tick128 * 17.1) * 43758.5453);
+              let peka_flash = step(0.35, peka_hash) * pow(1.0 - frac128, 1.2);
+              let strobe_hit = max(row_active * (0.65 + 0.85 * peka_flash), step(0.80, peka_hash) * 1.35);
+
+              // Cathode end-flare during ignition
+              let end_flare = (1.0 - smoothstep(0.0, 0.22, min(um, 1.0 - um))) * peka_flash;
+
+              let ceil_col = mix(
+                mix(f_sky, f_lilac, vec3(float(row % 2u))),
+                mix(f_sakura, f_lemon, vec3(float(ci % 2u))),
+                vec3(0.5 + 0.5 * sin(a * 2.0 + float(ci)))
+              );
+              tc = (ceil_col * (0.06 + 1.65 * strobe_hit) + f_milk * end_flare * 0.85);
+              tw = 0.80 + 0.65 * strobe_hit;
+            }
+          }
+
+        } else {
+          if tube_id < 104u {
+            // ------------------------------------------------------------------
+            // Zone C (tubes 64..103): Cute Pastel Techno Centerpiece!
+            // Multi-pattern 4-bar Heart Choreography + Strobe Stars & Portal
+            // ------------------------------------------------------------------
+            let ck = tube_id - 64u;
+            let hop = 1.0 + 0.09 * cute_pulse * (beat_hit + 0.35 * kick);
+            let bob = 0.08 * sin(a * 2.0);
+            let cz  = -8.90;
+            let cy  = 2.55 + bob;
+
+            if ck < 16u {
+              // 16 tubes: Twin-tube Geometric Fluorescent Heart (8 outer + 8 inner)
+              let ring = ck / 8u;
+              let edge = ck % 8u;
+              let sc   = (1.18 - float(ring) * 0.16) * hop;
+
+              var v0 = vec2(0.0, -1.05);
+              var v1 = vec2(-0.98, -0.08);
+              if edge == 1u {
+                v0 = vec2(-0.98, -0.08);
+                v1 = vec2(-0.98, 0.58);
+              }
+              if edge == 2u {
+                v0 = vec2(-0.98, 0.58);
+                v1 = vec2(-0.50, 0.96);
+              }
+              if edge == 3u {
+                v0 = vec2(-0.50, 0.96);
+                v1 = vec2(0.0, 0.52);
+              }
+              if edge == 4u {
+                v0 = vec2(0.0, 0.52);
+                v1 = vec2(0.50, 0.96);
+              }
+              if edge == 5u {
+                v0 = vec2(0.50, 0.96);
+                v1 = vec2(0.98, 0.58);
+              }
+              if edge == 6u {
+                v0 = vec2(0.98, 0.58);
+                v1 = vec2(0.98, -0.08);
+              }
+              if edge == 7u {
+                v0 = vec2(0.98, -0.08);
+                v1 = vec2(0.0, -1.05);
+              }
+
+              let g0 = mix(v0, v1, vec2(0.06)) * sc;
+              let g1 = mix(v0, v1, vec2(0.94)) * sc;
+              ta = vec3(g0.x, cy + g0.y, cz - float(ring) * 0.08);
+              tb = vec3(g1.x, cy + g1.y, cz - float(ring) * 0.08);
+
+              // Symmetrical bottom-to-top coordinate (0 at bottom tip, 4 at top cleft)
+              var sym_edge = float(edge) + um;
+              if edge >= 4u {
+                sym_edge = 8.0 - (float(edge) + um);
+              }
+              let h_norm = sym_edge * 0.25;
+
+              // 4 Distinct Choreography Patterns across the 4 bars of the 8-second loop:
+              let pat0_fill = smoothstep(h_norm - 0.12, h_norm + 0.12, fract(b16 * 0.5));
+              let pat0_ring = step(0.5, fract(b16 + float(ring) * 0.5));
+              let pat0      = 0.16 + 1.35 * pat0_fill * (0.45 + 0.55 * pat0_ring);
+
+              let pair_idx  = float(edge % 4u);
+              let active_p  = floor(fract(tick64 * 0.25) * 4.0);
+              let pat1_hit  = 1.0 - min(abs(pair_idx - active_p), 1.0);
+              let pat1      = 0.10 + 1.55 * pat1_hit * (0.5 + 0.5 * (1.0 - frac64));
+
+              let snake_dir = mix(1.0, -1.0, float(ring));
+              let snake_ph  = fract((float(edge) + um) * 0.25 + b16 * 0.25 * snake_dir);
+              let seg_quant = step(0.45, fract(float(seg) * 0.25 + tick64 * 0.5));
+              let pat2      = 0.12 + 1.48 * exp(-snake_ph * 4.2) * (0.4 + 0.6 * seg_quant);
+
+              let is_right  = step(3.5, float(edge));
+              let side_alt  = step(0.5, fract(b16 * 2.0 + is_right * 0.5));
+              let pat3      = 0.14 + 1.40 * side_alt + 0.65 * beat_hit;
+
+              let b0_m = 1.0 - step(0.5, bar_i);
+              let b1_m = step(0.5, bar_i) * (1.0 - step(1.5, bar_i));
+              let b2_m = step(1.5, bar_i) * (1.0 - step(2.5, bar_i));
+              let b3_m = step(2.5, bar_i);
+              let heart_anim = b0_m * pat0 + b1_m * pat1 + b2_m * pat2 + b3_m * pat3;
+
+              let col_outer = mix(f_sakura, f_coral, vec3(0.5 + 0.5 * sin(a * 2.0 + float(edge) * 0.8)));
+              let col_inner = mix(f_lemon, f_mint, vec3(0.5 + 0.5 * cos(a * 2.0 - float(edge) * 0.8)));
+              let swap_ring = step(0.5, fract(b16 * 0.5)) * b3_m;
+              let eff_ring  = abs(float(ring) - swap_ring);
+
+              tc = mix(col_outer, col_inner, vec3(eff_ring)) * heart_anim;
+              tw = 0.95 + 0.40 * clamp(heart_anim * 0.6, 0.0, 1.0);
+
+            } else {
+              if ck < 32u {
+                // 16 tubes: 4 Cute Pastel Fluorescent Star-Crosses with rotary digital stepping
+                let sk     = ck - 16u;
+                let star_i = sk / 4u;
+                let arm    = sk % 4u;
+
+                var sx = -2.35;
+                var sy = 2.65;
+                if star_i == 1u {
+                  sx = 2.35;
+                  sy = 2.65;
+                }
+                if star_i == 2u {
+                  sx = -1.75;
+                  sy = 4.20;
+                }
+                if star_i == 3u {
+                  sx = 1.75;
+                  sy = 4.20;
+                }
+
+                let ang = float(arm) * 0.7853982 + sin(a * 2.0 + float(star_i)) * 0.35;
+                let rad = (0.46 - 0.14 * float(arm % 2u)) * (1.0 + 0.15 * off_hit);
+                let dir = vec2(cos(ang), sin(ang)) * rad;
+
+                ta = vec3(sx - dir.x, sy - dir.y + bob * 0.5, cz - 0.25);
+                tb = vec3(sx + dir.x, sy + dir.y + bob * 0.5, cz - 0.25);
+
+                let rot_arm  = floor(fract((tick64 + float(star_i) * 2.0) * 0.25) * 4.0);
+                let arm_hit  = 1.0 - min(abs(float(arm) - rot_arm), 1.0);
+                let star_col = mix(f_mint, f_sky, vec3(float(star_i % 2u)));
+                tc = mix(star_col, f_lemon, vec3(float(arm % 2u) * 0.6)) * (0.15 + 1.45 * arm_hit + 0.45 * flash);
+                tw = 0.90 + 0.38 * arm_hit;
+
+              } else {
+                // 8 tubes (ck 32..39): Twin Portal Frame with segmented digital chase
+                let fk   = ck - 32u;
+                let side = fk % 4u;
+                let twin = float(fk / 4u) * 0.14;
+                let fw   = 1.72 + twin;
+                let fh0  = 0.85 - twin;
+                let fh1  = 4.25 + twin;
+
+                if side == 0u {
+                  ta = vec3(-fw, fh0, cz + 0.35);
+                  tb = vec3(-fw, fh1, cz + 0.35);
+                }
+                if side == 1u {
+                  ta = vec3(fw, fh0, cz + 0.35);
+                  tb = vec3(fw, fh1, cz + 0.35);
+                }
+                if side == 2u {
+                  ta = vec3(-fw + 0.12, fh1, cz + 0.35);
+                  tb = vec3(fw - 0.12, fh1, cz + 0.35);
+                }
+                if side == 3u {
+                  ta = vec3(-fw + 0.12, fh0, cz + 0.35);
+                  tb = vec3(fw - 0.12, fh0, cz + 0.35);
+                }
+
+                let dash_gate = step(0.25, sin(um * 25.1327 - a * 8.0 * mix(1.0, -1.0, float(fk / 4u))));
+                let rim_pulse = 0.20 + 1.15 * exp(-pow((um - fract(b16 * 0.5 + float(side) * 0.25)) * 4.5, 2.0));
+                tc = mix(f_sky, f_lilac, vec3(float(fk / 4u))) * (rim_pulse + 0.45 * dash_gate) * (0.75 + 0.35 * bar_hit);
+                tw = 1.10;
+              }
+            }
+
+          } else {
+            // Zone D (tubes 104..127): Floor Baseboard Tubes & 16-Step Pastel Sequencer Bar
+            let fk = tube_id - 104u;
+            if fk < 16u {
+              let x_step = -3.60 + (float(fk) + 0.5) * 0.45;
+              ta = vec3(x_step - 0.16, 0.14, -9.80);
+              tb = vec3(x_step + 0.16, 0.14, -9.80);
+
+              let sub16       = fract(tick64 * 0.0625) * 16.0;
+              let active_step = exp(-pow(min(abs(float(fk) - beat_i), 16.0 - abs(float(fk) - beat_i)) * 1.6, 2.0));
+              let sub_step    = exp(-pow(min(abs(float(fk) - sub16), 16.0 - abs(float(fk) - sub16)) * 2.2, 2.0));
+              let bar_accent  = step(3.5, float(fk % 4u));
+              let step_col    = mix(f_mint, f_sakura, vec3(bar_accent));
+              tc = step_col * (0.15 + 0.65 * sub_step) + (f_lemon + step_col * 0.8) * active_step * 1.25;
+              tw = 0.95 + 0.45 * active_step;
+            } else {
+              let sk   = fk - 16u;
+              let sx   = mix(-5.88, 5.88, float(sk / 4u));
+              let slot = sk % 4u;
+              let z0   = -1.50 - float(slot) * 2.65;
+              ta = vec3(sx, 0.12, z0);
+              tb = vec3(sx, 0.12, z0 - 2.15);
+
+              let b_hash = fract(sin(float(sk) * 31.7 + tick64 * 13.3) * 43758.5453);
+              let b_pipi = step(0.45, b_hash);
+              tc = mix(f_sakura, f_sky, vec3(float(sk / 4u))) * (0.14 + 1.15 * b_pipi) * (0.80 + 0.30 * kick);
+              tw = 0.95 + 0.25 * b_pipi;
+            }
+          }
+        }
+      }
+
+      p0  = mix(ta, tb, vec3(u0));
+      p1  = mix(ta, tb, vec3(u1));
+      col = tc * end_mask * glow;
+      wid = tw;
+
+      if is_refl == 1u {
+        let avg_y = max((p0.y + p1.y) * 0.5, 0.05);
+        let ripple = 0.025 * sin(avg_y * 5.0 + a * 2.0 + float(seg) * 0.5);
+        p0 = vec3(p0.x + ripple, -p0.y, p0.z);
+        p1 = vec3(p1.x - ripple, -p1.y, p1.z);
+        let fall = exp(-avg_y * 0.28) * refl_gain * 0.42;
+        col = col * fall;
+        wid = wid * 1.50;
+      }
+
+    } else {
+      if seed < 12288u {
+        // ------------------------------------------------------------------
+        // Seeds 8192..12287: Translucent Acrylic Partition Panels + Rectilinear Digital Animations!
+        //   g = 0..15  : 4 Acrylic Panel Bevel Frames (with racing digital scan pulses)
+        //   g = 16..47 : 32 Digital Step-Equalizer / Matrix Columns inside the 4 Panels
+        //   g = 48..63 : 16 Rectilinear Digital Barcode Scan-Rungs & Step-Cursors
+        // ------------------------------------------------------------------
+        let s  = seed - 8192u;
+        let g  = s / 64u;
+        let k  = s % 64u;
+        let u0 = float(k) / 64.0;
+        let u1 = float(k + 1u) / 64.0;
+        let um = (u0 + u1) * 0.5;
+
+        if g < 16u {
+          // 4 Translucent Acrylic Partition Outer Frames
+          let panel = g / 4u;
+          let edge  = g % 4u;
+          let side  = mix(-1.0, 1.0, float(panel % 2u));
+          let row   = float(panel / 2u);
+
+          let px0 = side * (2.65 + row * 0.85);
+          let px1 = side * (4.35 + row * 0.65);
+          let pz  = -3.80 - row * 3.10;
+          let py0 = 0.02;
+          let py1 = 4.35 - row * 0.35;
+
+          var ea = vec3(px0, py0, pz);
+          var eb = vec3(px0, py1, pz);
+          if edge == 1u {
+            ea = vec3(px1, py0, pz);
+            eb = vec3(px1, py1, pz);
+          }
+          if edge == 2u {
+            ea = vec3(px0, py1, pz);
+            eb = vec3(px1, py1, pz);
+          }
+          if edge == 3u {
+            ea = vec3(px0, py0, pz);
+            eb = vec3(px1, py0, pz);
+          }
+
+          p0 = mix(ea, eb, vec3(u0));
+          p1 = mix(ea, eb, vec3(u1));
+
+          let laser = exp(-pow((um - fract(b16 * 0.5 + float(edge) * 0.25 + float(panel) * 0.25)) * 6.0, 2.0));
+          let p_col = mix(
+            mix(f_sakura, f_lilac, vec3(row)),
+            mix(f_sky, f_mint, vec3(row)),
+            vec3(float(panel % 2u))
+          );
+          col = (mix(p_col, f_milk, vec3(0.30)) * 0.35 + p_col * laser * 1.15) * acrylic_ed * glow;
+          wid = 0.55 + 0.35 * laser;
+
+        } else {
+          if g < 48u {
+            // 32 Digital LED Equalizer / Matrix Columns embedded inside the 4 Acrylic Panels!
+            let bar_id = g - 16u;
+            let panel  = bar_id / 8u;
+            let col_i  = bar_id % 8u;
+            let side   = mix(-1.0, 1.0, float(panel % 2u));
+            let row    = float(panel / 2u);
+
+            let x_min  = 2.80 + row * 0.82;
+            let x_max  = 4.20 + row * 0.68;
+            let col_u  = (float(col_i) + 0.5) / 8.0;
+            let bx     = side * mix(x_min, x_max, col_u);
+            let bz     = -3.80 - row * 3.10;
+            let y_max  = 4.10 - row * 0.35;
+
+            p0 = vec3(bx, mix(0.18, y_max, u0), bz);
+            p1 = vec3(bx, mix(0.18, y_max, u1), bz);
+
+            // Quantized digital block segments (16 discrete LED cells per vertical column)
+            let cell_idx = floor(um * 16.0);
+            let cell_f   = fract(um * 16.0);
+            let cell_gap = step(0.18, cell_f) * (1.0 - step(0.84, cell_f));
+
+            let spec_w   = 0.5 + 0.5 * sin(a * 2.0 + float(col_i) * 0.85 + float(panel) * 1.7 + sin(a * 4.0 - float(col_i) * 0.5));
+            let level    = clamp(spec_w * (0.75 + 0.35 * kick) * 15.0, 1.0, 15.0);
+            let peak_pos = min(floor(level) + 2.0 + floor(2.0 * abs(sin(a * 4.0 + float(col_i)))), 15.0);
+
+            let is_lit   = step(cell_idx, floor(level));
+            let is_peak  = 1.0 - min(abs(cell_idx - peak_pos), 1.0);
+
+            let bit_hash = step(0.24, fract(sin(cell_idx * 17.3 + float(bar_id) * 31.1 + tick64 * 5.7) * 43758.5453));
+
+            let panel_c1 = mix(f_sakura, f_lilac, vec3(row));
+            let panel_c2 = mix(f_sky, f_mint, vec3(row));
+            let base_c   = mix(panel_c1, panel_c2, vec3(float(panel % 2u)));
+            let grad_c   = mix(base_c, f_lemon, vec3(um * 0.65));
+
+            let cell_gain = (is_lit * bit_hash * 0.68 + is_peak * 1.45) * cell_gap;
+            col = grad_c * cell_gain * acrylic_ed * glow;
+            wid = 0.68 * cell_gap;
+
+          } else {
+            // 16 Rectilinear Digital Barcode Scan-Rungs & Step-Sequencer Cursors on the Panels!
+            let w_id  = g - 48u;
+            let panel = w_id / 4u;
+            let line_i= w_id % 4u;
+            let side  = mix(-1.0, 1.0, float(panel % 2u));
+            let row   = float(panel / 2u);
+
+            let x_min = 2.72 + row * 0.84;
+            let x_max = 4.28 + row * 0.66;
+            let pz    = -3.79 - row * 3.10;
+            let y_top = 4.20 - row * 0.35;
+
+            let snap_step = floor(fract(loop_u * 2.0 + float(line_i) * 0.25 + float(panel) * 0.125) * 16.0) / 16.0;
+            let scan_y    = mix(0.22, y_top, snap_step);
+
+            p0 = vec3(side * mix(x_min, x_max, u0), scan_y, pz);
+            p1 = vec3(side * mix(x_min, x_max, u1), scan_y, pz);
+
+            let bit_col = floor(um * 8.0);
+            let bit_f   = fract(um * 8.0);
+            let bit_gap = step(0.15, bit_f) * (1.0 - step(0.85, bit_f));
+            let bit_on  = step(0.35, fract(sin(bit_col * 23.7 + float(w_id) * 13.1 + tick64 * 9.3) * 43758.5453));
+
+            let w_col = mix(f_lemon, mix(f_sakura, f_sky, vec3(float(panel % 2u))), vec3(float(line_i) / 3.0));
+            col = w_col * bit_gap * (0.20 + 0.95 * bit_on) * acrylic_ed * glow * 0.85;
+            wid = 0.60 * bit_gap;
+          }
+        }
+
+      } else {
+        // Seeds 12288..16383: Floating Pastel Light Prisms / Motes (8s closed orbit)
+        let s  = seed - 12288u;
+        let h1 = hash3(s * 19u + 1u);
+        let h2 = hash3(s * 43u + 7u);
+
+        let active = step(0.84, h1.z);
+
+        let bx = (h1.x * 2.0 - 1.0) * 5.6;
+        let by = 0.35 + h1.y * 4.4;
+        let bz = -11.2 + fract(h1.z * 7.3) * 8.5;
+
+        let ph1 = h2.x * 6.2831853;
+        let ph2 = h2.y * 6.2831853;
+        let rad = 0.18 + 0.26 * h2.z;
+        let ox  = rad * cos(a + ph1);
+        let oy  = rad * 0.6 * sin(a + ph2);
+        let oz  = rad * sin(a - ph1);
+        let pos = vec3(bx + ox, by + oy, bz + oz);
+
+        let sz = 0.012 + 0.015 * h2.z;
+        p0 = pos - vec3(0.0, sz, 0.0);
+        p1 = pos + vec3(0.0, sz, 0.0);
+
+        let twk = pow(0.5 + 0.5 * sin(a * 2.0 + ph1), 4.0) * active;
+        let side_u = clamp((bx + 5.6) / 11.2, 0.0, 1.0);
+        let mote_c = mix(mix(f_sakura, f_lemon, vec3(h2.x)), mix(f_sky, f_mint, vec3(h2.y)), vec3(side_u));
+
+        col = mote_c * twk * acrylic_ed * glow * 0.28;
+        wid = 0.50 * active;
+      }
+    }
+
+    position = p0;
+    velocity = p0 - p1;
+    tint     = col;
+    size     = wid;
+  }
+}
