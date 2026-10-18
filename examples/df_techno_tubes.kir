@@ -1,0 +1,429 @@
+// df_techno_tubes (`L1`, topology lines) — Fluorescent tube installation in a dark
+// smoky room with cute techno motifs, floor reflections, and an exact 8.0s loop.
+//
+// Clock is locked to `loop_u = fract(t * 0.125)` (exact 8.0-second loop, 16 beats at 120 BPM).
+// Seeds 0..4095: 3D fluorescent tube fixtures (stepped wall monuments, corner barriers,
+//   45-degree leaners, ceiling raceways, cute twin-tube heart, star/cross fixtures, floor sequencer).
+// Seeds 4096..8191: Glossy dark floor reflections (`y -> -y`, attenuated and rippled).
+// Seeds 8192..12287: Subtle floor tile seams & room corner edges.
+// Seeds 12288..16383: Soft illuminated smoke dust motes on closed 8s orbits.
+
+proc df_techno_tubes {
+  kind     L1
+  topology lines
+  capacity [8192, 92160] = 16384
+
+  param glow       : float [0.2, 3.0] = 1.28
+  param cute_pulse : float [0.0, 2.0] = 1.00
+  param refl_gain  : float [0.0, 2.0] = 0.85
+  param dust_amt   : float [0.0, 2.0] = 0.40
+
+  param sub_bass   : float [0.0, 2.0] = 0.45
+  param low_mid    : float [0.0, 2.0] = 0.50
+  param high_mid   : float [0.0, 2.0] = 0.45
+  param high_air   : float [0.0, 2.0] = 0.45
+  param transient  : float [0.0, 2.0] = 0.35
+
+  emit position, velocity, tint, size
+
+  element {
+    let loop_u = fract(t * 0.125);
+    let a      = loop_u * 6.2831853;
+    let b16    = loop_u * 16.0;
+    let beat_f = fract(b16);
+    let beat_i = floor(b16);
+
+    let beat_hit = pow(1.0 - beat_f, 3.5);
+    let off_hit  = pow(1.0 - fract(b16 + 0.5), 4.0);
+    let bar_hit  = pow(1.0 - fract(b16 * 0.25), 5.0);
+
+    let kick  = clamp(sub_bass * 0.65 + beat_hit * 0.75, 0.0, 2.0);
+    let flash = clamp(transient * 0.70 + beat_hit * 0.45, 0.0, 2.0);
+
+    // Fluorescent tube phosphor palette (linear RGB, HDR > 1 for bloom)
+    let f_pink  = vec3(1.75, 0.18, 0.74);
+    let f_rose  = vec3(1.85, 0.38, 0.64);
+    let f_peach = vec3(1.80, 0.82, 0.20);
+    let f_cyan  = vec3(0.14, 1.28, 1.85);
+    let f_mint  = vec3(0.18, 1.75, 0.86);
+    let f_lilac = vec3(0.76, 0.26, 1.80);
+    let f_white = vec3(1.45, 1.52, 1.70);
+
+    var p0  = vec3(0.0);
+    var p1  = vec3(0.0);
+    var col = vec3(0.0);
+    var wid = 1.0;
+
+    if seed < 8192u {
+      // Seeds 0..4095 are real tubes above floor; 4096..8191 are floor reflections
+      let is_refl = seed / 4096u;
+      let s       = seed % 4096u;
+
+      // Each tube has 32 segments so light pulses can travel smoothly along the glass tube
+      let tube_id = s / 32u;
+      let seg     = s % 32u;
+      let u0      = float(seg) / 32.0;
+      let u1      = float(seg + 1u) / 32.0;
+      let um      = (u0 + u1) * 0.5;
+
+      // Realistic fluorescent tube end-caps: dark gap at tips, hot cathode glow just inside
+      var end_mask = smoothstep(0.0, 0.06, um) * smoothstep(0.0, 0.06, 1.0 - um);
+      if seg == 0u || seg == 31u {
+        end_mask = 0.10;
+      }
+
+      var ta = vec3(0.0);
+      var tb = vec3(0.0);
+      var tc = vec3(0.0);
+      var tw = 1.0;
+
+      if tube_id < 32u {
+        // ------------------------------------------------------------------
+        // Zone A (tubes 0..31): 4 Stepped vertical wall monuments
+        // 8 parallel vertical tubes per tower, stepped symmetrically in height
+        // ------------------------------------------------------------------
+        let tower = tube_id / 8u;
+        let bar   = tube_id % 8u;
+        let bf    = float(bar) - 3.5;
+        let sym   = abs(bf);
+
+        let h_top = 4.20 - sym * 0.68;
+        let h_bot = 0.45 + sym * 0.08;
+
+        let side_x = mix(-5.92, 5.92, float(tower / 2u));
+        let base_z = mix(-4.50, -8.20, float(tower % 2u));
+        let tz     = base_z + bf * 0.16;
+
+        ta = vec3(side_x, h_bot, tz);
+        tb = vec3(side_x, h_top, tz);
+
+        // Techno equalizer / step-sequencer pulse climbing each tube on the 16-beat loop
+        let climb = fract(b16 * 0.25 + float(tower) * 0.25 - sym * 0.12);
+        let band_pulse = exp(-pow((um - climb) * 5.5, 2.0));
+        let meter_fill = smoothstep(um - 0.08, um + 0.08, 0.45 + 0.42 * sin(a * 2.0 + float(bar) * 0.7 + float(tower) * 1.5) + 0.25 * kick);
+
+        if tower < 2u {
+          tc = mix(f_pink, f_peach, vec3(step(1.5, sym)));
+          if sym < 0.6 {
+            tc = f_white;
+          }
+        } else {
+          tc = mix(f_cyan, f_mint, vec3(step(1.5, sym)));
+          if sym < 0.6 {
+            tc = f_white;
+          }
+        }
+        tc = tc * (0.38 + 0.65 * meter_fill + 1.10 * band_pulse);
+        tw = 1.15;
+
+      } else {
+        if tube_id < 64u {
+          // ------------------------------------------------------------------
+          // Zone B (tubes 32..63): Corner Barriers, 45° Diagonal Leaners & Ceiling Grid
+          // ------------------------------------------------------------------
+          let k = tube_id - 32u;
+
+          if k < 16u {
+            // Back-left (0..7) and Back-right (8..15) Corner Barriers
+            let c_side = k / 8u;
+            let idx    = k % 8u;
+            let sx     = mix(-1.0, 1.0, float(c_side));
+
+            if idx < 4u {
+              let yy = 1.05 + float(idx) * 0.92;
+              ta = vec3(sx * 5.95, yy, -9.40 - float(idx) * 0.25);
+              tb = vec3(sx * 3.30, yy, -12.05 + float(idx) * 0.25);
+              tc = mix(f_pink, f_cyan, vec3(float(c_side)));
+            } else {
+              let vi = idx - 4u;
+              let frac = (float(vi) + 0.5) * 0.25;
+              let xx = mix(sx * 5.75, sx * 3.65, frac);
+              let zz = mix(-9.75, -11.85, frac);
+              ta = vec3(xx, 0.55, zz);
+              tb = vec3(xx, 4.55, zz);
+              tc = mix(f_lilac, f_mint, vec3(float(vi % 2u)));
+            }
+            let chaser = 0.50 + 0.75 * exp(-pow((um - fract(b16 * 0.5 + float(idx) * 0.25)) * 4.5, 2.0));
+            tc = tc * chaser * (0.80 + 0.35 * kick);
+            tw = 1.15;
+
+          } else {
+            if k < 24u {
+              // 8 Diagonal 45-degree leaning tubes
+              let di   = k - 16u;
+              let pair = di / 2u;
+              let twin = float(di % 2u) * 0.14;
+              let sx   = mix(-1.0, 1.0, float(pair % 2u));
+
+              if pair < 2u {
+                let bx = sx * (3.20 + twin);
+                ta = vec3(bx - sx * 0.85, 0.90, -11.90);
+                tb = vec3(bx + sx * 0.85, 3.80, -11.90);
+                tc = mix(f_peach, f_mint, vec3(float(pair)));
+              } else {
+                let mz = -2.40 - twin;
+                ta = vec3(sx * 5.92, 0.80, mz - 1.10);
+                tb = vec3(sx * 5.92, 3.60, mz + 1.10);
+                tc = mix(f_rose, f_cyan, vec3(float(pair - 2u)));
+              }
+              let swp = 0.50 + 0.85 * sin(a * 2.0 + um * 3.14159 + float(di));
+              tc = tc * max(swp, 0.25) * (0.85 + 0.45 * off_hit);
+              tw = 1.10;
+
+            } else {
+              // 8 Overhead Ceiling Raceway Tubes (y = 5.55) chasing on the 8s loop
+              let ci   = k - 24u;
+              let row  = ci / 2u;
+              let side = mix(-1.0, 1.0, float(ci % 2u));
+              let zz   = -2.20 - float(row) * 2.45;
+              ta = vec3(side * 1.15, 5.55, zz);
+              tb = vec3(side * 3.85, 5.55, zz);
+
+              let seq_on = exp(-pow(fract(b16 * 0.25 - float(row) * 0.25) * 3.5, 2.0));
+              tc = mix(f_white, f_lilac, vec3(0.5 + 0.5 * sin(a + float(row)))) * (0.28 + 1.05 * seq_on);
+              tw = 1.05;
+            }
+          }
+
+        } else {
+          if tube_id < 104u {
+            // ------------------------------------------------------------------
+            // Zone C (tubes 64..103): Cute Techno Fluorescent Motif Centerpiece!
+            // Built entirely from straight fluorescent tubes in the smoky center alcove
+            // ------------------------------------------------------------------
+            let ck = tube_id - 64u;
+            let hop = 1.0 + 0.085 * cute_pulse * (beat_hit + 0.35 * kick);
+            let bob = 0.08 * sin(a * 2.0);
+            let cz  = -8.90;
+            let cy  = 2.55 + bob;
+
+            if ck < 16u {
+              // 16 tubes: Twin-tube Geometric Fluorescent Heart (8 outer + 8 inner parallel tubes)
+              let ring = ck / 8u;
+              let edge = ck % 8u;
+              let sc   = (1.18 - float(ring) * 0.16) * hop;
+
+              var v0 = vec2(0.0, -1.05);
+              var v1 = vec2(-0.98, -0.08);
+              if edge == 1u {
+                v0 = vec2(-0.98, -0.08);
+                v1 = vec2(-0.98, 0.58);
+              }
+              if edge == 2u {
+                v0 = vec2(-0.98, 0.58);
+                v1 = vec2(-0.50, 0.96);
+              }
+              if edge == 3u {
+                v0 = vec2(-0.50, 0.96);
+                v1 = vec2(0.0, 0.52);
+              }
+              if edge == 4u {
+                v0 = vec2(0.0, 0.52);
+                v1 = vec2(0.50, 0.96);
+              }
+              if edge == 5u {
+                v0 = vec2(0.50, 0.96);
+                v1 = vec2(0.98, 0.58);
+              }
+              if edge == 6u {
+                v0 = vec2(0.98, 0.58);
+                v1 = vec2(0.98, -0.08);
+              }
+              if edge == 7u {
+                v0 = vec2(0.98, -0.08);
+                v1 = vec2(0.0, -1.05);
+              }
+
+              let g0 = mix(v0, v1, vec2(0.06)) * sc;
+              let g1 = mix(v0, v1, vec2(0.94)) * sc;
+              ta = vec3(g0.x, cy + g0.y, cz - float(ring) * 0.08);
+              tb = vec3(g1.x, cy + g1.y, cz - float(ring) * 0.08);
+
+              let ch = fract((float(edge) + um) * 0.125 - b16 * 0.25);
+              let chase_boost = 0.65 + 0.95 * exp(-ch * 4.5) + 0.45 * beat_hit;
+              if ring == 0u {
+                tc = mix(f_pink, f_rose, vec3(0.5 + 0.5 * sin(a + float(edge)))) * chase_boost;
+              } else {
+                tc = mix(f_peach, f_white, vec3(0.5 + 0.5 * cos(a * 2.0))) * chase_boost;
+              }
+              tw = 1.25;
+
+            } else {
+              if ck < 32u {
+                // 16 tubes: 4 Cute Fluorescent Star-Crosses flanking the heart
+                let sk     = ck - 16u;
+                let star_i = sk / 4u;
+                let arm    = sk % 4u;
+
+                var sx = -2.35;
+                var sy = 2.65;
+                if star_i == 1u {
+                  sx = 2.35;
+                  sy = 2.65;
+                }
+                if star_i == 2u {
+                  sx = -1.75;
+                  sy = 4.20;
+                }
+                if star_i == 3u {
+                  sx = 1.75;
+                  sy = 4.20;
+                }
+
+                let ang = float(arm) * 0.7853982 + sin(a * 2.0 + float(star_i)) * 0.35;
+                let rad = (0.46 - 0.14 * float(arm % 2u)) * (1.0 + 0.15 * off_hit);
+                let dir = vec2(cos(ang), sin(ang)) * rad;
+
+                ta = vec3(sx - dir.x, sy - dir.y + bob * 0.5, cz - 0.25);
+                tb = vec3(sx + dir.x, sy + dir.y + bob * 0.5, cz - 0.25);
+
+                let arp = step(0.45, sin(b16 * 1.5707963 + float(star_i) * 1.5707963 + float(arm) * 0.8));
+                let star_col = mix(f_mint, f_cyan, vec3(float(star_i % 2u)));
+                tc = mix(star_col, f_peach, vec3(float(arm % 2u) * 0.45)) * (0.35 + 1.05 * arp + 0.35 * flash);
+                tw = 1.10;
+
+              } else {
+                // 8 tubes (ck 32..39): Twin Square Portal Frame around the centerpiece
+                let fk   = ck - 32u;
+                let side = fk % 4u;
+                let twin = float(fk / 4u) * 0.14;
+                let fw   = 1.72 + twin;
+                let fh0  = 0.85 - twin;
+                let fh1  = 4.25 + twin;
+
+                if side == 0u {
+                  ta = vec3(-fw, fh0, cz + 0.35);
+                  tb = vec3(-fw, fh1, cz + 0.35);
+                }
+                if side == 1u {
+                  ta = vec3(fw, fh0, cz + 0.35);
+                  tb = vec3(fw, fh1, cz + 0.35);
+                }
+                if side == 2u {
+                  ta = vec3(-fw + 0.12, fh1, cz + 0.35);
+                  tb = vec3(fw - 0.12, fh1, cz + 0.35);
+                }
+                if side == 3u {
+                  ta = vec3(-fw + 0.12, fh0, cz + 0.35);
+                  tb = vec3(fw - 0.12, fh0, cz + 0.35);
+                }
+
+                let rim_pulse = 0.50 + 0.70 * exp(-pow((um - fract(b16 * 0.25 + float(side) * 0.25)) * 4.0, 2.0));
+                tc = mix(f_cyan, f_lilac, vec3(float(fk / 4u))) * rim_pulse * (0.80 + 0.35 * bar_hit);
+                tw = 1.15;
+              }
+            }
+
+          } else {
+            // ------------------------------------------------------------------
+            // Zone D (tubes 104..127): Floor Baseboard Tubes & 16-Step Techno Sequencer Bar
+            // ------------------------------------------------------------------
+            let fk = tube_id - 104u;
+            if fk < 16u {
+              let x_step = -3.60 + (float(fk) + 0.5) * 0.45;
+              ta = vec3(x_step - 0.16, 0.14, -9.80);
+              tb = vec3(x_step + 0.16, 0.14, -9.80);
+
+              let active_step = exp(-pow(min(abs(float(fk) - beat_i), 16.0 - abs(float(fk) - beat_i)) * 1.4, 2.0));
+              let bar_accent  = step(3.5, float(fk % 4u));
+              let step_col    = mix(f_mint, f_pink, vec3(bar_accent));
+              tc = mix(step_col * 0.28, f_white * 1.30 + step_col, vec3(active_step));
+              tw = 1.20;
+            } else {
+              let sk   = fk - 16u;
+              let sx   = mix(-5.88, 5.88, float(sk / 4u));
+              let slot = sk % 4u;
+              let z0   = -1.50 - float(slot) * 2.65;
+              ta = vec3(sx, 0.12, z0);
+              tb = vec3(sx, 0.12, z0 - 2.15);
+
+              let wave = 0.45 + 0.65 * sin(a * 2.0 - float(slot) * 1.2 + um * 3.14159);
+              tc = mix(f_pink, f_cyan, vec3(float(sk / 4u))) * max(wave, 0.2) * (0.8 + 0.3 * kick);
+              tw = 1.05;
+            }
+          }
+        }
+      }
+
+      p0  = mix(ta, tb, vec3(u0));
+      p1  = mix(ta, tb, vec3(u1));
+      col = tc * end_mask * glow;
+      wid = tw;
+
+      if is_refl == 1u {
+        let avg_y = max((p0.y + p1.y) * 0.5, 0.05);
+        let ripple = 0.035 * sin(avg_y * 6.0 + a * 2.0 + float(seg) * 0.5);
+        p0 = vec3(p0.x + ripple, -p0.y, p0.z);
+        p1 = vec3(p1.x - ripple, -p1.y, p1.z);
+        let fall = exp(-avg_y * 0.32) * refl_gain * 0.32;
+        col = col * fall;
+        wid = wid * 1.65;
+      }
+
+    } else {
+      if seed < 12288u {
+        // ------------------------------------------------------------------
+        // Seeds 8192..12287: Subtle floor tile seams & main corner architectural edges
+        // ------------------------------------------------------------------
+        let s  = seed - 8192u;
+        let g  = s / 64u;
+        let k  = s % 64u;
+        let u0 = float(k) / 64.0;
+        let u1 = float(k + 1u) / 64.0;
+
+        if g < 12u {
+          let zline = -12.0 + float(g) * 1.15;
+          p0 = vec3(mix(-6.15, 6.15, u0), 0.01, zline);
+          p1 = vec3(mix(-6.15, 6.15, u1), 0.01, zline);
+          let dist_c = abs(mix(-6.15, 6.15, u0));
+          let edge_glow = exp(-(6.15 - dist_c) * 0.8);
+          col = mix(vec3(0.05, 0.015, 0.035), vec3(0.015, 0.05, 0.07), vec3(u0)) * (0.15 + 0.55 * edge_glow) * glow;
+          wid = 0.30;
+        } else {
+          p0  = vec3(0.0);
+          p1  = vec3(0.0);
+          col = vec3(0.0);
+          wid = 0.0;
+        }
+
+      } else {
+        // ------------------------------------------------------------------
+        // Seeds 12288..16383: Soft Illuminated Smoke Motes (8s closed orbit)
+        // ------------------------------------------------------------------
+        let s  = seed - 12288u;
+        let h1 = hash3(s * 19u + 1u);
+        let h2 = hash3(s * 43u + 7u);
+
+        let active = step(0.82, h1.z);
+
+        let bx = (h1.x * 2.0 - 1.0) * 5.6;
+        let by = 0.35 + h1.y * 4.4;
+        let bz = -11.2 + fract(h1.z * 7.3) * 8.5;
+
+        let ph1 = h2.x * 6.2831853;
+        let ph2 = h2.y * 6.2831853;
+        let rad = 0.18 + 0.28 * h2.z;
+        let ox  = rad * cos(a + ph1);
+        let oy  = rad * 0.6 * sin(a + ph2);
+        let oz  = rad * sin(a - ph1);
+        let pos = vec3(bx + ox, by + oy, bz + oz);
+
+        let sz = 0.012 + 0.016 * h2.z;
+        p0 = pos - vec3(0.0, sz, 0.0);
+        p1 = pos + vec3(0.0, sz, 0.0);
+
+        let twk = pow(0.5 + 0.5 * sin(a * 2.0 + ph1), 4.0) * active;
+        let side_u = clamp((bx + 5.6) / 11.2, 0.0, 1.0);
+        let mote_c = mix(mix(f_pink, f_peach, vec3(h2.x)), mix(f_cyan, f_mint, vec3(h2.y)), vec3(side_u));
+
+        col = mote_c * twk * dust_amt * glow * 0.28;
+        wid = 0.55 * active;
+      }
+    }
+
+    position = p0;
+    velocity = p0 - p1;
+    tint     = col;
+    size     = wid;
+  }
+}

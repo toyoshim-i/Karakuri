@@ -1,0 +1,142 @@
+// df_room_haze (`L4`, fullscreen) — Dark smoky gallery room with corner color-mixing
+// wall washes, polished dark concrete floor reflections, and 3D volumetric smoke
+// locked to an exact 8.0-second loop.
+
+proc df_room_haze {
+  kind  L4
+  blend additive
+
+  param wall_glow  : float [0.0, 2.5] = 1.15
+  param floor_refl : float [0.0, 2.5] = 0.95
+  param smoke_amt  : float [0.0, 2.5] = 1.25
+  param room_dark  : float [0.0, 1.0] = 0.58
+
+  param sub_bass   : float [0.0, 2.0] = 0.45
+  param low_mid    : float [0.0, 2.0] = 0.50
+  param high_air   : float [0.0, 2.0] = 0.45
+  param transient  : float [0.0, 2.0] = 0.35
+
+  fragment {
+    let loop_u = fract(t * 0.125);
+    let a      = loop_u * 6.2831853;
+    let b16    = loop_u * 16.0;
+
+    let beat_hit = pow(1.0 - fract(b16), 3.5);
+    let bar_hit  = pow(1.0 - fract(b16 * 0.25), 5.0);
+    let kick     = clamp(sub_bass * 0.6 + beat_hit * 0.65, 0.0, 2.0);
+    let pulse    = 0.85 + 0.28 * kick + 0.20 * bar_hit;
+
+    // Room bounds: x in [-6.2, 6.2], y in [0.0, 5.8], z in [-12.5, 6.0]
+    let d  = normalize(ray);
+    var tx = 100.0;
+    if d.x > 0.0001 {
+      tx = (6.2 - eye.x) / d.x;
+    } else {
+      if d.x < -0.0001 {
+        tx = (-6.2 - eye.x) / d.x;
+      }
+    }
+
+    var ty = 100.0;
+    if d.y > 0.0001 {
+      ty = (5.8 - eye.y) / d.y;
+    } else {
+      if d.y < -0.0001 {
+        ty = (0.0 - eye.y) / d.y;
+      }
+    }
+
+    var tz = 100.0;
+    if d.z > 0.0001 {
+      tz = (6.0 - eye.z) / d.z;
+    } else {
+      if d.z < -0.0001 {
+        tz = (-12.5 - eye.z) / d.z;
+      }
+    }
+
+    let t_hit = max(min(tx, min(ty, tz)), 0.1);
+    let hit   = eye + d * t_hit;
+
+    // Fluorescent palette (linear RGB)
+    let c_pink  = vec3(1.00, 0.14, 0.48);
+    let c_peach = vec3(1.00, 0.55, 0.12);
+    let c_cyan  = vec3(0.08, 0.78, 1.00);
+    let c_mint  = vec3(0.12, 0.96, 0.52);
+    let c_lilac = vec3(0.50, 0.18, 1.00);
+
+    let w_left  = mix(c_pink, c_peach, vec3(0.35 + 0.35 * sin(a + hit.y * 0.4)));
+    let w_right = mix(c_cyan, c_mint,  vec3(0.35 + 0.35 * cos(a - hit.y * 0.4)));
+    let w_backL = mix(c_pink, c_lilac, vec3(0.50 + 0.40 * sin(a * 2.0)));
+    let w_backR = mix(c_cyan, c_lilac, vec3(0.50 + 0.40 * cos(a * 2.0)));
+    let w_cute  = mix(c_pink, c_mint,  vec3(0.50 + 0.50 * sin(a * 2.0 + 1.2)));
+
+    // 3D distances from `hit` to the five main fluorescent light banks in the room
+    let dl  = length((hit - vec3(-6.0, 2.3, -6.2)) * vec3(1.0, 0.45, 0.50));
+    let dr  = length((hit - vec3(6.0, 2.3, -6.2)) * vec3(1.0, 0.45, 0.50));
+    let dbl = length((hit - vec3(-5.0, 2.5, -11.5)) * vec3(0.60, 0.45, 0.60));
+    let dbr = length((hit - vec3(5.0, 2.5, -11.5)) * vec3(0.60, 0.45, 0.60));
+    let dc  = length((hit - vec3(0.0, 2.6, -9.2)) * vec3(0.55, 0.50, 0.65));
+
+    let gl_l  = 1.0 / (1.0 + dl * dl * 0.30);
+    let gl_r  = 1.0 / (1.0 + dr * dr * 0.30);
+    let gl_bl = 1.0 / (0.9 + dbl * dbl * 0.26);
+    let gl_br = 1.0 / (0.9 + dbr * dbr * 0.26);
+    let gl_c  = 1.0 / (1.1 + dc * dc * 0.30);
+
+    let dx = 6.2 - abs(hit.x);
+    let dy = min(hit.y, 5.8 - hit.y);
+    let dz = hit.z + 12.5;
+    let seam = smoothstep(0.0, 0.08, min(dx, min(dy, dz)));
+    let corner_boost = 1.0 + 0.65 * exp(-min(dx, dz) * 1.2);
+
+    let wall_light = (w_left * gl_l + w_right * gl_r + w_backL * gl_bl + w_backR * gl_br + w_cute * gl_c * (0.9 + 0.35 * beat_hit))
+                   * corner_boost * seam * wall_glow * pulse;
+
+    var floor_col = vec3(0.0);
+    if hit.y < 0.03 && d.y < 0.0 {
+      let rip = 0.08 * sin(hit.x * 3.5 + a) * cos(hit.z * 2.8 - a);
+      let fx  = hit.x + rip;
+      let fz  = hit.z;
+
+      let rl  = exp(-abs(fx + 5.85) * 1.4) * exp(-abs(fz + 6.2) * 0.24);
+      let rr  = exp(-abs(fx - 5.85) * 1.4) * exp(-abs(fz + 6.2) * 0.24);
+      let rbl = exp(-abs(fx + 4.9) * 1.0)  * exp(-abs(fz + 11.4) * 0.30);
+      let rbr = exp(-abs(fx - 4.9) * 1.0)  * exp(-abs(fz + 11.4) * 0.30);
+      let rc  = exp(-abs(fx) * 0.75)       * exp(-abs(fz + 9.2) * 0.28);
+
+      let gx = smoothstep(0.0, 0.03, abs(fract(hit.x * 0.5) - 0.5));
+      let gz = smoothstep(0.0, 0.03, abs(fract(hit.z * 0.5) - 0.5));
+      let tile = 0.75 + 0.25 * (gx * gz);
+
+      let fresnel = 0.35 + 0.65 * pow(clamp(1.0 + d.y, 0.0, 1.0), 2.5);
+      floor_col = (w_left * rl + w_right * rr + w_backL * rbl + w_backR * rbr + w_cute * rc * 1.1)
+                * tile * fresnel * floor_refl * pulse * 0.65;
+    }
+
+    // 3D Volumetric Smoke: two depth shells along the ray, moving on a closed 8s circle
+    let cyc1 = vec3(cos(a) * 0.65, sin(a) * 0.45, sin(a - 1.1) * 0.65);
+    let cyc2 = vec3(sin(a * 2.0) * 0.40, cos(a * 2.0) * 0.35, cos(a) * 0.55);
+
+    let p1 = eye + d * min(t_hit * 0.42, 4.8);
+    let p2 = eye + d * min(t_hit * 0.76, 9.2);
+
+    let n1 = fbm(p1 * 0.34 + cyc1, 3);
+    let n2 = fbm(p2 * 0.50 - cyc2 + vec3(2.7, 1.3, 4.1), 3);
+    let density = clamp((n1 * 0.70 + n2 * 0.50) + 0.22, 0.0, 1.5);
+
+    let sl  = 1.0 / (1.5 + length(p2 - vec3(-5.6, 2.3, -6.2)) * 0.55);
+    let sr  = 1.0 / (1.5 + length(p2 - vec3(5.6, 2.3, -6.2)) * 0.55);
+    let sc  = 1.0 / (1.4 + length(p2 - vec3(0.0, 2.5, -9.0)) * 0.48);
+    let sbl = 1.0 / (1.5 + length(p2 - vec3(-4.8, 2.5, -11.2)) * 0.52);
+    let sbr = 1.0 / (1.5 + length(p2 - vec3(4.8, 2.5, -11.2)) * 0.52);
+
+    let smoke_tint = w_left * sl + w_right * sr + w_cute * sc + w_backL * sbl + w_backR * sbr;
+    let smoke_col  = smoke_tint * density * smoke_amt * (0.20 + 0.10 * high_air) * pulse;
+
+    let dist_fade = exp(-t_hit * 0.038);
+    let total = (wall_light * dist_fade + floor_col + smoke_col) * (1.15 - 0.75 * room_dark);
+
+    color = vec4(total, 1.0);
+  }
+}

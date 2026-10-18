@@ -1,0 +1,43 @@
+// df_tube_glow (`L4`) — Fluorescent tube & continuous smoky aura renderer.
+//
+// Draws both the crisp phosphor glass tube (`glass`) and a wide, continuous radial
+// atmospheric scatter aura (`aura` + `halo`) directly in the geometry pass.
+
+proc df_tube_glow {
+  kind  L4
+  blend additive
+
+  param width    : float [0.004, 0.065] = 0.028
+  param exposure : float [0.10, 6.0]    = 0.95
+  param core_hot : float [0.0, 4.0]     = 0.90
+  param falloff  : float [1.0, 8.0]     = 3.20
+
+  consumes position, velocity, tint, size
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position - velocity, 1.0);
+    point_rate = width * size;
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let along  = point_coord.x;
+
+    // Wide smoky scatter aura + medium phosphor glow + tight white-hot tube core
+    let aura  = pow(max(0.0, 1.0 - across), falloff);
+    let halo  = exp(-across * across * 14.0);
+    let glass = exp(-across * across * 64.0);
+    let core  = glass * glass;
+
+    let end_d = min(along, 1.0 - along) * 2.0;
+    let cap   = smoothstep(0.0, 0.12, end_d);
+
+    let luma  = dot(tint, vec3(0.299, 0.587, 0.114));
+    let white = vec3(core * core_hot * clamp(luma * 0.65, 0.0, 2.8));
+    let col   = (tint * (aura * 0.28 + halo * 0.65 + glass * 1.10) + white) * exposure;
+    let emis  = (aura * 0.45 + halo * 0.65 + glass * 0.80) * (0.82 + 0.18 * cap);
+
+    color = vec4(col, emis);
+  }
+}
