@@ -376,7 +376,7 @@ fn setup_xr_render_loop(
                                 let sign = -stick_y.signum();
                                 let mag = (abs_y - deadzone_y) / (1.0 - deadzone_y);
                                 let curved = mag * mag;
-                                let delta_y = (sign * curved * 0.45) as f32;
+                                let delta_y = sign * curved * 0.45;
                                 let mut sink = pointer_sink.borrow_mut();
                                 sink.push(WebXrPointerAction::MouseWheel { delta_y });
                             }
@@ -521,12 +521,12 @@ fn setup_xr_render_loop(
                                             }
                                             Some(mut gs) if gs.source_index == i => {
                                                 // 1. Thumbstick Y: distance along beam
-                                                let deadzone = 0.15;
+                                                let deadzone = 0.15f32;
                                                 let abs_y = stick_y.abs();
                                                 if abs_y > deadzone {
                                                     let sign = -stick_y.signum();
                                                     let mag = (abs_y - deadzone) / (1.0 - deadzone);
-                                                    let delta = (sign * mag * mag * 0.025) as f32;
+                                                    let delta = sign * mag * mag * 0.025;
                                                     gs.current_distance = (gs.current_distance
                                                         + delta)
                                                         .clamp(0.20, 8.0);
@@ -537,7 +537,7 @@ fn setup_xr_render_loop(
                                                 if abs_x > deadzone {
                                                     let sign = stick_x.signum();
                                                     let mag = (abs_x - deadzone) / (1.0 - deadzone);
-                                                    let factor = 1.0 + (sign * mag * 0.015) as f32;
+                                                    let factor = 1.0 + sign * mag * 0.015;
                                                     gs.current_scale = (gs.current_scale * factor)
                                                         .clamp(0.25, 4.0);
                                                 }

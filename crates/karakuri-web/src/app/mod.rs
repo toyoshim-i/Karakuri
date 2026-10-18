@@ -5,10 +5,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use karakuri::{mcp, seeded, working_copies, App, Launch, Sources, SLOTS};
+use karakuri::App;
 use karakuri_engine::Gpu;
-use karakuri_environment::{Opening, SlotPolicies};
-use karakuri_store::store::Store;
 use wasm_bindgen::JsCast;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;

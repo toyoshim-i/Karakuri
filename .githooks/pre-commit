@@ -196,8 +196,11 @@ if ! command -v cargo >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "pre-commit: cargo clippy"
+echo "pre-commit: cargo clippy (native)"
 cargo clippy --quiet --workspace --all-targets -- -D warnings
+
+echo "pre-commit: cargo clippy (wasm32 karakuri-web)"
+cargo clippy --quiet --target wasm32-unknown-unknown -p karakuri-web --all-targets -- -D warnings
 
 # **No tests here, and that is a decision rather than an omission.** This
 # workspace has nearly nine hundred of them and most want a GPU, so running any

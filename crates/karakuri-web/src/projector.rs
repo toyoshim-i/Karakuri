@@ -201,11 +201,10 @@ pub fn open_projector_window(
 
     // If window was already open and loaded, setup canvas immediately
     if let Some(doc) = popout.document() {
-        if doc.get_element_by_id("karakuri-projector-canvas").is_some() {
-            if !setup_done.replace(true) {
-                let _ = setup_projector_canvas(&popout, proxy.clone(), &pending_action);
-                return Ok(());
-            }
+        if doc.get_element_by_id("karakuri-projector-canvas").is_some() && !setup_done.replace(true)
+        {
+            let _ = setup_projector_canvas(&popout, proxy.clone(), &pending_action);
+            return Ok(());
         }
     }
 

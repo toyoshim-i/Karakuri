@@ -55,6 +55,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 done
 
 check_wasm_deploy() {
+    echo "pre-push: checking wasm clippy (karakuri-web)"
+    cargo clippy --quiet --target wasm32-unknown-unknown -p karakuri-web --all-targets -- -D warnings
+
     echo "pre-push: checking wasm workspace build"
     cargo build --quiet --target wasm32-unknown-unknown
 
