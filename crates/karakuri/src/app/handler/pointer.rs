@@ -148,82 +148,73 @@ impl App {
 
                 match touch.phase {
                     TouchPhase::Started => {
-                        let ctx = gfx.egui.egui_ctx().clone();
-                        let (claim, acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
-                        let _ = App::performed(
-                            &mut gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Change::Pointer(claim).repaint(),
-                        );
-                        App::to_egui(&mut gfx, &mut self.costs, &event);
-                        self.handle_left_mouse_input(
-                            &mut gfx,
-                            event_loop,
-                            &event,
-                            ElementState::Pressed,
-                        );
+                        if self.primary_touch_id.is_some() {
+                            // A second finger touching down indicates a two-finger scroll rather than a row carry.
+                            if matches!(
+                                self.readout.panel.in_hand(),
+                                Some(karakuri_console::panel::InHand::Carrying)
+                            ) {
+                                let _ = self.readout.panel.released(None);
+                            }
+                        } else {
+                            self.primary_touch_id = Some(touch.id);
+                            let ctx = gfx.egui.egui_ctx().clone();
+                            let (claim, acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
+                            let _ = App::performed(
+                                &mut gfx,
+                                self.started,
+                                &mut self.readout,
+                                self.recording.recorder(),
+                                &acted,
+                                Change::Pointer(claim).repaint(),
+                            );
+                            App::to_egui(&mut gfx, &mut self.costs, &event);
+                            self.handle_left_mouse_input(
+                                &mut gfx,
+                                event_loop,
+                                &event,
+                                ElementState::Pressed,
+                            );
+                        }
                     }
                     TouchPhase::Moved => {
-                        let prev = self.readout.panel.cursor();
-                        let dy = prev.y - p.y;
-                        let ctx = gfx.egui.egui_ctx().clone();
-                        let (claim, mut acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
-                        if acted == Acted::Nothing
-                            && dy.abs() > 0.0
-                            && !self.readout.panel.dragging()
-                            && self.readout.vr_drag.is_none()
-                            && self.readout.bar_drag.is_none()
-                            && !self.readout.view.has_modal_overlay()
-                            && matches!(
-                                karakuri_console::input::wheeled(
-                                    &mut self.readout.panel,
-                                    &self.readout.view,
-                                    p
-                                ),
-                                Some(
-                                    karakuri_console::input::Turned::Pane(_)
-                                        | karakuri_console::input::Turned::Library
-                                        | karakuri_console::input::Turned::Master
-                                )
+                        if self.primary_touch_id.is_none_or(|id| id == touch.id) {
+                            self.primary_touch_id = Some(touch.id);
+                            let ctx = gfx.egui.egui_ctx().clone();
+                            let (claim, acted) = self.readout.touch_moved(&ctx, p);
+                            App::to_egui(&mut gfx, &mut self.costs, &event);
+                            let repaint = App::performed(
+                                &mut gfx,
+                                self.started,
+                                &mut self.readout,
+                                self.recording.recorder(),
+                                &acted,
+                                Change::Pointer(claim).repaint(),
                             )
-                        {
-                            let (_, wheel_acted) = self.readout.pointer(&ctx, Pointer::Wheel(dy));
-                            if wheel_acted == Acted::Pointed {
-                                acted = Acted::Pointed;
-                            }
+                            .repaint;
+                            let tip = self.hover.moved(
+                                claim,
+                                &self.readout.panel,
+                                &ctx,
+                                &self.readout.view,
+                                p,
+                                self.started.elapsed(),
+                            );
+                            let repaint = repaint.soonest(Change::Tip(tip).repaint());
+                            App::wants(&gfx, &mut self.egui_due, &mut self.costs, repaint);
                         }
-                        App::to_egui(&mut gfx, &mut self.costs, &event);
-                        let repaint = App::performed(
-                            &mut gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Change::Pointer(claim).repaint(),
-                        )
-                        .repaint;
-                        let tip = self.hover.moved(
-                            claim,
-                            &self.readout.panel,
-                            &ctx,
-                            &self.readout.view,
-                            p,
-                            self.started.elapsed(),
-                        );
-                        let repaint = repaint.soonest(Change::Tip(tip).repaint());
-                        App::wants(&gfx, &mut self.egui_due, &mut self.costs, repaint);
                     }
                     TouchPhase::Ended | TouchPhase::Cancelled => {
-                        App::to_egui(&mut gfx, &mut self.costs, &event);
-                        self.handle_left_mouse_input(
-                            &mut gfx,
-                            event_loop,
-                            &event,
-                            ElementState::Released,
-                        );
+                        if self.primary_touch_id.is_none_or(|id| id == touch.id) {
+                            self.primary_touch_id = None;
+                            App::to_egui(&mut gfx, &mut self.costs, &event);
+                            self.handle_left_mouse_input(
+                                &mut gfx,
+                                event_loop,
+                                &event,
+                                ElementState::Released,
+                            );
+                        }
                     }
                 }
             }

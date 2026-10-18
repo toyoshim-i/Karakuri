@@ -293,4 +293,40 @@ impl Readout {
         }
         (claim, did)
     }
+
+    /// Handles a touch-move gesture at `p`, converting vertical drags inside the Library bay
+    /// from row-carry into vertical scroll and routing vertical touch drags in scrollable bays
+    /// (`Pane`, `Library`, `Master`) to wheel scrolling.
+    pub(crate) fn touch_moved(&mut self, ctx: &egui::Context, p: Point) -> (Claim, Acted) {
+        let prev = self.panel.cursor();
+        let dx = prev.x - p.x;
+        let dy = prev.y - p.y;
+        if matches!(self.panel.in_hand(), Some(InHand::Carrying))
+            && dy.abs() > dx.abs()
+            && self.panel.layout().find("library").is_some_and(|id| {
+                self.panel.layout().visible(id) && self.panel.layout().rect(id).contains(p)
+            })
+        {
+            let _ = self.panel.released(None);
+        }
+        let (mut claim, mut acted) = self.pointer(ctx, Pointer::Moved(p));
+        if acted == Acted::Nothing
+            && dy.abs() > 0.0
+            && !self.panel.dragging()
+            && self.vr_drag.is_none()
+            && self.bar_drag.is_none()
+            && !self.view.has_modal_overlay()
+            && matches!(
+                wheeled(&mut self.panel, &self.view, p),
+                Some(Turned::Pane(_) | Turned::Library | Turned::Master)
+            )
+        {
+            let (wheel_claim, wheel_acted) = self.pointer(ctx, Pointer::Wheel(dy));
+            if wheel_acted == Acted::Pointed {
+                claim = wheel_claim;
+                acted = Acted::Pointed;
+            }
+        }
+        (claim, acted)
+    }
 }

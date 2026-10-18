@@ -101,6 +101,8 @@ pub struct App {
     pub(crate) last_mixer_revision: u64,
     /// Timestamp and position of previous mouse press for double-click detection.
     pub(crate) last_click: Option<(Instant, karakuri_layout::Point)>,
+    /// Active primary touch identifier so multi-finger gestures do not jump cursor coordinates.
+    pub(crate) primary_touch_id: Option<u64>,
     /// Optional CJK fallback font bytes loaded dynamically (e.g. on wasm32).
     pub(crate) cjk_font_bytes: Option<Vec<u8>>,
     /// Optional callback invoked when the user interacts with audio input controls (ADR-0384).
@@ -290,6 +292,7 @@ impl App {
             clock: Clock::new(Instant::now()),
             last_mixer_revision: 0,
             last_click: None,
+            primary_touch_id: None,
             cjk_font_bytes: None,
             audio_request_hook: None,
             midi_request_hook: None,

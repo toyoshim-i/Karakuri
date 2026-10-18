@@ -479,3 +479,68 @@ fn a_drop_of_a_procedure_on_an_inspector_pane_loads_that_panes_deck() {
         }))
     );
 }
+
+#[test]
+fn touch_vertical_drag_in_library_scrolls_while_horizontal_drag_carries() {
+    let ctx = drawn_once();
+    let mut readout = Readout::new(430.0, 800.0);
+    readout
+        .panel
+        .set_active_drawer(Some(karakuri_console::panel::DrawerSide::Left));
+    view::rearrange(&mut readout.panel, readout.view.canvas);
+    readout.panel.solve();
+    readout.view.scopes = Scope::ALL.to_vec();
+    readout.view.library = (0..40).map(|i| format!("set_{i:02}")).collect();
+
+    let row_center = |readout: &mut Readout, index: usize| {
+        readout.panel.solve();
+        let rect = library_bay(
+            readout.panel.layout(),
+            &readout.view.scopes,
+            &readout.view.library,
+            readout.view.opened(),
+            readout.view.pointed(),
+            readout.view.library_scroll(),
+        )
+        .expect("library bay present in open left drawer")
+        .row(index);
+        Point::new(rect.center().x, rect.center().y)
+    };
+
+    // 1. Vertical touch drag on a Library row cancels carry and scrolls the Library bay.
+    let at = row_center(&mut readout, 2);
+    readout.pointer(&ctx, Pointer::Moved(at));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(
+        matches!(readout.panel.in_hand(), Some(InHand::Carrying)),
+        "touch down on row starts carry"
+    );
+
+    let (claim, did) = readout.touch_moved(&ctx, Point::new(at.x, at.y - 48.0));
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(did, Acted::Pointed);
+    assert!(
+        !readout.panel.dragging(),
+        "vertical touch drag in library bay must cancel carry"
+    );
+    assert_eq!(readout.view.library_scroll(), 48.0);
+    assert_eq!(
+        readout.panel.active_drawer(),
+        Some(karakuri_console::panel::DrawerSide::Left),
+        "library drawer stays open during vertical scroll"
+    );
+    readout.pointer(&ctx, Pointer::Up);
+
+    // 2. Horizontal touch drag on a Library row preserves carry and auto-dismisses the drawer when leaving it.
+    let at = row_center(&mut readout, 3);
+    readout.pointer(&ctx, Pointer::Moved(at));
+    readout.pointer(&ctx, Pointer::Down);
+    assert!(matches!(readout.panel.in_hand(), Some(InHand::Carrying)));
+
+    let (_, did) = readout.touch_moved(&ctx, Point::new(at.x + 40.0, at.y + 4.0));
+    assert_eq!(did, Acted::Nothing);
+    assert!(
+        matches!(readout.panel.in_hand(), Some(InHand::Carrying)),
+        "horizontal touch drag preserves carry"
+    );
+}
